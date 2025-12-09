@@ -1,6 +1,6 @@
 # assign-gingerly
 
-This packpage provides a utility function for carefully merging one object into another.
+This package provides a utility function for carefully merging one object into another.
 
 It builds on Object.assign.  It adds support for:
 

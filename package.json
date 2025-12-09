@@ -1,0 +1,20 @@
+{
+  "name": "assign-gingerly",
+  "version": "0.0.0",
+  "description": "This package provides a utility function for carefully merging one object into another.",
+  "homepage": "https://github.com/bahrus/assign-gingerly#readme",
+  "bugs": {
+    "url": "https://github.com/bahrus/assign-gingerly/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bahrus/assign-gingerly.git"
+  },
+  "license": "MIT",
+  "author": "Bruce B. Anderson <andeson.bruce.b@gmail.com>",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test"
+  }
+}
