@@ -35,7 +35,7 @@ console.log(oInput.style.height);
 
 This can go many levels deep.
 
-## Example 3
+## Example 3 Deeply nested
 
 ```TypeScript
 const obj = {};
@@ -51,4 +51,12 @@ console.log(obj);
 //   a: {b: c: {d: 'hello', e: 'world'}},
 //   style: {height: '15px'}
 // }
+```
+
+When the right hand side of an expression is an object, assignGingerly is recursively applied (passing the third argument in if applicable, which will be discussed below) 
+
+## Dependency injection based on a registry object
+
+```Typescript
+
 ```
