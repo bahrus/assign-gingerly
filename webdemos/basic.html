@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <script type=module>
+        import { assignGingerly } from '../index.js';
+
+        const target = { a: 1, b: 2 };
+        const source = { b: 3, c: 4 };
+
+        const result = await assignGingerly(target, source);
+
+        console.log('Result:', result);
+        // Expected output: Result: { a: 1, b: 3, c: 4 }
+
+        const sourceObj = { hello: 'world' };
+        await assignGingerly(sourceObj, { hello: 'Venus', foo: 'bar' });
+        console.log('Source Object:', sourceObj);
+        // Expected output: Source Object: { hello: 'Venus', foo: 'bar' }
+
+        const oInput = {
+            
+        };
+    
+        await assignGingerly(oInput, { '?.style?.height': '15px' });
+        console.log({oInput});
+    </script>
+</body>
+</html>
