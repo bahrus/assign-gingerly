@@ -13,6 +13,19 @@
   "license": "MIT",
   "author": "Bruce B. Anderson <andeson.bruce.b@gmail.com>",
   "type": "module",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "types": "./index.d.ts"
+    }
+  },
   "main": "index.js",
   "scripts": {
     "serve": "node ./node_modules/spa-ssi/serve.js",
