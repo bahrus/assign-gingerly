@@ -4,7 +4,6 @@
 export interface IBaseRegistryItem<T = any> {
   spawn: { new (): T } | Promise<{ new (): T }>;
   map: { [key: string | symbol]: keyof T };
-  enhKey?: string;
 }
 
 /**

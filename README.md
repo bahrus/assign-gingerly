@@ -93,7 +93,7 @@ baseRegistry.define([
         },
         spawn: MyEnhancement
     },{
-       enhKey: 'mellowYellow',
+       
        map: {
            [isMellow]: 'isMellow'
        },
