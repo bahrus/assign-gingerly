@@ -36,7 +36,7 @@ export class BaseRegistry {
 function parsePath(path) {
     return path
         .split('.')
-        .map(part => part.replace(/^\?/, ''))
+        .map(part => part.replace(/\?/g, ''))
         .filter(part => part.length > 0);
 }
 /**
