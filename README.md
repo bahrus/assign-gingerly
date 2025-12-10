@@ -97,24 +97,30 @@ baseRegistry.define([
        map: {
            [isMellow]: 'isMellow'
        },
-       spawn: YourEnhancement
+       spawn: async () => {
+          return YourEnhancement;
+       } 
     }
 ]);
 //end of dependency injection
 
-assignGingerly({
+const asyncResult = await assignGingerly({}, {
     [isHappy]: true,
     [isMellow]: true,
     '?.style.height': '40px',
     '?.enhancements?.mellowYellow?.madAboutFourteen': true
-}, baseRegistry);
-inputEl.set[isMellow] = false;
-divContainer.appendChild(inputEl);
-document.body.appendChild(divContainer);
+}, {
+    registry: BaseRegistry
+});
+asyncResult.set[isMellow] = false;
 ```
 
-The platform would search the registry for any enhancements that has a mapping with a matching symbol of isHappy and isMellow, and if found, instantiate the instance if needed, then set the property value.
+The assignGingerly searches the registry for any items that has a mapping with a matching symbol of isHappy and isMellow, and if found, sees it already has an instance of the spawn class associated with the first passed in parameter.  If no such instance is found, it instantiates one, associates the instance with the first parameter, then sets the property value.
+
+It also adds a lazy property to the first passed in parameter, "set", which returns a proxy, and that proxy watches for symbol references passed in a value, and sets the value from that spawned instance.  Again, if the spawned instance is not found, it respawns it.
 
 The suggestion to use Symbol.for with a guid, as opposed to just Symbol(), is based on some negative experiences I've had with multiple versions of the same library being referenced, but is not required. Regular symbols could also be used when that risk can be avoided.
+
+Note the first time we mention async.  This is only necessary if you wish to work directly with the merged object.  This allows for lazy loading of the spawning class, which can be useful for large applications that don't need to download all the classes at once.  If you are just "depositing" values into the object, no need to await for anything.  Also, the assignGingerly should first do all the class instantiations that are already loaded (where the class constructor is specified in spawn), and then does all the lazy loaded ones.
 
 
