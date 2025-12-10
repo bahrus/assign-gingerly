@@ -58,5 +58,7 @@ When the right hand side of an expression is an object, assignGingerly is recurs
 ## Dependency injection based on a registry object
 
 ```Typescript
-
+interface BaseRepository<T> {
+    spawn: {new(): T} | Promise<{new(): T}>
+}
 ```
