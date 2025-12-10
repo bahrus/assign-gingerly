@@ -59,8 +59,62 @@ When the right hand side of an expression is an object, assignGingerly is recurs
 ## Dependency injection based on a registry object and a Symbolic reference
 
 ```Typescript
-interface BaseRepository<T> {
+interface IBaseRegistryItem<T = any> {
     spawn: {new(): T} | Promise<{new(): T}>
     map: {[key: string | symbol]: keyof T}
 }
+
+export const isHappy = Symbol.for('TFWsx0YH5E6eSfhE7zfLxA');
+class MyEnhancement extends ElementEnhancement(EventTarget){
+    get isHappy(){}
+    set isHappy(nv){}
+}
+
+export const isMellow = Symbol.for('BqnnTPWRHkWdVGWcGQoAiw');
+class YourEnhancement extends ElementEnhancement(EventTarget){
+    get isMellow(){}
+    set isMellow(nv){}
+    get madAboutFourteen(){}
+    set madAboutFourteen(nv){}
+}
+
+class BaseRegistry{
+    define(IBaseRegistryItem | IBaseRegistryItem[]){
+        ...
+    }
+}
+
+//Here's where the dependency injection mapping takes place
+const baseRegistry = new BaseRegistry;
+baseRegistry.define([
+    {
+        map: {
+            [isHappy]: 'isHappy'
+        },
+        spawn: MyEnhancement
+    },{
+       enhKey: 'mellowYellow',
+       map: {
+           [isMellow]: 'isMellow'
+       },
+       spawn: YourEnhancement
+    }
+]);
+//end of dependency injection
+
+assignGingerly({
+    [isHappy]: true,
+    [isMellow]: true,
+    '?.style.height': '40px',
+    '?.enhancements?.mellowYellow?.madAboutFourteen': true
+}, baseRegistry);
+inputEl.set[isMellow] = false;
+divContainer.appendChild(inputEl);
+document.body.appendChild(divContainer);
 ```
+
+The platform would search the registry for any enhancements that has a mapping with a matching symbol of isHappy and isMellow, and if found, instantiate the instance if needed, then set the property value.
+
+The suggestion to use Symbol.for with a guid, as opposed to just Symbol(), is based on some negative experiences I've had with multiple versions of the same library being referenced, but is not required. Regular symbols could also be used when that risk can be avoided.
+
+
