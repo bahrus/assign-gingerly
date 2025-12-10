@@ -13,6 +13,7 @@ It builds on Object.assign.  It adds support for:
 const sourceObj = {hello: 'world'};
 assignGingerly(sourceObj, {hello: 'Venus', foo: 'bar'});
 // Because none of the keys of the second parameter start with "?.", 
+// nor includes any symbols keys,
 // assign gingerly produces identical results as Object.assign:
 console.log(sourceObj);
 //{hello: 'Venus', foo: 'bar'}
@@ -55,10 +56,11 @@ console.log(obj);
 
 When the right hand side of an expression is an object, assignGingerly is recursively applied (passing the third argument in if applicable, which will be discussed below) 
 
-## Dependency injection based on a registry object
+## Dependency injection based on a registry object and a Symbolic reference
 
 ```Typescript
 interface BaseRepository<T> {
     spawn: {new(): T} | Promise<{new(): T}>
+    map: {[key: string | symbol]: keyof T}
 }
 ```
