@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Object.prototype.assignGingerly nested path functionality</title>
+    <link rel="help" href="https://github.com/bahrus/assign-gingerly">
+    <script src="/resources/testharness.js"></script>
+    <script src="/resources/testharnessreport.js"></script>
+</head>
+<body>
+<script type="module">
+    import assignGingerly from '../object-extension.js';
+
+    promise_test(async (t) => {
+        const target = {};
+        await target.assignGingerly({ '?.level1': 'value' });
+        
+        assert_equals(target.level1, 'value', 'should create single-level nested property');
+    }, 'Object.prototype.assignGingerly should handle single-level nested paths');
+
+    promise_test(async (t) => {
+        const target = {};
+        await target.assignGingerly({ '?.level1?.level2': 'value' });
+        
+        assert_equals(target.level1.level2, 'value', 'should create two-level nested property');
+    }, 'Object.prototype.assignGingerly should handle two-level nested paths');
+
+    promise_test(async (t) => {
+        const target = {};
+        await target.assignGingerly({ '?.a?.b?.c?.d?.e': 'deep' });
+        
+        assert_equals(target.a.b.c.d.e, 'deep', 'should create deeply nested property');
+    }, 'Object.prototype.assignGingerly should handle deeply nested paths');
+
+    promise_test(async (t) => {
+        const target = {};
+        await target.assignGingerly({
+            '?.path1?.a': 'value1',
+            '?.path2?.b': 'value2',
+            '?.path3?.c': 'value3'
+        });
+        
+        assert_equals(target.path1.a, 'value1', 'should create first nested path');
+        assert_equals(target.path2.b, 'value2', 'should create second nested path');
+        assert_equals(target.path3.c, 'value3', 'should create third nested path');
+    }, 'Object.prototype.assignGingerly should handle multiple nested paths');
+
+    promise_test(async (t) => {
+        const target = {};
+        await target.assignGingerly({
+            simple: 'value',
+            '?.nested?.key': 'nested value',
+            another: 'simple value'
+        });
+        
+        assert_equals(target.simple, 'value', 'should handle simple property');
+        assert_equals(target.nested.key, 'nested value', 'should handle nested property');
+        assert_equals(target.another, 'simple value', 'should handle another simple property');
+    }, 'Object.prototype.assignGingerly should mix simple and nested properties');
+
+    promise_test(async (t) => {
+        const target = {
+            existing: {
+                deep: 'value'
+            }
+        };
+        await target.assignGingerly({ '?.existing?.new': 'added' });
+        
+        assert_equals(target.existing.deep, 'value', 'should preserve existing nested value');
+        assert_equals(target.existing.new, 'added', 'should add to existing nested object');
+    }, 'Object.prototype.assignGingerly should preserve existing nested structures');
+
+    promise_test(async (t) => {
+        const target = {};
+        await target.assignGingerly({
+            '?.config': {
+                setting1: 'value1',
+                setting2: 'value2'
+            }
+        });
+        
+        assert_equals(target.config.setting1, 'value1', 'should recursively merge nested object property 1');
+        assert_equals(target.config.setting2, 'value2', 'should recursively merge nested object property 2');
+    }, 'Object.prototype.assignGingerly should recursively merge nested objects');
+
+    promise_test(async (t) => {
+        const target = {};
+        await target.assignGingerly({
+            '?.style?.height': '15px',
+            '?.style?.width': '100%',
+            '?.style?.background': 'blue'
+        });
+        
+        assert_equals(target.style.height, '15px', 'should set height style');
+        assert_equals(target.style.width, '100%', 'should set width style');
+        assert_equals(target.style.background, 'blue', 'should set background style');
+    }, 'Object.prototype.assignGingerly should handle complex nested structures');
+
+    promise_test(async (t) => {
+        const target = {};
+        await target.assignGingerly({
+            '?.style?.height': '15px',
+            '?.a?.b?.c': {
+                d: 'hello',
+                e: 'world'
+            }
+        });
+        
+        assert_equals(target.style.height, '15px', 'should create style path');
+        assert_equals(target.a.b.c.d, 'hello', 'should create nested object path');
+        assert_equals(target.a.b.c.e, 'world', 'should create nested object value');
+    }, 'Object.prototype.assignGingerly should handle README example 3');
+
+    promise_test(async (t) => {
+        const target = { path: { nested: { value: 'original' } } };
+        await target.assignGingerly({ '?.path?.nested?.value': 'updated' });
+        
+        assert_equals(target.path.nested.value, 'updated', 'should overwrite deeply nested value');
+    }, 'Object.prototype.assignGingerly should overwrite deeply nested values');
+
+    promise_test(async (t) => {
+        const target = {};
+        await target.assignGingerly({ '?.data?.users': [
+            { id: 1, name: 'Alice' },
+            { id: 2, name: 'Bob' }
+        ]});
+        
+        assert_equals(target.data.users[0].name, 'Alice', 'should handle nested arrays with objects');
+        assert_equals(target.data.users[1].name, 'Bob', 'should preserve array contents');
+    }, 'Object.prototype.assignGingerly should handle nested arrays');
+
+    promise_test(async (t) => {
+        const target = {};
+        await target.assignGingerly({ '?.x-custom?.my-prop': 'value' });
+        
+        assert_equals(target['x-custom']['my-prop'], 'value', 'should handle special characters in property names');
+    }, 'Object.prototype.assignGingerly should handle special characters in paths');
+</script>
+</body>
+</html>

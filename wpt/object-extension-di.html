@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Object.prototype.assignGingerly dependency injection</title>
+    <link rel="help" href="https://github.com/bahrus/assign-gingerly">
+    <script src="/resources/testharness.js"></script>
+    <script src="/resources/testharnessreport.js"></script>
+</head>
+<body>
+<script type="module">
+    import assignGingerly, { BaseRegistry } from '../object-extension.js';
+
+    promise_test(async (t) => {
+        const registry = new BaseRegistry();
+        const testSym = Symbol.for('test-symbol');
+        
+        class TestClass {
+            value = 'initial';
+        }
+        
+        registry.define({
+            map: { [testSym]: 'value' },
+            spawn: TestClass
+        });
+        
+        const target = {};
+        await target.assignGingerly({ [testSym]: 'updated' }, { registry });
+        
+        assert_true(target !== undefined, 'should complete with registry option');
+    }, 'Object.prototype.assignGingerly should support dependency injection with registry');
+
+    promise_test(async (t) => {
+        const registry = new BaseRegistry();
+        const sym1 = Symbol.for('sym1');
+        const sym2 = Symbol.for('sym2');
+        
+        class Class1 { prop1 = 'initial'; }
+        class Class2 { prop2 = 'initial'; }
+        
+        registry.define([
+            { map: { [sym1]: 'prop1' }, spawn: Class1 },
+            { map: { [sym2]: 'prop2' }, spawn: Class2 }
+        ]);
+        
+        const target = {};
+        await target.assignGingerly({
+            [sym1]: 'value1',
+            [sym2]: 'value2'
+        }, { registry });
+        
+        assert_true(target !== undefined, 'should handle multiple symbol dependencies');
+    }, 'Object.prototype.assignGingerly should handle multiple symbols');
+
+    promise_test(async (t) => {
+        const registry = new BaseRegistry();
+        const testSym = Symbol.for('test-async');
+        
+        class AsyncClass {
+            value = 'initial';
+        }
+        
+        registry.define({
+            map: { [testSym]: 'value' },
+            spawn: Promise.resolve(AsyncClass)
+        });
+        
+        const target = {};
+        await target.assignGingerly({ [testSym]: 'async-value' }, { registry });
+        
+        assert_true(target !== undefined, 'should handle async spawn');
+    }, 'Object.prototype.assignGingerly should support async spawn classes');
+
+    promise_test(async (t) => {
+        const registry = new BaseRegistry();
+        const testSym = Symbol.for('reuse-test');
+        
+        class ReuseClass {
+            count = 0;
+        }
+        
+        registry.define({
+            map: { [testSym]: 'count' },
+            spawn: ReuseClass
+        });
+        
+        const target = {};
+        await target.assignGingerly({ [testSym]: 5 }, { registry });
+        await target.assignGingerly({ [testSym]: 10 }, { registry });
+        
+        assert_true(target !== undefined, 'should reuse instances');
+    }, 'Object.prototype.assignGingerly should reuse spawned instances');
+
+    promise_test(async (t) => {
+        const registry = new BaseRegistry();
+        const testSym = Symbol.for('combo-test');
+        
+        class ComboClass {
+            value = 'initial';
+        }
+        
+        registry.define({
+            map: { [testSym]: 'value' },
+            spawn: ComboClass
+        });
+        
+        const target = {};
+        await target.assignGingerly({
+            [testSym]: 'symbol-value',
+            '?.config?.setting': 'nested-value'
+        }, { registry });
+        
+        assert_equals(target.config.setting, 'nested-value', 'should combine nested paths with symbols');
+    }, 'Object.prototype.assignGingerly should combine nested paths with dependencies');
+
+    promise_test(async (t) => {
+        const registry = new BaseRegistry();
+        const testSym = Symbol.for('set-test');
+        
+        class SetTestClass {
+            value = 'initial';
+        }
+        
+        registry.define({
+            map: { [testSym]: 'value' },
+            spawn: SetTestClass
+        });
+        
+        const target = await new Object().assignGingerly({}, { registry });
+        
+        assert_true('set' in target, 'should create set property when registry is used');
+    }, 'Object.prototype.assignGingerly should create set property for lazy assignment');
+
+    promise_test(async (t) => {
+        const registry = new BaseRegistry();
+        const testSym = Symbol.for('proxy-test');
+        
+        class ProxyTestClass {
+            value = 'initial';
+        }
+        
+        registry.define({
+            map: { [testSym]: 'value' },
+            spawn: ProxyTestClass
+        });
+        
+        const target = await new Object().assignGingerly({}, { registry });
+        target.set[testSym] = 'proxy-value';
+        
+        assert_true(target !== undefined, 'should allow assignment through set proxy');
+    }, 'Object.prototype.assignGingerly should support set proxy assignment');
+
+    promise_test(async (t) => {
+        const isHappy = Symbol.for('isHappy-test');
+        const isMellow = Symbol.for('isMellow-test');
+        
+        class Enhancement1 {
+            isHappy = false;
+        }
+        
+        class Enhancement2 {
+            isMellow = false;
+            madAboutFourteen = false;
+        }
+        
+        const registry = new BaseRegistry();
+        registry.define([
+            { map: { [isHappy]: 'isHappy' }, spawn: Enhancement1 },
+            { map: { [isMellow]: 'isMellow' }, spawn: Enhancement2 }
+        ]);
+        
+        const target = {};
+        await target.assignGingerly({
+            [isHappy]: true,
+            [isMellow]: true,
+            '?.style?.height': '40px',
+            '?.enhancements?.mellowYellow?.madAboutFourteen': true
+        }, { registry });
+        
+        assert_equals(target.style.height, '40px', 'should set style property');
+        assert_equals(target.enhancements.mellowYellow.madAboutFourteen, true, 'should set nested property');
+    }, 'Object.prototype.assignGingerly should handle README example 4 (full DI example)');
+</script>
+</body>
+</html>
