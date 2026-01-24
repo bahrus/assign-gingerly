@@ -128,4 +128,17 @@ The suggestion to use Symbol.for with a guid, as opposed to just Symbol(), is ba
 
 Note that the example above is the first time we mention async.  This is only necessary if you wish to work directly with the merged object.  This allows for lazy loading of the spawning class, which can be useful for large applications that don't need to download all the classes at once.  If you are just "depositing" values into the object, no need to await for anything.  Also, the assignGingerly should first do all the class instantiations that are already loaded (where the class constructor is specified in spawn), and then does all the lazy loaded ones.
 
+## Support for JSON assignment with Symbol.for symbols
+
+```JavaScript
+const asyncResult = await assignGingerly({}, {
+    "[Symbol.for('TFWsx0YH5E6eSfhE7zfLxA')]": true,
+    "[Symbol.for('BqnnTPWRHkWdVGWcGQoAiw')]": true,
+    '?.style.height': '40px',
+    '?.enhancements?.mellowYellow?.madAboutFourteen': true
+}, {
+    registry: BaseRegistry
+});
+```
+
 

@@ -51,6 +51,24 @@ export class BaseRegistry {
 }
 
 /**
+ * Helper function to check if a string key represents a Symbol.for expression
+ */
+function isSymbolForKey(key: string): boolean {
+  return key.startsWith('[Symbol.for(') && key.endsWith(')]');
+}
+
+/**
+ * Helper function to extract the symbol key from a Symbol.for string
+ */
+function parseSymbolForKey(key: string): symbol | null {
+  const match = key.match(/^\[Symbol\.for\(['"](.+)['"]\)\]$/);
+  if (match && match[1]) {
+    return Symbol.for(match[1]);
+  }
+  return null;
+}
+
+/**
  * Helper function to parse a path string with ?. notation
  */
 function parsePath(path: string): string[] {
@@ -102,9 +120,29 @@ export async function assignGingerly(
   // Track promises for async spawning
   const asyncSpawns: Promise<void>[] = [];
 
-  // First pass: handle all non-symbol keys and sync operations
+  // Convert Symbol.for string keys to actual symbols
+  const processedSource: Record<string | symbol, any> = {};
   for (const key of Object.keys(source)) {
-    const value = source[key];
+    if (isSymbolForKey(key)) {
+      const symbol = parseSymbolForKey(key);
+      if (symbol) {
+        processedSource[symbol] = source[key];
+      } else {
+        // Invalid Symbol.for format - treat as regular string key
+        processedSource[key] = source[key];
+      }
+    } else {
+      processedSource[key] = source[key];
+    }
+  }
+  // Copy over actual symbol keys
+  for (const sym of Object.getOwnPropertySymbols(source)) {
+    processedSource[sym] = source[sym];
+  }
+
+  // First pass: handle all non-symbol keys and sync operations
+  for (const key of Object.keys(processedSource)) {
+    const value = processedSource[key];
 
     if (isNestedPath(key)) {
       const pathParts = parsePath(key);
@@ -134,9 +172,9 @@ export async function assignGingerly(
   }
 
   // Second pass: handle symbol keys for dependency injection
-  const symbols = Object.getOwnPropertySymbols(source);
+  const symbols = Object.getOwnPropertySymbols(processedSource);
   for (const sym of symbols) {
-    const value = source[sym];
+    const value = processedSource[sym];
 
     if (registry) {
       const registryItem = registry.findBySymbol(sym);
