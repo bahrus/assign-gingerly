@@ -11,7 +11,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
 
     const isHappy = Symbol.for('test-isHappy');
     
-    registry.define({
+    registry.push({
       map: { [isHappy]: 'isHappy' },
       spawn: MyEnhancement
     });
@@ -20,7 +20,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     expect(items.length).toBe(1);
   });
 
-  test('should define multiple registry items at once', () => {
+  test('should push multiple registry items at once', () => {
     const registry = new BaseRegistry();
     const sym1 = Symbol.for('sym1');
     const sym2 = Symbol.for('sym2');
@@ -28,7 +28,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     class Class1 {}
     class Class2 {}
     
-    registry.define([
+    registry.push([
       { map: { [sym1]: 'prop1' }, spawn: Class1 },
       { map: { [sym2]: 'prop2' }, spawn: Class2 }
     ]);
@@ -42,7 +42,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     
     class TestClass {}
     
-    registry.define({
+    registry.push({
       map: { [testSymbol]: 'testProp' },
       spawn: TestClass
     });
@@ -60,7 +60,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
       isHappy = false;
     }
     
-    registry.define({
+    registry.push({
       map: { [isHappy]: 'isHappy' },
       spawn: MyEnhancement
     });
@@ -80,7 +80,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
       value = 'initial';
     }
     
-    registry.define({
+    registry.push({
       map: { [mySymbol]: 'value' },
       spawn: MyClass
     });
@@ -99,7 +99,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
       value = 'initial';
     }
     
-    registry.define({
+    registry.push({
       map: { [mySymbol]: 'value' },
       spawn: Promise.resolve(AsyncClass)
     });
@@ -121,7 +121,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
       }
     }
     
-    registry.define({
+    registry.push({
       map: { [mySymbol]: 'count' },
       spawn: CounterClass
     });
@@ -146,7 +146,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
       prop2 = 'initial2';
     }
     
-    registry.define([
+    registry.push([
       { map: { [sym1]: 'prop1' }, spawn: Class1 },
       { map: { [sym2]: 'prop2' }, spawn: Class2 }
     ]);
@@ -168,7 +168,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
       value = 'initial';
     }
     
-    registry.define({
+    registry.push({
       map: { [mySymbol]: 'value' },
       spawn: MyClass
     });
@@ -190,7 +190,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
       value = 'initial';
     }
     
-    registry.define({
+    registry.push({
       map: { [testSymbol]: 'value' },
       spawn: TestClass
     });
@@ -209,7 +209,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
       value = 'initial';
     }
     
-    registry.define({
+    registry.push({
       map: { [testSymbol]: 'value' },
       spawn: TestClass
     });

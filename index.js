@@ -7,7 +7,7 @@ const instanceMap = new WeakMap();
  */
 export class BaseRegistry {
     items = [];
-    define(items) {
+    push(items) {
         if (Array.isArray(items)) {
             this.items.push(...items);
         }

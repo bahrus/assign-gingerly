@@ -84,14 +84,14 @@ class YourEnhancement extends ElementEnhancement(EventTarget){
 }
 
 class BaseRegistry{
-    define(IBaseRegistryItem | IBaseRegistryItem[]){
+    push(IBaseRegistryItem | IBaseRegistryItem[]){
         ...
     }
 }
 
 //Here's where the dependency injection mapping takes place
 const baseRegistry = new BaseRegistry;
-baseRegistry.define([
+baseRegistry.push([
     {
         map: {
             [isHappy]: 'isHappy'

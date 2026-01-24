@@ -25,7 +25,7 @@ const instanceMap = new WeakMap<object, Map<symbol | string, any>>();
 export class BaseRegistry {
   private items: IBaseRegistryItem[] = [];
 
-  define(items: IBaseRegistryItem | IBaseRegistryItem[]): void {
+  push(items: IBaseRegistryItem | IBaseRegistryItem[]): void {
     if (Array.isArray(items)) {
       this.items.push(...items);
     } else {

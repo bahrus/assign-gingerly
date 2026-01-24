@@ -18,7 +18,7 @@ export interface IAssignGingerlyOptions {
  */
 export declare class BaseRegistry {
   private items;
-  define(items: IBaseRegistryItem | IBaseRegistryItem[]): void;
+  push(items: IBaseRegistryItem | IBaseRegistryItem[]): void;
   getItems(): IBaseRegistryItem[];
   findBySymbol(symbol: symbol | string): IBaseRegistryItem | undefined;
 }

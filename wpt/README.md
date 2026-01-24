@@ -185,7 +185,7 @@ promise_test(async (t) => {
     
     class TestClass { value = 'initial'; }
     
-    registry.define({ map: { [sym]: 'value' }, spawn: TestClass });
+    registry.push({ map: { [sym]: 'value' }, spawn: TestClass });
     
     const target = {};
     await target.assignGingerly({ [sym]: 'updated' }, { registry });

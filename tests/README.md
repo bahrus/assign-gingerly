@@ -134,7 +134,7 @@ const symbol = Symbol.for('test');
 
 class MyClass { value = 'initial'; }
 
-registry.define({
+registry.push({
   map: { [symbol]: 'value' },
   spawn: MyClass
 });

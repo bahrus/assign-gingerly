@@ -19,7 +19,7 @@
             value = 'initial';
         }
         
-        registry.define({
+        registry.push({
             map: { [testSym]: 'value' },
             spawn: TestClass
         });
@@ -38,7 +38,7 @@
         class Class1 { prop1 = 'initial'; }
         class Class2 { prop2 = 'initial'; }
         
-        registry.define([
+        registry.push([
             { map: { [sym1]: 'prop1' }, spawn: Class1 },
             { map: { [sym2]: 'prop2' }, spawn: Class2 }
         ]);
@@ -60,7 +60,7 @@
             value = 'initial';
         }
         
-        registry.define({
+        registry.push({
             map: { [testSym]: 'value' },
             spawn: Promise.resolve(AsyncClass)
         });
@@ -79,7 +79,7 @@
             count = 0;
         }
         
-        registry.define({
+        registry.push({
             map: { [testSym]: 'count' },
             spawn: ReuseClass
         });
@@ -99,7 +99,7 @@
             value = 'initial';
         }
         
-        registry.define({
+        registry.push({
             map: { [testSym]: 'value' },
             spawn: ComboClass
         });
@@ -121,7 +121,7 @@
             value = 'initial';
         }
         
-        registry.define({
+        registry.push({
             map: { [testSym]: 'value' },
             spawn: SetTestClass
         });
@@ -139,7 +139,7 @@
             value = 'initial';
         }
         
-        registry.define({
+        registry.push({
             map: { [testSym]: 'value' },
             spawn: ProxyTestClass
         });
@@ -164,7 +164,7 @@
         }
         
         const registry = new BaseRegistry();
-        registry.define([
+        registry.push([
             { map: { [isHappy]: 'isHappy' }, spawn: Enhancement1 },
             { map: { [isMellow]: 'isMellow' }, spawn: Enhancement2 }
         ]);

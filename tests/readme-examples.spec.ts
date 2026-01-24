@@ -63,7 +63,7 @@ test.describe('assignGingerly - README Examples', () => {
     
     // Create and configure registry
     const baseRegistry = new BaseRegistry();
-    baseRegistry.define([
+    baseRegistry.push([
       {
         map: {
           [isHappy]: 'isHappy'
@@ -106,7 +106,7 @@ test.describe('assignGingerly - README Examples', () => {
     }
     
     const baseRegistry = new BaseRegistry();
-    baseRegistry.define({
+    baseRegistry.push({
       map: { [isMellow]: 'isMellow' },
       spawn: YourEnhancement
     });
@@ -127,7 +127,7 @@ test.describe('assignGingerly - README Examples', () => {
     }
     
     const baseRegistry = new BaseRegistry();
-    baseRegistry.define({
+    baseRegistry.push({
       map: { [isMellow]: 'isMellow' },
       spawn: Promise.resolve(AsyncEnhancement) // Return class after async operation
     });
@@ -154,7 +154,7 @@ test.describe('assignGingerly - README Examples', () => {
     }
     
     const registry = new BaseRegistry();
-    registry.define([
+    registry.push([
       {
         map: { [syncSym]: 'value' },
         spawn: SyncClass
@@ -185,7 +185,7 @@ test.describe('assignGingerly - README Examples', () => {
     }
     
     const registry = new BaseRegistry();
-    registry.define({
+    registry.push({
       map: { [enhSym]: 'enabled' },
       spawn: Enhancement
     });
