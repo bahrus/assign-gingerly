@@ -2,9 +2,9 @@ import { test, expect } from '@playwright/test';
 import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - Basic Functionality', () => {
-  test('Example 1: Basic object assignment (like Object.assign)', async () => {
+  test('Example 1: Basic object assignment (like Object.assign)', () => {
     const sourceObj = { hello: 'world' };
-    await assignGingerly(sourceObj, { hello: 'Venus', foo: 'bar' });
+    assignGingerly(sourceObj, { hello: 'Venus', foo: 'bar' });
     
     expect(sourceObj).toEqual({
       hello: 'Venus',
@@ -12,16 +12,16 @@ test.describe('assignGingerly - Basic Functionality', () => {
     });
   });
 
-  test('should handle empty source object', async () => {
+  test('should handle empty source object', () => {
     const target = { existing: 'value' };
-    await assignGingerly(target, {});
+    assignGingerly(target, {});
     
     expect(target).toEqual({ existing: 'value' });
   });
 
-  test('should handle multiple key-value pairs', async () => {
+  test('should handle multiple key-value pairs', () => {
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       name: 'John',
       age: 30,
       email: 'john@example.com'
@@ -34,9 +34,9 @@ test.describe('assignGingerly - Basic Functionality', () => {
     });
   });
 
-  test('should preserve existing properties when adding new ones', async () => {
+  test('should preserve existing properties when adding new ones', () => {
     const target = { existing: 'value' };
-    await assignGingerly(target, { new: 'property' });
+    assignGingerly(target, { new: 'property' });
     
     expect(target).toEqual({
       existing: 'value',
@@ -44,21 +44,21 @@ test.describe('assignGingerly - Basic Functionality', () => {
     });
   });
 
-  test('should overwrite existing properties', async () => {
+  test('should overwrite existing properties', () => {
     const target = { prop: 'old' };
-    await assignGingerly(target, { prop: 'new' });
+    assignGingerly(target, { prop: 'new' });
     
     expect(target.prop).toBe('new');
   });
 
-  test('should handle non-object values gracefully', async () => {
-    const result = await assignGingerly(null, { test: 'value' });
+  test('should handle non-object values gracefully', () => {
+    const result = assignGingerly(null, { test: 'value' });
     expect(result).toBeNull();
   });
 
-  test('should handle non-object source', async () => {
+  test('should handle non-object source', () => {
     const target = { existing: 'value' };
-    await assignGingerly(target, {} as any);
+    assignGingerly(target, {} as any);
     
     expect(target).toEqual({ existing: 'value' });
   });

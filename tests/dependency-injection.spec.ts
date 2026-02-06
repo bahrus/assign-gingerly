@@ -52,7 +52,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     expect(item?.map[testSymbol]).toBe('testProp');
   });
 
-  test('should inject dependency with symbol key', async () => {
+  test('should inject dependency with symbol key', () => {
     const registry = new BaseRegistry();
     const isHappy = Symbol.for('isHappy-test');
     
@@ -65,14 +65,14 @@ test.describe('assignGingerly - Dependency Injection', () => {
       spawn: MyEnhancement
     });
     
-    const result = await assignGingerly({}, {
+    const result = assignGingerly({}, {
       [isHappy]: true
     }, { registry });
     
     expect(result).toBeDefined();
   });
 
-  test('should handle synchronous spawn', async () => {
+  test('should handle synchronous spawn', () => {
     const registry = new BaseRegistry();
     const mySymbol = Symbol.for('my-symbol');
     
@@ -86,31 +86,12 @@ test.describe('assignGingerly - Dependency Injection', () => {
     });
     
     const target = {};
-    await assignGingerly(target, { [mySymbol]: 'updated' }, { registry });
+    assignGingerly(target, { [mySymbol]: 'updated' }, { registry });
     
     expect(target).toBeDefined();
   });
 
-  test('should handle async spawn with Promise', async () => {
-    const registry = new BaseRegistry();
-    const mySymbol = Symbol.for('async-symbol');
-    
-    class AsyncClass {
-      value = 'initial';
-    }
-    
-    registry.push({
-      map: { [mySymbol]: 'value' },
-      spawn: Promise.resolve(AsyncClass)
-    });
-    
-    const target = {};
-    const result = await assignGingerly(target, { [mySymbol]: 'async-value' }, { registry });
-    
-    expect(result).toBeDefined();
-  });
-
-  test('should reuse spawned instances for same symbol', async () => {
+  test('should reuse spawned instances for same symbol', () => {
     const registry = new BaseRegistry();
     const mySymbol = Symbol.for('reuse-symbol');
     
@@ -127,13 +108,13 @@ test.describe('assignGingerly - Dependency Injection', () => {
     });
     
     const target = {};
-    await assignGingerly(target, { [mySymbol]: 5 }, { registry });
-    await assignGingerly(target, { [mySymbol]: 10 }, { registry });
+    assignGingerly(target, { [mySymbol]: 5 }, { registry });
+    assignGingerly(target, { [mySymbol]: 10 }, { registry });
     
     expect(target).toBeDefined();
   });
 
-  test('should work with multiple symbols', async () => {
+  test('should work with multiple symbols', () => {
     const registry = new BaseRegistry();
     const sym1 = Symbol.for('sym1');
     const sym2 = Symbol.for('sym2');
@@ -152,7 +133,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     ]);
     
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       [sym1]: 'value1',
       [sym2]: 'value2'
     }, { registry });
@@ -160,7 +141,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     expect(target).toBeDefined();
   });
 
-  test('should combine nested paths with symbol dependencies', async () => {
+  test('should combine nested paths with symbol dependencies', () => {
     const registry = new BaseRegistry();
     const mySymbol = Symbol.for('combo-symbol');
     
@@ -174,7 +155,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     });
     
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       [mySymbol]: 'symbol-value',
       '?.config?.setting': 'nested-value'
     }, { registry });
@@ -182,7 +163,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     expect(target).toBeDefined();
   });
 
-  test('should create set property for lazy symbol assignment', async () => {
+  test('should create set property for lazy symbol assignment', () => {
     const registry = new BaseRegistry();
     const testSymbol = Symbol.for('set-test');
     
@@ -195,13 +176,13 @@ test.describe('assignGingerly - Dependency Injection', () => {
       spawn: TestClass
     });
     
-    const target = await assignGingerly({}, {}, { registry });
+    const target = assignGingerly({}, {}, { registry });
     
     // The set property should exist
     expect('set' in target).toBe(true);
   });
 
-  test('should handle symbol assignment through set proxy', async () => {
+  test('should handle symbol assignment through set proxy', () => {
     const registry = new BaseRegistry();
     const testSymbol = Symbol.for('proxy-test');
     
@@ -214,7 +195,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
       spawn: TestClass
     });
     
-    const target = await assignGingerly({}, {}, { registry });
+    const target = assignGingerly({}, {}, { registry });
     
     // Assignment through proxy should work
     target.set[testSymbol] = 'proxy-value';

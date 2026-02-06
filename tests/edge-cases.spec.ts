@@ -2,9 +2,9 @@ import { test, expect } from '@playwright/test';
 import assignGingerly from '../assignGingerly.js';
 
 test.describe('assignGingerly - Edge Cases', () => {
-  test('should handle arrays as values', async () => {
+  test('should handle arrays as values', () => {
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       items: [1, 2, 3],
       names: ['Alice', 'Bob']
     });
@@ -15,9 +15,9 @@ test.describe('assignGingerly - Edge Cases', () => {
     });
   });
 
-  test('should not treat arrays as objects to recurse into', async () => {
+  test('should not treat arrays as objects to recurse into', () => {
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       data: [1, 2, { nested: 'value' }]
     });
     
@@ -25,9 +25,9 @@ test.describe('assignGingerly - Edge Cases', () => {
     expect(target.data).toEqual([1, 2, { nested: 'value' }]);
   });
 
-  test('should handle numeric values', async () => {
+  test('should handle numeric values', () => {
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       count: 42,
       price: 19.99,
       zero: 0
@@ -38,9 +38,9 @@ test.describe('assignGingerly - Edge Cases', () => {
     expect(target.zero).toBe(0);
   });
 
-  test('should handle boolean values', async () => {
+  test('should handle boolean values', () => {
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       active: true,
       disabled: false
     });
@@ -49,9 +49,9 @@ test.describe('assignGingerly - Edge Cases', () => {
     expect(target.disabled).toBe(false);
   });
 
-  test('should handle null and undefined', async () => {
+  test('should handle null and undefined', () => {
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       nullValue: null,
       undefinedValue: undefined
     });
@@ -60,9 +60,9 @@ test.describe('assignGingerly - Edge Cases', () => {
     expect(target.undefinedValue).toBeUndefined();
   });
 
-  test('should handle string values', async () => {
+  test('should handle string values', () => {
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       text: 'hello',
       emoji: '🚀',
       empty: ''
@@ -73,19 +73,19 @@ test.describe('assignGingerly - Edge Cases', () => {
     expect(target.empty).toBe('');
   });
 
-  test('should ignore null as target', async () => {
-    const result = await assignGingerly(null, { test: 'value' });
+  test('should ignore null as target', () => {
+    const result = assignGingerly(null, { test: 'value' });
     expect(result).toBeNull();
   });
 
-  test('should ignore undefined as target', async () => {
-    const result = await assignGingerly(undefined, { test: 'value' });
+  test('should ignore undefined as target', () => {
+    const result = assignGingerly(undefined, { test: 'value' });
     expect(result).toBeUndefined();
   });
 
-  test('should handle complex nested structures', async () => {
+  test('should handle complex nested structures', () => {
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       app: {
         settings: {
           theme: 'dark',
@@ -102,60 +102,60 @@ test.describe('assignGingerly - Edge Cases', () => {
     expect(target.app.users[0].name).toBe('Alice');
   });
 
-  test('should handle very deeply nested paths', async () => {
+  test('should handle very deeply nested paths', () => {
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       '?.a?.b?.c?.d?.e?.f?.g?.h': 'deep-value'
     });
     
     expect(target.a.b.c.d.e.f.g.h).toBe('deep-value');
   });
 
-  test('should handle special characters in nested paths', async () => {
+  test('should handle special characters in nested paths', () => {
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       '?.style?.background-color': '#ff0000'
     });
     
     expect(target.style['background-color']).toBe('#ff0000');
   });
 
-  test('should maintain object prototype chain for primitives', async () => {
+  test('should maintain object prototype chain for primitives', () => {
     const target = {};
     const source = {
       str: 'text',
       num: 123
     };
     
-    await assignGingerly(target, source);
+    assignGingerly(target, source);
     
     expect(typeof target.str).toBe('string');
     expect(typeof target.num).toBe('number');
   });
 
-  test('should handle reassignment of values', async () => {
+  test('should handle reassignment of values', () => {
     const target = { value: 'initial' };
     
-    await assignGingerly(target, { value: 'first' });
+    assignGingerly(target, { value: 'first' });
     expect(target.value).toBe('first');
     
-    await assignGingerly(target, { value: 'second' });
+    assignGingerly(target, { value: 'second' });
     expect(target.value).toBe('second');
   });
 
-  test('should handle empty nested paths', async () => {
+  test('should handle empty nested paths', () => {
     const target = { existing: 'value' };
-    await assignGingerly(target, {});
+    assignGingerly(target, {});
     
     expect(target).toEqual({ existing: 'value' });
   });
 
-  test('should handle sequential calls', async () => {
+  test('should handle sequential calls', () => {
     const target = {};
     
-    await assignGingerly(target, { a: 1 });
-    await assignGingerly(target, { b: 2 });
-    await assignGingerly(target, { '?.c?.d': 3 });
+    assignGingerly(target, { a: 1 });
+    assignGingerly(target, { b: 2 });
+    assignGingerly(target, { '?.c?.d': 3 });
     
     expect(target).toEqual({
       a: 1,

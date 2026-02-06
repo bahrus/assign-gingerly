@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import assignGingerly from '../assignGingerly.js';
 
 test.describe('assignGingerly - Nested Path Assignment', () => {
-  test('Example 2: Merging into an existing sub object using ?. notation', async () => {
+  test('Example 2: Merging into an existing sub object using ?. notation', () => {
     // Simulate DOM element
     const oInput = {
       style: {
@@ -10,14 +10,14 @@ test.describe('assignGingerly - Nested Path Assignment', () => {
       }
     };
     
-    await assignGingerly(oInput, { '?.style?.height': '15px' });
+    assignGingerly(oInput, { '?.style?.height': '15px' });
     
     expect(oInput.style.height).toBe('15px');
   });
 
-  test('Example 3: Deeply nested object creation', async () => {
+  test('Example 3: Deeply nested object creation', () => {
     const obj = {};
-    await assignGingerly(obj, {
+    assignGingerly(obj, {
       '?.style?.height': '15px',
       '?.a?.b?.c': {
         d: 'hello',
@@ -38,18 +38,18 @@ test.describe('assignGingerly - Nested Path Assignment', () => {
     });
   });
 
-  test('should create intermediate objects for nested paths', async () => {
+  test('should create intermediate objects for nested paths', () => {
     const obj = {};
-    await assignGingerly(obj, {
+    assignGingerly(obj, {
       '?.level1?.level2?.level3': 'value'
     });
     
     expect(obj.level1.level2.level3).toBe('value');
   });
 
-  test('should handle multiple nested paths simultaneously', async () => {
+  test('should handle multiple nested paths simultaneously', () => {
     const obj = {};
-    await assignGingerly(obj, {
+    assignGingerly(obj, {
       '?.path1?.a': 'value1',
       '?.path2?.b': 'value2',
       '?.path3?.c?.d': 'value3'
@@ -60,14 +60,14 @@ test.describe('assignGingerly - Nested Path Assignment', () => {
     expect(obj.path3.c.d).toBe('value3');
   });
 
-  test('should preserve existing nested structures', async () => {
+  test('should preserve existing nested structures', () => {
     const obj = {
       existing: {
         nested: 'value'
       }
     };
     
-    await assignGingerly(obj, {
+    assignGingerly(obj, {
       '?.existing?.new': 'added'
     });
     
@@ -75,9 +75,9 @@ test.describe('assignGingerly - Nested Path Assignment', () => {
     expect(obj.existing.new).toBe('added');
   });
 
-  test('should handle mixed nested and non-nested keys', async () => {
+  test('should handle mixed nested and non-nested keys', () => {
     const obj = {};
-    await assignGingerly(obj, {
+    assignGingerly(obj, {
       simple: 'value',
       '?.nested?.key': 'nested value',
       another: 'simple value'
@@ -88,9 +88,9 @@ test.describe('assignGingerly - Nested Path Assignment', () => {
     expect(obj.nested.key).toBe('nested value');
   });
 
-  test('should recursively merge nested objects', async () => {
+  test('should recursively merge nested objects', () => {
     const obj = {};
-    await assignGingerly(obj, {
+    assignGingerly(obj, {
       '?.config': {
         setting1: 'value1',
         setting2: 'value2'
@@ -101,9 +101,9 @@ test.describe('assignGingerly - Nested Path Assignment', () => {
     expect(obj.config.setting2).toBe('value2');
   });
 
-  test('should handle deeply nested object values', async () => {
+  test('should handle deeply nested object values', () => {
     const obj = {};
-    await assignGingerly(obj, {
+    assignGingerly(obj, {
       '?.data?.users': {
         user1: { name: 'Alice', age: 30 },
         user2: { name: 'Bob', age: 25 }
@@ -114,14 +114,14 @@ test.describe('assignGingerly - Nested Path Assignment', () => {
     expect(obj.data.users.user2.age).toBe(25);
   });
 
-  test('should handle overwriting nested values', async () => {
+  test('should handle overwriting nested values', () => {
     const obj = {
       config: {
         setting: 'old value'
       }
     };
     
-    await assignGingerly(obj, {
+    assignGingerly(obj, {
       '?.config?.setting': 'new value'
     });
     

@@ -2,14 +2,14 @@ import { test, expect } from '@playwright/test';
 import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - README Examples', () => {
-  test('Example 1: Basic assignment (superset of Object.assign)', async () => {
+  test('Example 1: Basic assignment (superset of Object.assign)', () => {
     const sourceObj = { hello: 'world' };
-    await assignGingerly(sourceObj, { hello: 'Venus', foo: 'bar' });
+    assignGingerly(sourceObj, { hello: 'Venus', foo: 'bar' });
     
     expect(sourceObj).toEqual({ hello: 'Venus', foo: 'bar' });
   });
 
-  test('Example 2: Merging into existing sub object', async () => {
+  test('Example 2: Merging into existing sub object', () => {
     // Simulate DOM element with style property
     const oInput = {
       style: {
@@ -17,14 +17,14 @@ test.describe('assignGingerly - README Examples', () => {
       }
     };
     
-    await assignGingerly(oInput, { '?.style?.height': '15px' });
+    assignGingerly(oInput, { '?.style?.height': '15px' });
     
     expect(oInput.style.height).toBe('15px');
   });
 
-  test('Example 3: Deeply nested object creation', async () => {
+  test('Example 3: Deeply nested object creation', () => {
     const obj = {};
-    await assignGingerly(obj, {
+    assignGingerly(obj, {
       '?.style?.height': '15px',
       '?.a?.b?.c': {
         d: 'hello',
@@ -46,7 +46,7 @@ test.describe('assignGingerly - README Examples', () => {
     });
   });
 
-  test('Example 4: Dependency injection with symbols', async () => {
+  test('Example 4: Dependency injection with symbols', () => {
     // Define symbols
     const isHappy = Symbol.for('TFWsx0YH5E6eSfhE7zfLxA');
     const isMellow = Symbol.for('BqnnTPWRHkWdVGWcGQoAiw');
@@ -80,7 +80,7 @@ test.describe('assignGingerly - README Examples', () => {
     ]);
     
     // Use assignGingerly with dependency injection
-    const asyncResult = await assignGingerly({}, {
+    const result = assignGingerly({}, {
       [isHappy]: true,
       [isMellow]: true,
       '?.style?.height': '40px',
@@ -90,15 +90,15 @@ test.describe('assignGingerly - README Examples', () => {
     });
     
     // Verify the result structure
-    expect(asyncResult).toBeDefined();
-    expect(asyncResult.style?.height).toBe('40px');
-    expect(asyncResult.enhancements?.mellowYellow?.madAboutFourteen).toBe(true);
+    expect(result).toBeDefined();
+    expect(result.style?.height).toBe('40px');
+    expect(result.enhancements?.mellowYellow?.madAboutFourteen).toBe(true);
     
     // Verify set property exists for lazy assignment
-    expect('set' in asyncResult).toBe(true);
+    expect('set' in result).toBe(true);
   });
 
-  test('Example 4 extended: Using set property for lazy assignment', async () => {
+  test('Example 4 extended: Using set property for lazy assignment', () => {
     const isMellow = Symbol.for('BqnnTPWRHkWdVGWcGQoAiw');
     
     class YourEnhancement {
@@ -111,72 +111,15 @@ test.describe('assignGingerly - README Examples', () => {
       spawn: YourEnhancement
     });
     
-    const asyncResult = await assignGingerly({}, {}, { registry: baseRegistry });
+    const result = assignGingerly({}, {}, { registry: baseRegistry });
     
     // Use the set proxy to assign symbol values
-    asyncResult.set[isMellow] = false;
-    
-    expect(asyncResult).toBeDefined();
-  });
-
-  test('Async spawn example from README', async () => {
-    const isMellow = Symbol.for('async-example');
-    
-    class AsyncEnhancement {
-      isMellow = false;
-    }
-    
-    const baseRegistry = new BaseRegistry();
-    baseRegistry.push({
-      map: { [isMellow]: 'isMellow' },
-      spawn: Promise.resolve(AsyncEnhancement) // Return class after async operation
-    });
-    
-    const result = await assignGingerly({}, {
-      [isMellow]: true
-    }, {
-      registry: baseRegistry
-    });
+    result.set[isMellow] = false;
     
     expect(result).toBeDefined();
   });
 
-  test('Multiple async and sync spawns together', async () => {
-    const syncSym = Symbol.for('sync-spawn');
-    const asyncSym = Symbol.for('async-spawn');
-    
-    class SyncClass {
-      value = 'sync';
-    }
-    
-    class AsyncClass {
-      value = 'async';
-    }
-    
-    const registry = new BaseRegistry();
-    registry.push([
-      {
-        map: { [syncSym]: 'value' },
-        spawn: SyncClass
-      },
-      {
-        map: { [asyncSym]: 'value' },
-        spawn: Promise.resolve(AsyncClass)
-      }
-    ]);
-    
-    // According to README: sync instantiations happen first, then async ones
-    const result = await assignGingerly({}, {
-      [syncSym]: 'sync-value',
-      [asyncSym]: 'async-value'
-    }, {
-      registry
-    });
-    
-    expect(result).toBeDefined();
-  });
-
-  test('Combining all features: nested paths + dependencies', async () => {
+  test('Combining all features: nested paths + dependencies', () => {
     const enhSym = Symbol.for('enhancement');
     
     class Enhancement {
@@ -191,7 +134,7 @@ test.describe('assignGingerly - README Examples', () => {
     });
     
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       [enhSym]: true,
       '?.app?.name': 'MyApp',
       '?.app?.version': '1.0.0',

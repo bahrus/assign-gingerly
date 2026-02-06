@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - JSON Symbol.for Support', () => {
-  test('should convert Symbol.for string keys to actual symbols', async () => {
+  test('should convert Symbol.for string keys to actual symbols', () => {
     const registry = new BaseRegistry();
     const testSymbol = Symbol.for('test-json-symbol');
     
@@ -16,14 +16,14 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     });
     
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       "[Symbol.for('test-json-symbol')]": 'json-value'
     }, { registry });
     
     expect(target).toBeDefined();
   });
 
-  test('should handle multiple Symbol.for string keys', async () => {
+  test('should handle multiple Symbol.for string keys', () => {
     const registry = new BaseRegistry();
     const sym1 = Symbol.for('json-sym1');
     const sym2 = Symbol.for('json-sym2');
@@ -42,7 +42,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     ]);
     
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       "[Symbol.for('json-sym1')]": 'value1',
       "[Symbol.for('json-sym2')]": 'value2'
     }, { registry });
@@ -50,7 +50,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     expect(target).toBeDefined();
   });
 
-  test('should work with README example using Symbol.for strings', async () => {
+  test('should work with README example using Symbol.for strings', () => {
     const isHappy = Symbol.for('TFWsx0YH5E6eSfhE7zfLxA');
     const isMellow = Symbol.for('BqnnTPWRHkWdVGWcGQoAiw');
     
@@ -74,7 +74,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
       }
     ]);
     
-    const asyncResult = await assignGingerly({}, {
+    const result = assignGingerly({}, {
       "[Symbol.for('TFWsx0YH5E6eSfhE7zfLxA')]": true,
       "[Symbol.for('BqnnTPWRHkWdVGWcGQoAiw')]": true,
       '?.style?.height': '40px',
@@ -83,12 +83,12 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
       registry: baseRegistry
     });
     
-    expect(asyncResult).toBeDefined();
-    expect(asyncResult.style?.height).toBe('40px');
-    expect(asyncResult.enhancements?.mellowYellow?.madAboutFourteen).toBe(true);
+    expect(result).toBeDefined();
+    expect(result.style?.height).toBe('40px');
+    expect(result.enhancements?.mellowYellow?.madAboutFourteen).toBe(true);
   });
 
-  test('should handle both actual symbols and Symbol.for strings together', async () => {
+  test('should handle both actual symbols and Symbol.for strings together', () => {
     const registry = new BaseRegistry();
     const actualSymbol = Symbol.for('actual-symbol');
     const stringSymbol = Symbol.for('string-symbol');
@@ -107,7 +107,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     ]);
     
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       [actualSymbol]: 'actual-value',
       "[Symbol.for('string-symbol')]": 'string-value'
     }, { registry });
@@ -115,7 +115,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     expect(target).toBeDefined();
   });
 
-  test('should support Symbol.for strings with double quotes', async () => {
+  test('should support Symbol.for strings with double quotes', () => {
     const registry = new BaseRegistry();
     const testSymbol = Symbol.for('double-quote-test');
     
@@ -129,14 +129,14 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     });
     
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       '[Symbol.for("double-quote-test")]': 'double-quote-value'
     }, { registry });
     
     expect(target).toBeDefined();
   });
 
-  test('should combine Symbol.for strings with nested paths', async () => {
+  test('should combine Symbol.for strings with nested paths', () => {
     const registry = new BaseRegistry();
     const testSymbol = Symbol.for('combo-json-symbol');
     
@@ -150,7 +150,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     });
     
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       "[Symbol.for('combo-json-symbol')]": 'symbol-value',
       '?.config?.setting': 'nested-value',
       regularKey: 'regular-value'
@@ -161,9 +161,9 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     expect(target.regularKey).toBe('regular-value');
   });
 
-  test('should ignore invalid Symbol.for string formats', async () => {
+  test('should ignore invalid Symbol.for string formats', () => {
     const target = {};
-    await assignGingerly(target, {
+    assignGingerly(target, {
       '[Symbol.for(invalid)]': 'should-be-ignored',
       '[Symbol.for()]': 'also-ignored',
       'Symbol.for("test")': 'not-bracket-format',
@@ -175,7 +175,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     expect(target['[Symbol.for(invalid)]']).toBe('should-be-ignored');
   });
 
-  test('should work with JSON.parse for true JSON compatibility', async () => {
+  test('should work with JSON.parse for true JSON compatibility', () => {
     const registry = new BaseRegistry();
     const testSymbol = Symbol.for('json-parsed-symbol');
     
@@ -197,7 +197,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     const parsedData = JSON.parse(jsonString);
     
     const target = {};
-    await assignGingerly(target, parsedData, { registry });
+    assignGingerly(target, parsedData, { registry });
     
     expect(target).toBeDefined();
     expect(target.config?.name).toBe('MyApp');

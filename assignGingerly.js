@@ -77,7 +77,7 @@ function ensureNestedPath(obj, pathParts) {
 /**
  * Main assignGingerly function
  */
-export async function assignGingerly(target, source, options) {
+export function assignGingerly(target, source, options) {
     if (!target || typeof target !== 'object') {
         return target;
     }
@@ -86,8 +86,6 @@ export async function assignGingerly(target, source, options) {
         : options?.registry
             ? new options.registry()
             : undefined;
-    // Track promises for async spawning
-    const asyncSpawns = [];
     // Convert Symbol.for string keys to actual symbols
     const processedSource = {};
     for (const key of Object.keys(source)) {
@@ -121,7 +119,7 @@ export async function assignGingerly(target, source, options) {
                 if (!(lastKey in parent) || typeof parent[lastKey] !== 'object') {
                     parent[lastKey] = {};
                 }
-                await assignGingerly(parent[lastKey], value, options);
+                assignGingerly(parent[lastKey], value, options);
             }
             else {
                 parent[lastKey] = value;
@@ -133,7 +131,7 @@ export async function assignGingerly(target, source, options) {
                 if (!(key in target) || typeof target[key] !== 'object') {
                     target[key] = {};
                 }
-                await assignGingerly(target[key], value, options);
+                assignGingerly(target[key], value, options);
             }
             else {
                 target[key] = value;
@@ -155,8 +153,7 @@ export async function assignGingerly(target, source, options) {
                 // Check if instance already exists
                 let instance = instances.get(sym);
                 if (!instance) {
-                    // Check if spawn is a constructor or a promise
-                    const SpawnClass = await Promise.resolve(registryItem.spawn);
+                    const SpawnClass = registryItem.spawn;
                     instance = new SpawnClass();
                     instances.set(sym, instance);
                 }
@@ -184,31 +181,12 @@ export async function assignGingerly(target, source, options) {
                                 let instance = instances.get(prop);
                                 if (!instance) {
                                     const SpawnClass = registryItem.spawn;
-                                    if (SpawnClass instanceof Promise) {
-                                        // Handle async case - would need to be awaited externally
-                                        SpawnClass.then((SC) => {
-                                            instance = new SC();
-                                            instances.set(prop, instance);
-                                            const mappedKey = registryItem.map[prop];
-                                            if (mappedKey && instance && typeof instance === 'object') {
-                                                instance[mappedKey] = value;
-                                            }
-                                        });
-                                    }
-                                    else {
-                                        instance = new SpawnClass();
-                                        instances.set(prop, instance);
-                                        const mappedKey = registryItem.map[prop];
-                                        if (mappedKey && instance && typeof instance === 'object') {
-                                            instance[mappedKey] = value;
-                                        }
-                                    }
+                                    instance = new SpawnClass();
+                                    instances.set(prop, instance);
                                 }
-                                else {
-                                    const mappedKey = registryItem.map[prop];
-                                    if (mappedKey && instance && typeof instance === 'object') {
-                                        instance[mappedKey] = value;
-                                    }
+                                const mappedKey = registryItem.map[prop];
+                                if (mappedKey && instance && typeof instance === 'object') {
+                                    instance[mappedKey] = value;
                                 }
                             }
                         }

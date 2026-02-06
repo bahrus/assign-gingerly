@@ -2,7 +2,7 @@
  * Interface for registry items that define dependency injection mappings
  */
 export interface IBaseRegistryItem<T = any> {
-  spawn: { new (): T } | Promise<{ new (): T }>;
+  spawn: { new (): T };
   map: { [key: string | symbol]: keyof T };
   enhKey?: string;
 }
@@ -102,11 +102,11 @@ function ensureNestedPath(obj: any, pathParts: string[]): any {
 /**
  * Main assignGingerly function
  */
-export async function assignGingerly(
+export function assignGingerly(
   target: any,
   source: Record<string | symbol, any>,
   options?: IAssignGingerlyOptions
-): Promise<any> {
+): any {
   if (!target || typeof target !== 'object') {
     return target;
   }
@@ -116,9 +116,6 @@ export async function assignGingerly(
     : options?.registry
     ? new options.registry()
     : undefined;
-
-  // Track promises for async spawning
-  const asyncSpawns: Promise<void>[] = [];
 
   // Convert Symbol.for string keys to actual symbols
   const processedSource: Record<string | symbol, any> = {};
@@ -154,7 +151,7 @@ export async function assignGingerly(
         if (!(lastKey in parent) || typeof parent[lastKey] !== 'object') {
           parent[lastKey] = {};
         }
-        await assignGingerly(parent[lastKey], value, options);
+        assignGingerly(parent[lastKey], value, options);
       } else {
         parent[lastKey] = value;
       }
@@ -164,7 +161,7 @@ export async function assignGingerly(
         if (!(key in target) || typeof target[key] !== 'object') {
           target[key] = {};
         }
-        await assignGingerly(target[key], value, options);
+        assignGingerly(target[key], value, options);
       } else {
         target[key] = value;
       }
@@ -189,8 +186,7 @@ export async function assignGingerly(
         let instance = instances.get(sym);
 
         if (!instance) {
-          // Check if spawn is a constructor or a promise
-          const SpawnClass = await Promise.resolve(registryItem.spawn as any);
+          const SpawnClass = registryItem.spawn;
           instance = new SpawnClass();
           instances.set(sym, instance);
         }
@@ -222,30 +218,14 @@ export async function assignGingerly(
                   let instance = instances.get(prop);
 
                   if (!instance) {
-                    const SpawnClass = registryItem.spawn as any;
-                    if (SpawnClass instanceof Promise) {
-                      // Handle async case - would need to be awaited externally
-                      SpawnClass.then((SC: any) => {
-                        instance = new SC();
-                        instances.set(prop, instance);
-                        const mappedKey = registryItem.map[prop];
-                        if (mappedKey && instance && typeof instance === 'object') {
-                          (instance as any)[mappedKey] = value;
-                        }
-                      });
-                    } else {
-                      instance = new SpawnClass();
-                      instances.set(prop, instance);
-                      const mappedKey = registryItem.map[prop];
-                      if (mappedKey && instance && typeof instance === 'object') {
-                        (instance as any)[mappedKey] = value;
-                      }
-                    }
-                  } else {
-                    const mappedKey = registryItem.map[prop];
-                    if (mappedKey && instance && typeof instance === 'object') {
-                      (instance as any)[mappedKey] = value;
-                    }
+                    const SpawnClass = registryItem.spawn;
+                    instance = new SpawnClass();
+                    instances.set(prop, instance);
+                  }
+                  
+                  const mappedKey = registryItem.map[prop];
+                  if (mappedKey && instance && typeof instance === 'object') {
+                    (instance as any)[mappedKey] = value;
                   }
                 }
               }
