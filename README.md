@@ -34,7 +34,7 @@ console.log(sourceObj);
 
 ```TypeScript
 const oInput = document.querySelector('#myInput');
-assignGingerly(oInput, {'?.style?.height': '15px'});
+await assignGingerly(oInput, {'?.style?.height': '15px'});
 console.log(oInput.style.height);
 // 15px
 ```
@@ -45,7 +45,7 @@ This can go many levels deep.
 
 ```TypeScript
 const obj = {};
-assignGingerly(obj, {
+await assignGingerly(obj, {
     '?.style?.height': '15px',
     '?.a?.b?.c': {
         d: 'hello',

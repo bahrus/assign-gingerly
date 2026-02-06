@@ -13,7 +13,7 @@
   "license": "MIT",
   "author": "Bruce B. Anderson <andeson.bruce.b@gmail.com>",
   "type": "module",
-  "types": "index.d.ts",
+  "types": "types.d.ts",
   "files": [
     "assignGingerly.js",
     "index.d.ts",
@@ -23,7 +23,7 @@
   "exports": {
     ".": {
       "import": "./assignGingerly.js",
-      "types": "./index.d.ts"
+      "types": "./types.d.ts"
     }
   },
   "main": "assignGingerly.js",
