@@ -1,4 +1,4 @@
-import assignGingerly from './index.js';
+import assignGingerly from './assignGingerly.js';
 
 /**
  * Adds assignGingerly method to all objects via the Object prototype

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import assignGingerly from '../index.js';
+import assignGingerly from '../assignGingerly.js';
 
 test.describe('assignGingerly - Nested Path Assignment', () => {
   test('Example 2: Merging into an existing sub object using ?. notation', async () => {

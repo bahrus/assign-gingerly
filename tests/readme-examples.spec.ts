@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import assignGingerly, { BaseRegistry } from '../index.js';
+import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - README Examples', () => {
   test('Example 1: Basic assignment (superset of Object.assign)', async () => {

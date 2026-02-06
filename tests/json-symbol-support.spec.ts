@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import assignGingerly, { BaseRegistry } from '../index.js';
+import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - JSON Symbol.for Support', () => {
   test('should convert Symbol.for string keys to actual symbols', async () => {

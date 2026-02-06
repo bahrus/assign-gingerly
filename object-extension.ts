@@ -1,4 +1,4 @@
-import assignGingerly, { BaseRegistry, IAssignGingerlyOptions } from './index.js';
+import assignGingerly, { BaseRegistry, IAssignGingerlyOptions } from './assignGingerly.js';
 
 /**
  * Extends the Object interface to include the assignGingerly method

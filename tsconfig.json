@@ -9,7 +9,7 @@
 		"skipLibCheck": true
 	},
 	"include": [
-		"index.ts"
+		"assignGingerly.ts"
 	],
 	"exclude":[
 		"node_modules/*"

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import assignGingerly from '../index.js';
+import assignGingerly from '../assignGingerly.js';
 
 test.describe('assignGingerly - Edge Cases', () => {
   test('should handle arrays as values', async () => {

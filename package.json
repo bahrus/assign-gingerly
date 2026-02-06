@@ -15,18 +15,18 @@
   "type": "module",
   "types": "index.d.ts",
   "files": [
-    "index.js",
+    "assignGingerly.js",
     "index.d.ts",
     "README.md",
     "LICENSE"
   ],
   "exports": {
     ".": {
-      "import": "./index.js",
+      "import": "./assignGingerly.js",
       "types": "./index.d.ts"
     }
   },
-  "main": "index.js",
+  "main": "assignGingerly.js",
   "scripts": {
     "serve": "node ./node_modules/spa-ssi/serve.js",
     "test": "playwright test",
