@@ -34,7 +34,7 @@ console.log(sourceObj);
 
 ```TypeScript
 const oInput = document.querySelector('#myInput');
-await assignGingerly(oInput, {'?.style?.height': '15px'});
+assignGingerly(oInput, {'?.style?.height': '15px'});
 console.log(oInput.style.height);
 // 15px
 ```
@@ -45,7 +45,7 @@ This can go many levels deep.
 
 ```TypeScript
 const obj = {};
-await assignGingerly(obj, {
+assignGingerly(obj, {
     '?.style?.height': '15px',
     '?.a?.b?.c': {
         d: 'hello',
@@ -60,6 +60,74 @@ console.log(obj);
 ```
 
 When the right hand side of an expression is an object, assignGingerly is recursively applied (passing the third argument in if applicable, which will be discussed below) 
+
+## Example 4 - Incrementing values with !inc command
+
+The `!inc` command allows you to increment numeric values:
+
+```TypeScript
+const obj = {
+    a: {
+        b: {
+            c: 2
+        }
+    }
+};
+assignGingerly(obj, {
+    '!inc ?.a?.b?.c': 3,
+    '!inc ?.a?.d?.e': -2
+});
+console.log(obj);
+// {
+//   a: {
+//     b: { c: 5 },      // 2 + 3 = 5
+//     d: { e: -2 }      // non-existent path created with value -2
+//   }
+// }
+```
+
+The `!inc` command syntax is `!inc <path>` where the path can use the `?.` nested notation. The right-hand side value is added to the existing value using `+=`. If the path doesn't exist, it's created and set directly to the value. Non-numeric increments will allow JavaScript to throw its natural error.
+
+## Example 5 - Toggling boolean values with !toggle command
+
+The `!toggle` command allows you to toggle boolean values either immediately or after a delay:
+
+```TypeScript
+const obj = {
+    a: {
+        b: {
+            c: true
+        }
+    }
+};
+assignGingerly(obj, {
+    '!toggle ?.a?.b?.c': 0,      // Toggle immediately
+    '!toggle ?.a?.d?.e': 20      // Toggle after 20ms
+});
+console.log(obj);
+// {
+//   a: {
+//     b: { c: false }           // Toggled immediately
+//     // d doesn't exist yet
+//   }
+// }
+
+setTimeout(() => {
+    console.log(obj);
+    // {
+    //   a: {
+    //     b: { c: false },
+    //     d: { e: true }         // Created and toggled after 20ms
+    //   }
+    // }
+}, 40);
+```
+
+The `!toggle` command syntax is `!toggle <path>` where the path can use the `?.` nested notation. The right-hand side value determines the behavior:
+- **RHS = 0**: Toggle the existing value immediately (non-existent paths are not created)
+- **RHS > 0**: Schedule the toggle to happen after N milliseconds (non-existent paths are created and initialized to `true`)
+
+For existing values, the toggle is performed using JavaScript's logical NOT operator (`!value`). Non-numeric delay values will be passed to `setTimeout` and may throw an error.
 
 ## Dependency injection based on a registry object and a Symbolic reference
 
@@ -107,7 +175,7 @@ baseRegistry.push([
 ]);
 //end of dependency injection
 
-const asyncResult = await assignGingerly({}, {
+const result = assignGingerly({}, {
     [isHappy]: true,
     [isMellow]: true,
     '?.style.height': '40px',
@@ -115,7 +183,7 @@ const asyncResult = await assignGingerly({}, {
 }, {
     registry: BaseRegistry
 });
-asyncResult.set[isMellow] = false;
+result.set[isMellow] = false;
 ```
 
 The assignGingerly searches the registry for any items that has a mapping with a matching symbol of isHappy and isMellow, and if found, sees if it already has an instance of the spawn class associated with the first passed in parameter.  If no such instance is found, it instantiates one, associates the instance with the first parameter, then sets the property value.
@@ -124,12 +192,10 @@ It also adds a lazy property to the first passed in parameter, "set", which retu
 
 The suggestion to use Symbol.for with a guid, as opposed to just Symbol(), is based on some negative experiences I've had with multiple versions of the same library being referenced, but is not required. Regular symbols could also be used when that risk can be avoided.
 
-Note that the example above is the first time we mention async.  This is only necessary if you wish to work directly with the merged object.  This allows for lazy loading of the spawning class, which can be useful for large applications that don't need to download all the classes at once.  If you are just "depositing" values into the object, no need to await for anything.  Also, the assignGingerly should first do all the class instantiations that are already loaded (where the class constructor is specified in spawn), and then does all the lazy loaded ones.
-
 ## Support for JSON assignment with Symbol.for symbols
 
 ```JavaScript
-const asyncResult = await assignGingerly({}, {
+const result = assignGingerly({}, {
     "[Symbol.for('TFWsx0YH5E6eSfhE7zfLxA')]": true,
     "[Symbol.for('BqnnTPWRHkWdVGWcGQoAiw')]": true,
     '?.style.height': '40px',
