@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Custom Element Registry Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .test-section h3 {
+      margin-top: 0;
+    }
+    .pass {
+      color: green;
+      font-weight: bold;
+    }
+    .fail {
+      color: red;
+      font-weight: bold;
+    }
+    .result {
+      margin: 10px 0;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Custom Element Registry Test</h1>
+  <p>This test requires Chrome 146+ with scoped custom element registry support.</p>
+  
+  <div id="results"></div>
+
+  <script type="module">
+    import '../object-extension.js';
+    import { BaseRegistry } from '../assignGingerly.js';
+
+    const results = document.getElementById('results');
+
+    function addResult(title, passed, message) {
+      const section = document.createElement('div');
+      section.className = 'test-section';
+      section.innerHTML = `
+        <h3>${title}</h3>
+        <div class="result">
+          <span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
+          <p>${message}</p>
+        </div>
+      `;
+      results.appendChild(section);
+    }
+
+    // Test 1: Check if CustomElementRegistry has assignGingerlyRegistry
+    try {
+      const div = document.createElement('div');
+      const hasCustomElementRegistry = 'customElementRegistry' in div;
+      
+      if (!hasCustomElementRegistry) {
+        addResult(
+          'Test 1: CustomElementRegistry Support',
+          false,
+          'This browser does not support customElementRegistry on elements. Chrome 146+ required.'
+        );
+      } else {
+        const hasAssignGingerlyRegistry = 'assignGingerlyRegistry' in div.customElementRegistry;
+        addResult(
+          'Test 1: CustomElementRegistry has assignGingerlyRegistry',
+          hasAssignGingerlyRegistry,
+          hasAssignGingerlyRegistry 
+            ? 'assignGingerlyRegistry property exists on customElementRegistry'
+            : 'assignGingerlyRegistry property NOT found on customElementRegistry'
+        );
+
+        // Test 2: Check if assignGingerlyRegistry is a BaseRegistry instance
+        if (hasAssignGingerlyRegistry) {
+          const registry = div.customElementRegistry.assignGingerlyRegistry;
+          const isBaseRegistry = registry instanceof BaseRegistry;
+          addResult(
+            'Test 2: assignGingerlyRegistry is BaseRegistry instance',
+            isBaseRegistry,
+            isBaseRegistry
+              ? `assignGingerlyRegistry is an instance of BaseRegistry`
+              : `assignGingerlyRegistry is NOT a BaseRegistry instance (type: ${typeof registry})`
+          );
+
+          // Test 3: Check lazy getter behavior (same instance on multiple accesses)
+          const registry2 = div.customElementRegistry.assignGingerlyRegistry;
+          const isSameInstance = registry === registry2;
+          addResult(
+            'Test 3: Lazy getter returns same instance',
+            isSameInstance,
+            isSameInstance
+              ? 'Multiple accesses return the same BaseRegistry instance'
+              : 'Multiple accesses return different instances (lazy getter not working)'
+          );
+
+          // Test 4: Test auto-population of registry in assignGingerly
+          const testDiv = document.createElement('div');
+          const testRegistry = testDiv.customElementRegistry.assignGingerlyRegistry;
+          
+          // Add a test item to the registry
+          const testSymbol = Symbol.for('testProperty');
+          class TestClass {
+            value = null;
+          }
+          testRegistry.push({
+            spawn: TestClass,
+            map: { [testSymbol]: 'value' }
+          });
+
+          // Call assignGingerly without options
+          testDiv.assignGingerly({
+            [testSymbol]: 'test-value'
+          });
+
+          // Check if the registry was used
+          const hasSetProperty = 'set' in testDiv;
+          addResult(
+            'Test 4: assignGingerly auto-uses customElementRegistry',
+            hasSetProperty,
+            hasSetProperty
+              ? 'assignGingerly automatically used the customElementRegistry.assignGingerlyRegistry'
+              : 'assignGingerly did not use the registry (no "set" property created)'
+          );
+
+          // Test 5: Test with explicit options.registry (should override)
+          const testDiv2 = document.createElement('div');
+          const customRegistry = new BaseRegistry();
+          const customSymbol = Symbol.for('customProperty');
+          
+          class CustomClass {
+            customValue = null;
+          }
+          customRegistry.push({
+            spawn: CustomClass,
+            map: { [customSymbol]: 'customValue' }
+          });
+
+          testDiv2.assignGingerly({
+            [customSymbol]: 'custom-test'
+          }, { registry: customRegistry });
+
+          const usedCustomRegistry = 'set' in testDiv2;
+          addResult(
+            'Test 5: Explicit registry option overrides auto-population',
+            usedCustomRegistry,
+            usedCustomRegistry
+              ? 'Explicit registry option was used correctly'
+              : 'Explicit registry option was not used'
+          );
+
+          // Test 6: Test assignTentatively also uses customElementRegistry
+          const testDiv3 = document.createElement('div');
+          testDiv3.assignTentatively({
+            testProp: 'value'
+          });
+
+          const hasTestProp = testDiv3.testProp === 'value';
+          addResult(
+            'Test 6: assignTentatively also auto-uses customElementRegistry',
+            hasTestProp,
+            hasTestProp
+              ? 'assignTentatively correctly auto-populated registry from customElementRegistry'
+              : 'assignTentatively did not work correctly'
+          );
+        }
+      }
+    } catch (error) {
+      addResult(
+        'Error',
+        false,
+        `An error occurred: ${error.message}`
+      );
+    }
+  </script>
+</body>
+</html>

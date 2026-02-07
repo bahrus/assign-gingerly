@@ -1,6 +1,15 @@
 import assignGingerly, { BaseRegistry, IAssignGingerlyOptions } from './assignGingerly.js';
 
 /**
+ * Extends the CustomElementRegistry interface to include assignGingerlyRegistry
+ */
+declare global {
+  interface CustomElementRegistry {
+    assignGingerlyRegistry: typeof BaseRegistry | BaseRegistry;
+  }
+}
+
+/**
  * Extends the Object interface to include the assignGingerly and assignTentatively methods
  */
 declare global {
@@ -49,6 +58,28 @@ declare global {
 }
 
 /**
+ * Adds assignGingerlyRegistry to CustomElementRegistry prototype as a lazy getter
+ */
+if (typeof CustomElementRegistry !== 'undefined') {
+  Object.defineProperty(CustomElementRegistry.prototype, 'assignGingerlyRegistry', {
+    get: function () {
+      // Create a new BaseRegistry instance on first access and cache it
+      const registry = new BaseRegistry();
+      // Replace the getter with the actual value
+      Object.defineProperty(this, 'assignGingerlyRegistry', {
+        value: registry,
+        writable: true,
+        enumerable: false,
+        configurable: true,
+      });
+      return registry;
+    },
+    enumerable: false,
+    configurable: true,
+  });
+}
+
+/**
  * Adds assignGingerly method to all objects via the Object prototype
  */
 Object.defineProperty(Object.prototype, 'assignGingerly', {
@@ -57,6 +88,11 @@ Object.defineProperty(Object.prototype, 'assignGingerly', {
     source: Record<string | symbol, any>,
     options?: IAssignGingerlyOptions
   ): T {
+    // Auto-populate registry from customElementRegistry if this is an Element
+    if (this instanceof Element && (!options || !options.registry)) {
+      if (!options) options = {};
+      options.registry = (this as any).customElementRegistry?.assignGingerlyRegistry;
+    }
     assignGingerly(this, source, options);
     return this;
   },
@@ -75,6 +111,11 @@ Object.defineProperty(Object.prototype, 'assignTentatively', {
     source: Record<string | symbol, any>,
     options?: IAssignGingerlyOptions
   ): T {
+    // Auto-populate registry from customElementRegistry if this is an Element
+    if (this instanceof Element && (!options || !options.registry)) {
+      if (!options) options = {};
+      options.registry = (this as any).customElementRegistry?.assignGingerlyRegistry;
+    }
     assignGingerly(this, source, options);
     return this;
   },
