@@ -103,6 +103,23 @@ function parseToggleCommand(key: string): string | null {
 }
 
 /**
+ * Helper function to check if a key represents a !delete command
+ */
+function isDeleteCommand(key: string): boolean {
+  return key.startsWith('!delete ');
+}
+
+/**
+ * Helper function to parse a !delete command and extract the path
+ */
+function parseDeleteCommand(key: string): string | null {
+  if (!isDeleteCommand(key)) {
+    return null;
+  }
+  return key.substring(8); // Remove '!delete ' prefix
+}
+
+/**
  * Helper function to parse a path string with ?. notation
  */
 function parsePath(path: string): string[] {
@@ -224,6 +241,65 @@ export function assignGingerly(
             } else {
               // Path doesn't exist, initialize to true
               parent[lastKey] = true;
+            }
+          }, delay);
+        }
+      }
+      continue;
+    }
+
+    // Handle !delete commands
+    if (isDeleteCommand(key)) {
+      const path = parseDeleteCommand(key);
+      if (path) {
+        const delay = value;
+        
+        if (delay === 0) {
+          // Immediate delete
+          const pathParts = parsePath(path);
+          if (pathParts.length > 0) {
+            const lastKey = pathParts[pathParts.length - 1];
+            const parentPathParts = pathParts.slice(0, -1);
+            
+            // Navigate to parent without creating intermediate paths
+            let parent = target;
+            let canDelete = true;
+            
+            for (const part of parentPathParts) {
+              if (!(part in parent) || typeof parent[part] !== 'object' || parent[part] === null) {
+                canDelete = false;
+                break;
+              }
+              parent = parent[part];
+            }
+            
+            if (canDelete && lastKey in parent) {
+              delete parent[lastKey];
+            }
+          }
+        } else {
+          // Delayed delete using setTimeout
+          setTimeout(() => {
+            const pathParts = parsePath(path);
+            if (pathParts.length > 0) {
+              const lastKey = pathParts[pathParts.length - 1];
+              const parentPathParts = pathParts.slice(0, -1);
+              
+              // Navigate to parent without creating intermediate paths
+              let parent = target;
+              let canDelete = true;
+              
+              for (const part of parentPathParts) {
+                if (!(part in parent) || typeof parent[part] !== 'object' || parent[part] === null) {
+                  canDelete = false;
+                  break;
+                }
+                parent = parent[part];
+              }
+              
+              if (canDelete && lastKey in parent) {
+                delete parent[lastKey];
+              }
             }
           }, delay);
         }

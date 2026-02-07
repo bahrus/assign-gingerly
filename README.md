@@ -129,6 +129,44 @@ The `!toggle` command syntax is `!toggle <path>` where the path can use the `?.`
 
 For existing values, the toggle is performed using JavaScript's logical NOT operator (`!value`). Non-numeric delay values will be passed to `setTimeout` and may throw an error.
 
+## Example 6 - Deleting properties with !delete command
+
+The `!delete` command allows you to delete properties either immediately or after a delay:
+
+```TypeScript
+const obj = {
+    a: {
+        b: {
+            c: true,
+            d: 'hello'
+        }
+    }
+};
+assignGingerly(obj, {
+    '!delete ?.a?.b?.c': 0,      // Delete immediately
+    '!delete ?.a?.b': 20         // Delete after 20ms
+});
+console.log(obj);
+// {
+//   a: {
+//     b: { d: 'hello' }          // c deleted immediately
+//   }
+// }
+
+setTimeout(() => {
+    console.log(obj);
+    // {
+    //   a: {}                     // b deleted after 20ms
+    // }
+}, 40);
+```
+
+The `!delete` command syntax is `!delete <path>` where the path can use the `?.` nested notation. The right-hand side value determines the behavior:
+- **RHS = 0**: Delete the final property immediately (non-existent paths are silently skipped)
+- **RHS > 0**: Schedule the deletion to happen after N milliseconds (non-existent paths are silently skipped)
+
+**Important**: The `!delete` command only deletes the **final property** in the path. The entire nested chain is not deleted. For example, `'!delete ?.a?.b?.c': 0` only deletes property `c`, leaving the structure `a.b` intact. If any intermediate path doesn't exist, the command is silently skipped without error.
+
 ## Dependency injection based on a registry object and a Symbolic reference
 
 ```Typescript
