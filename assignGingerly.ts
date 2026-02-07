@@ -69,6 +69,23 @@ function parseSymbolForKey(key: string): symbol | null {
 }
 
 /**
+ * Helper function to check if a key represents an !inc command
+ */
+function isIncCommand(key: string): boolean {
+  return key.startsWith('!inc ');
+}
+
+/**
+ * Helper function to parse an !inc command and extract the path
+ */
+function parseIncCommand(key: string): string | null {
+  if (!isIncCommand(key)) {
+    return null;
+  }
+  return key.substring(5); // Remove '!inc ' prefix
+}
+
+/**
  * Helper function to parse a path string with ?. notation
  */
 function parsePath(path: string): string[] {
@@ -140,6 +157,25 @@ export function assignGingerly(
   // First pass: handle all non-symbol keys and sync operations
   for (const key of Object.keys(processedSource)) {
     const value = processedSource[key];
+
+    // Handle !inc commands
+    if (isIncCommand(key)) {
+      const path = parseIncCommand(key);
+      if (path) {
+        const pathParts = parsePath(path);
+        const lastKey = pathParts[pathParts.length - 1];
+        const parent = ensureNestedPath(target, pathParts);
+
+        // If the path doesn't exist, set it directly to the value
+        if (!(lastKey in parent)) {
+          parent[lastKey] = value;
+        } else {
+          // Path exists, apply increment: oldValue += newValue
+          parent[lastKey] += value;
+        }
+      }
+      continue;
+    }
 
     if (isNestedPath(key)) {
       const pathParts = parsePath(key);
