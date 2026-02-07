@@ -62,6 +62,21 @@ function parseIncCommand(key) {
     return key.substring(5); // Remove '!inc ' prefix
 }
 /**
+ * Helper function to check if a key represents a !toggle command
+ */
+function isToggleCommand(key) {
+    return key.startsWith('!toggle ');
+}
+/**
+ * Helper function to parse a !toggle command and extract the path
+ */
+function parseToggleCommand(key) {
+    if (!isToggleCommand(key)) {
+        return null;
+    }
+    return key.substring(8); // Remove '!toggle ' prefix
+}
+/**
  * Helper function to parse a path string with ?. notation
  */
 function parsePath(path) {
@@ -139,6 +154,41 @@ export function assignGingerly(target, source, options) {
                 else {
                     // Path exists, apply increment: oldValue += newValue
                     parent[lastKey] += value;
+                }
+            }
+            continue;
+        }
+        // Handle !toggle commands
+        if (isToggleCommand(key)) {
+            const path = parseToggleCommand(key);
+            if (path) {
+                const delay = value;
+                if (delay === 0) {
+                    // Immediate toggle
+                    const pathParts = parsePath(path);
+                    const lastKey = pathParts[pathParts.length - 1];
+                    const parent = ensureNestedPath(target, pathParts);
+                    if (lastKey in parent) {
+                        // Path exists, toggle it
+                        parent[lastKey] = !parent[lastKey];
+                    }
+                    // If path doesn't exist, don't create it for immediate toggle
+                }
+                else {
+                    // Delayed toggle using setTimeout
+                    setTimeout(() => {
+                        const pathParts = parsePath(path);
+                        const lastKey = pathParts[pathParts.length - 1];
+                        const parent = ensureNestedPath(target, pathParts);
+                        if (lastKey in parent) {
+                            // Path exists, toggle it
+                            parent[lastKey] = !parent[lastKey];
+                        }
+                        else {
+                            // Path doesn't exist, initialize to true
+                            parent[lastKey] = true;
+                        }
+                    }, delay);
                 }
             }
             continue;
