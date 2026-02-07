@@ -343,3 +343,66 @@ console.log(obj); // { a: 1, b: { c: 2 }, d: 3 }
 **Note**: The `assignTentatively` method on Object.prototype is simply an alias for `assignGingerly` and does **not** provide the reversibility features of the standalone `assignTentatively` function described in Example 7. For reversible assignments, use the standalone function from `assign-gingerly/assignTentatively`.
 
 The prototype extensions are non-enumerable and won't appear in `Object.keys()` or `for...in` loops.
+
+## Custom Element Registry Integration (Chrome 146+)
+
+This package includes support for Chrome's scoped custom element registries, which automatically integrates dependency injection with custom elements.
+
+### Automatic Registry Population
+
+When `assignGingerly` or `assignTentatively` is called on an Element instance without providing an explicit `registry` option, it automatically uses the registry from `element.customElementRegistry.assignGingerlyRegistry`:
+
+```TypeScript
+import 'assign-gingerly/object-extension.js';
+import { BaseRegistry } from 'assign-gingerly';
+
+// Set up a registry on the custom element registry
+const myElement = document.createElement('div');
+const registry = myElement.customElementRegistry.assignGingerlyRegistry;
+
+const mySymbol = Symbol.for('myProperty');
+class MyEnhancement {
+  value = null;
+}
+
+registry.push({
+  spawn: MyEnhancement,
+  map: { [mySymbol]: 'value' }
+});
+
+// No need to pass registry option - it's automatically used!
+myElement.assignGingerly({
+  [mySymbol]: 'hello world'
+});
+```
+
+### Lazy Registry Creation
+
+Each `CustomElementRegistry` instance gets its own `assignGingerlyRegistry` property via a lazy getter. The `BaseRegistry` instance is created on first access and cached for subsequent uses:
+
+```TypeScript
+const element1 = document.createElement('div');
+const element2 = document.createElement('span');
+
+// Each element's customElementRegistry gets its own registry
+const registry1 = element1.customElementRegistry.assignGingerlyRegistry;
+const registry2 = element2.customElementRegistry.assignGingerlyRegistry;
+
+// Multiple accesses return the same instance
+console.log(registry1 === element1.customElementRegistry.assignGingerlyRegistry); // true
+```
+
+### Explicit Registry Override
+
+You can still provide an explicit `registry` option to override the automatic behavior:
+
+```TypeScript
+const customRegistry = new BaseRegistry();
+// ... configure customRegistry ...
+
+myElement.assignGingerly({
+  [mySymbol]: 'value'
+}, { registry: customRegistry }); // Uses customRegistry instead of customElementRegistry
+```
+
+**Browser Support**: This feature requires Chrome 146+ with scoped custom element registry support. The implementation is designed as a polyfill for the web standards proposal and does not include fallback behavior for older browsers.
