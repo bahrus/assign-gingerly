@@ -16,9 +16,11 @@ declare global {
 
 The type should match the existing IAssignGingerlyOptions.registry type exactly.
 
-Please add assignGingerlyRegistry to the CustomElementRegistry prototype with an instance of new BaseRegistry().  Because this is part of a polyfill implementation for standard proposal, no effort should be made to shield the developer from future platform API's.
+Please add assignGingerlyRegistry to the CustomElementRegistry prototype with an instance of new BaseRegistry().  Because this is part of a polyfill implementation for a web standards proposal, no effort should be made to shield the developer from future platform API's.
 
-Because Playwright doesn't yet support Chrome 146, we cant yet playwright unit tests automatically.  Please create test html pages, but no *.spec.ts files for now until Playwright catches up.
+The creation of the BaseRegistry should be done via a lazy getter property added to the CustomElementRegistry.
+
+Because Playwright doesn't yet support Chrome 146, we can't yet run playwright unit tests automatically.  Please create test html pages in wpt, but no *.spec.ts files for now until Playwright catches up.
 
 For now, this is the requirements for Requirement6:
 
@@ -62,5 +64,10 @@ If:
 call assignGingerly with:
 
 ```JavaScript
-options.registry = this.customElementRegistry.assignGingerlyRegistry;
+// Modify options before calling
+if (this instanceof Element && (!options || !options.registry)) {
+  if (!options) options = {};
+  options.registry = (this as any).customElementRegistry?.assignGingerlyRegistry;
+}
+assignGingerly(this, source, options);
 ```
