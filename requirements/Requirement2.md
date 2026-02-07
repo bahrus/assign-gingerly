@@ -6,8 +6,7 @@ Planned commands are:
 
 - !inc
 - !toggle
-- !delete
-- !concat 
+- !delete 
 
 This requirement is focused on inc
 
