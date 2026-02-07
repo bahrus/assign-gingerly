@@ -12,13 +12,13 @@
         const target = { a: 1, b: 2 };
         const source = { b: 3, c: 4 };
 
-        const result = await assignGingerly(target, source);
+        const result = assignGingerly(target, source);
 
         console.log('Result:', result);
         // Expected output: Result: { a: 1, b: 3, c: 4 }
 
         const sourceObj = { hello: 'world' };
-        await assignGingerly(sourceObj, { hello: 'Venus', foo: 'bar' });
+        assignGingerly(sourceObj, { hello: 'Venus', foo: 'bar' });
         console.log('Source Object:', sourceObj);
         // Expected output: Source Object: { hello: 'Venus', foo: 'bar' }
 
@@ -26,7 +26,7 @@
             
         };
     
-        await assignGingerly(oInput, { '?.style?.height': '15px' });
+        assignGingerly(oInput, { '?.style?.height': '15px' });
         console.log({oInput});
     </script>
 </body>

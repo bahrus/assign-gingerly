@@ -116,14 +116,14 @@ The Playwright configuration in `playwright.config.ts` includes:
 ### Basic Assignment
 ```typescript
 const target = {};
-await assignGingerly(target, { hello: 'world' });
+assignGingerly(target, { hello: 'world' });
 expect(target.hello).toBe('world');
 ```
 
 ### Nested Assignment
 ```typescript
 const target = {};
-await assignGingerly(target, { '?.a?.b?.c': 'value' });
+assignGingerly(target, { '?.a?.b?.c': 'value' });
 expect(target.a.b.c).toBe('value');
 ```
 
@@ -139,7 +139,7 @@ registry.push({
   spawn: MyClass
 });
 
-const target = await assignGingerly({}, { [symbol]: 'new value' }, { registry });
+const target = assignGingerly({}, { [symbol]: 'new value' }, { registry });
 ```
 
 ## Notes

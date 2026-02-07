@@ -26,7 +26,7 @@ declare global {
     assignGingerly(
       source: Record<string | symbol, any>,
       options?: IAssignGingerlyOptions
-    ): Promise<this>;
+    ): this;
   }
 }
 
@@ -34,12 +34,12 @@ declare global {
  * Adds assignGingerly method to all objects via the Object prototype
  */
 Object.defineProperty(Object.prototype, 'assignGingerly', {
-  value: async function <T extends object>(
+  value: function <T extends object>(
     this: T,
     source: Record<string | symbol, any>,
     options?: IAssignGingerlyOptions
-  ): Promise<T> {
-    await assignGingerly(this, source, options);
+  ): T {
+    assignGingerly(this, source, options);
     return this;
   },
   writable: true,
