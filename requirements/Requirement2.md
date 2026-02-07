@@ -38,7 +38,7 @@ Question:
 
 Answer:
 
-Directly set it to -2?  We also see in this example it continues to create nested structures with the same logic as setting values.
+Directly set it to -2.  If the path doesn't exist, just set it to the value directly.  We also see in this example it continues to create intermediate nested object structures structures with the same logic as setting values.
 
 Question:
 
@@ -46,8 +46,16 @@ What if the current value of the pointed to nested path is a non numeric value?
 
 Answer:
 
-The code should just do += rhs and allow the JavaScript engine to throw whatever error it would naturally throw, and processing will stop.
+The code should just do new value = old value + rhs and allow the JavaScript engine to throw whatever error it would naturally throw, and processing will stop.
 
 Likewise, if the value to increment by is non numeric -- don't do any validation, just do += rhs
+
+Question:
+
+Is !inc case sensitive?
+
+Answer:
+
+Yes
 
 
