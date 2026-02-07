@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Object.prototype.assignTentatively basic functionality</title>
+    <link rel="help" href="https://github.com/bahrus/assign-gingerly">
+    <script src="/resources/testharness.js"></script>
+    <script src="/resources/testharnessreport.js"></script>
+</head>
+<body>
+<script type="module">
+    import assignGingerly from '../object-extension.js';
+
+    test(() => {
+        const target = {};
+        const result = target.assignTentatively({ hello: 'world' });
+        
+        assert_equals(target.hello, 'world', 'should assign simple property');
+        assert_equals(result, target, 'should return the target object');
+    }, 'Object.prototype.assignTentatively should assign simple properties');
+
+    test(() => {
+        const target = { existing: 'value' };
+        target.assignTentatively({ new: 'property' });
+        
+        assert_equals(target.existing, 'value', 'should preserve existing properties');
+        assert_equals(target.new, 'property', 'should add new properties');
+    }, 'Object.prototype.assignTentatively should preserve existing properties');
+
+    test(() => {
+        const target = { value: 'old' };
+        target.assignTentatively({ value: 'new' });
+        
+        assert_equals(target.value, 'new', 'should overwrite existing property');
+    }, 'Object.prototype.assignTentatively should overwrite properties');
+
+    test(() => {
+        const target = {};
+        target.assignTentatively({ a: 1, b: 2, c: 3 });
+        
+        assert_equals(target.a, 1, 'should assign first property');
+        assert_equals(target.b, 2, 'should assign second property');
+        assert_equals(target.c, 3, 'should assign third property');
+    }, 'Object.prototype.assignTentatively should assign multiple properties');
+
+    test(() => {
+        const target = {};
+        const source = { data: { nested: 'value' } };
+        target.assignTentatively(source);
+        
+        assert_equals(target.data.nested, 'value', 'should merge nested objects');
+    }, 'Object.prototype.assignTentatively should merge nested objects');
+
+    test(() => {
+        const target = {};
+        target.assignTentatively({ '?.style?.height': '15px' });
+        
+        assert_equals(target.style.height, '15px', 'should create nested path with ?. notation');
+    }, 'Object.prototype.assignTentatively should support ?. notation');
+
+    test(() => {
+        const target = {};
+        target.assignTentatively({
+            '?.a?.b?.c': 'deep',
+            '?.x?.y': 'shallow'
+        });
+        
+        assert_equals(target.a.b.c, 'deep', 'should create deeply nested path');
+        assert_equals(target.x.y, 'shallow', 'should create multiple nested paths');
+    }, 'Object.prototype.assignTentatively should handle multiple nested paths');
+
+    test(() => {
+        const target = {};
+        target.assignTentatively({ arr: [1, 2, 3] });
+        
+        assert_true(Array.isArray(target.arr), 'should preserve arrays');
+        assert_array_equals(target.arr, [1, 2, 3], 'should not modify array contents');
+    }, 'Object.prototype.assignTentatively should handle arrays');
+
+    test(() => {
+        const target = {};
+        target.assignTentatively({
+            str: 'string',
+            num: 42,
+            bool: true,
+            nil: null,
+            undef: undefined
+        });
+        
+        assert_equals(target.str, 'string', 'should handle string values');
+        assert_equals(target.num, 42, 'should handle numeric values');
+        assert_true(target.bool, 'should handle boolean values');
+        assert_equals(target.nil, null, 'should handle null');
+        assert_equals(target.undef, undefined, 'should handle undefined');
+    }, 'Object.prototype.assignTentatively should handle various data types');
+
+    test(() => {
+        const target1 = {};
+        const target2 = {};
+        
+        target1.assignTentatively({ prop: 'value1' });
+        target2.assignTentatively({ prop: 'value2' });
+        
+        assert_equals(target1.prop, 'value1', 'first target should have its value');
+        assert_equals(target2.prop, 'value2', 'second target should have its value');
+    }, 'Object.prototype.assignTentatively should work on multiple objects independently');
+
+    test(() => {
+        const target = {};
+        const result1 = target.assignTentatively({ a: 1 });
+        const result2 = result1.assignTentatively({ b: 2 });
+        
+        assert_equals(target.a, 1, 'should have first assignment');
+        assert_equals(target.b, 2, 'should have second assignment');
+        assert_equals(result1, target, 'chain calls should return same object');
+        assert_equals(result2, target, 'chain calls should return same object');
+    }, 'Object.prototype.assignTentatively should support method chaining');
+
+    test(() => {
+        const target = {};
+        
+        assert_false(target.hasOwnProperty('assignTentatively'), 'should not be enumerable');
+        assert_false('assignTentatively' in Object.keys(target), 'should not appear in Object.keys()');
+        
+        target.assignTentatively({ prop: 'value' });
+        
+        const keys = Object.keys(target);
+        assert_true(keys.includes('prop'), 'assigned property should be enumerable');
+        assert_false(keys.includes('assignTentatively'), 'assignTentatively should not be in keys');
+    }, 'Object.prototype.assignTentatively should not be enumerable');
+
+    test(() => {
+        const target = {};
+        
+        target.assignGingerly({ a: 1 });
+        target.assignTentatively({ b: 2 });
+        
+        assert_equals(target.a, 1, 'assignGingerly should work');
+        assert_equals(target.b, 2, 'assignTentatively should work');
+    }, 'assignGingerly and assignTentatively should work together');
+
+    test(() => {
+        const target = {};
+        
+        const result1 = target.assignGingerly({ a: 1 });
+        const result2 = target.assignTentatively({ b: 2 });
+        
+        assert_equals(result1, target, 'assignGingerly should return target');
+        assert_equals(result2, target, 'assignTentatively should return target');
+        assert_equals(target.a, 1, 'should have property from assignGingerly');
+        assert_equals(target.b, 2, 'should have property from assignTentatively');
+    }, 'assignGingerly and assignTentatively should be interchangeable');
+
+    test(() => {
+        const target = {};
+        
+        target
+            .assignGingerly({ a: 1 })
+            .assignTentatively({ b: 2 })
+            .assignGingerly({ c: 3 })
+            .assignTentatively({ d: 4 });
+        
+        assert_equals(target.a, 1, 'should have first property');
+        assert_equals(target.b, 2, 'should have second property');
+        assert_equals(target.c, 3, 'should have third property');
+        assert_equals(target.d, 4, 'should have fourth property');
+    }, 'assignGingerly and assignTentatively should chain together');
+</script>
+</body>
+</html>

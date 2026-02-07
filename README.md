@@ -310,3 +310,36 @@ const result = assignGingerly({}, {
 ```
 
 
+
+## Object.prototype Extensions
+
+For convenience, this package also provides Object.prototype extensions that allow you to call `assignGingerly` and `assignTentatively` directly on any object:
+
+```TypeScript
+import 'assign-gingerly/object-extension.js';
+
+const obj = {};
+obj.assignGingerly({ '?.style?.height': '15px' });
+console.log(obj.style.height); // '15px'
+
+// assignTentatively is an alias for assignGingerly on the prototype
+const target = {};
+target.assignTentatively({ '?.config?.theme': 'dark' });
+console.log(target.config.theme); // 'dark'
+```
+
+Both methods return `this`, allowing for method chaining:
+
+```TypeScript
+const obj = {};
+obj
+  .assignGingerly({ a: 1 })
+  .assignTentatively({ '?.b?.c': 2 })
+  .assignGingerly({ d: 3 });
+
+console.log(obj); // { a: 1, b: { c: 2 }, d: 3 }
+```
+
+**Note**: The `assignTentatively` method on Object.prototype is simply an alias for `assignGingerly` and does **not** provide the reversibility features of the standalone `assignTentatively` function described in Example 7. For reversible assignments, use the standalone function from `assign-gingerly/assignTentatively`.
+
+The prototype extensions are non-enumerable and won't appear in `Object.keys()` or `for...in` loops.

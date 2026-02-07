@@ -135,6 +135,34 @@
         
         assert_equals(target['x-custom']['my-prop'], 'value', 'should handle special characters in property names');
     }, 'Object.prototype.assignGingerly should handle special characters in paths');
+
+    test(() => {
+        const target = {};
+        target.assignTentatively({ '?.level1?.level2': 'value' });
+        
+        assert_equals(target.level1.level2, 'value', 'should create two-level nested property');
+    }, 'Object.prototype.assignTentatively should handle nested paths');
+
+    test(() => {
+        const target = {};
+        target.assignTentatively({
+            '?.path1?.a': 'value1',
+            '?.path2?.b': 'value2'
+        });
+        
+        assert_equals(target.path1.a, 'value1', 'should create first nested path');
+        assert_equals(target.path2.b, 'value2', 'should create second nested path');
+    }, 'Object.prototype.assignTentatively should handle multiple nested paths');
+
+    test(() => {
+        const target = {};
+        target
+            .assignGingerly({ '?.a?.b': 'gingerly' })
+            .assignTentatively({ '?.c?.d': 'tentatively' });
+        
+        assert_equals(target.a.b, 'gingerly', 'should have assignGingerly nested path');
+        assert_equals(target.c.d, 'tentatively', 'should have assignTentatively nested path');
+    }, 'assignGingerly and assignTentatively should both handle nested paths');
 </script>
 </body>
 </html>
