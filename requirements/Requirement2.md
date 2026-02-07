@@ -56,6 +56,6 @@ Is !inc case sensitive?
 
 Answer:
 
-Yes
+Yes, and only one space after !inc is allowed.
 
 
