@@ -96,15 +96,13 @@ baseRegistry.push([
         map: {
             [isHappy]: 'isHappy'
         },
-        spawn: MyEnhancement
+        spawn: MyEnhancement,
     },{
        
        map: {
            [isMellow]: 'isMellow'
        },
-       spawn: async () => {
-          return YourEnhancement;
-       } 
+       spawn: YourEnhancement,
     }
 ]);
 //end of dependency injection
