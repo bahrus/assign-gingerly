@@ -167,6 +167,70 @@ The `!delete` command syntax is `!delete <path>` where the path can use the `?.`
 
 **Important**: The `!delete` command only deletes the **final property** in the path. The entire nested chain is not deleted. For example, `'!delete ?.a?.b?.c': 0` only deletes property `c`, leaving the structure `a.b` intact. If any intermediate path doesn't exist, the command is silently skipped without error.
 
+## Example 7 - Reversible assignments with assignTentatively
+
+The `assignTentatively` function works like `assignGingerly` but with a powerful addition: **reversibility**. It tracks changes and generates a reversal object that can undo all modifications:
+
+```TypeScript
+import assignTentatively from 'assign-gingerly/assignTentatively';
+
+const obj = { f: { g: 'hello' } };
+const reversal = {};
+
+assignTentatively(obj, {
+    '?.style?.height': '15px',
+    '?.a?.b?.c': {
+        d: 'hello',
+        e: 'world'
+    },
+    '?.f?.g': 'bye'
+}, { reversal });
+
+console.log(obj);
+// {
+//   f: { g: 'bye' },
+//   style: { height: '15px' },
+//   a: { b: { c: { d: 'hello', e: 'world' } } }
+// }
+
+console.log(reversal);
+// {
+//   '!delete ?.a': 0,
+//   '!delete ?.style': 0,
+//   '?.f?.g': 'hello'
+// }
+
+// Later, restore to original state:
+assignTentatively(obj, reversal);
+console.log(obj);
+// {
+//   f: { g: 'hello' }
+// }
+```
+
+**Key differences from assignGingerly:**
+- **No setTimeout support**: All `!toggle`, `!inc`, and `!delete` commands execute immediately, regardless of the RHS value
+- **No registry/DI support**: Dependency injection features are not available (pass it in and it will be ignored)
+- **Reversal tracking**: Maintains a reversal object that records:
+  - **Original values** of modified existing properties
+  - **!delete commands** for newly created top-level paths (e.g., `!delete ?.a` for paths created under `a`)
+  - **Original values** for deleted properties
+
+**Reversal guarantee:**
+```JavaScript
+const reversal = {};
+const obj = {...originalObj};
+const string1 = JSON.stringify(obj);
+
+assignTentatively(obj, sourceChanges, { reversal });
+assignTentatively(obj, reversal);
+
+const string2 = JSON.stringify(obj);
+console.log(string1 === string2); // true
+```
+
+This guarantees that applying the reversal object restores the object to its exact original state.
+
 ## Dependency injection based on a registry object and a Symbolic reference
 
 ```Typescript
