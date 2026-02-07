@@ -15,8 +15,8 @@
   "type": "module",
   "types": "types.d.ts",
   "files": [
-    "assignGingerly.js",
-    "types.d.ts",
+    "*.js",
+    "*.ts",
     "README.md",
     "LICENSE"
   ],
@@ -42,9 +42,9 @@
     "update": "ncu -u && npm install"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.0",
+    "@playwright/test": "^1.58.2",
     "spa-ssi": "0.0.26",
-    "@types/node": "^25.0.10",
+    "@types/node": "^25.2.1",
     "typescript": "^5.9.3"
   }
 }
