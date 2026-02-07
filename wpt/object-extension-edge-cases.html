@@ -11,25 +11,25 @@
 <script type="module">
     import assignGingerly from '../object-extension.js';
 
-    promise_test(async (t) => {
+    test(() => {
         const target = {};
-        await target.assignGingerly({ items: [1, 2, 3] });
+        target.assignGingerly({ items: [1, 2, 3] });
         
         assert_true(Array.isArray(target.items), 'should preserve array type');
         assert_array_equals(target.items, [1, 2, 3], 'should not recurse into arrays');
     }, 'Object.prototype.assignGingerly should handle arrays as values');
 
-    promise_test(async (t) => {
+    test(() => {
         const target = {};
-        await target.assignGingerly({ data: [1, 2, { nested: 'value' }] });
+        target.assignGingerly({ data: [1, 2, { nested: 'value' }] });
         
         assert_true(Array.isArray(target.data), 'array should remain an array');
         assert_equals(target.data[2].nested, 'value', 'should preserve array contents');
     }, 'Object.prototype.assignGingerly should not recurse into array elements');
 
-    promise_test(async (t) => {
+    test(() => {
         const target = {};
-        await target.assignGingerly({
+        target.assignGingerly({
             count: 42,
             price: 19.99,
             zero: 0
@@ -40,9 +40,9 @@
         assert_equals(target.zero, 0, 'should handle zero');
     }, 'Object.prototype.assignGingerly should handle numeric values');
 
-    promise_test(async (t) => {
+    test(() => {
         const target = {};
-        await target.assignGingerly({
+        target.assignGingerly({
             active: true,
             disabled: false
         });
@@ -51,9 +51,9 @@
         assert_false(target.disabled, 'should handle false values');
     }, 'Object.prototype.assignGingerly should handle boolean values');
 
-    promise_test(async (t) => {
+    test(() => {
         const target = {};
-        await target.assignGingerly({
+        target.assignGingerly({
             nullValue: null,
             undefinedValue: undefined
         });
@@ -62,9 +62,9 @@
         assert_equals(target.undefinedValue, undefined, 'should handle undefined');
     }, 'Object.prototype.assignGingerly should handle null and undefined');
 
-    promise_test(async (t) => {
+    test(() => {
         const target = {};
-        await target.assignGingerly({
+        target.assignGingerly({
             text: 'hello',
             emoji: '🚀',
             empty: ''
@@ -75,9 +75,9 @@
         assert_equals(target.empty, '', 'should handle empty strings');
     }, 'Object.prototype.assignGingerly should handle string values');
 
-    promise_test(async (t) => {
+    test(() => {
         const target = {};
-        await target.assignGingerly({
+        target.assignGingerly({
             app: {
                 settings: {
                     theme: 'dark',
@@ -94,79 +94,79 @@
         assert_equals(target.app.users[0].name, 'Alice', 'should preserve array contents in nested structures');
     }, 'Object.prototype.assignGingerly should handle complex nested structures');
 
-    promise_test(async (t) => {
+    test(() => {
         const target = {};
-        await target.assignGingerly({ '?.a?.b?.c?.d?.e?.f?.g?.h': 'deep-value' });
+        target.assignGingerly({ '?.a?.b?.c?.d?.e?.f?.g?.h': 'deep-value' });
         
         assert_equals(target.a.b.c.d.e.f.g.h, 'deep-value', 'should handle very deep nesting');
     }, 'Object.prototype.assignGingerly should handle very deeply nested paths');
 
-    promise_test(async (t) => {
+    test(() => {
         const target = {};
-        await target.assignGingerly({ '?.style?.background-color': '#ff0000' });
+        target.assignGingerly({ '?.style?.background-color': '#ff0000' });
         
         assert_equals(target.style['background-color'], '#ff0000', 'should handle special characters in property names');
     }, 'Object.prototype.assignGingerly should handle special characters in paths');
 
-    promise_test(async (t) => {
+    test(() => {
         const target = {};
-        await target.assignGingerly({ str: 'text', num: 123 });
+        target.assignGingerly({ str: 'text', num: 123 });
         
         assert_equals(typeof target.str, 'string', 'should preserve string type');
         assert_equals(typeof target.num, 'number', 'should preserve number type');
     }, 'Object.prototype.assignGingerly should maintain type information');
 
-    promise_test(async (t) => {
+    test(() => {
         const target = { value: 'initial' };
         
-        await target.assignGingerly({ value: 'first' });
+        target.assignGingerly({ value: 'first' });
         assert_equals(target.value, 'first', 'should update value on first call');
         
-        await target.assignGingerly({ value: 'second' });
+        target.assignGingerly({ value: 'second' });
         assert_equals(target.value, 'second', 'should update value on second call');
     }, 'Object.prototype.assignGingerly should handle reassignments');
 
-    promise_test(async (t) => {
+    test(() => {
         const target = { existing: 'value' };
-        await target.assignGingerly({});
+        target.assignGingerly({});
         
         assert_equals(target.existing, 'value', 'should preserve values with empty source');
     }, 'Object.prototype.assignGingerly should handle empty source objects');
 
-    promise_test(async (t) => {
+    test(() => {
         const target = {};
         
-        await target.assignGingerly({ a: 1 });
+        target.assignGingerly({ a: 1 });
         assert_equals(target.a, 1, 'should apply first assignment');
         
-        await target.assignGingerly({ b: 2 });
+        target.assignGingerly({ b: 2 });
         assert_equals(target.b, 2, 'should apply second assignment');
         
-        await target.assignGingerly({ '?.c?.d': 3 });
+        target.assignGingerly({ '?.c?.d': 3 });
         assert_equals(target.c.d, 3, 'should apply third assignment');
         
         assert_equals(target.a, 1, 'should retain first assignment');
         assert_equals(target.b, 2, 'should retain second assignment');
     }, 'Object.prototype.assignGingerly should handle sequential calls');
 
-    promise_test(async (t) => {
+    test(() => {
         const target = {};
         const source1 = { '?.nested': { a: 1 } };
         const source2 = { '?.nested': { b: 2 } };
         
-        await target.assignGingerly(source1);
-        await target.assignGingerly(source2);
+        target.assignGingerly(source1);
+        target.assignGingerly(source2);
         
         assert_equals(target.nested.a, 1, 'should retain first nested assignment');
         assert_equals(target.nested.b, 2, 'should add to second nested assignment');
     }, 'Object.prototype.assignGingerly should merge sequential nested assignments');
 
-    promise_test(async (t) => {
+    test(() => {
         const obj1 = {};
         const obj2 = {};
         
-        const result1 = await obj1.assignGingerly({ value: 'obj1' });
-        const result2 = await obj2.assignGingerly({ value: 'obj2' });
+        const result1 = obj1.assignGingerly({ value: 'obj1' });
+        const result2 = obj2.assignGingerly({ value: 'obj2' });
         
         assert_equals(obj1.value, 'obj1', 'first object should have its value');
         assert_equals(obj2.value, 'obj2', 'second object should have its value');

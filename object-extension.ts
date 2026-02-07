@@ -11,16 +11,16 @@ declare global {
      * 
      * @param source - The source object to merge
      * @param options - Optional configuration with registry for dependency injection
-     * @returns A promise that resolves to this object after merging
+     * @returns This object after merging
      * 
      * @example
      * const target = {};
-     * await target.assignGingerly({ '?.style?.height': '15px' });
+     * target.assignGingerly({ '?.style?.height': '15px' });
      * console.log(target); // { style: { height: '15px' } }
      * 
      * @example
      * const obj = { a: 1 };
-     * await obj.assignGingerly({ b: 2, '?.nested?.key': 'value' });
+     * obj.assignGingerly({ b: 2, '?.nested?.key': 'value' });
      * console.log(obj); // { a: 1, b: 2, nested: { key: 'value' } }
      */
     assignGingerly(

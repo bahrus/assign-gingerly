@@ -11,7 +11,7 @@
 <script type="module">
     import assignGingerly, { BaseRegistry } from '../object-extension.js';
 
-    promise_test(async (t) => {
+    test(() => {
         const registry = new BaseRegistry();
         const testSym = Symbol.for('test-symbol');
         
@@ -25,12 +25,12 @@
         });
         
         const target = {};
-        await target.assignGingerly({ [testSym]: 'updated' }, { registry });
+        target.assignGingerly({ [testSym]: 'updated' }, { registry });
         
         assert_true(target !== undefined, 'should complete with registry option');
     }, 'Object.prototype.assignGingerly should support dependency injection with registry');
 
-    promise_test(async (t) => {
+    test(() => {
         const registry = new BaseRegistry();
         const sym1 = Symbol.for('sym1');
         const sym2 = Symbol.for('sym2');
@@ -44,7 +44,7 @@
         ]);
         
         const target = {};
-        await target.assignGingerly({
+        target.assignGingerly({
             [sym1]: 'value1',
             [sym2]: 'value2'
         }, { registry });
@@ -52,7 +52,7 @@
         assert_true(target !== undefined, 'should handle multiple symbol dependencies');
     }, 'Object.prototype.assignGingerly should handle multiple symbols');
 
-    promise_test(async (t) => {
+    test(() => {
         const registry = new BaseRegistry();
         const testSym = Symbol.for('test-async');
         
@@ -66,12 +66,12 @@
         });
         
         const target = {};
-        await target.assignGingerly({ [testSym]: 'async-value' }, { registry });
+        target.assignGingerly({ [testSym]: 'async-value' }, { registry });
         
         assert_true(target !== undefined, 'should handle async spawn');
     }, 'Object.prototype.assignGingerly should support async spawn classes');
 
-    promise_test(async (t) => {
+    test(() => {
         const registry = new BaseRegistry();
         const testSym = Symbol.for('reuse-test');
         
@@ -85,13 +85,13 @@
         });
         
         const target = {};
-        await target.assignGingerly({ [testSym]: 5 }, { registry });
-        await target.assignGingerly({ [testSym]: 10 }, { registry });
+        target.assignGingerly({ [testSym]: 5 }, { registry });
+        target.assignGingerly({ [testSym]: 10 }, { registry });
         
         assert_true(target !== undefined, 'should reuse instances');
     }, 'Object.prototype.assignGingerly should reuse spawned instances');
 
-    promise_test(async (t) => {
+    test(() => {
         const registry = new BaseRegistry();
         const testSym = Symbol.for('combo-test');
         
@@ -105,7 +105,7 @@
         });
         
         const target = {};
-        await target.assignGingerly({
+        target.assignGingerly({
             [testSym]: 'symbol-value',
             '?.config?.setting': 'nested-value'
         }, { registry });
@@ -113,7 +113,7 @@
         assert_equals(target.config.setting, 'nested-value', 'should combine nested paths with symbols');
     }, 'Object.prototype.assignGingerly should combine nested paths with dependencies');
 
-    promise_test(async (t) => {
+    test(() => {
         const registry = new BaseRegistry();
         const testSym = Symbol.for('set-test');
         
@@ -126,12 +126,12 @@
             spawn: SetTestClass
         });
         
-        const target = await new Object().assignGingerly({}, { registry });
+        const target = new Object().assignGingerly({}, { registry });
         
         assert_true('set' in target, 'should create set property when registry is used');
     }, 'Object.prototype.assignGingerly should create set property for lazy assignment');
 
-    promise_test(async (t) => {
+    test(() => {
         const registry = new BaseRegistry();
         const testSym = Symbol.for('proxy-test');
         
@@ -144,13 +144,13 @@
             spawn: ProxyTestClass
         });
         
-        const target = await new Object().assignGingerly({}, { registry });
+        const target = new Object().assignGingerly({}, { registry });
         target.set[testSym] = 'proxy-value';
         
         assert_true(target !== undefined, 'should allow assignment through set proxy');
     }, 'Object.prototype.assignGingerly should support set proxy assignment');
 
-    promise_test(async (t) => {
+    test(() => {
         const isHappy = Symbol.for('isHappy-test');
         const isMellow = Symbol.for('isMellow-test');
         
@@ -170,7 +170,7 @@
         ]);
         
         const target = {};
-        await target.assignGingerly({
+        target.assignGingerly({
             [isHappy]: true,
             [isMellow]: true,
             '?.style?.height': '40px',

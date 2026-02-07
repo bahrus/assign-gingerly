@@ -30,6 +30,6 @@ export declare function assignGingerly(
   target: any,
   source: Record<string | symbol, any>,
   options?: IAssignGingerlyOptions
-): Promise<any>;
+): any;
 
 export default assignGingerly;
