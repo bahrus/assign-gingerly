@@ -16,17 +16,26 @@
   "types": "types.d.ts",
   "files": [
     "assignGingerly.js",
-    "index.d.ts",
+    "types.d.ts",
     "README.md",
     "LICENSE"
   ],
   "exports": {
     ".": {
-      "import": "./assignGingerly.js",
+      "default": "./index.js",
+      "types": "./types.d.ts"
+    },
+    "./assignGingerly.js": {
+      "default": "./assignGingerly.js",
+      "types": "./types.d.ts"
+    },
+    "./assignTentatively.js": {
+      "default": "./assignTentatively.js",
       "types": "./types.d.ts"
     }
   },
-  "main": "assignGingerly.js",
+  "main": "index.js",
+  "module": "index.js",
   "scripts": {
     "serve": "node ./node_modules/spa-ssi/serve.js",
     "test": "playwright test",
