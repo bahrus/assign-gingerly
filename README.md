@@ -282,7 +282,7 @@ baseRegistry.push([
 const result = assignGingerly({}, {
     [isHappy]: true,
     [isMellow]: true,
-    '?.style.height': '40px',
+    '?.style?.height': '40px',
     '?.enh?.mellowYellow?.madAboutFourteen': true
 }, {
     registry: BaseRegistry
