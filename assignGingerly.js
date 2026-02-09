@@ -29,6 +29,9 @@ export class BaseRegistry {
             }) || Object.getOwnPropertySymbols(map).some(sym => sym === symbol);
         });
     }
+    findByEnhKey(enhKey) {
+        return this.items.find(item => item.enhKey === enhKey);
+    }
 }
 /**
  * Helper function to check if a string key represents a Symbol.for expression

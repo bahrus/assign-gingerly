@@ -2,9 +2,13 @@
  * Interface for registry items that define dependency injection mappings
  */
 export interface IBaseRegistryItem<T = any> {
-  spawn: { new (): T };
+  spawn: { new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T };
   map: { [key: string | symbol]: keyof T };
   enhKey?: string;
+}
+
+export interface SpawnContext<T = any> {
+  mountInfo: IBaseRegistryItem<T>;
 }
 
 /**
@@ -47,6 +51,10 @@ export class BaseRegistry {
         return false;
       }) || Object.getOwnPropertySymbols(map).some(sym => sym === symbol);
     });
+  }
+
+  findByEnhKey(enhKey: string | symbol): IBaseRegistryItem | undefined {
+    return this.items.find(item => item.enhKey === enhKey);
   }
 }
 

@@ -4,13 +4,13 @@ export type EnhKey = string | symbol;
  * Interface for registry items that define dependency injection mappings
  */
 export interface IBaseRegistryItem<T = any> {
-  spawn: { new (oElement: Element, ctx: SpawnContext<T>, initVals?: Partial<T>): T  };
+  spawn: { new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T  };
   map: { [key: string | symbol]: keyof T };
   enhKey?: EnhKey;
 }
 
 export interface SpawnContext<T = any> {
-  mountInfo: IBaseRegistryItem<T>
+  mountInfo: IBaseRegistryItem<T>;
 }
 
 /**
@@ -28,6 +28,7 @@ export declare class BaseRegistry {
   push(items: IBaseRegistryItem | IBaseRegistryItem[]): void;
   getItems(): IBaseRegistryItem[];
   findBySymbol(symbol: symbol | string): IBaseRegistryItem | undefined;
+  findByEnhKey(enhKey: string | symbol): IBaseRegistryItem | undefined;
 }
 
 /**
