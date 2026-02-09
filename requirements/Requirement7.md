@@ -12,6 +12,10 @@ declare global {
 
 Note first the addition of property enhKey to IBaseRegistryItem
 
+But BaseRegistry only has findBySymbol(). We need to add:
+
+findByEnhKey(enhKey: string | symbol): IBaseRegistryItem | undefined;
+
 The basic thing we want to do is that if a registry item is in the customElementRegistry for an element, then doing:
 
 ```JavaScript
@@ -26,6 +30,14 @@ If so,
 
      checks if oElement.myEnh already exists as an instance of class constructor.
 
+```JavaScript
+if (oElement[enhKey] && oElement[enhKey] instanceof SpawnClass) {
+  // Already exists, just use it
+} else {
+  // Need to spawn
+}
+```
+
      If not, spawns an instance of the class constructor, passing in oElement as the first argument, and the spawnContext.  If oElement.myEnh is set to some object that isn't an instance of the class constructor,
      it is passed as the third argument into the class constructor (initVals).  oElement.myEnh is set to the spawned instance.
 
@@ -39,11 +51,18 @@ If not, if there is no registry item with enhKey === 'myEnh', then:
 
 To accomplish this:
 
+oElement.set → returns a proxy (first level)
+oElement.set.myEnh → proxy's get trap returns  the actual enhancement object (second level) if a spawn class is found with enhKey === 'myEnh' and if not just sets oElement.myEnh = {} and returns eElement.myEnh.
+oElement.set.myEnh.myEnhProp = 'hello' → sets the property on the enhancement
+
 The code sample below is "approximate" and probably contains some errors and is purposely vague in some cases.
 
-In object-extension.ts add a "set" lazy property to the Element prototype, that is something like below
+
+
+
 
 ```JavaScript
+//weak map between elements and the "set" proxy
 const wm = new WeakMap();
 Object.defineProperty(Element.prototype, 'set', {
     get() {
@@ -53,9 +72,10 @@ Object.defineProperty(Element.prototype, 'set', {
             const proxy = new Proxy(self, {
                 get(obj: any, prop: EnhKey){
                     //do the spawning if found in registry or set oElement[enhKey] = {}
+                    const ctx: SpawnContext = { mountInfo: registryItem };
                 }
             })
-            wm.set(this, new BeEnhanced(this));
+            wm.set(this, proxy);
         }
         return wm.get(this);
     },
