@@ -406,3 +406,182 @@ myElement.assignGingerly({
 ```
 
 **Browser Support**: This feature requires Chrome 146+ with scoped custom element registry support. The implementation is designed as a polyfill for the web standards proposal and does not include fallback behavior for older browsers.
+
+## Enhanced Element Property Assignment with `set` Proxy (Chrome 146+)
+
+Building on the Custom Element Registry integration, this package provides a powerful `set` proxy on all Element instances that enables automatic enhancement spawning and simplified property assignment syntax.
+
+### Basic Usage
+
+The `set` proxy allows you to assign properties to enhancements using a clean, chainable syntax:
+
+```TypeScript
+import 'assign-gingerly/object-extension.js';
+import { BaseRegistry } from 'assign-gingerly';
+
+// Define an enhancement class
+class MyEnhancement {
+  element;
+  ctx;
+  myProp = null;
+  anotherProp = null;
+
+  constructor(oElement, ctx, initVals) {
+    this.element = oElement;
+    this.ctx = ctx;
+    if (initVals) {
+      Object.assign(this, initVals);
+    }
+  }
+}
+
+// Register the enhancement with an enhKey
+const myElement = document.createElement('div');
+const registry = myElement.customElementRegistry.assignGingerlyRegistry;
+
+registry.push({
+  spawn: MyEnhancement,
+  map: {},
+  enhKey: 'myEnh'  // Key identifier for this enhancement
+});
+
+// Use the set proxy to automatically spawn and assign properties
+myElement.set.myEnh.myProp = 'hello';
+myElement.set.myEnh.anotherProp = 'world';
+
+console.log(myElement.myEnh instanceof MyEnhancement); // true
+console.log(myElement.myEnh.myProp); // 'hello'
+console.log(myElement.myEnh.element === myElement); // true
+```
+
+### How It Works
+
+When you access `element.set.enhKey.property`, the proxy:
+
+1. **Checks the registry**: Looks for a registry item with `enhKey` matching the property name
+2. **Spawns if needed**: If found and the enhancement doesn't exist or is the wrong type:
+   - Creates a `SpawnContext` with `{ mountInfo: registryItem }`
+   - Calls the constructor with `(element, ctx, initVals)`
+   - If a non-matching object already exists at `element[enhKey]`, it's passed as `initVals`
+   - Stores the spawned instance at `element[enhKey]`
+3. **Reuses existing instances**: If the enhancement already exists and is the correct type, it reuses it
+4. **Falls back to plain objects**: If no registry item is found, creates a plain object at `element[enhKey]`
+
+### Constructor Signature
+
+Enhancement classes should follow this constructor signature:
+
+```TypeScript
+interface SpawnContext<T> {
+  mountInfo: IBaseRegistryItem<T>;
+}
+
+class Enhancement {
+  constructor(
+    oElement?: Element,      // The element being enhanced
+    ctx?: SpawnContext,      // Context with registry item info
+    initVals?: Partial<T>    // Initial values if property existed
+  ) {
+    // Your initialization logic
+  }
+}
+```
+
+All parameters are optional for backward compatibility with existing code.
+
+### Registry Item with enhKey
+
+Registry items now support an optional `enhKey` property:
+
+```TypeScript
+interface IBaseRegistryItem<T> {
+  spawn: { new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T };
+  map: { [key: string | symbol]: keyof T };
+  enhKey?: string;  // String identifier for set proxy access
+}
+```
+
+### Advanced Examples
+
+**Multiple Enhancements:**
+```TypeScript
+class StyleEnhancement {
+  constructor(oElement, ctx, initVals) {
+    this.element = oElement;
+  }
+  height = null;
+  width = null;
+}
+
+class DataEnhancement {
+  constructor(oElement, ctx, initVals) {
+    this.element = oElement;
+  }
+  value = null;
+}
+
+const element = document.createElement('div');
+const registry = element.customElementRegistry.assignGingerlyRegistry;
+
+registry.push([
+  { spawn: StyleEnhancement, map: {}, enhKey: 'styles' },
+  { spawn: DataEnhancement, map: {}, enhKey: 'data' }
+]);
+
+element.set.styles.height = '100px';
+element.set.data.value = 'test';
+
+console.log(element.styles instanceof StyleEnhancement); // true
+console.log(element.data instanceof DataEnhancement); // true
+```
+
+**Preserving Existing Data with initVals:**
+```TypeScript
+const element = document.createElement('div');
+const registry = element.customElementRegistry.assignGingerlyRegistry;
+
+registry.push({
+  spawn: MyEnhancement,
+  map: {},
+  enhKey: 'config'
+});
+
+// Set a plain object first
+element.config = { existingProp: 'preserved', anotherProp: 'also preserved' };
+
+// Access via set proxy - spawns enhancement with initVals
+element.set.config.newProp = 'added';
+
+console.log(element.config instanceof MyEnhancement); // true
+console.log(element.config.existingProp); // 'preserved'
+console.log(element.config.newProp); // 'added'
+```
+
+**Plain Objects Without Registry:**
+```TypeScript
+const element = document.createElement('div');
+
+// No registry item for 'plainData' - creates plain object
+element.set.plainData.prop1 = 'value1';
+element.set.plainData.prop2 = 'value2';
+
+console.log(element.plainData); // { prop1: 'value1', prop2: 'value2' }
+```
+
+### Finding Registry Items by enhKey
+
+The `BaseRegistry` class includes a `findByEnhKey` method:
+
+```TypeScript
+const registry = new BaseRegistry();
+registry.push({
+  spawn: MyEnhancement,
+  map: {},
+  enhKey: 'myEnh'
+});
+
+const item = registry.findByEnhKey('myEnh');
+console.log(item.enhKey); // 'myEnh'
+```
+
+**Browser Support**: This feature requires Chrome 146+ with scoped custom element registry support.
