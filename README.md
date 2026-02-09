@@ -283,7 +283,7 @@ const result = assignGingerly({}, {
     [isHappy]: true,
     [isMellow]: true,
     '?.style.height': '40px',
-    '?.enhancements?.mellowYellow?.madAboutFourteen': true
+    '?.enh?.mellowYellow?.madAboutFourteen': true
 }, {
     registry: BaseRegistry
 });
@@ -292,7 +292,7 @@ result.set[isMellow] = false;
 
 The assignGingerly searches the registry for any items that has a mapping with a matching symbol of isHappy and isMellow, and if found, sees if it already has an instance of the spawn class associated with the first passed in parameter.  If no such instance is found, it instantiates one, associates the instance with the first parameter, then sets the property value.
 
-It also adds a lazy property to the first passed in parameter, "set", which returns a proxy, and that proxy watches for symbol references passed in a value, and sets the value from that spawned instance.  Again, if the spawned instance is not found, it respawns it.
+It also adds a lazy property to the first passed in parameter, "set", which returns a proxy, and that proxy watches for symbol references passed in a value, and sets the value from that spawned instance.  Again, if the spawned instance is not found, it re-spawns it.
 
 The suggestion to use Symbol.for with a guid, as opposed to just Symbol(), is based on some negative experiences I've had with multiple versions of the same library being referenced, but is not required. Regular symbols could also be used when that risk can be avoided.
 
@@ -303,7 +303,7 @@ const result = assignGingerly({}, {
     "[Symbol.for('TFWsx0YH5E6eSfhE7zfLxA')]": true,
     "[Symbol.for('BqnnTPWRHkWdVGWcGQoAiw')]": true,
     '?.style.height': '40px',
-    '?.enhancements?.mellowYellow?.madAboutFourteen': true
+    '?.enh?.mellowYellow?.madAboutFourteen': true
 }, {
     registry: BaseRegistry
 });

@@ -1,9 +1,16 @@
+export type EnhKey = string | symbol;
+
 /**
  * Interface for registry items that define dependency injection mappings
  */
 export interface IBaseRegistryItem<T = any> {
-  spawn: { new (): T } | Promise<{ new (): T }>;
+  spawn: { new (oElement: Element, ctx: SpawnContext<T>): T, initVals?: Partial<T> }>;
   map: { [key: string | symbol]: keyof T };
+  enhKey?: EnhKey;
+}
+
+export interface SpawnContext<T = any> {
+  mountInfo: IBaseRegistryItem<T>
 }
 
 /**
