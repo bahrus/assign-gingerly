@@ -17,9 +17,11 @@ export interface IBaseRegistryItem<T = any> {
   //keys of type symbol are used for dependency injection
   //and are used by assign-gingerly
   map: { [key: string | symbol]: keyof T };
+  //only applicable when spawning from a DOM Element reference
   enhKey?: EnhKey;
   lifecycleKeys?: {
-    dispose?: string | symbol
+    dispose?: string | symbol,
+    resolved?: string | symbol
   }
   //used by mount-observer, not by assign-gingerly
   //impossible to polyfill, but will always be disposed
