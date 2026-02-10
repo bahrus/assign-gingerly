@@ -4,7 +4,8 @@ export type EnhKey = string | symbol;
 type DisposeEvent = 
     | 'disconnect' 
     | 'dismount'
-    | 'exit'
+    // cannot polyfill
+    | 'exit' // element moved outside customElementRegistry
 
 /**
  * Interface for registry items that define dependency injection mappings
