@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Element.enh.get() Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .test-section h3 {
+      margin-top: 0;
+    }
+    .pass {
+      color: green;
+      font-weight: bold;
+    }
+    .fail {
+      color: red;
+      font-weight: bold;
+    }
+    .result {
+      margin: 10px 0;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Element.enh.get() Test</h1>
+  <p>This test verifies the enh.get() method for programmatic instance spawning.</p>
+  
+  <div id="results"></div>
+
+  <script type="module">
+    import '../object-extension.js';
+    import { BaseRegistry } from '../assignGingerly.js';
+
+    const results = document.getElementById('results');
+
+    function addResult(title, passed, message) {
+      const section = document.createElement('div');
+      section.className = 'test-section';
+      section.innerHTML = `
+        <h3>${title}</h3>
+        <div class="result">
+          <span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
+          <p>${message}</p>
+        </div>
+      `;
+      results.appendChild(section);
+    }
+
+    // Test Enhancement Class
+    class TestEnhancement {
+      element;
+      ctx;
+      value = null;
+      instanceId = Math.random();
+
+      constructor(oElement, ctx, initVals) {
+        this.element = oElement;
+        this.ctx = ctx;
+        if (initVals) {
+          Object.assign(this, initVals);
+        }
+      }
+    }
+
+    try {
+      const div = document.createElement('div');
+      const hasCustomElementRegistry = 'customElementRegistry' in div;
+      
+      if (!hasCustomElementRegistry) {
+        addResult(
+          'Browser Support',
+          false,
+          'This browser does not support customElementRegistry on elements. Chrome 146+ required.'
+        );
+      } else {
+        // Test 1: enh has get method
+        const hasGetMethod = typeof div.enh.get === 'function';
+        addResult(
+          'Test 1: enh has get() method',
+          hasGetMethod,
+          hasGetMethod
+            ? 'enh.get() method exists'
+            : 'enh.get() method NOT found'
+        );
+
+        // Test 2: get() spawns instance with enhKey
+        const testDiv1 = document.createElement('div');
+        const registryItem1 = {
+          spawn: TestEnhancement,
+          map: {},
+          enhKey: 'myEnh'
+        };
+
+        const instance1 = testDiv1.enh.get(registryItem1);
+        
+        const isInstance = instance1 instanceof TestEnhancement;
+        const hasElement = instance1.element === testDiv1;
+        const hasContext = instance1.ctx && instance1.ctx.mountInfo === registryItem1;
+        const onEnh = testDiv1.enh.myEnh === instance1;
+        
+        addResult(
+          'Test 2: get() spawns instance with enhKey',
+          isInstance && hasElement && hasContext && onEnh,
+          isInstance && hasElement && hasContext && onEnh
+            ? 'Instance spawned correctly and stored on enh.myEnh'
+            : `Failed: isInstance=${isInstance}, hasElement=${hasElement}, hasContext=${hasContext}, onEnh=${onEnh}`
+        );
+
+        // Test 3: get() returns same instance on subsequent calls
+        const testDiv2 = document.createElement('div');
+        const registryItem2 = {
+          spawn: TestEnhancement,
+          map: {},
+          enhKey: 'sameEnh'
+        };
+
+        const instance2a = testDiv2.enh.get(registryItem2);
+        const id1 = instance2a.instanceId;
+        
+        const instance2b = testDiv2.enh.get(registryItem2);
+        const id2 = instance2b.instanceId;
+        
+        const sameInstance = id1 === id2 && instance2a === instance2b;
+        
+        addResult(
+          'Test 3: get() returns same instance on subsequent calls',
+          sameInstance,
+          sameInstance
+            ? `Same instance (${id1}) returned`
+            : `Different instances: ${id1} vs ${id2}`
+        );
+
+        // Test 4: get() adds registry item to registry if not present
+        const testDiv3 = document.createElement('div');
+        const registry3 = testDiv3.customElementRegistry.assignGingerlyRegistry;
+        
+        const registryItem3 = {
+          spawn: TestEnhancement,
+          map: {},
+          enhKey: 'autoAddEnh'
+        };
+
+        // Registry should be empty initially
+        const itemsBefore = registry3.getItems().length;
+        
+        // Call get() with new registry item
+        const instance3 = testDiv3.enh.get(registryItem3);
+        
+        // Registry should now contain the item
+        const itemsAfter = registry3.getItems().length;
+        const hasItem = registry3.getItems().includes(registryItem3);
+        
+        addResult(
+          'Test 4: get() adds registry item to registry if not present',
+          itemsAfter > itemsBefore && hasItem,
+          itemsAfter > itemsBefore && hasItem
+            ? `Registry item added (${itemsBefore} -> ${itemsAfter} items)`
+            : `Registry item not added: before=${itemsBefore}, after=${itemsAfter}, hasItem=${hasItem}`
+        );
+
+        // Test 5: get() without enhKey
+        const testDiv4 = document.createElement('div');
+        const registryItem4 = {
+          spawn: TestEnhancement,
+          map: {}
+          // No enhKey
+        };
+
+        const instance4 = testDiv4.enh.get(registryItem4);
+        
+        const isInstance4 = instance4 instanceof TestEnhancement;
+        const hasElement4 = instance4.element === testDiv4;
+        const notOnEnhProperty = !testDiv4.enh.undefined && !testDiv4.enh.null;
+        
+        addResult(
+          'Test 5: get() works without enhKey',
+          isInstance4 && hasElement4 && notOnEnhProperty,
+          isInstance4 && hasElement4 && notOnEnhProperty
+            ? 'Instance spawned without enhKey, not stored on enh property'
+            : `Failed: isInstance=${isInstance4}, hasElement=${hasElement4}`
+        );
+
+        // Test 6: get() with initVals
+        const testDiv5 = document.createElement('div');
+        const registryItem5 = {
+          spawn: TestEnhancement,
+          map: {},
+          enhKey: 'initEnh'
+        };
+
+        // Set a plain object first
+        testDiv5.enh.initEnh = { value: 'initial', extra: 'data' };
+        
+        // Call get() - should spawn with initVals
+        const instance5 = testDiv5.enh.get(registryItem5);
+        
+        const isInstance5 = instance5 instanceof TestEnhancement;
+        const hasInitVal = instance5.extra === 'data';
+        const replacedOnEnh = testDiv5.enh.initEnh === instance5;
+        
+        addResult(
+          'Test 6: get() passes initVals when property exists',
+          isInstance5 && hasInitVal && replacedOnEnh,
+          isInstance5 && hasInitVal && replacedOnEnh
+            ? 'Instance spawned with initVals and replaced plain object'
+            : `Failed: isInstance=${isInstance5}, hasInitVal=${hasInitVal}, replaced=${replacedOnEnh}`
+        );
+
+        // Test 7: get() shares instance with enh.set
+        const testDiv6 = document.createElement('div');
+        const registryItem6 = {
+          spawn: TestEnhancement,
+          map: {},
+          enhKey: 'sharedEnh'
+        };
+
+        // Use get() first
+        const instance6a = testDiv6.enh.get(registryItem6);
+        const id6a = instance6a.instanceId;
+        
+        // Use enh.set
+        testDiv6.enh.set.sharedEnh.value = 'test';
+        const id6b = testDiv6.enh.sharedEnh.instanceId;
+        
+        const sharedInstance = id6a === id6b;
+        const valueSet = testDiv6.enh.sharedEnh.value === 'test';
+        
+        addResult(
+          'Test 7: get() shares instance with enh.set',
+          sharedInstance && valueSet,
+          sharedInstance && valueSet
+            ? `Same instance (${id6a}) shared between get() and enh.set`
+            : `Different instances: ${id6a} vs ${id6b}`
+        );
+
+        // Test 8: get() shares instance with assignGingerly
+        const symbol8 = Symbol.for('test8');
+        const testDiv7 = document.createElement('div');
+        const registryItem7 = {
+          spawn: TestEnhancement,
+          map: { [symbol8]: 'value' },
+          enhKey: 'assignEnh'
+        };
+
+        // Use get() first
+        const instance7a = testDiv7.enh.get(registryItem7);
+        const id7a = instance7a.instanceId;
+        
+        // Use assignGingerly
+        import assignGingerly from '../assignGingerly.js';
+        assignGingerly(testDiv7, {
+          [symbol8]: 'fromAssign'
+        }, { registry: testDiv7.customElementRegistry.assignGingerlyRegistry });
+        
+        const id7b = testDiv7.enh.assignEnh.instanceId;
+        
+        const sharedWithAssign = id7a === id7b;
+        const valueFromAssign = testDiv7.enh.assignEnh.value === 'fromAssign';
+        
+        addResult(
+          'Test 8: get() shares instance with assignGingerly',
+          sharedWithAssign && valueFromAssign,
+          sharedWithAssign && valueFromAssign
+            ? `Same instance (${id7a}) shared between get() and assignGingerly`
+            : `Different instances: ${id7a} vs ${id7b}`
+        );
+      }
+    } catch (error) {
+      addResult(
+        'Error',
+        false,
+        `An error occurred: ${error.message}\n${error.stack}`
+      );
+    }
+  </script>
+</body>
+</html>

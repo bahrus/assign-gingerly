@@ -96,6 +96,66 @@ class ElementEnhancementContainer {
   }
 
   /**
+   * Get or spawn an instance for a registry item
+   * @param registryItem - The registry item to get/spawn instance for
+   * @returns The spawned instance
+   */
+  get(registryItem: any): any {
+    const element = this.element;
+    
+    // Get the registry from customElementRegistry
+    const registry = (element as any).customElementRegistry?.assignGingerlyRegistry;
+    
+    if (!registry) {
+      throw new Error('customElementRegistry.assignGingerlyRegistry not available');
+    }
+    
+    // Check if registryItem is in the registry
+    const items = registry.getItems();
+    if (!items.includes(registryItem)) {
+      // Add it to the registry
+      registry.push(registryItem);
+    }
+    
+    // Get or create instance using the global instance map
+    const instanceMap = getInstanceMap();
+    if (!instanceMap.has(element)) {
+      instanceMap.set(element, new Map());
+    }
+    const instances = instanceMap.get(element)!;
+    
+    let instance = instances.get(registryItem);
+    
+    if (!instance) {
+      // Need to spawn
+      const SpawnClass = registryItem.spawn;
+      
+      // Check if there's an enhKey
+      if (registryItem.enhKey) {
+        const ctx = { mountInfo: registryItem };
+        const self = this as any;
+        const initVals = self[registryItem.enhKey] && 
+                        !(self[registryItem.enhKey] instanceof SpawnClass)
+                        ? self[registryItem.enhKey]
+                        : undefined;
+        instance = new SpawnClass(element, ctx, initVals);
+        
+        // Store on enh container
+        self[registryItem.enhKey] = instance;
+      } else {
+        // No enhKey, just spawn with element
+        const ctx = { mountInfo: registryItem };
+        instance = new SpawnClass(element, ctx);
+      }
+      
+      // Store in global instance map
+      instances.set(registryItem, instance);
+    }
+    
+    return instance;
+  }
+
+  /**
    * Lazy getter for the set proxy
    */
   get set() {

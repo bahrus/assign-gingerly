@@ -1,7 +1,7 @@
 # get / spawn instance programmatically
 
 ```JavaScript
-const spawnedInstance = oElement.get(registryItem: IBaseRegistryItem)
+const spawnedInstance = oElement.enh.get(registryItem: IBaseRegistryItem)
 ```
 
 should:

@@ -687,4 +687,57 @@ const item = registry.findByEnhKey('myEnh');
 console.log(item.enhKey); // 'myEnh'
 ```
 
+### Programmatic Instance Spawning with `enh.get()`
+
+The `enh.get()` method provides a programmatic way to spawn or retrieve enhancement instances:
+
+```TypeScript
+const registryItem = {
+  spawn: MyEnhancement,
+  map: {},
+  enhKey: 'myEnh'
+};
+
+// Get or spawn the instance
+const instance = element.enh.get(registryItem);
+
+console.log(instance instanceof MyEnhancement); // true
+console.log(element.enh.myEnh === instance); // true
+```
+
+**How `enh.get()` works:**
+
+1. **Adds to registry**: If the registry item isn't already in `element.customElementRegistry.assignGingerlyRegistry`, it's automatically added
+2. **Spawns if needed**: If no instance exists for this registry item, it spawns one (passing element, context, and initVals if applicable)
+3. **Stores on enh**: If the registry item has an `enhKey`, the instance is stored at `element.enh[enhKey]`
+4. **Returns instance**: Returns the spawned or existing instance
+
+**Benefits:**
+- **Explicit control**: Spawn instances programmatically without needing to use symbols or property assignment
+- **Shared instances**: Uses the same global instance map as `assignGingerly` and `enh.set`, ensuring only one instance per registry item
+- **Auto-registration**: Automatically adds registry items to the element's registry if not present
+
+**Example with shared instances:**
+```TypeScript
+const registryItem = {
+  spawn: MyEnhancement,
+  map: { [mySymbol]: 'value' },
+  enhKey: 'myEnh'
+};
+
+// Get instance programmatically
+const instance1 = element.enh.get(registryItem);
+instance1.prop1 = 'from get()';
+
+// Use enh.set - gets the SAME instance
+element.enh.set.myEnh.prop2 = 'from set';
+
+// Use assignGingerly - still the SAME instance
+assignGingerly(element, { [mySymbol]: 'from assign' }, { registry });
+
+console.log(element.enh.myEnh.prop1); // 'from get()'
+console.log(element.enh.myEnh.prop2); // 'from set'
+console.log(element.enh.myEnh.value); // 'from assign'
+```
+
 **Browser Support**: This feature requires Chrome 146+ with scoped custom element registry support.
