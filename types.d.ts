@@ -1,15 +1,30 @@
 export type EnhKey = string | symbol;
 
+//used by mount-observer, not by assign-gingerly
+type DisposeEvent = 
+    | 'disconnect' 
+    | 'dismount'
+    | 'exit'
+
 /**
  * Interface for registry items that define dependency injection mappings
  */
 export interface IBaseRegistryItem<T = any> {
   spawn: { new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T  };
+  //keys of type string are attribute "coordinates"
+  //and not used in assign-gingerly
+  //keys of type symbol are used for dependency injection
+  //and are used by assign-gingerly
   map: { [key: string | symbol]: keyof T };
   enhKey?: EnhKey;
   lifecycleKeys?: {
     dispose?: string
   }
+  //used by mount-observer, not by assign-gingerly
+  //impossible to polyfill, but will always be disposed
+  //when oElement's reference count goes to zero
+  disposeOn?: DisposeEvent | DisposeEvent[]
+    
 }
 
 export interface SpawnContext<T = any> {
