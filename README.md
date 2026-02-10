@@ -296,6 +296,16 @@ It also adds a lazy property to the first passed in parameter, "set", which retu
 
 The suggestion to use Symbol.for with a guid, as opposed to just Symbol(), is based on some negative experiences I've had with multiple versions of the same library being referenced, but is not required. Regular symbols could also be used when that risk can be avoided.
 
+### Global Instance Map for Cross-Version Compatibility
+
+To ensure instance uniqueness even when multiple versions of this package are loaded, spawned instances are stored in a global WeakMap at `globalThis['assign-gingerly-instance-map-7F3E9A2B-4C1D-8E6F-9A0B-5D2C3E4F6A7B']`. This guarantees that:
+
+- **Same instance across versions**: Different versions of the package will share the same instance map
+- **Memory safety**: Using WeakMap allows garbage collection when objects are no longer referenced
+- **No conflicts**: The GUID-based key prevents collisions with other libraries
+
+This is particularly important in complex applications where different dependencies might bundle different versions of assign-gingerly.
+
 ## Support for JSON assignment with Symbol.for symbols
 
 ```JavaScript

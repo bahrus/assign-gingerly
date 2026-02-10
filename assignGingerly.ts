@@ -19,9 +19,20 @@ export interface IAssignGingerlyOptions {
 }
 
 /**
- * Map to store spawned instances associated with objects
+ * GUID for global instance map storage to ensure uniqueness across package versions
  */
-const instanceMap = new WeakMap<object, Map<symbol | string, any>>();
+const INSTANCE_MAP_GUID = 'HDBhTPLuIUyooMxK88m68Q';
+
+/**
+ * Get or create the global instance map
+ * Stored in globalThis to ensure uniqueness across different package versions
+ */
+function getInstanceMap(): WeakMap<object, Map<symbol | string, any>> {
+  if (!(globalThis as any)[INSTANCE_MAP_GUID]) {
+    (globalThis as any)[INSTANCE_MAP_GUID] = new WeakMap<object, Map<symbol | string, any>>();
+  }
+  return (globalThis as any)[INSTANCE_MAP_GUID];
+}
 
 /**
  * Base registry class for managing dependency injection
@@ -350,6 +361,7 @@ export function assignGingerly(
     if (registry) {
       const registryItem = registry.findBySymbol(sym);
       if (registryItem) {
+        const instanceMap = getInstanceMap();
         // Get or initialize the instances map for this target
         if (!instanceMap.has(target)) {
           instanceMap.set(target, new Map());
@@ -385,6 +397,7 @@ export function assignGingerly(
               if (typeof prop === 'symbol') {
                 const registryItem = registry.findBySymbol(prop);
                 if (registryItem) {
+                  const instanceMap = getInstanceMap();
                   if (!instanceMap.has(target)) {
                     instanceMap.set(target, new Map());
                   }

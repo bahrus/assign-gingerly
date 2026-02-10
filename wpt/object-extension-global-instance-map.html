@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Global Instance Map Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .test-section h3 {
+      margin-top: 0;
+    }
+    .pass {
+      color: green;
+      font-weight: bold;
+    }
+    .fail {
+      color: red;
+      font-weight: bold;
+    }
+    .result {
+      margin: 10px 0;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Global Instance Map Test</h1>
+  <p>This test verifies that the instance map is stored globally to ensure uniqueness across package versions.</p>
+  
+  <div id="results"></div>
+
+  <script type="module">
+    import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
+
+    const results = document.getElementById('results');
+
+    function addResult(title, passed, message) {
+      const section = document.createElement('div');
+      section.className = 'test-section';
+      section.innerHTML = `
+        <h3>${title}</h3>
+        <div class="result">
+          <span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
+          <p>${message}</p>
+        </div>
+      `;
+      results.appendChild(section);
+    }
+
+    // Test Enhancement Class
+    class TestEnhancement {
+      value = null;
+      instanceId = Math.random();
+    }
+
+    try {
+      // Test 1: Verify global instance map exists
+      const INSTANCE_MAP_GUID = 'assign-gingerly-instance-map-7F3E9A2B-4C1D-8E6F-9A0B-5D2C3E4F6A7B';
+      const hasGlobalMap = INSTANCE_MAP_GUID in globalThis;
+      
+      addResult(
+        'Test 1: Global instance map is created',
+        hasGlobalMap,
+        hasGlobalMap
+          ? `Global instance map exists at globalThis['${INSTANCE_MAP_GUID}']`
+          : 'Global instance map not found'
+      );
+
+      // Test 2: Same instance returned for same symbol
+      const testSymbol = Symbol.for('testEnhancement');
+      const registry = new BaseRegistry();
+      registry.push({
+        spawn: TestEnhancement,
+        map: { [testSymbol]: 'value' }
+      });
+
+      const target = {};
+      
+      // First assignment
+      assignGingerly(target, {
+        [testSymbol]: 'first'
+      }, { registry });
+
+      const firstInstanceId = (target as any).set?.[testSymbol]?.instanceId;
+
+      // Second assignment - should reuse same instance
+      assignGingerly(target, {
+        [testSymbol]: 'second'
+      }, { registry });
+
+      const secondInstanceId = (target as any).set?.[testSymbol]?.instanceId;
+
+      const sameInstance = firstInstanceId === secondInstanceId;
+      
+      addResult(
+        'Test 2: Same instance reused across multiple assignGingerly calls',
+        sameInstance,
+        sameInstance
+          ? `Instance ID ${firstInstanceId} reused correctly`
+          : `Different instances: ${firstInstanceId} vs ${secondInstanceId}`
+      );
+
+      // Test 3: Different targets get different instances
+      const target1 = {};
+      const target2 = {};
+      
+      assignGingerly(target1, {
+        [testSymbol]: 'target1'
+      }, { registry });
+
+      assignGingerly(target2, {
+        [testSymbol]: 'target2'
+      }, { registry });
+
+      // Access instances through the set proxy
+      const instance1Id = (target1 as any).set?.[testSymbol]?.instanceId;
+      const instance2Id = (target2 as any).set?.[testSymbol]?.instanceId;
+
+      const differentInstances = instance1Id !== instance2Id;
+      
+      addResult(
+        'Test 3: Different targets get different instances',
+        differentInstances,
+        differentInstances
+          ? `Target1: ${instance1Id}, Target2: ${instance2Id}`
+          : `Same instance ID: ${instance1Id}`
+      );
+
+      // Test 4: Global map is a WeakMap
+      const globalMap = globalThis[INSTANCE_MAP_GUID];
+      const isWeakMap = globalMap instanceof WeakMap;
+      
+      addResult(
+        'Test 4: Global instance map is a WeakMap',
+        isWeakMap,
+        isWeakMap
+          ? 'Global map is correctly a WeakMap (allows garbage collection)'
+          : `Global map type: ${typeof globalMap}`
+      );
+
+      // Test 5: Instance persists across multiple calls with same target
+      const persistTarget = {};
+      
+      assignGingerly(persistTarget, {
+        [testSymbol]: 'initial'
+      }, { registry });
+
+      // Get the instance
+      const persistInstance = (persistTarget as any).set?.[testSymbol];
+      const persistId = persistInstance?.instanceId;
+
+      // Make another call
+      assignGingerly(persistTarget, {
+        [testSymbol]: 'updated'
+      }, { registry });
+
+      // Check if same instance
+      const updatedInstance = (persistTarget as any).set?.[testSymbol];
+      const updatedId = updatedInstance?.instanceId;
+
+      const persisted = persistId === updatedId;
+      
+      addResult(
+        'Test 5: Instance persists and is updated, not replaced',
+        persisted,
+        persisted
+          ? `Instance ${persistId} persisted correctly`
+          : `Instance replaced: ${persistId} -> ${updatedId}`
+      );
+
+      // Test 6: Verify the global map can be accessed directly
+      const directAccess = globalThis[INSTANCE_MAP_GUID];
+      const canAccessDirectly = directAccess !== undefined && directAccess instanceof WeakMap;
+      
+      addResult(
+        'Test 6: Global map can be accessed directly from globalThis',
+        canAccessDirectly,
+        canAccessDirectly
+          ? 'Global map is accessible and is a WeakMap'
+          : 'Cannot access global map directly'
+      );
+
+      // Test 7: Multiple registries share the same instance map
+      const registry2 = new BaseRegistry();
+      registry2.push({
+        spawn: TestEnhancement,
+        map: { [testSymbol]: 'value' }
+      });
+
+      const sharedTarget = {};
+      
+      // Use first registry
+      assignGingerly(sharedTarget, {
+        [testSymbol]: 'registry1'
+      }, { registry });
+
+      const id1 = (sharedTarget as any).set?.[testSymbol]?.instanceId;
+
+      // Use second registry - should still get same instance from global map
+      assignGingerly(sharedTarget, {
+        [testSymbol]: 'registry2'
+      }, { registry: registry2 });
+
+      const id2 = (sharedTarget as any).set?.[testSymbol]?.instanceId;
+
+      const sharedMap = id1 === id2;
+      
+      addResult(
+        'Test 7: Multiple registries share the same global instance map',
+        sharedMap,
+        sharedMap
+          ? `Both registries use same instance: ${id1}`
+          : `Different instances: ${id1} vs ${id2}`
+      );
+
+    } catch (error) {
+      addResult(
+        'Error',
+        false,
+        `An error occurred: ${error.message}\n${error.stack}`
+      );
+    }
+  </script>
+</body>
+</html>
