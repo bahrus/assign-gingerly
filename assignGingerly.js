@@ -5,6 +5,7 @@ const INSTANCE_MAP_GUID = 'HDBhTPLuIUyooMxK88m68Q';
 /**
  * Get or create the global instance map
  * Stored in globalThis to ensure uniqueness across different package versions
+ * Maps objects to a Map of registry items to their spawned instances
  */
 function getInstanceMap() {
     if (!globalThis[INSTANCE_MAP_GUID]) {
@@ -314,12 +315,12 @@ export function assignGingerly(target, source, options) {
                     instanceMap.set(target, new Map());
                 }
                 const instances = instanceMap.get(target);
-                // Check if instance already exists
-                let instance = instances.get(sym);
+                // Check if instance already exists (keyed by registryItem)
+                let instance = instances.get(registryItem);
                 if (!instance) {
                     const SpawnClass = registryItem.spawn;
                     instance = new SpawnClass();
-                    instances.set(sym, instance);
+                    instances.set(registryItem, instance);
                 }
                 // Find the mapped property name
                 const mappedKey = registryItem.map[sym];
@@ -343,11 +344,11 @@ export function assignGingerly(target, source, options) {
                                     instanceMap.set(target, new Map());
                                 }
                                 const instances = instanceMap.get(target);
-                                let instance = instances.get(prop);
+                                let instance = instances.get(registryItem);
                                 if (!instance) {
                                     const SpawnClass = registryItem.spawn;
                                     instance = new SpawnClass();
-                                    instances.set(prop, instance);
+                                    instances.set(registryItem, instance);
                                 }
                                 const mappedKey = registryItem.map[prop];
                                 if (mappedKey && instance && typeof instance === 'object') {

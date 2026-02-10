@@ -303,8 +303,42 @@ To ensure instance uniqueness even when multiple versions of this package are lo
 - **Same instance across versions**: Different versions of the package will share the same instance map
 - **Memory safety**: Using WeakMap allows garbage collection when objects are no longer referenced
 - **No conflicts**: The GUID-based key prevents collisions with other libraries
+- **Registry item keying**: Instances are keyed by registry item (not by symbol), ensuring that multiple symbols mapped to the same registry item share the same spawned instance
 
 This is particularly important in complex applications where different dependencies might bundle different versions of assign-gingerly.
+
+**Example of registry item keying:**
+```TypeScript
+const symbol1 = Symbol.for('prop1');
+const symbol2 = Symbol.for('prop2');
+
+class MyEnhancement {
+  prop1 = null;
+  prop2 = null;
+}
+
+const registryItem = {
+  spawn: MyEnhancement,
+  map: {
+    [symbol1]: 'prop1',
+    [symbol2]: 'prop2'
+  }
+};
+
+const registry = new BaseRegistry();
+registry.push(registryItem);
+
+const target = {};
+
+// Both symbols use the SAME instance because they're in the same registry item
+assignGingerly(target, { [symbol1]: 'value1' }, { registry });
+assignGingerly(target, { [symbol2]: 'value2' }, { registry });
+
+// Both properties are set on the same instance
+console.log(target.set[symbol1] === target.set[symbol2]); // true
+console.log(target.set[symbol1].prop1); // 'value1'
+console.log(target.set[symbol1].prop2); // 'value2'
+```
 
 ## Support for JSON assignment with Symbol.for symbols
 

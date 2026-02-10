@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registry Item Key Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .test-section h3 {
+      margin-top: 0;
+    }
+    .pass {
+      color: green;
+      font-weight: bold;
+    }
+    .fail {
+      color: red;
+      font-weight: bold;
+    }
+    .result {
+      margin: 10px 0;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Registry Item Key Test</h1>
+  <p>This test verifies that spawned instances are keyed by registry item, not by symbol.</p>
+  
+  <div id="results"></div>
+
+  <script type="module">
+    import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
+
+    const results = document.getElementById('results');
+
+    function addResult(title, passed, message) {
+      const section = document.createElement('div');
+      section.className = 'test-section';
+      section.innerHTML = `
+        <h3>${title}</h3>
+        <div class="result">
+          <span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
+          <p>${message}</p>
+        </div>
+      `;
+      results.appendChild(section);
+    }
+
+    // Test Enhancement Class
+    class TestEnhancement {
+      prop1 = null;
+      prop2 = null;
+      instanceId = Math.random();
+    }
+
+    try {
+      // Test 1: Multiple symbols mapping to same registry item should share instance
+      const symbol1 = Symbol.for('test1');
+      const symbol2 = Symbol.for('test2');
+      
+      const registryItem = {
+        spawn: TestEnhancement,
+        map: {
+          [symbol1]: 'prop1',
+          [symbol2]: 'prop2'
+        }
+      };
+
+      const registry = new BaseRegistry();
+      registry.push(registryItem);
+
+      const target = {};
+      
+      // Set via first symbol
+      assignGingerly(target, {
+        [symbol1]: 'value1'
+      }, { registry });
+
+      // Get instance ID after first assignment
+      const instanceId1 = target.set?.[symbol1]?.instanceId;
+
+      // Set via second symbol
+      assignGingerly(target, {
+        [symbol2]: 'value2'
+      }, { registry });
+
+      // Get instance ID after second assignment
+      const instanceId2 = target.set?.[symbol2]?.instanceId;
+
+      // Both should be the same instance
+      const sameInstance = instanceId1 === instanceId2;
+      const bothPropsSet = target.set?.[symbol1]?.prop1 === 'value1' && 
+                          target.set?.[symbol1]?.prop2 === 'value2';
+      
+      addResult(
+        'Test 1: Multiple symbols in same registry item share instance',
+        sameInstance && bothPropsSet,
+        sameInstance && bothPropsSet
+          ? `Same instance (${instanceId1}) used for both symbols, both properties set`
+          : `Different instances: ${instanceId1} vs ${instanceId2}, or properties not set correctly`
+      );
+
+      // Test 2: Different registry items with same symbol should create different instances
+      const sharedSymbol = Symbol.for('shared');
+      
+      class Enhancement1 {
+        value = null;
+        id = 'enh1';
+      }
+
+      class Enhancement2 {
+        value = null;
+        id = 'enh2';
+      }
+
+      const registryItem1 = {
+        spawn: Enhancement1,
+        map: { [sharedSymbol]: 'value' }
+      };
+
+      const registryItem2 = {
+        spawn: Enhancement2,
+        map: { [sharedSymbol]: 'value' }
+      };
+
+      const registry2 = new BaseRegistry();
+      registry2.push([registryItem1, registryItem2]);
+
+      const target2 = {};
+      
+      // This should use the first registry item found
+      assignGingerly(target2, {
+        [sharedSymbol]: 'test'
+      }, { registry: registry2 });
+
+      const instance = target2.set?.[sharedSymbol];
+      const isFirstEnhancement = instance?.id === 'enh1';
+      
+      addResult(
+        'Test 2: Registry item determines instance type',
+        isFirstEnhancement,
+        isFirstEnhancement
+          ? `Correct enhancement type (${instance.id}) based on registry item`
+          : `Wrong enhancement type: ${instance?.id}`
+      );
+
+      // Test 3: Same registry item reused across multiple targets
+      const symbol3 = Symbol.for('test3');
+      
+      class SharedEnhancement {
+        value = null;
+        instanceId = Math.random();
+      }
+
+      const sharedRegistryItem = {
+        spawn: SharedEnhancement,
+        map: { [symbol3]: 'value' }
+      };
+
+      const registry3 = new BaseRegistry();
+      registry3.push(sharedRegistryItem);
+
+      const targetA = {};
+      const targetB = {};
+      
+      assignGingerly(targetA, {
+        [symbol3]: 'valueA'
+      }, { registry: registry3 });
+
+      assignGingerly(targetB, {
+        [symbol3]: 'valueB'
+      }, { registry: registry3 });
+
+      const instanceA = targetA.set?.[symbol3];
+      const instanceB = targetB.set?.[symbol3];
+
+      // Different targets should have different instances
+      const differentInstances = instanceA?.instanceId !== instanceB?.instanceId;
+      // But both should be of the same type
+      const sameType = instanceA instanceof SharedEnhancement && 
+                       instanceB instanceof SharedEnhancement;
+      
+      addResult(
+        'Test 3: Different targets get different instances of same registry item',
+        differentInstances && sameType,
+        differentInstances && sameType
+          ? `Different instances (${instanceA.instanceId} vs ${instanceB.instanceId}) but same type`
+          : `Same instance or wrong types`
+      );
+
+      // Test 4: Registry item as key allows proper instance lookup
+      const symbol4 = Symbol.for('test4');
+      
+      class CounterEnhancement {
+        count = 0;
+        instanceId = Math.random();
+      }
+
+      const counterRegistryItem = {
+        spawn: CounterEnhancement,
+        map: { [symbol4]: 'count' }
+      };
+
+      const registry4 = new BaseRegistry();
+      registry4.push(counterRegistryItem);
+
+      const target4 = {};
+      
+      // Multiple assignments should update the same instance
+      assignGingerly(target4, { [symbol4]: 1 }, { registry: registry4 });
+      const id1 = target4.set?.[symbol4]?.instanceId;
+      
+      assignGingerly(target4, { [symbol4]: 2 }, { registry: registry4 });
+      const id2 = target4.set?.[symbol4]?.instanceId;
+      
+      assignGingerly(target4, { [symbol4]: 3 }, { registry: registry4 });
+      const id3 = target4.set?.[symbol4]?.instanceId;
+
+      const allSameInstance = id1 === id2 && id2 === id3;
+      const finalValue = target4.set?.[symbol4]?.count;
+      
+      addResult(
+        'Test 4: Multiple assignments update same instance',
+        allSameInstance && finalValue === 3,
+        allSameInstance && finalValue === 3
+          ? `Same instance (${id1}) updated correctly to ${finalValue}`
+          : `Different instances or wrong value: ${id1}, ${id2}, ${id3}, value: ${finalValue}`
+      );
+
+      // Test 5: Verify the global map structure
+      const INSTANCE_MAP_GUID = 'assign-gingerly-instance-map-7F3E9A2B-4C1D-8E6F-9A0B-5D2C3E4F6A7B';
+      const globalMap = globalThis[INSTANCE_MAP_GUID];
+      
+      const target5 = {};
+      const symbol5 = Symbol.for('test5');
+      
+      class TestClass {
+        value = null;
+      }
+
+      const testRegistryItem = {
+        spawn: TestClass,
+        map: { [symbol5]: 'value' }
+      };
+
+      const registry5 = new BaseRegistry();
+      registry5.push(testRegistryItem);
+
+      assignGingerly(target5, { [symbol5]: 'test' }, { registry: registry5 });
+
+      // The global map should have target5
+      const hasTarget = globalMap.has(target5);
+      
+      // Get the inner map
+      const innerMap = globalMap.get(target5);
+      const isMap = innerMap instanceof Map;
+      
+      // The inner map should have the registry item as key
+      const hasRegistryItem = innerMap?.has(testRegistryItem);
+      
+      addResult(
+        'Test 5: Global map uses registry item as key',
+        hasTarget && isMap && hasRegistryItem,
+        hasTarget && isMap && hasRegistryItem
+          ? 'Global map correctly stores instances keyed by registry item'
+          : `Map structure incorrect: hasTarget=${hasTarget}, isMap=${isMap}, hasRegistryItem=${hasRegistryItem}`
+      );
+
+    } catch (error) {
+      addResult(
+        'Error',
+        false,
+        `An error occurred: ${error.message}\n${error.stack}`
+      );
+    }
+  </script>
+</body>
+</html>
