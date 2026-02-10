@@ -18,7 +18,7 @@ export interface IBaseRegistryItem<T = any> {
   map: { [key: string | symbol]: keyof T };
   enhKey?: EnhKey;
   lifecycleKeys?: {
-    dispose?: string
+    dispose?: string | symbol
   }
   //used by mount-observer, not by assign-gingerly
   //impossible to polyfill, but will always be disposed
