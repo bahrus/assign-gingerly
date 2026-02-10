@@ -132,7 +132,7 @@ class ElementEnhancementContainer {
         // Lazy load waitForEvent
         const { waitForEvent } = await import('./waitForEvent.js');
         // Wait for the 'resolved' event
-        await waitForEvent(spawnedInstance, 'resolved');
+        await waitForEvent(spawnedInstance, resolvedKey);
         // Check if resolved flag is now set
         if (spawnedInstance[resolvedKey]) {
             return spawnedInstance;
