@@ -32,6 +32,9 @@
     "./assignTentatively.js": {
       "default": "./assignTentatively.js",
       "types": "./types.d.ts"
+    },
+    "./waitForEvent.js": {
+      "default": "./waitForEvent.js"
     }
   },
   "main": "index.js",
