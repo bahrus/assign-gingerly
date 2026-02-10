@@ -7,6 +7,9 @@ export interface IBaseRegistryItem<T = any> {
   spawn: { new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T  };
   map: { [key: string | symbol]: keyof T };
   enhKey?: EnhKey;
+  lifecycleKeys?: {
+    dispose?: string
+  }
 }
 
 export interface SpawnContext<T = any> {

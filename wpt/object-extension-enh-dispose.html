@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Element.enh.dispose() Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .test-section h3 {
+      margin-top: 0;
+    }
+    .pass {
+      color: green;
+      font-weight: bold;
+    }
+    .fail {
+      color: red;
+      font-weight: bold;
+    }
+    .result {
+      margin: 10px 0;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Element.enh.dispose() Test</h1>
+  <p>This test verifies the enh.dispose() method for cleaning up enhancement instances.</p>
+  
+  <div id="results"></div>
+
+  <script type="module">
+    import '../object-extension.js';
+    import { BaseRegistry, getInstanceMap, INSTANCE_MAP_GUID } from '../assignGingerly.js';
+
+    const results = document.getElementById('results');
+
+    function addResult(title, passed, message) {
+      const section = document.createElement('div');
+      section.className = 'test-section';
+      section.innerHTML = `
+        <h3>${title}</h3>
+        <div class="result">
+          <span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
+          <p>${message}</p>
+        </div>
+      `;
+      results.appendChild(section);
+    }
+
+    // Test Enhancement Class with dispose
+    class TestEnhancement {
+      element;
+      ctx;
+      value = null;
+      disposed = false;
+      disposeCalledWith = null;
+
+      constructor(oElement, ctx, initVals) {
+        this.element = oElement;
+        this.ctx = ctx;
+        if (initVals) {
+          Object.assign(this, initVals);
+        }
+      }
+
+      cleanup(registryItem) {
+        this.disposed = true;
+        this.disposeCalledWith = registryItem;
+      }
+    }
+
+    try {
+      const div = document.createElement('div');
+      const hasCustomElementRegistry = 'customElementRegistry' in div;
+      
+      if (!hasCustomElementRegistry) {
+        addResult(
+          'Browser Support',
+          false,
+          'This browser does not support customElementRegistry on elements. Chrome 146+ required.'
+        );
+      } else {
+        // Test 1: enh has dispose method
+        const hasDisposeMethod = typeof div.enh.dispose === 'function';
+        addResult(
+          'Test 1: enh has dispose() method',
+          hasDisposeMethod,
+          hasDisposeMethod
+            ? 'enh.dispose() method exists'
+            : 'enh.dispose() method NOT found'
+        );
+
+        // Test 2: dispose() calls lifecycle dispose method
+        const testDiv1 = document.createElement('div');
+        const registryItem1 = {
+          spawn: TestEnhancement,
+          map: {},
+          enhKey: 'disposeEnh',
+          lifecycleKeys: {
+            dispose: 'cleanup'
+          }
+        };
+
+        const instance1 = testDiv1.enh.get(registryItem1);
+        const wasDisposed = instance1.disposed;
+        
+        testDiv1.enh.dispose(registryItem1);
+        
+        const isDisposed = instance1.disposed;
+        const calledWithCorrectArg = instance1.disposeCalledWith === registryItem1;
+        
+        addResult(
+          'Test 2: dispose() calls lifecycle dispose method',
+          !wasDisposed && isDisposed && calledWithCorrectArg,
+          !wasDisposed && isDisposed && calledWithCorrectArg
+            ? 'Dispose method called with correct registry item'
+            : `Failed: wasDisposed=${wasDisposed}, isDisposed=${isDisposed}, correctArg=${calledWithCorrectArg}`
+        );
+
+        // Test 3: dispose() removes from instance map
+        const testDiv2 = document.createElement('div');
+        const registryItem2 = {
+          spawn: TestEnhancement,
+          map: {},
+          enhKey: 'removeEnh'
+        };
+
+        const instance2 = testDiv2.enh.get(registryItem2);
+        
+        const globalMap = getInstanceMap();
+        const instancesBefore = globalMap.get(testDiv2);
+        const hadInstance = instancesBefore && instancesBefore.has(registryItem2);
+        
+        testDiv2.enh.dispose(registryItem2);
+        
+        const instancesAfter = globalMap.get(testDiv2);
+        const hasInstance = instancesAfter && instancesAfter.has(registryItem2);
+        
+        addResult(
+          'Test 3: dispose() removes from instance map',
+          hadInstance && !hasInstance,
+          hadInstance && !hasInstance
+            ? 'Instance removed from global instance map'
+            : `Failed: hadInstance=${hadInstance}, hasInstance=${hasInstance}`
+        );
+
+        // Test 4: dispose() removes from enh container
+        const testDiv3 = document.createElement('div');
+        const registryItem3 = {
+          spawn: TestEnhancement,
+          map: {},
+          enhKey: 'containerEnh'
+        };
+
+        const instance3 = testDiv3.enh.get(registryItem3);
+        const hadOnEnh = testDiv3.enh.containerEnh === instance3;
+        
+        testDiv3.enh.dispose(registryItem3);
+        
+        const hasOnEnh = testDiv3.enh.containerEnh !== undefined;
+        
+        addResult(
+          'Test 4: dispose() removes from enh container',
+          hadOnEnh && !hasOnEnh,
+          hadOnEnh && !hasOnEnh
+            ? 'Instance removed from enh container'
+            : `Failed: hadOnEnh=${hadOnEnh}, hasOnEnh=${hasOnEnh}`
+        );
+
+        // Test 5: dispose() with no lifecycle method doesn't error
+        const testDiv4 = document.createElement('div');
+        const registryItem4 = {
+          spawn: TestEnhancement,
+          map: {},
+          enhKey: 'noLifecycleEnh'
+          // No lifecycleKeys
+        };
+
+        const instance4 = testDiv4.enh.get(registryItem4);
+        
+        let noError = true;
+        try {
+          testDiv4.enh.dispose(registryItem4);
+        } catch (error) {
+          noError = false;
+        }
+        
+        const globalMap4 = getInstanceMap();
+        const instances4 = globalMap4.get(testDiv4);
+        const removed = !instances4 || !instances4.has(registryItem4);
+        
+        addResult(
+          'Test 5: dispose() without lifecycle method works',
+          noError && removed,
+          noError && removed
+            ? 'Dispose works without lifecycle method'
+            : `Failed: noError=${noError}, removed=${removed}`
+        );
+
+        // Test 6: dispose() on non-existent instance is safe
+        const testDiv5 = document.createElement('div');
+        const registryItem5 = {
+          spawn: TestEnhancement,
+          map: {},
+          enhKey: 'neverSpawnedEnh'
+        };
+
+        let noError5 = true;
+        try {
+          testDiv5.enh.dispose(registryItem5);
+        } catch (error) {
+          noError5 = false;
+        }
+        
+        addResult(
+          'Test 6: dispose() on non-existent instance is safe',
+          noError5,
+          noError5
+            ? 'Dispose safely handles non-existent instances'
+            : 'Dispose threw error on non-existent instance'
+        );
+
+        // Test 7: After dispose, get() creates new instance
+        const testDiv6 = document.createElement('div');
+        const registryItem6 = {
+          spawn: TestEnhancement,
+          map: {},
+          enhKey: 'respawnEnh'
+        };
+
+        const instance6a = testDiv6.enh.get(registryItem6);
+        instance6a.value = 'first';
+        const id1 = Math.random();
+        instance6a.instanceId = id1;
+        
+        testDiv6.enh.dispose(registryItem6);
+        
+        const instance6b = testDiv6.enh.get(registryItem6);
+        const id2 = instance6b.instanceId;
+        
+        const isDifferent = id1 !== id2;
+        const valueReset = instance6b.value === null;
+        
+        addResult(
+          'Test 7: After dispose, get() creates new instance',
+          isDifferent && valueReset,
+          isDifferent && valueReset
+            ? 'New instance created after dispose'
+            : `Failed: different=${isDifferent}, reset=${valueReset}`
+        );
+
+        // Test 8: dispose() doesn't affect other instances
+        const testDiv7 = document.createElement('div');
+        const registryItem7a = {
+          spawn: TestEnhancement,
+          map: {},
+          enhKey: 'keepEnh1'
+        };
+        const registryItem7b = {
+          spawn: TestEnhancement,
+          map: {},
+          enhKey: 'keepEnh2'
+        };
+
+        const instance7a = testDiv7.enh.get(registryItem7a);
+        const instance7b = testDiv7.enh.get(registryItem7b);
+        
+        instance7a.value = 'keep1';
+        instance7b.value = 'keep2';
+        
+        testDiv7.enh.dispose(registryItem7a);
+        
+        const aRemoved = testDiv7.enh.keepEnh1 === undefined;
+        const bKept = testDiv7.enh.keepEnh2 === instance7b;
+        const bValueKept = instance7b.value === 'keep2';
+        
+        addResult(
+          'Test 8: dispose() only affects specified instance',
+          aRemoved && bKept && bValueKept,
+          aRemoved && bKept && bValueKept
+            ? 'Only specified instance disposed, others kept'
+            : `Failed: aRemoved=${aRemoved}, bKept=${bKept}, bValueKept=${bValueKept}`
+        );
+      }
+    } catch (error) {
+      addResult(
+        'Error',
+        false,
+        `An error occurred: ${error.message}\n${error.stack}`
+      );
+    }
+  </script>
+</body>
+</html>

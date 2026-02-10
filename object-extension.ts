@@ -156,6 +156,42 @@ class ElementEnhancementContainer {
   }
 
   /**
+   * Dispose of an enhancement instance
+   * @param registryItem - The registry item to dispose
+   */
+  dispose(registryItem: any): void {
+    const element = this.element;
+    
+    // Get the instance map
+    const instanceMap = getInstanceMap();
+    if (!instanceMap.has(element)) {
+      return; // No instances for this element
+    }
+    
+    const instances = instanceMap.get(element)!;
+    const spawnedInstance = instances.get(registryItem);
+    
+    if (!spawnedInstance) {
+      return; // No instance for this registry item
+    }
+    
+    // Call dispose lifecycle method if it exists
+    const disposeKey = registryItem?.lifecycleKeys?.dispose;
+    if (disposeKey && typeof spawnedInstance[disposeKey] === 'function') {
+      spawnedInstance[disposeKey](registryItem);
+    }
+    
+    // Remove from instance map
+    instances.delete(registryItem);
+    
+    // Remove from enh container if it has an enhKey
+    if (registryItem.enhKey) {
+      const self = this as any;
+      delete self[registryItem.enhKey];
+    }
+  }
+
+  /**
    * Lazy getter for the set proxy
    */
   get set() {

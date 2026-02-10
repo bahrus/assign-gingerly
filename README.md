@@ -740,4 +740,96 @@ console.log(element.enh.myEnh.prop2); // 'from set'
 console.log(element.enh.myEnh.value); // 'from assign'
 ```
 
+### Disposing Enhancement Instances with `enh.dispose()`
+
+The `enh.dispose()` method provides a way to clean up and remove enhancement instances:
+
+```TypeScript
+class MyEnhancement {
+  element;
+  ctx;
+  
+  constructor(oElement, ctx, initVals) {
+    this.element = oElement;
+    this.ctx = ctx;
+    // Setup code...
+  }
+  
+  cleanup(registryItem) {
+    // Cleanup code - remove event listeners, clear timers, etc.
+    console.log('Disposing enhancement');
+  }
+}
+
+const registryItem = {
+  spawn: MyEnhancement,
+  map: {},
+  enhKey: 'myEnh',
+  lifecycleKeys: {
+    dispose: 'cleanup'  // Method name to call on disposal
+  }
+};
+
+// Get instance
+const instance = element.enh.get(registryItem);
+
+// Later, dispose of it
+element.enh.dispose(registryItem);
+```
+
+**How `enh.dispose()` works:**
+
+1. **Retrieves instance**: Gets the spawned instance from the global instance map
+2. **Calls lifecycle method**: If `lifecycleKeys.dispose` is specified, calls that method on the instance (passing the registry item)
+3. **Removes from map**: Removes the instance from the global instance map
+4. **Removes from enh**: If the registry item has an `enhKey`, removes the property from the enh container
+
+**Benefits:**
+- **Proper cleanup**: Allows enhancements to clean up resources (event listeners, timers, etc.)
+- **Memory management**: Removes references to allow garbage collection
+- **Safe**: Safely handles non-existent instances without errors
+- **Isolated**: Only affects the specified instance, leaving others intact
+
+**Example with lifecycle cleanup:**
+```TypeScript
+class TimerEnhancement {
+  element;
+  timerId = null;
+  
+  constructor(oElement, ctx) {
+    this.element = oElement;
+    this.timerId = setInterval(() => {
+      console.log('Timer tick');
+    }, 1000);
+  }
+  
+  cleanup() {
+    if (this.timerId) {
+      clearInterval(this.timerId);
+      this.timerId = null;
+      console.log('Timer cleaned up');
+    }
+  }
+}
+
+const registryItem = {
+  spawn: TimerEnhancement,
+  map: {},
+  enhKey: 'timer',
+  lifecycleKeys: {
+    dispose: 'cleanup'
+  }
+};
+
+element.enh.get(registryItem); // Starts timer
+
+// Later...
+element.enh.dispose(registryItem); // Stops timer and cleans up
+```
+
+**After disposal:**
+- The instance is removed from the global instance map
+- Calling `enh.get()` again will create a new instance
+- The enhancement property is removed from the enh container
+
 **Browser Support**: This feature requires Chrome 146+ with scoped custom element registry support.
