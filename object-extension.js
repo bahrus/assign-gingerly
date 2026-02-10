@@ -110,6 +110,36 @@ class ElementEnhancementContainer {
         }
     }
     /**
+     * Wait for an enhancement instance to be resolved
+     * @param registryItem - The registry item to wait for
+     * @returns Promise that resolves with the spawned instance
+     */
+    async whenResolved(registryItem) {
+        const resolvedKey = registryItem?.lifecycleKeys?.resolved;
+        if (resolvedKey === undefined) {
+            throw new Error('Must specify resolved key in lifecycleKeys');
+        }
+        // Get or spawn the instance
+        const spawnedInstance = this.get(registryItem);
+        // Check if already resolved
+        if (spawnedInstance[resolvedKey]) {
+            return spawnedInstance;
+        }
+        // Check if instance is an EventTarget
+        if (!(spawnedInstance instanceof EventTarget)) {
+            throw new Error('Instance must be an EventTarget to use whenResolved');
+        }
+        // Lazy load waitForEvent
+        const { waitForEvent } = await import('./waitForEvent.js');
+        // Wait for the 'resolved' event
+        await waitForEvent(spawnedInstance, 'resolved');
+        // Check if resolved flag is now set
+        if (spawnedInstance[resolvedKey]) {
+            return spawnedInstance;
+        }
+        throw new Error('Rejected');
+    }
+    /**
      * Lazy getter for the set proxy
      */
     get set() {

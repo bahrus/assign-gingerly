@@ -7,6 +7,7 @@ export interface IBaseRegistryItem<T = any> {
   enhKey?: string;
   lifecycleKeys?: {
     dispose?: string;
+    resolved?: string;
   };
 }
 

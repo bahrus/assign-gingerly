@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Element.enh.whenResolved() Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .test-section h3 {
+      margin-top: 0;
+    }
+    .pass {
+      color: green;
+      font-weight: bold;
+    }
+    .fail {
+      color: red;
+      font-weight: bold;
+    }
+    .result {
+      margin: 10px 0;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Element.enh.whenResolved() Test</h1>
+  <p>This test verifies the enh.whenResolved() method for waiting on async enhancement initialization.</p>
+  
+  <div id="results"></div>
+
+  <script type="module">
+    import '../object-extension.js';
+    import { BaseRegistry } from '../assignGingerly.js';
+
+    const results = document.getElementById('results');
+
+    function addResult(title, passed, message) {
+      const section = document.createElement('div');
+      section.className = 'test-section';
+      section.innerHTML = `
+        <h3>${title}</h3>
+        <div class="result">
+          <span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
+          <p>${message}</p>
+        </div>
+      `;
+      results.appendChild(section);
+    }
+
+    // Test Enhancement Class that extends EventTarget
+    class AsyncEnhancement extends EventTarget {
+      element;
+      ctx;
+      isResolved = false;
+      data = null;
+
+      constructor(oElement, ctx, initVals) {
+        super();
+        this.element = oElement;
+        this.ctx = ctx;
+        if (initVals) {
+          Object.assign(this, initVals);
+        }
+      }
+
+      async initialize() {
+        // Simulate async initialization
+        await new Promise(resolve => setTimeout(resolve, 50));
+        this.data = 'loaded';
+        this.isResolved = true;
+        this.dispatchEvent(new Event('resolved'));
+      }
+    }
+
+    try {
+      const div = document.createElement('div');
+      const hasCustomElementRegistry = 'customElementRegistry' in div;
+      
+      if (!hasCustomElementRegistry) {
+        addResult(
+          'Browser Support',
+          false,
+          'This browser does not support customElementRegistry on elements. Chrome 146+ required.'
+        );
+      } else {
+        // Test 1: enh has whenResolved method
+        const hasWhenResolvedMethod = typeof div.enh.whenResolved === 'function';
+        addResult(
+          'Test 1: enh has whenResolved() method',
+          hasWhenResolvedMethod,
+          hasWhenResolvedMethod
+            ? 'enh.whenResolved() method exists'
+            : 'enh.whenResolved() method NOT found'
+        );
+
+        // Test 2: whenResolved waits for async initialization
+        const testDiv1 = document.createElement('div');
+        const registryItem1 = {
+          spawn: AsyncEnhancement,
+          map: {},
+          enhKey: 'asyncEnh',
+          lifecycleKeys: {
+            resolved: 'isResolved'
+          }
+        };
+
+        const instance1 = testDiv1.enh.get(registryItem1);
+        const wasResolved = instance1.isResolved;
+        
+        // Start async initialization
+        instance1.initialize();
+        
+        // Wait for resolution
+        const resolved1 = await testDiv1.enh.whenResolved(registryItem1);
+        
+        const isResolved = resolved1.isResolved;
+        const hasData = resolved1.data === 'loaded';
+        const sameInstance = resolved1 === instance1;
+        
+        addResult(
+          'Test 2: whenResolved waits for async initialization',
+          !wasResolved && isResolved && hasData && sameInstance,
+          !wasResolved && isResolved && hasData && sameInstance
+            ? 'Successfully waited for async initialization'
+            : `Failed: wasResolved=${wasResolved}, isResolved=${isResolved}, hasData=${hasData}, same=${sameInstance}`
+        );
+
+        // Test 3: whenResolved returns immediately if already resolved
+        const testDiv2 = document.createElement('div');
+        const registryItem2 = {
+          spawn: AsyncEnhancement,
+          map: {},
+          enhKey: 'preResolvedEnh',
+          lifecycleKeys: {
+            resolved: 'isResolved'
+          }
+        };
+
+        const instance2 = testDiv2.enh.get(registryItem2);
+        instance2.isResolved = true; // Already resolved
+        instance2.data = 'pre-loaded';
+        
+        const startTime = Date.now();
+        const resolved2 = await testDiv2.enh.whenResolved(registryItem2);
+        const elapsed = Date.now() - startTime;
+        
+        const returnedImmediately = elapsed < 10; // Should be nearly instant
+        const correctInstance = resolved2 === instance2;
+        
+        addResult(
+          'Test 3: whenResolved returns immediately if already resolved',
+          returnedImmediately && correctInstance,
+          returnedImmediately && correctInstance
+            ? `Returned immediately (${elapsed}ms)`
+            : `Failed: elapsed=${elapsed}ms, correct=${correctInstance}`
+        );
+
+        // Test 4: whenResolved throws if no resolved key specified
+        const testDiv3 = document.createElement('div');
+        const registryItem3 = {
+          spawn: AsyncEnhancement,
+          map: {},
+          enhKey: 'noResolvedKeyEnh'
+          // No lifecycleKeys.resolved
+        };
+
+        let threwError = false;
+        let errorMessage = '';
+        try {
+          await testDiv3.enh.whenResolved(registryItem3);
+        } catch (error) {
+          threwError = true;
+          errorMessage = error.message;
+        }
+        
+        const correctError = errorMessage.includes('Must specify resolved key');
+        
+        addResult(
+          'Test 4: whenResolved throws if no resolved key specified',
+          threwError && correctError,
+          threwError && correctError
+            ? `Correct error: ${errorMessage}`
+            : `Failed: threw=${threwError}, message=${errorMessage}`
+        );
+
+        // Test 5: whenResolved throws if instance is not EventTarget
+        class NonEventTargetEnhancement {
+          element;
+          ctx;
+          isResolved = false;
+
+          constructor(oElement, ctx) {
+            this.element = oElement;
+            this.ctx = ctx;
+          }
+        }
+
+        const testDiv4 = document.createElement('div');
+        const registryItem4 = {
+          spawn: NonEventTargetEnhancement,
+          map: {},
+          enhKey: 'nonEventTargetEnh',
+          lifecycleKeys: {
+            resolved: 'isResolved'
+          }
+        };
+
+        let threwError4 = false;
+        let errorMessage4 = '';
+        try {
+          await testDiv4.enh.whenResolved(registryItem4);
+        } catch (error) {
+          threwError4 = true;
+          errorMessage4 = error.message;
+        }
+        
+        const correctError4 = errorMessage4.includes('must be an EventTarget');
+        
+        addResult(
+          'Test 5: whenResolved throws if instance is not EventTarget',
+          threwError4 && correctError4,
+          threwError4 && correctError4
+            ? `Correct error: ${errorMessage4}`
+            : `Failed: threw=${threwError4}, message=${errorMessage4}`
+        );
+
+        // Test 6: whenResolved can be called multiple times
+        const testDiv5 = document.createElement('div');
+        const registryItem5 = {
+          spawn: AsyncEnhancement,
+          map: {},
+          enhKey: 'multiCallEnh',
+          lifecycleKeys: {
+            resolved: 'isResolved'
+          }
+        };
+
+        const instance5 = testDiv5.enh.get(registryItem5);
+        
+        // Start async initialization
+        instance5.initialize();
+        
+        // Call whenResolved multiple times
+        const promise1 = testDiv5.enh.whenResolved(registryItem5);
+        const promise2 = testDiv5.enh.whenResolved(registryItem5);
+        
+        const [resolved5a, resolved5b] = await Promise.all([promise1, promise2]);
+        
+        const bothResolved = resolved5a === instance5 && resolved5b === instance5;
+        
+        addResult(
+          'Test 6: whenResolved can be called multiple times',
+          bothResolved,
+          bothResolved
+            ? 'Multiple calls all resolved correctly'
+            : 'Multiple calls did not resolve correctly'
+        );
+
+        // Test 7: Lazy loading of waitForEvent module
+        // This test verifies that the module is loaded dynamically
+        const testDiv6 = document.createElement('div');
+        const registryItem6 = {
+          spawn: AsyncEnhancement,
+          map: {},
+          enhKey: 'lazyLoadEnh',
+          lifecycleKeys: {
+            resolved: 'isResolved'
+          }
+        };
+
+        const instance6 = testDiv6.enh.get(registryItem6);
+        instance6.initialize();
+        
+        // The module should be lazy loaded when whenResolved is called
+        const resolved6 = await testDiv6.enh.whenResolved(registryItem6);
+        
+        const lazyLoadWorked = resolved6 === instance6 && resolved6.isResolved;
+        
+        addResult(
+          'Test 7: Lazy loading of waitForEvent module works',
+          lazyLoadWorked,
+          lazyLoadWorked
+            ? 'Module lazy loaded and used successfully'
+            : 'Lazy loading failed'
+        );
+      }
+    } catch (error) {
+      addResult(
+        'Error',
+        false,
+        `An error occurred: ${error.message}\n${error.stack}`
+      );
+    }
+  </script>
+</body>
+</html>
