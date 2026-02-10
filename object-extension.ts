@@ -1,4 +1,4 @@
-import assignGingerly, { BaseRegistry, IAssignGingerlyOptions } from './assignGingerly.js';
+import assignGingerly, { BaseRegistry, IAssignGingerlyOptions, getInstanceMap, INSTANCE_MAP_GUID } from './assignGingerly.js';
 
 /**
  * Extends the CustomElementRegistry interface to include assignGingerlyRegistry
@@ -114,11 +114,16 @@ class ElementEnhancementContainer {
             if (registryItem) {
               const SpawnClass = registryItem.spawn;
               
-              // Check if enhancement already exists and is correct instance
-              if (self[prop] && self[prop] instanceof SpawnClass) {
-                // Already exists, just return it
-                return self[prop];
-              } else {
+              // Check the global instance map first
+              const instanceMap = getInstanceMap();
+              if (!instanceMap.has(element)) {
+                instanceMap.set(element, new Map());
+              }
+              const instances = instanceMap.get(element)!;
+              
+              let instance = instances.get(registryItem);
+              
+              if (!instance) {
                 // Need to spawn
                 let initVals: any = undefined;
                 
@@ -131,13 +136,21 @@ class ElementEnhancementContainer {
                 const ctx = { mountInfo: registryItem };
                 
                 // Spawn the instance
-                const instance = new SpawnClass(element, ctx, initVals);
+                instance = new SpawnClass(element, ctx, initVals);
+                
+                // Store in global instance map
+                instances.set(registryItem, instance);
                 
                 // Set it on the enh container
                 self[prop] = instance;
-                
-                return instance;
+              } else {
+                // Instance exists in global map, ensure it's on enh container
+                if (self[prop] !== instance) {
+                  self[prop] = instance;
+                }
               }
+              
+              return instance;
             }
           }
           

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shared Instance Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .test-section h3 {
+      margin-top: 0;
+    }
+    .pass {
+      color: green;
+      font-weight: bold;
+    }
+    .fail {
+      color: red;
+      font-weight: bold;
+    }
+    .result {
+      margin: 10px 0;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Shared Instance Test</h1>
+  <p>This test verifies that instances are shared between assignGingerly and element.enh.set.</p>
+  
+  <div id="results"></div>
+
+  <script type="module">
+    import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
+    import '../object-extension.js';
+
+    const results = document.getElementById('results');
+
+    function addResult(title, passed, message) {
+      const section = document.createElement('div');
+      section.className = 'test-section';
+      section.innerHTML = `
+        <h3>${title}</h3>
+        <div class="result">
+          <span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
+          <p>${message}</p>
+        </div>
+      `;
+      results.appendChild(section);
+    }
+
+    // Test Enhancement Class
+    class TestEnhancement {
+      element;
+      ctx;
+      prop1 = null;
+      prop2 = null;
+      instanceId = Math.random();
+
+      constructor(oElement, ctx, initVals) {
+        this.element = oElement;
+        this.ctx = ctx;
+        if (initVals) {
+          Object.assign(this, initVals);
+        }
+      }
+    }
+
+    try {
+      const div = document.createElement('div');
+      const hasCustomElementRegistry = 'customElementRegistry' in div;
+      
+      if (!hasCustomElementRegistry) {
+        addResult(
+          'Browser Support',
+          false,
+          'This browser does not support customElementRegistry on elements. Chrome 146+ required.'
+        );
+      } else {
+        // Test 1: assignGingerly with enhKey creates instance on enh
+        const symbol1 = Symbol.for('test1');
+        const testDiv1 = document.createElement('div');
+        const registry1 = testDiv1.customElementRegistry.assignGingerlyRegistry;
+        
+        registry1.push({
+          spawn: TestEnhancement,
+          map: { [symbol1]: 'prop1' },
+          enhKey: 'myEnh'
+        });
+
+        assignGingerly(testDiv1, {
+          [symbol1]: 'value1'
+        }, { registry: registry1 });
+
+        const hasEnhProperty = testDiv1.enh && testDiv1.enh.myEnh;
+        const isCorrectInstance = hasEnhProperty && testDiv1.enh.myEnh instanceof TestEnhancement;
+        const hasCorrectValue = isCorrectInstance && testDiv1.enh.myEnh.prop1 === 'value1';
+        
+        addResult(
+          'Test 1: assignGingerly with enhKey creates instance on enh',
+          hasEnhProperty && isCorrectInstance && hasCorrectValue,
+          hasEnhProperty && isCorrectInstance && hasCorrectValue
+            ? `Instance created on enh.myEnh with correct value`
+            : `Failed: hasEnh=${hasEnhProperty}, isInstance=${isCorrectInstance}, hasValue=${hasCorrectValue}`
+        );
+
+        // Test 2: enh.set and assignGingerly share the same instance
+        const symbol2 = Symbol.for('test2');
+        const testDiv2 = document.createElement('div');
+        const registry2 = testDiv2.customElementRegistry.assignGingerlyRegistry;
+        
+        registry2.push({
+          spawn: TestEnhancement,
+          map: { [symbol2]: 'prop2' },
+          enhKey: 'sharedEnh'
+        });
+
+        // First, use enh.set
+        testDiv2.enh.set.sharedEnh.prop1 = 'fromEnhSet';
+        const instanceId1 = testDiv2.enh.sharedEnh.instanceId;
+
+        // Then, use assignGingerly
+        assignGingerly(testDiv2, {
+          [symbol2]: 'fromAssignGingerly'
+        }, { registry: registry2 });
+
+        const instanceId2 = testDiv2.enh.sharedEnh.instanceId;
+        const sameInstance = instanceId1 === instanceId2;
+        const hasBothValues = testDiv2.enh.sharedEnh.prop1 === 'fromEnhSet' &&
+                             testDiv2.enh.sharedEnh.prop2 === 'fromAssignGingerly';
+        
+        addResult(
+          'Test 2: enh.set and assignGingerly share the same instance',
+          sameInstance && hasBothValues,
+          sameInstance && hasBothValues
+            ? `Same instance (${instanceId1}) used by both, both properties set`
+            : `Different instances: ${instanceId1} vs ${instanceId2}, or values not set`
+        );
+
+        // Test 3: assignGingerly first, then enh.set
+        const symbol3 = Symbol.for('test3');
+        const testDiv3 = document.createElement('div');
+        const registry3 = testDiv3.customElementRegistry.assignGingerlyRegistry;
+        
+        registry3.push({
+          spawn: TestEnhancement,
+          map: { [symbol3]: 'prop2' },
+          enhKey: 'reverseEnh'
+        });
+
+        // First, use assignGingerly
+        assignGingerly(testDiv3, {
+          [symbol3]: 'fromAssignGingerly'
+        }, { registry: registry3 });
+
+        const instanceId3 = testDiv3.enh.reverseEnh.instanceId;
+
+        // Then, use enh.set
+        testDiv3.enh.set.reverseEnh.prop1 = 'fromEnhSet';
+
+        const instanceId4 = testDiv3.enh.reverseEnh.instanceId;
+        const sameInstanceReverse = instanceId3 === instanceId4;
+        const hasBothValuesReverse = testDiv3.enh.reverseEnh.prop1 === 'fromEnhSet' &&
+                                     testDiv3.enh.reverseEnh.prop2 === 'fromAssignGingerly';
+        
+        addResult(
+          'Test 3: assignGingerly first, then enh.set shares instance',
+          sameInstanceReverse && hasBothValuesReverse,
+          sameInstanceReverse && hasBothValuesReverse
+            ? `Same instance (${instanceId3}) used by both, both properties set`
+            : `Different instances: ${instanceId3} vs ${instanceId4}, or values not set`
+        );
+
+        // Test 4: Multiple symbols, same registry item, shared instance
+        const symbol4a = Symbol.for('test4a');
+        const symbol4b = Symbol.for('test4b');
+        const testDiv4 = document.createElement('div');
+        const registry4 = testDiv4.customElementRegistry.assignGingerlyRegistry;
+        
+        registry4.push({
+          spawn: TestEnhancement,
+          map: {
+            [symbol4a]: 'prop1',
+            [symbol4b]: 'prop2'
+          },
+          enhKey: 'multiSymEnh'
+        });
+
+        // Use assignGingerly with first symbol
+        assignGingerly(testDiv4, {
+          [symbol4a]: 'value1'
+        }, { registry: registry4 });
+
+        const instanceId5 = testDiv4.enh.multiSymEnh.instanceId;
+
+        // Use assignGingerly with second symbol
+        assignGingerly(testDiv4, {
+          [symbol4b]: 'value2'
+        }, { registry: registry4 });
+
+        const instanceId6 = testDiv4.enh.multiSymEnh.instanceId;
+
+        // Use enh.set
+        testDiv4.enh.set.multiSymEnh.prop1 = 'updated';
+
+        const instanceId7 = testDiv4.enh.multiSymEnh.instanceId;
+
+        const allSameInstance = instanceId5 === instanceId6 && instanceId6 === instanceId7;
+        const allValuesCorrect = testDiv4.enh.multiSymEnh.prop1 === 'updated' &&
+                                testDiv4.enh.multiSymEnh.prop2 === 'value2';
+        
+        addResult(
+          'Test 4: Multiple symbols and enh.set all share same instance',
+          allSameInstance && allValuesCorrect,
+          allSameInstance && allValuesCorrect
+            ? `All access methods use same instance (${instanceId5})`
+            : `Different instances: ${instanceId5}, ${instanceId6}, ${instanceId7}`
+        );
+
+        // Test 5: Verify global instance map is used
+        const INSTANCE_MAP_GUID = 'HDBhTPLuIUyooMxK88m68Q';
+        const globalMap = globalThis[INSTANCE_MAP_GUID];
+        
+        const symbol5 = Symbol.for('test5');
+        const testDiv5 = document.createElement('div');
+        const registry5 = testDiv5.customElementRegistry.assignGingerlyRegistry;
+        
+        const registryItem5 = {
+          spawn: TestEnhancement,
+          map: { [symbol5]: 'prop1' },
+          enhKey: 'globalMapEnh'
+        };
+        
+        registry5.push(registryItem5);
+
+        // Use enh.set
+        testDiv5.enh.set.globalMapEnh.prop1 = 'test';
+
+        // Check global map
+        const hasInGlobalMap = globalMap.has(testDiv5);
+        const innerMap = globalMap.get(testDiv5);
+        const hasRegistryItem = innerMap && innerMap.has(registryItem5);
+        const instanceFromMap = innerMap && innerMap.get(registryItem5);
+        const sameAsEnh = instanceFromMap === testDiv5.enh.globalMapEnh;
+        
+        addResult(
+          'Test 5: Global instance map is used by enh.set',
+          hasInGlobalMap && hasRegistryItem && sameAsEnh,
+          hasInGlobalMap && hasRegistryItem && sameAsEnh
+            ? 'Instance correctly stored in global map'
+            : `Failed: inMap=${hasInGlobalMap}, hasItem=${hasRegistryItem}, same=${sameAsEnh}`
+        );
+
+        // Test 6: Element reference passed to constructor
+        const symbol6 = Symbol.for('test6');
+        const testDiv6 = document.createElement('div');
+        const registry6 = testDiv6.customElementRegistry.assignGingerlyRegistry;
+        
+        registry6.push({
+          spawn: TestEnhancement,
+          map: { [symbol6]: 'prop1' },
+          enhKey: 'elemRefEnh'
+        });
+
+        assignGingerly(testDiv6, {
+          [symbol6]: 'test'
+        }, { registry: registry6 });
+
+        const hasElementRef = testDiv6.enh.elemRefEnh.element === testDiv6;
+        const hasContext = testDiv6.enh.elemRefEnh.ctx && testDiv6.enh.elemRefEnh.ctx.mountInfo;
+        
+        addResult(
+          'Test 6: Element reference passed to constructor via assignGingerly',
+          hasElementRef && hasContext,
+          hasElementRef && hasContext
+            ? 'Constructor received element and context correctly'
+            : `Failed: hasElement=${hasElementRef}, hasContext=${hasContext}`
+        );
+      }
+    } catch (error) {
+      addResult(
+        'Error',
+        false,
+        `An error occurred: ${error.message}\n${error.stack}`
+      );
+    }
+  </script>
+</body>
+</html>

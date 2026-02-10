@@ -298,14 +298,64 @@ The suggestion to use Symbol.for with a guid, as opposed to just Symbol(), is ba
 
 ### Global Instance Map for Cross-Version Compatibility
 
-To ensure instance uniqueness even when multiple versions of this package are loaded, spawned instances are stored in a global WeakMap at `globalThis['assign-gingerly-instance-map-7F3E9A2B-4C1D-8E6F-9A0B-5D2C3E4F6A7B']`. This guarantees that:
+To ensure instance uniqueness even when multiple versions of this package are loaded, spawned instances are stored in a global WeakMap at `globalThis['HDBhTPLuIUyooMxK88m68Q']`. This guarantees that:
 
 - **Same instance across versions**: Different versions of the package will share the same instance map
 - **Memory safety**: Using WeakMap allows garbage collection when objects are no longer referenced
 - **No conflicts**: The GUID-based key prevents collisions with other libraries
 - **Registry item keying**: Instances are keyed by registry item (not by symbol), ensuring that multiple symbols mapped to the same registry item share the same spawned instance
+- **Shared between assignGingerly and enh.set**: Both `assignGingerly()` and `element.enh.set` use the same global instance map, ensuring only one instance per registry item per element
 
 This is particularly important in complex applications where different dependencies might bundle different versions of assign-gingerly.
+
+**Example of shared instances:**
+```TypeScript
+const symbol1 = Symbol.for('prop1');
+const symbol2 = Symbol.for('prop2');
+
+class MyEnhancement {
+  element;
+  ctx;
+  prop1 = null;
+  prop2 = null;
+  instanceId = Math.random();
+
+  constructor(oElement, ctx, initVals) {
+    this.element = oElement;
+    this.ctx = ctx;
+    if (initVals) {
+      Object.assign(this, initVals);
+    }
+  }
+}
+
+const registryItem = {
+  spawn: MyEnhancement,
+  map: {
+    [symbol1]: 'prop1',
+    [symbol2]: 'prop2'
+  },
+  enhKey: 'myEnh'
+};
+
+const registry = new BaseRegistry();
+registry.push(registryItem);
+
+const element = document.createElement('div');
+element.customElementRegistry.assignGingerlyRegistry.push(registryItem);
+
+// Use assignGingerly first
+assignGingerly(element, { [symbol1]: 'value1' }, { registry });
+const id1 = element.enh.myEnh.instanceId;
+
+// Use enh.set - gets the SAME instance
+element.enh.set.myEnh.prop2 = 'value2';
+const id2 = element.enh.myEnh.instanceId;
+
+console.log(id1 === id2); // true - same instance!
+console.log(element.enh.myEnh.prop1); // 'value1'
+console.log(element.enh.myEnh.prop2); // 'value2'
+```
 
 **Example of registry item keying:**
 ```TypeScript

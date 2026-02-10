@@ -21,14 +21,14 @@ export interface IAssignGingerlyOptions {
 /**
  * GUID for global instance map storage to ensure uniqueness across package versions
  */
-const INSTANCE_MAP_GUID = 'HDBhTPLuIUyooMxK88m68Q';
+export const INSTANCE_MAP_GUID = 'HDBhTPLuIUyooMxK88m68Q';
 
 /**
  * Get or create the global instance map
  * Stored in globalThis to ensure uniqueness across different package versions
  * Maps objects to a Map of registry items to their spawned instances
  */
-function getInstanceMap(): WeakMap<object, Map<IBaseRegistryItem, any>> {
+export function getInstanceMap(): WeakMap<object, Map<IBaseRegistryItem, any>> {
   if (!(globalThis as any)[INSTANCE_MAP_GUID]) {
     (globalThis as any)[INSTANCE_MAP_GUID] = new WeakMap<object, Map<IBaseRegistryItem, any>>();
   }
@@ -374,8 +374,29 @@ export function assignGingerly(
 
         if (!instance) {
           const SpawnClass = registryItem.spawn;
-          instance = new SpawnClass();
+          
+          // If target is an Element and registryItem has enhKey, pass element to constructor
+          if (registryItem.enhKey && typeof Element !== 'undefined' && target instanceof Element) {
+            const ctx = { mountInfo: registryItem };
+            const initVals = (target as any).enh?.[registryItem.enhKey] && 
+                            !((target as any).enh[registryItem.enhKey] instanceof SpawnClass)
+                            ? (target as any).enh[registryItem.enhKey]
+                            : undefined;
+            instance = new SpawnClass(target, ctx, initVals);
+          } else {
+            instance = new SpawnClass();
+          }
+          
           instances.set(registryItem, instance);
+          
+          // If target is an Element and registryItem has enhKey, store on enh
+          if (registryItem.enhKey && typeof Element !== 'undefined' && target instanceof Element) {
+            if (!(target as any).enh) {
+              // This shouldn't happen if object-extension is loaded, but handle it
+              (target as any).enh = {};
+            }
+            (target as any).enh[registryItem.enhKey] = instance;
+          }
         }
 
         // Find the mapped property name
@@ -407,8 +428,28 @@ export function assignGingerly(
 
                   if (!instance) {
                     const SpawnClass = registryItem.spawn;
-                    instance = new SpawnClass();
+                    
+                    // If target is an Element and registryItem has enhKey, pass element to constructor
+                    if (registryItem.enhKey && typeof Element !== 'undefined' && target instanceof Element) {
+                      const ctx = { mountInfo: registryItem };
+                      const initVals = (target as any).enh?.[registryItem.enhKey] && 
+                                      !((target as any).enh[registryItem.enhKey] instanceof SpawnClass)
+                                      ? (target as any).enh[registryItem.enhKey]
+                                      : undefined;
+                      instance = new SpawnClass(target, ctx, initVals);
+                    } else {
+                      instance = new SpawnClass();
+                    }
+                    
                     instances.set(registryItem, instance);
+                    
+                    // If target is an Element and registryItem has enhKey, store on enh
+                    if (registryItem.enhKey && typeof Element !== 'undefined' && target instanceof Element) {
+                      if (!(target as any).enh) {
+                        (target as any).enh = {};
+                      }
+                      (target as any).enh[registryItem.enhKey] = instance;
+                    }
                   }
                   
                   const mappedKey = registryItem.map[prop];
