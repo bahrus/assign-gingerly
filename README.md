@@ -832,4 +832,133 @@ element.enh.dispose(registryItem); // Stops timer and cleans up
 - Calling `enh.get()` again will create a new instance
 - The enhancement property is removed from the enh container
 
+### Waiting for Async Initialization with `enh.whenResolved()`
+
+The `enh.whenResolved()` method provides a way to wait for asynchronous enhancement initialization:
+
+```TypeScript
+class AsyncEnhancement extends EventTarget {
+  element;
+  ctx;
+  isResolved = false;
+  data = null;
+  
+  constructor(oElement, ctx) {
+    super();
+    this.element = oElement;
+    this.ctx = ctx;
+    this.initialize();
+  }
+  
+  async initialize() {
+    // Simulate async operation (fetch data, load resources, etc.)
+    const response = await fetch('/api/data');
+    this.data = await response.json();
+    
+    // Mark as resolved and dispatch event
+    this.isResolved = true;
+    this.dispatchEvent(new Event('resolved'));
+  }
+}
+
+const registryItem = {
+  spawn: AsyncEnhancement,
+  map: {},
+  enhKey: 'asyncEnh',
+  lifecycleKeys: {
+    resolved: 'isResolved'  // Property name that indicates resolution
+  }
+};
+
+// Wait for the enhancement to be fully initialized
+const instance = await element.enh.whenResolved(registryItem);
+console.log(instance.data); // Data is loaded and ready
+```
+
+**How `enh.whenResolved()` works:**
+
+1. **Validates configuration**: Throws error if `lifecycleKeys.resolved` is not specified
+2. **Gets instance**: Calls `enh.get()` to get or spawn the instance
+3. **Checks if resolved**: If the resolved property is already true, returns immediately
+4. **Validates EventTarget**: Throws error if instance is not an EventTarget
+5. **Waits for event**: Lazy loads the `waitForEvent` module and waits for the 'resolved' event
+6. **Returns or rejects**: Returns the instance if resolved flag is set, otherwise throws
+
+**Requirements:**
+- Enhancement class must extend `EventTarget`
+- Must specify `lifecycleKeys.resolved` property name
+- Instance must dispatch a 'resolved' event when ready
+- Instance must set the resolved property to a truthy value
+
+**Benefits:**
+- **Async-aware**: Properly handles asynchronous initialization
+- **Lazy loading**: The waitForEvent module is only loaded when needed
+- **Early return**: Returns immediately if already resolved (no waiting)
+- **Type safety**: Validates that instance can dispatch events
+- **Clean API**: Simple promise-based interface
+
+**Example with multiple async operations:**
+```TypeScript
+class DataEnhancement extends EventTarget {
+  element;
+  isResolved = false;
+  users = null;
+  settings = null;
+  
+  constructor(oElement, ctx) {
+    super();
+    this.element = oElement;
+    this.loadData();
+  }
+  
+  async loadData() {
+    try {
+      // Load multiple resources in parallel
+      const [usersRes, settingsRes] = await Promise.all([
+        fetch('/api/users'),
+        fetch('/api/settings')
+      ]);
+      
+      this.users = await usersRes.json();
+      this.settings = await settingsRes.json();
+      
+      // Mark as resolved
+      this.isResolved = true;
+      this.dispatchEvent(new Event('resolved'));
+    } catch (error) {
+      console.error('Failed to load data:', error);
+      // Could dispatch a 'rejected' event here
+    }
+  }
+}
+
+const registryItem = {
+  spawn: DataEnhancement,
+  map: {},
+  enhKey: 'data',
+  lifecycleKeys: {
+    resolved: 'isResolved'
+  }
+};
+
+// Wait for all data to be loaded
+try {
+  const dataEnh = await element.enh.whenResolved(registryItem);
+  console.log('Users:', dataEnh.users);
+  console.log('Settings:', dataEnh.settings);
+} catch (error) {
+  console.error('Enhancement failed to resolve:', error);
+}
+```
+
+**Calling multiple times:**
+```TypeScript
+// Multiple calls to whenResolved all wait for the same instance
+const promise1 = element.enh.whenResolved(registryItem);
+const promise2 = element.enh.whenResolved(registryItem);
+
+const [instance1, instance2] = await Promise.all([promise1, promise2]);
+console.log(instance1 === instance2); // true - same instance
+```
+
 **Browser Support**: This feature requires Chrome 146+ with scoped custom element registry support.
