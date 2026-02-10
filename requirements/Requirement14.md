@@ -38,7 +38,7 @@ if(spawnedInstance[resolved]) return spawnedInstance;
 if(!(spawnedInstance instanceof EventTarget)) throw 'Invalid class type';
 
 const {waitForEvent} = await import('./waitForEvent.js');
-await waitForEvent('resolved');
+await waitForEvent(resolvedKey);
 if(spawnedInstance[resolved]) return spawnedInstance;
 throw 'Rejected'
 ```
