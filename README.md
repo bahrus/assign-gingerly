@@ -451,13 +451,13 @@ myElement.assignGingerly({
 
 **Browser Support**: This feature requires Chrome 146+ with scoped custom element registry support. The implementation is designed as a polyfill for the web standards proposal and does not include fallback behavior for older browsers.
 
-## Enhanced Element Property Assignment with `set` Proxy (Chrome 146+)
+## Enhanced Element Property Assignment with `enh.set` Proxy (Chrome 146+)
 
-Building on the Custom Element Registry integration, this package provides a powerful `set` proxy on all Element instances that enables automatic enhancement spawning and simplified property assignment syntax.
+Building on the Custom Element Registry integration, this package provides a powerful `enh.set` proxy on all Element instances that enables automatic enhancement spawning and simplified property assignment syntax. The `enh` property serves as a dedicated namespace for enhancements, preventing conflicts with future platform properties.
 
 ### Basic Usage
 
-The `set` proxy allows you to assign properties to enhancements using a clean, chainable syntax:
+The `enh.set` proxy allows you to assign properties to enhancements using a clean, chainable syntax:
 
 ```TypeScript
 import 'assign-gingerly/object-extension.js';
@@ -489,27 +489,36 @@ registry.push({
   enhKey: 'myEnh'  // Key identifier for this enhancement
 });
 
-// Use the set proxy to automatically spawn and assign properties
-myElement.set.myEnh.myProp = 'hello';
-myElement.set.myEnh.anotherProp = 'world';
+// Use the enh.set proxy to automatically spawn and assign properties
+myElement.enh.set.myEnh.myProp = 'hello';
+myElement.enh.set.myEnh.anotherProp = 'world';
 
-console.log(myElement.myEnh instanceof MyEnhancement); // true
-console.log(myElement.myEnh.myProp); // 'hello'
-console.log(myElement.myEnh.element === myElement); // true
+console.log(myElement.enh.myEnh instanceof MyEnhancement); // true
+console.log(myElement.enh.myEnh.myProp); // 'hello'
+console.log(myElement.enh.myEnh.element === myElement); // true
 ```
 
 ### How It Works
 
-When you access `element.set.enhKey.property`, the proxy:
+When you access `element.enh.set.enhKey.property`, the proxy:
 
 1. **Checks the registry**: Looks for a registry item with `enhKey` matching the property name
 2. **Spawns if needed**: If found and the enhancement doesn't exist or is the wrong type:
    - Creates a `SpawnContext` with `{ mountInfo: registryItem }`
    - Calls the constructor with `(element, ctx, initVals)`
-   - If a non-matching object already exists at `element[enhKey]`, it's passed as `initVals`
-   - Stores the spawned instance at `element[enhKey]`
+   - If a non-matching object already exists at `element.enh[enhKey]`, it's passed as `initVals`
+   - Stores the spawned instance at `element.enh[enhKey]`
 3. **Reuses existing instances**: If the enhancement already exists and is the correct type, it reuses it
-4. **Falls back to plain objects**: If no registry item is found, creates a plain object at `element[enhKey]`
+4. **Falls back to plain objects**: If no registry item is found, creates a plain object at `element.enh[enhKey]`
+
+### Why the `enh` Namespace?
+
+The `enh` property provides a dedicated namespace for enhancements, similar to how `dataset` provides a namespace for data attributes. This prevents conflicts with:
+- Future platform properties that might be added to Element
+- Existing element properties and methods
+- Other libraries that might extend Element
+
+This approach is part of a proposal to WHATWG for standardizing element enhancements.
 
 ### Constructor Signature
 
@@ -572,11 +581,11 @@ registry.push([
   { spawn: DataEnhancement, map: {}, enhKey: 'data' }
 ]);
 
-element.set.styles.height = '100px';
-element.set.data.value = 'test';
+element.enh.set.styles.height = '100px';
+element.enh.set.data.value = 'test';
 
-console.log(element.styles instanceof StyleEnhancement); // true
-console.log(element.data instanceof DataEnhancement); // true
+console.log(element.enh.styles instanceof StyleEnhancement); // true
+console.log(element.enh.data instanceof DataEnhancement); // true
 ```
 
 **Preserving Existing Data with initVals:**
@@ -593,12 +602,12 @@ registry.push({
 // Set a plain object first
 element.config = { existingProp: 'preserved', anotherProp: 'also preserved' };
 
-// Access via set proxy - spawns enhancement with initVals
-element.set.config.newProp = 'added';
+// Access via enh.set proxy - spawns enhancement with initVals
+element.enh.set.config.newProp = 'added';
 
-console.log(element.config instanceof MyEnhancement); // true
-console.log(element.config.existingProp); // 'preserved'
-console.log(element.config.newProp); // 'added'
+console.log(element.enh.config instanceof MyEnhancement); // true
+console.log(element.enh.config.existingProp); // 'preserved'
+console.log(element.enh.config.newProp); // 'added'
 ```
 
 **Plain Objects Without Registry:**
@@ -606,10 +615,10 @@ console.log(element.config.newProp); // 'added'
 const element = document.createElement('div');
 
 // No registry item for 'plainData' - creates plain object
-element.set.plainData.prop1 = 'value1';
-element.set.plainData.prop2 = 'value2';
+element.enh.set.plainData.prop1 = 'value1';
+element.enh.set.plainData.prop2 = 'value2';
 
-console.log(element.plainData); // { prop1: 'value1', prop2: 'value2' }
+console.log(element.enh.plainData); // { prop1: 'value1', prop2: 'value2' }
 ```
 
 ### Finding Registry Items by enhKey

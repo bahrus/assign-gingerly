@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Element.enh.set Proxy Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .test-section h3 {
+      margin-top: 0;
+    }
+    .pass {
+      color: green;
+      font-weight: bold;
+    }
+    .fail {
+      color: red;
+      font-weight: bold;
+    }
+    .result {
+      margin: 10px 0;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Element.enh.set Proxy Test</h1>
+  <p>This test requires Chrome 146+ with scoped custom element registry support.</p>
+  <p>Tests the enh property which contains enhancements, preventing conflicts with future platform properties.</p>
+  
+  <div id="results"></div>
+
+  <script type="module">
+    import '../object-extension.js';
+    import { BaseRegistry } from '../assignGingerly.js';
+
+    const results = document.getElementById('results');
+
+    function addResult(title, passed, message) {
+      const section = document.createElement('div');
+      section.className = 'test-section';
+      section.innerHTML = `
+        <h3>${title}</h3>
+        <div class="result">
+          <span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
+          <p>${message}</p>
+        </div>
+      `;
+      results.appendChild(section);
+    }
+
+    // Test Enhancement Class
+    class MyEnhancement {
+      element;
+      ctx;
+      myProp = null;
+      anotherProp = null;
+
+      constructor(oElement, ctx, initVals) {
+        this.element = oElement;
+        this.ctx = ctx;
+        if (initVals) {
+          Object.assign(this, initVals);
+        }
+      }
+    }
+
+    // Test Enhancement Class 2
+    class YourEnhancement {
+      element;
+      ctx;
+      value = null;
+
+      constructor(oElement, ctx, initVals) {
+        this.element = oElement;
+        this.ctx = ctx;
+        if (initVals) {
+          Object.assign(this, initVals);
+        }
+      }
+    }
+
+    try {
+      const div = document.createElement('div');
+      const hasCustomElementRegistry = 'customElementRegistry' in div;
+      
+      if (!hasCustomElementRegistry) {
+        addResult(
+          'Browser Support',
+          false,
+          'This browser does not support customElementRegistry on elements. Chrome 146+ required.'
+        );
+      } else {
+        // Test 1: Element has 'enh' property
+        const hasEnhProperty = 'enh' in div;
+        addResult(
+          'Test 1: Element has "enh" property',
+          hasEnhProperty,
+          hasEnhProperty 
+            ? 'Element.prototype has "enh" property'
+            : 'Element.prototype does NOT have "enh" property'
+        );
+
+        // Test 2: enh has 'set' property
+        const hasSetProperty = hasEnhProperty && 'set' in div.enh;
+        addResult(
+          'Test 2: enh has "set" property',
+          hasSetProperty,
+          hasSetProperty
+            ? 'enh object has "set" property'
+            : 'enh object does NOT have "set" property'
+        );
+
+        // Test 3: Set up registry with enhKey
+        const testDiv = document.createElement('div');
+        const registry = testDiv.customElementRegistry.assignGingerlyRegistry;
+        
+        registry.push({
+          spawn: MyEnhancement,
+          map: {},
+          enhKey: 'myEnh'
+        });
+
+        // Test 4: Access via enh.set proxy spawns enhancement
+        testDiv.enh.set.myEnh.myProp = 'hello';
+        
+        const isMyEnhancement = testDiv.enh.myEnh instanceof MyEnhancement;
+        const hasCorrectValue = testDiv.enh.myEnh.myProp === 'hello';
+        const hasElement = testDiv.enh.myEnh.element === testDiv;
+        const hasContext = testDiv.enh.myEnh.ctx && testDiv.enh.myEnh.ctx.mountInfo;
+        
+        addResult(
+          'Test 3: enh.set.myEnh spawns MyEnhancement instance',
+          isMyEnhancement && hasCorrectValue && hasElement && hasContext,
+          `Instance check: ${isMyEnhancement}, Value: ${testDiv.enh.myEnh.myProp}, ` +
+          `Element ref: ${hasElement}, Context: ${hasContext}`
+        );
+
+        // Test 5: Subsequent access returns same instance
+        testDiv.enh.set.myEnh.anotherProp = 'world';
+        const sameInstance = testDiv.enh.myEnh.myProp === 'hello' && testDiv.enh.myEnh.anotherProp === 'world';
+        
+        addResult(
+          'Test 4: Subsequent access uses same instance',
+          sameInstance,
+          sameInstance
+            ? 'Same instance reused, both properties set correctly'
+            : 'Different instance or properties not set correctly'
+        );
+
+        // Test 6: No registry item - creates plain object
+        const testDiv2 = document.createElement('div');
+        testDiv2.enh.set.plainObj.prop = 'value';
+        
+        const isPlainObject = testDiv2.enh.plainObj && 
+                                !(testDiv2.enh.plainObj instanceof MyEnhancement) &&
+                                testDiv2.enh.plainObj.prop === 'value';
+        
+        addResult(
+          'Test 5: No registry item creates plain object',
+          isPlainObject,
+          isPlainObject
+            ? 'Plain object created and property set'
+            : 'Plain object not created correctly'
+        );
+
+        // Test 7: initVals passed when property exists but wrong type
+        const testDiv3 = document.createElement('div');
+        const registry3 = testDiv3.customElementRegistry.assignGingerlyRegistry;
+        
+        registry3.push({
+          spawn: YourEnhancement,
+          map: {},
+          enhKey: 'yourEnh'
+        });
+
+        // Set a plain object first
+        testDiv3.enh.yourEnh = { value: 'initial', extra: 'data' };
+        
+        // Now access via enh.set proxy - should spawn with initVals
+        testDiv3.enh.set.yourEnh.value = 'updated';
+        
+        const isYourEnhancement = testDiv3.enh.yourEnh instanceof YourEnhancement;
+        const hasInitialValue = testDiv3.enh.yourEnh.extra === 'data';
+        const hasUpdatedValue = testDiv3.enh.yourEnh.value === 'updated';
+        
+        addResult(
+          'Test 6: initVals passed when property exists but wrong type',
+          isYourEnhancement && hasInitialValue && hasUpdatedValue,
+          `Instance: ${isYourEnhancement}, InitVals preserved: ${hasInitialValue}, ` +
+          `Updated: ${hasUpdatedValue}`
+        );
+
+        // Test 8: Multiple enhancements on same element
+        const testDiv4 = document.createElement('div');
+        const registry4 = testDiv4.customElementRegistry.assignGingerlyRegistry;
+        
+        registry4.push([
+          {
+            spawn: MyEnhancement,
+            map: {},
+            enhKey: 'enh1'
+          },
+          {
+            spawn: YourEnhancement,
+            map: {},
+            enhKey: 'enh2'
+          }
+        ]);
+
+        testDiv4.enh.set.enh1.myProp = 'first';
+        testDiv4.enh.set.enh2.value = 'second';
+        
+        const hasEnh1 = testDiv4.enh.enh1 instanceof MyEnhancement && testDiv4.enh.enh1.myProp === 'first';
+        const hasEnh2 = testDiv4.enh.enh2 instanceof YourEnhancement && testDiv4.enh.enh2.value === 'second';
+        
+        addResult(
+          'Test 7: Multiple enhancements on same element',
+          hasEnh1 && hasEnh2,
+          hasEnh1 && hasEnh2
+            ? 'Both enhancements created and work independently'
+            : 'Multiple enhancements not working correctly'
+        );
+
+        // Test 9: Nested property access
+        const testDiv5 = document.createElement('div');
+        const registry5 = testDiv5.customElementRegistry.assignGingerlyRegistry;
+        
+        registry5.push({
+          spawn: MyEnhancement,
+          map: {},
+          enhKey: 'nested'
+        });
+
+        testDiv5.enh.set.nested.myProp = 'level1';
+        testDiv5.enh.nested.anotherProp = 'level2';
+        
+        const nestedWorks = testDiv5.enh.nested instanceof MyEnhancement &&
+                             testDiv5.enh.nested.myProp === 'level1' &&
+                             testDiv5.enh.nested.anotherProp === 'level2';
+        
+        addResult(
+          'Test 8: Nested property access works',
+          nestedWorks,
+          nestedWorks
+            ? 'Can set properties via enh.set proxy and directly'
+            : 'Nested property access not working'
+        );
+
+        // Test 10: Enhancements don't pollute element namespace
+        const testDiv6 = document.createElement('div');
+        const registry6 = testDiv6.customElementRegistry.assignGingerlyRegistry;
+        
+        registry6.push({
+          spawn: MyEnhancement,
+          map: {},
+          enhKey: 'isolated'
+        });
+
+        testDiv6.enh.set.isolated.myProp = 'test';
+        
+        // Enhancement should be on enh, not directly on element
+        const notOnElement = !('isolated' in testDiv6);
+        const onEnh = 'isolated' in testDiv6.enh;
+        
+        addResult(
+          'Test 9: Enhancements isolated in enh namespace',
+          notOnElement && onEnh,
+          notOnElement && onEnh
+            ? 'Enhancement correctly isolated in enh property, not polluting element'
+            : `Enhancement pollution: onElement=${!notOnElement}, onEnh=${onEnh}`
+        );
+      }
+    } catch (error) {
+      addResult(
+        'Error',
+        false,
+        `An error occurred: ${error.message}\n${error.stack}`
+      );
+    }
+  </script>
+</body>
+</html>

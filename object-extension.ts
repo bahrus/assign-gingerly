@@ -7,6 +7,10 @@ declare global {
   interface CustomElementRegistry {
     assignGingerlyRegistry: typeof BaseRegistry | BaseRegistry;
   }
+  
+  interface Element {
+    enh: any; // Enhancement container
+  }
 }
 
 /**
@@ -80,68 +84,91 @@ if (typeof CustomElementRegistry !== 'undefined') {
 }
 
 /**
- * Adds 'set' proxy to Element prototype for enhanced property assignment
+ * Enhancement container class for Element.prototype.enh
+ * Provides a 'set' proxy for enhanced property assignment
+ */
+class ElementEnhancementContainer {
+  private element: Element;
+  private _setProxy?: ProxyHandler<ElementEnhancementContainer>;
+
+  constructor(element: Element) {
+    this.element = element;
+  }
+
+  /**
+   * Lazy getter for the set proxy
+   */
+  get set() {
+    if (!this._setProxy) {
+      const self = this as any; // Allow dynamic property access
+      const element = this.element;
+      this._setProxy = new Proxy(this, {
+        get(obj: any, prop: string | symbol) {
+          // Get the registry from customElementRegistry
+          const registry = (element as any).customElementRegistry?.assignGingerlyRegistry;
+          
+          if (registry) {
+            // Check if there's a registry item with matching enhKey
+            const registryItem = registry.findByEnhKey(prop);
+            
+            if (registryItem) {
+              const SpawnClass = registryItem.spawn;
+              
+              // Check if enhancement already exists and is correct instance
+              if (self[prop] && self[prop] instanceof SpawnClass) {
+                // Already exists, just return it
+                return self[prop];
+              } else {
+                // Need to spawn
+                let initVals: any = undefined;
+                
+                // If property exists but isn't the right instance, pass it as initVals
+                if (self[prop] && !(self[prop] instanceof SpawnClass)) {
+                  initVals = self[prop];
+                }
+                
+                // Create spawn context
+                const ctx = { mountInfo: registryItem };
+                
+                // Spawn the instance
+                const instance = new SpawnClass(element, ctx, initVals);
+                
+                // Set it on the enh container
+                self[prop] = instance;
+                
+                return instance;
+              }
+            }
+          }
+          
+          // No registry item found - create plain object if needed
+          if (self[prop] === undefined) {
+            self[prop] = {};
+          }
+          
+          return self[prop];
+        }
+      }) as any;
+    }
+    
+    return this._setProxy;
+  }
+}
+
+/**
+ * Adds 'enh' property to Element prototype for enhanced property assignment
  * Supports automatic spawning of enhancement classes based on registry
  */
 if (typeof Element !== 'undefined') {
-  const setProxyWeakMap = new WeakMap<Element, ProxyHandler<Element>>();
+  const enhContainerWeakMap = new WeakMap<Element, ElementEnhancementContainer>();
   
-  Object.defineProperty(Element.prototype, 'set', {
+  Object.defineProperty(Element.prototype, 'enh', {
     get: function (this: Element) {
-      if (!setProxyWeakMap.has(this)) {
-        const self = this;
-        const proxy = new Proxy(self, {
-          get(obj: any, prop: string | symbol) {
-            // Get the registry from customElementRegistry
-            const registry = (self as any).customElementRegistry?.assignGingerlyRegistry;
-            
-            if (registry) {
-              // Check if there's a registry item with matching enhKey
-              const registryItem = registry.findByEnhKey(prop);
-              
-              if (registryItem) {
-                const SpawnClass = registryItem.spawn;
-                
-                // Check if enhancement already exists and is correct instance
-                if (self[prop as any] && self[prop as any] instanceof SpawnClass) {
-                  // Already exists, just return it
-                  return self[prop as any];
-                } else {
-                  // Need to spawn
-                  let initVals: any = undefined;
-                  
-                  // If property exists but isn't the right instance, pass it as initVals
-                  if (self[prop as any] && !(self[prop as any] instanceof SpawnClass)) {
-                    initVals = self[prop as any];
-                  }
-                  
-                  // Create spawn context
-                  const ctx = { mountInfo: registryItem };
-                  
-                  // Spawn the instance
-                  const instance = new SpawnClass(self, ctx, initVals);
-                  
-                  // Set it on the element
-                  (self as any)[prop] = instance;
-                  
-                  return instance;
-                }
-              }
-            }
-            
-            // No registry item found - create plain object if needed
-            if (self[prop as any] === undefined) {
-              (self as any)[prop] = {};
-            }
-            
-            return self[prop as any];
-          }
-        });
-        
-        setProxyWeakMap.set(this, proxy);
+      if (!enhContainerWeakMap.has(this)) {
+        enhContainerWeakMap.set(this, new ElementEnhancementContainer(this));
       }
       
-      return setProxyWeakMap.get(this);
+      return enhContainerWeakMap.get(this);
     },
     enumerable: true,
     configurable: true,
