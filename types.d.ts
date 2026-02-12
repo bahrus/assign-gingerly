@@ -1,5 +1,21 @@
 export type EnhKey = string | symbol;
 
+type NoUnderscore<T extends string> = T extends `_${string}` ? never : T;
+
+type YesUnderscore = `_${string}`;
+
+export type StringWithAutocompleteOptions<TOptions> = 
+    | (string & {})
+    | TOptions;
+
+export type StringNotStartWithUnderscoreAutocompleteOptions<TOptions> = 
+    | (NoUnderscore<string> & {})
+    | TOptions;
+
+export type StringStartWithUnderscoreAutocompleteOptions<TOptions> = 
+    | (YesUnderscore & {})
+    | TOptions;
+
 //used by mount-observer, not by assign-gingerly
 type DisposeEvent = 
     | 'disconnect' 
@@ -16,12 +32,12 @@ export interface IBaseRegistryItem<T = any> {
   
   spawn: { new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T  };
   
-  attrs: AttrPatterns<T>;
-  //keys of type string are attribute "coordinates"
-  //and not used in assign-gingerly
+  //Applicable to passing in the initVals during the spawn lifecycle event
+  attrs?: AttrPatterns<T>;
+  
   //keys of type symbol are used for dependency injection
   //and are used by assign-gingerly
-  map: { [key: string | symbol]: keyof T };
+  map?: { [key: symbol]: keyof T };
   //only applicable when spawning from a DOM Element reference
   enhKey?: EnhKey;
   lifecycleKeys?: {
@@ -32,8 +48,14 @@ export interface IBaseRegistryItem<T = any> {
   //impossible to polyfill, but will always be disposed
   //when oElement's reference count goes to zero
   disposeOn?: DisposeEvent | DisposeEvent[]
+
+  whereElementMatches?: string
+
+  whereInstanceOf?: Constructor | Constructor[]
     
 }
+
+export type Constructor = new (...args: any[]) => any;
 
 export type pathString = `?.${string}`;
 
@@ -43,10 +65,11 @@ export interface AttrConfig<T = any> {
    */
   instanceOf?: 'Object' | 'String' | 'Number' | 'Boolean' | 'Array' 
               | typeof Object | typeof String | typeof Number | typeof Boolean | typeof Array;
+
   
   /**
    * Property name on the spawned class instance to map to
-   * Use '.' to map to the root object
+   * Use '.' to map to the root object using assignGingerly
    */
   mapsTo: 
     | '.' 
@@ -68,24 +91,21 @@ export interface AttrConfig<T = any> {
   // initialOnly?: boolean;
 }
 
-export interface AttrPatterns<T = any> {
+export type AttrPatterns<T = any> = {
   /**
    * Base prefix for attribute names
    */
   base: string;
-  
+
   /**
    * Configuration for the base pattern
    */
-  _base: AttrConfig<T>;
-  
-  /**
-   * User-defined patterns:
-   * - Keys without underscore: template strings (e.g., '${base}:hello')
-   * - Keys with underscore: configuration objects (e.g., _a: { instanceOf: 'String', mapsTo: 'hello' })
-   */
+  _base?: AttrConfig<T>;
+} & {
+  // Allow any string key (for user-defined patterns)
+  // but provide autocomplete for T's properties
   [key: string]: string | AttrConfig<T>;
-}
+};
 
 
 export interface SpawnContext<T = any> {
@@ -97,6 +117,7 @@ export interface SpawnContext<T = any> {
  */
 export interface IAssignGingerlyOptions {
   registry?: typeof BaseRegistry | BaseRegistry;
+  bypassChecks?: boolean;
 }
 
 /**
