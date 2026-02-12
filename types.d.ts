@@ -105,6 +105,9 @@ export type AttrPatterns<T = any> = {
   // Provide autocomplete for all properties of T (optional)
   [K in keyof T]?: string | AttrConfig<T>;
 } & {
+  // Provide autocomplete for underscore-prefixed config keys
+  [K in keyof T as `_${string & K}`]?: AttrConfig<T>;
+} & {
   // Allow any other string keys for custom patterns
   [key: string]: string | AttrConfig<T>;
 };

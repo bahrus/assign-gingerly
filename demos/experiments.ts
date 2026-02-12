@@ -22,6 +22,8 @@ const regItem: IBaseRegistryItem<MyEnhancement> = {
     attrs: {
         base: 'greetings',
         howAreYou: '${base}:how-are-you',
-        
+        _hello: {
+            mapsTo: 'howAreYou'
+        }
     }
 };
