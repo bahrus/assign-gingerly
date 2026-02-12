@@ -41,7 +41,7 @@ export interface IBaseRegistryItem<T = any> {
 ### AttrPatterns Interface
 
 ```TypeScript
-interface AttrPattern<T = any> {
+interface AttrConfig<T = any> {
     instanceOf?: 'Object' | 'String' | 'Number' | 'Boolean' | 'Array' 
                 | typeof Object | typeof String | typeof Number | typeof Boolean | typeof Array;
     mapsTo: '.' | keyof T;
@@ -51,8 +51,8 @@ interface AttrPattern<T = any> {
 
 interface AttrPatterns<T = any> {
     base: string;
-    _base: AttrPattern<T>;
-    [key: string]: string | AttrPattern<T>;
+    _base: AttrConfig<T>;
+    [key: string]: string | AttrConfig<T>;
 }
 ```
 

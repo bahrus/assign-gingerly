@@ -6,12 +6,17 @@ type DisposeEvent =
     | 'dismount'
     // cannot polyfill
     | 'exit' // element moved outside customElementRegistry
+    //reference count outside any enhancements goes to zero
+    | 'dispose'
 
 /**
  * Interface for registry items that define dependency injection mappings
  */
 export interface IBaseRegistryItem<T = any> {
+  
   spawn: { new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T  };
+  
+  attrs: AttrPatterns<T>;
   //keys of type string are attribute "coordinates"
   //and not used in assign-gingerly
   //keys of type symbol are used for dependency injection
@@ -29,6 +34,59 @@ export interface IBaseRegistryItem<T = any> {
   disposeOn?: DisposeEvent | DisposeEvent[]
     
 }
+
+export type pathString = `?.${string}`;
+
+export interface AttrConfig<T = any> {
+  /**
+   * Type of the property value (JSON-serializable string format)
+   */
+  instanceOf?: 'Object' | 'String' | 'Number' | 'Boolean' | 'Array' 
+              | typeof Object | typeof String | typeof Number | typeof Boolean | typeof Array;
+  
+  /**
+   * Property name on the spawned class instance to map to
+   * Use '.' to map to the root object
+   */
+  mapsTo: 
+    | '.' 
+    | keyof T 
+    | pathString 
+    | `!delete ${pathString}`
+    | `!toggle ${pathString}`
+    | `!inc ${pathString}`
+  
+  /**
+   * Optional parser function to transform attribute string value
+   */
+  parser?: (attrValue: string | null) => any;
+  
+  // /**
+  //  * Whether to only read the initial value (true) or continue observing changes (false)
+  //  * Defaults to true (initial read only)
+  //  */
+  // initialOnly?: boolean;
+}
+
+export interface AttrPatterns<T = any> {
+  /**
+   * Base prefix for attribute names
+   */
+  base: string;
+  
+  /**
+   * Configuration for the base pattern
+   */
+  _base: AttrConfig<T>;
+  
+  /**
+   * User-defined patterns:
+   * - Keys without underscore: template strings (e.g., '${base}:hello')
+   * - Keys with underscore: configuration objects (e.g., _a: { instanceOf: 'String', mapsTo: 'hello' })
+   */
+  [key: string]: string | AttrConfig<T>;
+}
+
 
 export interface SpawnContext<T = any> {
   mountInfo: IBaseRegistryItem<T>;
