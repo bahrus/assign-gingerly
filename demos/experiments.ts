@@ -21,6 +21,7 @@ const regItem: IBaseRegistryItem<MyEnhancement> = {
     spawn: MyEnhancement,
     attrs: {
         base: 'greetings',
-        howAreYou: '${base}:how-are-you'
+        howAreYou: '${base}:how-are-you',
+        
     }
 };

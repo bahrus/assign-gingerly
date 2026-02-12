@@ -102,8 +102,10 @@ export type AttrPatterns<T = any> = {
    */
   _base?: AttrConfig<T>;
 } & {
-  // Allow any string key (for user-defined patterns)
-  // but provide autocomplete for T's properties
+  // Provide autocomplete for all properties of T (optional)
+  [K in keyof T]?: string | AttrConfig<T>;
+} & {
+  // Allow any other string keys for custom patterns
   [key: string]: string | AttrConfig<T>;
 };
 
