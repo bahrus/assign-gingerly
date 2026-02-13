@@ -338,7 +338,7 @@ const result = assignGingerly({}, {
 }, {
     registry: BaseRegistry
 });
-result.set[isMellow] = false;
+//result.set[isMellow] = false;
 ```
 
 The assignGingerly function searches the registry for any items that has a mapping with a matching symbol of isHappy and isMellow, and if found, sees if it already has an instance of the spawn class associated with the first passed in parameter.  If no such instance is found, it instantiates one, associates the instance with the first parameter, then sets the property value.
