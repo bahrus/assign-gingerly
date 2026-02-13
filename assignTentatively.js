@@ -29,23 +29,19 @@ function parseToggleCommand(key) {
     return key.substring(0, key.length - 3); // Remove ' =!' suffix
 }
 /**
- * Helper function to check if a key represents a ??x delete command
+ * Helper function to check if a key represents a -= delete command
  */
 function isDeleteCommand(key) {
-    return key.includes('??');
+    return key.endsWith(' -=');
 }
 /**
- * Helper function to parse a ??x delete command and extract the path and property
+ * Helper function to parse a -= delete command and extract the path
  */
 function parseDeleteCommand(key) {
     if (!isDeleteCommand(key)) {
         return null;
     }
-    const parts = key.split('??');
-    if (parts.length !== 2) {
-        return null;
-    }
-    return { path: parts[0], property: parts[1] };
+    return key.substring(0, key.length - 3); // Remove ' -=' suffix
 }
 /**
  * Helper function to parse a path string with ?. notation
@@ -185,31 +181,45 @@ export function assignTentatively(target, source, options) {
             }
             continue;
         }
-        // Handle ??x delete commands (immediately, no delay)
+        // Handle -= delete commands (immediately, no delay)
         if (isDeleteCommand(key)) {
-            const parsed = parseDeleteCommand(key);
-            if (parsed && value === null) {
-                const { path, property } = parsed;
+            const path = parseDeleteCommand(key);
+            if (path !== null) {
                 const pathParts = parsePath(path);
-                // Navigate to parent without creating intermediate paths
+                // Determine the parent object
                 let parent = target;
                 let canDelete = true;
-                for (const part of pathParts) {
-                    if (parent && typeof parent === 'object' && part in parent) {
-                        parent = parent[part];
-                    }
-                    else {
-                        canDelete = false;
-                        break;
+                // If path is empty or just '?', delete from root
+                if (pathParts.length === 0) {
+                    parent = target;
+                }
+                else {
+                    // Navigate to parent without creating intermediate paths
+                    for (const part of pathParts) {
+                        if (parent && typeof parent === 'object' && part in parent) {
+                            parent = parent[part];
+                        }
+                        else {
+                            canDelete = false;
+                            break;
+                        }
                     }
                 }
-                if (canDelete && typeof parent === 'object' && parent !== null && property in parent) {
-                    // Store original value for reversal
-                    const fullPath = path ? `${path}?.${property}` : `?.${property}`;
-                    if (!(fullPath in reversal)) {
-                        reversal[fullPath] = parent[property];
+                if (canDelete && typeof parent === 'object' && parent !== null) {
+                    // RHS can be a string (single property) or array (multiple properties)
+                    const propertiesToDelete = Array.isArray(value) ? value : [value];
+                    for (const prop of propertiesToDelete) {
+                        if (prop in parent) {
+                            // Store original value for reversal
+                            const fullPath = pathParts.length > 0
+                                ? `?.${pathParts.join('?.')}.${prop}`
+                                : `?.${prop}`;
+                            if (!(fullPath in reversal)) {
+                                reversal[fullPath] = parent[prop];
+                            }
+                            delete parent[prop];
+                        }
                     }
-                    delete parent[property];
                 }
             }
             continue;
@@ -291,9 +301,9 @@ export function assignTentatively(target, source, options) {
     }
     // Add delete commands for created top-level paths to reversal
     for (const topLevelKey of trackedCreatedPaths) {
-        const deleteKey = `??${topLevelKey}`;
+        const deleteKey = ` -=`;
         if (!(deleteKey in reversal)) {
-            reversal[deleteKey] = null;
+            reversal[deleteKey] = topLevelKey;
         }
     }
     return target;

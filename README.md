@@ -157,9 +157,9 @@ The `=!` command syntax is `<path> =!` where the path can use the `?.` nested no
 
 For existing values, the toggle is performed using JavaScript's logical NOT operator (`!value`), regardless of what type it is.
 
-## Example 6 - Deleting properties with "... ??x": null command
+## Example 6 - Deleting properties with -= command
 
-The `??x: null` command allows us to delete properties.
+The `-=` command allows you to delete properties from objects:
 
 ```TypeScript
 const obj = {
@@ -172,12 +172,47 @@ const obj = {
 };
 assignGingerly(obj, {
     //deletes obj.a.b.c if it exists
-    '?.a?.b??c': null,      
+    '?.a?.b -=': 'c',      
 });
 console.log(obj);
 // {
 //   a: {
 //     b: { d: 'hello' }          // c deleted 
+//   }
+// }
+```
+
+The `-=` command syntax is `<path> -=` where the path points to the parent object. The right-hand side value specifies what to delete:
+- **String**: Delete a single property
+- **Array**: Delete multiple properties
+
+```TypeScript
+const obj = {
+    data: {
+        keep: 'this',
+        remove1: 'delete',
+        remove2: 'delete',
+        remove3: 'delete'
+    }
+};
+
+// Delete single property
+assignGingerly(obj, { '?.data -=': 'remove1' });
+
+// Delete multiple properties
+assignGingerly(obj, { '?.data -=': ['remove2', 'remove3'] });
+
+console.log(obj);
+// {
+//   data: { keep: 'this' }
+// }
+```
+
+**Important notes:**
+- The path specifies the parent object, not the property to delete
+- Non-existent properties are silently skipped
+- If the parent path doesn't exist, the command is silently skipped
+- For root-level deletion, use ` -=` (space before -=)
 //   }
 // }
 
@@ -212,8 +247,8 @@ console.log(obj);
 
 console.log(reversal);
 // {
-//   '"... ??x": null ?.a': 0,
-//   '"... ??x": null ?.style': 0,
+//   ' -=': 'a',
+//   ' -=': 'style',
 //   '?.f?.g': 'hello'
 // }
 
@@ -229,7 +264,7 @@ console.log(obj);
 - **No registry/DI support**: Dependency injection features are not available (pass it in and it will be ignored).  Dependency injection is discussed below.
 - **Reversal tracking**: Maintains a reversal object that records:
   - **Original values** of modified existing properties
-  - **"... ??x": null commands** for newly created top-level paths (e.g., `"... ??x": null ?.a` for paths created under `a`)
+  - **-= commands** for newly created top-level paths (e.g., ` -=: 'a'` for paths created under `a`)
   - **Original values** for deleted properties
 
 **Reversal guarantee:**

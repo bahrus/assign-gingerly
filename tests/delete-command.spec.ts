@@ -1,14 +1,20 @@
 import { test, expect } from '@playwright/test';
 import assignGingerly from '../assignGingerly';
 
-test.describe('??x delete command', () => {
-  test('should delete an existing property with ??x: null', () => {
+test.describe('-= delete command', () => {
+  test('should delete a single property', () => {
     const obj = { a: 1, b: 2 };
-    assignGingerly(obj, { '??a': null });
+    assignGingerly(obj, { ' -=': 'a' });
     expect(obj).toEqual({ b: 2 });
   });
 
-  test('should delete only the specified property in nested path', () => {
+  test('should delete multiple properties with array', () => {
+    const obj = { a: 1, b: 2, c: 3 };
+    assignGingerly(obj, { ' -=': ['a', 'b'] });
+    expect(obj).toEqual({ c: 3 });
+  });
+
+  test('should delete property from nested path', () => {
     const obj = {
       a: {
         b: {
@@ -17,7 +23,7 @@ test.describe('??x delete command', () => {
         }
       }
     };
-    assignGingerly(obj, { '?.a?.b??c': null });
+    assignGingerly(obj, { '?.a?.b -=': 'c' });
     expect(obj).toEqual({
       a: {
         b: {
@@ -27,13 +33,33 @@ test.describe('??x delete command', () => {
     });
   });
 
+  test('should delete multiple properties from nested path', () => {
+    const obj = {
+      a: {
+        b: {
+          c: true,
+          d: 'hello',
+          e: 'world'
+        }
+      }
+    };
+    assignGingerly(obj, { '?.a?.b -=': ['c', 'd'] });
+    expect(obj).toEqual({
+      a: {
+        b: {
+          e: 'world'
+        }
+      }
+    });
+  });
+
   test('should not create intermediate paths when deleting', () => {
     const obj = { a: 1 };
-    assignGingerly(obj, { '?.x?.y??z': null });
+    assignGingerly(obj, { '?.x?.y -=': 'z' });
     expect(obj).toEqual({ a: 1 });
   });
 
-  test('should skip delete if any intermediate path does not exist', () => {
+  test('should skip delete if parent path does not exist', () => {
     const obj = {
       a: {
         b: {
@@ -41,7 +67,7 @@ test.describe('??x delete command', () => {
         }
       }
     };
-    assignGingerly(obj, { '?.a?.x??c': null });
+    assignGingerly(obj, { '?.a?.x -=': 'c' });
     expect(obj).toEqual({
       a: {
         b: {
@@ -51,10 +77,10 @@ test.describe('??x delete command', () => {
     });
   });
 
-  test('should not throw if path does not exist', () => {
+  test('should not throw if property does not exist', () => {
     const obj = { a: 1 };
     expect(() => {
-      assignGingerly(obj, { '?.missing?.property??target': null });
+      assignGingerly(obj, { ' -=': 'missing' });
     }).not.toThrow();
     expect(obj).toEqual({ a: 1 });
   });
@@ -72,7 +98,7 @@ test.describe('??x delete command', () => {
         }
       }
     };
-    assignGingerly(obj, { '?.level1?.level2?.level3?.level4??target': null });
+    assignGingerly(obj, { '?.level1?.level2?.level3?.level4 -=': 'target' });
     expect(obj).toEqual({
       level1: {
         level2: {
@@ -96,7 +122,7 @@ test.describe('??x delete command', () => {
       }
     };
     assignGingerly(obj, {
-      '?.a?.b??c': null
+      '?.a?.b -=': 'c'
     });
     expect(obj).toEqual({
       a: {
@@ -111,7 +137,7 @@ test.describe('??x delete command', () => {
     const obj = {
       a: null
     };
-    assignGingerly(obj, { '?.a?.b??c': null });
+    assignGingerly(obj, { '?.a -=': 'b' });
     expect(obj).toEqual({ a: null });
   });
 
@@ -119,7 +145,7 @@ test.describe('??x delete command', () => {
     const obj = {
       a: 'string'
     };
-    assignGingerly(obj, { '?.a?.b??c': null });
+    assignGingerly(obj, { '?.a -=': 'b' });
     expect(obj).toEqual({ a: 'string' });
   });
 
@@ -130,7 +156,7 @@ test.describe('??x delete command', () => {
         1: 'one'
       }
     };
-    assignGingerly(obj, { '?.a??0': null });
+    assignGingerly(obj, { '?.a -=': '0' });
     expect(obj).toEqual({
       a: {
         1: 'one'
@@ -147,7 +173,7 @@ test.describe('??x delete command', () => {
         }
       }
     };
-    assignGingerly(obj, { '?.data?.strings??my-value': null });
+    assignGingerly(obj, { '?.data?.strings -=': 'my-value' });
     expect(obj).toEqual({
       data: {
         strings: {
@@ -157,7 +183,7 @@ test.describe('??x delete command', () => {
     });
   });
 
-  test('should handle multiple deletes', () => {
+  test('should handle multiple delete operations', () => {
     const obj = {
       a: {
         b: {
@@ -167,8 +193,10 @@ test.describe('??x delete command', () => {
       }
     };
     assignGingerly(obj, {
-      '?.a?.b??c': null,
-      '?.a?.b??d': null
+      '?.a?.b -=': 'c'
+    });
+    assignGingerly(obj, {
+      '?.a?.b -=': 'd'
     });
     expect(obj).toEqual({
       a: {
@@ -188,7 +216,7 @@ test.describe('??x delete command', () => {
         }
       }
     };
-    assignGingerly(obj, { '?.a?.b?.c??d': null });
+    assignGingerly(obj, { '?.a?.b?.c -=': 'd' });
     expect(obj).toEqual({
       a: {
         b: {
@@ -200,20 +228,12 @@ test.describe('??x delete command', () => {
     });
   });
 
-  test('should only require RHS to be null', () => {
-    const obj = { a: 1 };
-    // Should execute without validation - only null triggers delete
-    assignGingerly(obj, { '?.a??a': 'invalid' as any });
-    expect(obj).toEqual({ a: 1 }); // Not deleted because RHS is not null
-  });
-
-  test('should handle multiple deletes on same level', () => {
+  test('should handle deleting all properties with array', () => {
     const obj = { a: 1, b: 2, c: 3 };
     assignGingerly(obj, {
-      '??a': null,
-      '??b': null
+      ' -=': ['a', 'b', 'c']
     });
-    expect(obj).toEqual({ c: 3 });
+    expect(obj).toEqual({});
   });
 
   test('should delete complex nested structures', () => {
@@ -222,23 +242,17 @@ test.describe('??x delete command', () => {
       delete_me: { also: 'nested' },
       keep2: [1, 2, 3]
     };
-    assignGingerly(obj, { '??delete_me': null });
+    assignGingerly(obj, { ' -=': 'delete_me' });
     expect(obj).toEqual({
       keep1: { nested: 'value' },
       keep2: [1, 2, 3]
     });
   });
 
-  test('should handle empty path (single property)', () => {
-    const obj = { prop: 'value' };
-    assignGingerly(obj, { '??prop': null });
+  test('should skip delete of non-existent properties in array', () => {
+    const obj = { a: 1, b: 2 };
+    assignGingerly(obj, { ' -=': ['a', 'nonexistent', 'b'] });
     expect(obj).toEqual({});
-  });
-
-  test('should skip delete of non-existent top-level property', () => {
-    const obj = { a: 1 };
-    assignGingerly(obj, { '??nonexistent': null });
-    expect(obj).toEqual({ a: 1 });
   });
 
   test('should preserve symbol properties when deleting', () => {
@@ -249,7 +263,7 @@ test.describe('??x delete command', () => {
         [sym]: 'symbol value'
       }
     };
-    assignGingerly(obj, { '?.a??b': null });
+    assignGingerly(obj, { '?.a -=': 'b' });
     expect(obj).toEqual({
       a: {
         [sym]: 'symbol value'
@@ -264,7 +278,7 @@ test.describe('??x delete command', () => {
         user2: { name: 'Bob', age: 25 }
       }
     };
-    assignGingerly(obj, { '?.users?.user1??age': null });
+    assignGingerly(obj, { '?.users?.user1 -=': 'age' });
     expect(obj).toEqual({
       users: {
         user1: { name: 'Alice' },
@@ -273,66 +287,74 @@ test.describe('??x delete command', () => {
     });
   });
 
-  test('should handle delete with getter properties', () => {
-    const obj = {
-      a: {
-        b: {
-          c: 'value'
-        }
-      }
-    };
-    assignGingerly(obj, { '?.a?.b??c': null });
-    expect(obj).toEqual({
-      a: {
-        b: {}
-      }
-    });
-  });
-
   test('should mix delete with other commands', () => {
     const obj = { a: 1, b: 2, c: 3 };
     assignGingerly(obj, {
       '?.a +=': 10,
-      '??b': null,
+      ' -=': 'b',
       '?.d': 4
     });
     expect(obj).toEqual({ a: 11, c: 3, d: 4 });
   });
 
-  test('should handle delete on root level without path', () => {
+  test('should handle delete on root level', () => {
     const obj = { prop1: 'value1', prop2: 'value2' };
-    assignGingerly(obj, { '??prop1': null });
+    assignGingerly(obj, { ' -=': 'prop1' });
     expect(obj).toEqual({ prop2: 'value2' });
   });
 
-  test('should handle delete with ?. prefix on root', () => {
-    const obj = { prop1: 'value1', prop2: 'value2' };
-    assignGingerly(obj, { '?.??prop1': null });
-    expect(obj).toEqual({ prop2: 'value2' });
-  });
-
-  test('should not delete if RHS is not null', () => {
+  test('should handle empty array (no-op)', () => {
     const obj = { a: 1, b: 2 };
-    assignGingerly(obj, { '??a': undefined as any });
+    assignGingerly(obj, { ' -=': [] });
     expect(obj).toEqual({ a: 1, b: 2 });
   });
 
-  test('should not delete if RHS is 0', () => {
-    const obj = { a: 1, b: 2 };
-    assignGingerly(obj, { '??a': 0 as any });
-    expect(obj).toEqual({ a: 1, b: 2 });
+  test('should handle deleting with duplicate property names in array', () => {
+    const obj = { a: 1, b: 2, c: 3 };
+    assignGingerly(obj, { ' -=': ['a', 'a', 'b'] });
+    expect(obj).toEqual({ c: 3 });
   });
 
-  test('should not delete if RHS is false', () => {
-    const obj = { a: 1, b: 2 };
-    assignGingerly(obj, { '??a': false as any });
-    expect(obj).toEqual({ a: 1, b: 2 });
+  test('should work with very deeply nested paths', () => {
+    const obj = {
+      a: { b: { c: { d: { e: { f: { g: 'delete', h: 'keep' } } } } } }
+    };
+    assignGingerly(obj, { '?.a?.b?.c?.d?.e?.f -=': 'g' });
+    expect(obj).toEqual({
+      a: { b: { c: { d: { e: { f: { h: 'keep' } } } } } }
+    });
   });
 
-  test('should handle property name with ?? in it (edge case)', () => {
-    // The ?? is the delimiter, so property names can't contain ??
-    const obj = { a: { b: 1 } };
-    assignGingerly(obj, { '?.a??b': null });
-    expect(obj).toEqual({ a: {} });
+  test('should handle multiple separate delete operations in one call', () => {
+    const obj = {
+      section1: { a: 1, b: 2 },
+      section2: { c: 3, d: 4 }
+    };
+    assignGingerly(obj, {
+      '?.section1 -=': 'a',
+      '?.section2 -=': ['c', 'd']
+    });
+    expect(obj).toEqual({
+      section1: { b: 2 },
+      section2: {}
+    });
+  });
+
+  test('should combine with += on same object', () => {
+    const obj = { count: 5, remove: 'me', keep: 'this' };
+    assignGingerly(obj, {
+      '?.count +=': 10,
+      ' -=': 'remove'
+    });
+    expect(obj).toEqual({ count: 15, keep: 'this' });
+  });
+
+  test('should combine with =! on same object', () => {
+    const obj = { flag: true, remove: 'me', keep: 'this' };
+    assignGingerly(obj, {
+      '?.flag =!': '.',
+      ' -=': 'remove'
+    });
+    expect(obj).toEqual({ flag: false, keep: 'this' });
   });
 });
