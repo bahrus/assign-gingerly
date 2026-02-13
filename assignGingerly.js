@@ -61,49 +61,53 @@ function parseSymbolForKey(key) {
     return null;
 }
 /**
- * Helper function to check if a key represents an !inc command
+ * Helper function to check if a key represents an += command
  */
 function isIncCommand(key) {
-    return key.startsWith('!inc ');
+    return key.endsWith(' +=');
 }
 /**
- * Helper function to parse an !inc command and extract the path
+ * Helper function to parse an += command and extract the path
  */
 function parseIncCommand(key) {
     if (!isIncCommand(key)) {
         return null;
     }
-    return key.substring(5); // Remove '!inc ' prefix
+    return key.substring(0, key.length - 3); // Remove ' +=' suffix
 }
 /**
- * Helper function to check if a key represents a !toggle command
+ * Helper function to check if a key represents a =! command
  */
 function isToggleCommand(key) {
-    return key.startsWith('!toggle ');
+    return key.endsWith(' =!');
 }
 /**
- * Helper function to parse a !toggle command and extract the path
+ * Helper function to parse a =! command and extract the path
  */
 function parseToggleCommand(key) {
     if (!isToggleCommand(key)) {
         return null;
     }
-    return key.substring(8); // Remove '!toggle ' prefix
+    return key.substring(0, key.length - 3); // Remove ' =!' suffix
 }
 /**
- * Helper function to check if a key represents a !delete command
+ * Helper function to check if a key represents a ??x delete command
  */
 function isDeleteCommand(key) {
-    return key.startsWith('!delete ');
+    return key.includes('??');
 }
 /**
- * Helper function to parse a !delete command and extract the path
+ * Helper function to parse a ??x delete command and extract the path and property
  */
 function parseDeleteCommand(key) {
     if (!isDeleteCommand(key)) {
         return null;
     }
-    return key.substring(8); // Remove '!delete ' prefix
+    const parts = key.split('??');
+    if (parts.length !== 2) {
+        return null;
+    }
+    return { path: parts[0], property: parts[1] };
 }
 /**
  * Helper function to parse a path string with ?. notation
@@ -169,7 +173,7 @@ export function assignGingerly(target, source, options) {
     // First pass: handle all non-symbol keys and sync operations
     for (const key of Object.keys(processedSource)) {
         const value = processedSource[key];
-        // Handle !inc commands
+        // Handle += commands
         if (isIncCommand(key)) {
             const path = parseIncCommand(key);
             if (path) {
@@ -187,89 +191,69 @@ export function assignGingerly(target, source, options) {
             }
             continue;
         }
-        // Handle !toggle commands
+        // Handle =! commands (toggle/negate)
         if (isToggleCommand(key)) {
-            const path = parseToggleCommand(key);
-            if (path) {
-                const delay = value;
-                if (delay === 0) {
-                    // Immediate toggle
-                    const pathParts = parsePath(path);
-                    const lastKey = pathParts[pathParts.length - 1];
-                    const parent = ensureNestedPath(target, pathParts);
-                    if (lastKey in parent) {
-                        // Path exists, toggle it
-                        parent[lastKey] = !parent[lastKey];
+            const lhsPath = parseToggleCommand(key);
+            if (lhsPath) {
+                const rhsPath = value;
+                // Parse LHS path
+                const lhsPathParts = parsePath(lhsPath);
+                const lhsLastKey = lhsPathParts[lhsPathParts.length - 1];
+                const lhsParent = ensureNestedPath(target, lhsPathParts);
+                // Determine what to negate
+                let valueToNegate;
+                if (rhsPath === '.') {
+                    // Self-reference: negate the LHS value itself (if it exists)
+                    if (lhsLastKey in lhsParent) {
+                        valueToNegate = lhsParent[lhsLastKey];
                     }
-                    // If path doesn't exist, don't create it for immediate toggle
+                    else {
+                        // LHS doesn't exist, treat as undefined -> !undefined = true
+                        valueToNegate = undefined;
+                    }
                 }
                 else {
-                    // Delayed toggle using setTimeout
-                    setTimeout(() => {
-                        const pathParts = parsePath(path);
-                        const lastKey = pathParts[pathParts.length - 1];
-                        const parent = ensureNestedPath(target, pathParts);
-                        if (lastKey in parent) {
-                            // Path exists, toggle it
-                            parent[lastKey] = !parent[lastKey];
+                    // RHS path: navigate to get the value (don't create paths)
+                    const rhsPathParts = parsePath(rhsPath);
+                    let current = target;
+                    let exists = true;
+                    for (const part of rhsPathParts) {
+                        if (current && typeof current === 'object' && part in current) {
+                            current = current[part];
                         }
                         else {
-                            // Path doesn't exist, initialize to true
-                            parent[lastKey] = true;
+                            exists = false;
+                            break;
                         }
-                    }, delay);
+                    }
+                    // If RHS doesn't exist, treat as truthy (will become false)
+                    valueToNegate = exists ? current : true;
                 }
+                // Apply negation to LHS
+                lhsParent[lhsLastKey] = !valueToNegate;
             }
             continue;
         }
-        // Handle !delete commands
+        // Handle ??x delete commands
         if (isDeleteCommand(key)) {
-            const path = parseDeleteCommand(key);
-            if (path) {
-                const delay = value;
-                if (delay === 0) {
-                    // Immediate delete
-                    const pathParts = parsePath(path);
-                    if (pathParts.length > 0) {
-                        const lastKey = pathParts[pathParts.length - 1];
-                        const parentPathParts = pathParts.slice(0, -1);
-                        // Navigate to parent without creating intermediate paths
-                        let parent = target;
-                        let canDelete = true;
-                        for (const part of parentPathParts) {
-                            if (!(part in parent) || typeof parent[part] !== 'object' || parent[part] === null) {
-                                canDelete = false;
-                                break;
-                            }
-                            parent = parent[part];
-                        }
-                        if (canDelete && lastKey in parent) {
-                            delete parent[lastKey];
-                        }
+            const parsed = parseDeleteCommand(key);
+            if (parsed && value === null) {
+                const { path, property } = parsed;
+                const pathParts = parsePath(path);
+                // Navigate to parent without creating intermediate paths
+                let parent = target;
+                let canDelete = true;
+                for (const part of pathParts) {
+                    if (parent && typeof parent === 'object' && part in parent) {
+                        parent = parent[part];
+                    }
+                    else {
+                        canDelete = false;
+                        break;
                     }
                 }
-                else {
-                    // Delayed delete using setTimeout
-                    setTimeout(() => {
-                        const pathParts = parsePath(path);
-                        if (pathParts.length > 0) {
-                            const lastKey = pathParts[pathParts.length - 1];
-                            const parentPathParts = pathParts.slice(0, -1);
-                            // Navigate to parent without creating intermediate paths
-                            let parent = target;
-                            let canDelete = true;
-                            for (const part of parentPathParts) {
-                                if (!(part in parent) || typeof parent[part] !== 'object' || parent[part] === null) {
-                                    canDelete = false;
-                                    break;
-                                }
-                                parent = parent[part];
-                            }
-                            if (canDelete && lastKey in parent) {
-                                delete parent[lastKey];
-                            }
-                        }
-                    }, delay);
+                if (canDelete && typeof parent === 'object' && parent !== null && property in parent) {
+                    delete parent[property];
                 }
             }
             continue;
