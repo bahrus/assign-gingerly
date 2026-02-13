@@ -372,16 +372,63 @@ Answer:  By default, only set to true if attribute present.  Never set it to fal
 
 ## Implementation Checklist
 
-- [ ] Implement template variable resolution with cycle detection
-- [ ] Implement default parser functions for each `instanceOf` type
-- [ ] Handle missing attributes (don't add to `initVals`)
-- [ ] Handle empty string attribute values
-- [ ] Add error handling for JSON parse failures
-- [ ] Add validation for undefined template variable references
-- [ ] Ensure `mapsTo` defaults work correctly (especially for `_base`)
-- [ ] Test nested template references
-- [ ] Test combination of base object + additional attributes
-- [ ] Document error handling behavior
+- [x] Implement template variable resolution with cycle detection
+- [x] Implement default parser functions for each `instanceOf` type
+- [x] Handle missing attributes (don't add to `initVals`)
+- [x] Handle empty string attribute values
+- [x] Add error handling for JSON parse failures
+- [x] Add validation for undefined template variable references
+- [x] Ensure `mapsTo` defaults work correctly (especially for `_base`)
+- [x] Test nested template references
+- [x] Test combination of base object + additional attributes
+- [x] Document error handling behavior
+
+## Implementation Complete
+
+The `withAttrs` feature has been implemented with the following components:
+
+### Files Created/Modified:
+
+1. **assign-gingerly/parseWithAttrs.ts** (new) - Core parsing logic
+   - Template variable resolution with cycle detection
+   - Default parsers for all `instanceOf` types
+   - Error handling for parse failures
+   
+2. **assign-gingerly/parseWithAttrs.js** (generated) - Compiled JavaScript version
+
+3. **assign-gingerly/object-extension.ts** (modified) - Integration point
+   - Added import for `parseWithAttrs`
+   - Modified `get()` method to parse attributes before spawning
+   - Merges attribute-derived `initVals` with existing `initVals`
+
+4. **assign-gingerly/types.d.ts** (already had `withAttrs` property)
+   - `IBaseRegistryItem` interface includes `withAttrs?: AttrPatterns<T>`
+
+5. **assign-gingerly/demos/withAttrs-demo.html** (new) - Comprehensive demo
+   - All 11 examples from requirements
+   - Error handling demonstration
+   - Visual pass/fail indicators
+
+### How It Works:
+
+1. When `ElementEnhancementContainer.get()` is called with a `registryItem` that has `withAttrs` defined
+2. `parseWithAttrs()` is called with the element and the `withAttrs` configuration
+3. Template variables are resolved recursively (e.g., `${base}`, `${hello}`)
+4. Attributes are read from the element using the resolved attribute names
+5. Values are parsed according to `instanceOf` type or custom parser
+6. Results are mapped to property names via `mapsTo`
+7. The parsed values become `attrInitVals`
+8. `attrInitVals` is merged with any existing `initVals` (existing takes precedence)
+9. The merged `initVals` is passed to the spawn constructor
+
+### Testing:
+
+Open `assign-gingerly/demos/withAttrs-demo.html` in a browser to see all examples working.
+
+Each test shows:
+- The result from `parseWithAttrs()`
+- The expected result
+- Pass/fail status
 
 
 

@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>withAttrs Demo</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .result { background: #f0f0f0; padding: 10px; margin-top: 10px; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>withAttrs Demonstration</h1>
+    
+    <div class="test">
+        <h2>Example 1: Base Object with JSON</h2>
+        <div id="test1" greet-ings='{"hello": "world"}'></div>
+        <div class="result" id="result1"></div>
+    </div>
+    
+    <div class="test">
+        <h2>Example 2: Base Object with Custom mapsTo</h2>
+        <div id="test2" greet-ings='{"hello": "world", "goodbye": {"place": "Mars"}}'></div>
+        <div class="result" id="result2"></div>
+    </div>
+    
+    <div class="test">
+        <h2>Example 3: Simple String Attribute</h2>
+        <div id="test3" greet-ings-hello='how-are-you'></div>
+        <div class="result" id="result3"></div>
+    </div>
+    
+    <div class="test">
+        <h2>Example 4: Boolean with Nested Path</h2>
+        <div id="test4" greet-ings-hello:is-happy></div>
+        <div class="result" id="result4"></div>
+    </div>
+    
+    <div class="test">
+        <h2>Example 5: Number Attribute</h2>
+        <div id="test5" data-count='42'></div>
+        <div class="result" id="result5"></div>
+    </div>
+    
+    <div class="test">
+        <h2>Example 6: Missing Attribute</h2>
+        <div id="test6" data-count='5'></div>
+        <div class="result" id="result6"></div>
+    </div>
+    
+    <div class="test">
+        <h2>Example 7: Multiple Attributes</h2>
+        <div id="test7" config-name='Alice' config-age='30' config-active></div>
+        <div class="result" id="result7"></div>
+    </div>
+    
+    <div class="test">
+        <h2>Example 8: Array Attribute</h2>
+        <div id="test8" data-tags='["javascript", "typescript", "web"]'></div>
+        <div class="result" id="result8"></div>
+    </div>
+    
+    <div class="test">
+        <h2>Example 9: Custom Parser</h2>
+        <div id="test9" data-timestamp='2024-01-15T10:30:00Z'></div>
+        <div class="result" id="result9"></div>
+    </div>
+    
+    <div class="test">
+        <h2>Example 10: Nested Template References</h2>
+        <div id="test10" x-level1-level2-level3='deep-value'></div>
+        <div class="result" id="result10"></div>
+    </div>
+    
+    <div class="test">
+        <h2>Example 11: Combining Base with Additional Attributes</h2>
+        <div id="test11" config='{"theme": "dark", "lang": "en"}' config-override='light'></div>
+        <div class="result" id="result11"></div>
+    </div>
+    
+    <div class="test">
+        <h2>Error Test: Invalid JSON</h2>
+        <div id="test12" data-obj='{invalid json}'></div>
+        <div class="result" id="result12"></div>
+    </div>
+    
+    <script type="module">
+        import { parseWithAttrs } from '../parseWithAttrs.js';
+        
+        function displayResult(testId, result, expected) {
+            const resultDiv = document.getElementById(`result${testId}`);
+            const match = JSON.stringify(result) === JSON.stringify(expected);
+            resultDiv.innerHTML = `
+                <div class="${match ? 'success' : 'error'}">
+                    <strong>Result:</strong> <pre>${JSON.stringify(result, null, 2)}</pre>
+                    <strong>Expected:</strong> <pre>${JSON.stringify(expected, null, 2)}</pre>
+                    <strong>Status:</strong> ${match ? '✓ PASS' : '✗ FAIL'}
+                </div>
+            `;
+        }
+        
+        function displayError(testId, error) {
+            const resultDiv = document.getElementById(`result${testId}`);
+            resultDiv.innerHTML = `
+                <div class="error">
+                    <strong>Error:</strong> ${error.message}
+                </div>
+            `;
+        }
+        
+        // Test 1
+        try {
+            const el1 = document.getElementById('test1');
+            const result1 = parseWithAttrs(el1, {
+                base: 'greet-ings'
+            });
+            displayResult(1, result1, { hello: 'world' });
+        } catch (e) {
+            displayError(1, e);
+        }
+        
+        // Test 2
+        try {
+            const el2 = document.getElementById('test2');
+            const result2 = parseWithAttrs(el2, {
+                base: 'greet-ings',
+                _base: {
+                    mapsTo: 'greetings',
+                    instanceOf: 'Object'
+                }
+            });
+            displayResult(2, result2, { greetings: { hello: 'world', goodbye: { place: 'Mars' } } });
+        } catch (e) {
+            displayError(2, e);
+        }
+        
+        // Test 3
+        try {
+            const el3 = document.getElementById('test3');
+            const result3 = parseWithAttrs(el3, {
+                base: 'greet-ings',
+                hello: '${base}-hello'
+            });
+            displayResult(3, result3, { hello: 'how-are-you' });
+        } catch (e) {
+            displayError(3, e);
+        }
+        
+        // Test 4
+        try {
+            const el4 = document.getElementById('test4');
+            const result4 = parseWithAttrs(el4, {
+                base: 'greet-ings',
+                hello: '${base}-hello',
+                isHappy: '${hello}:is-happy',
+                _isHappy: {
+                    instanceOf: 'Boolean',
+                    mapsTo: '?.moods?.personIsHappy'
+                }
+            });
+            displayResult(4, result4, { '?.moods?.personIsHappy': true });
+        } catch (e) {
+            displayError(4, e);
+        }
+        
+        // Test 5
+        try {
+            const el5 = document.getElementById('test5');
+            const result5 = parseWithAttrs(el5, {
+                base: 'data',
+                count: '${base}-count',
+                _count: {
+                    instanceOf: 'Number',
+                    mapsTo: 'itemCount'
+                }
+            });
+            displayResult(5, result5, { itemCount: 42 });
+        } catch (e) {
+            displayError(5, e);
+        }
+        
+        // Test 6
+        try {
+            const el6 = document.getElementById('test6');
+            const result6 = parseWithAttrs(el6, {
+                base: 'data',
+                count: '${base}-count',
+                label: '${base}-label'
+            });
+            displayResult(6, result6, { count: '5' });
+        } catch (e) {
+            displayError(6, e);
+        }
+        
+        // Test 7
+        try {
+            const el7 = document.getElementById('test7');
+            const result7 = parseWithAttrs(el7, {
+                base: 'config',
+                name: '${base}-name',
+                age: '${base}-age',
+                _age: {
+                    instanceOf: 'Number',
+                    mapsTo: 'userAge'
+                },
+                active: '${base}-active',
+                _active: {
+                    instanceOf: 'Boolean',
+                    mapsTo: 'isActive'
+                }
+            });
+            displayResult(7, result7, { name: 'Alice', userAge: 30, isActive: true });
+        } catch (e) {
+            displayError(7, e);
+        }
+        
+        // Test 8
+        try {
+            const el8 = document.getElementById('test8');
+            const result8 = parseWithAttrs(el8, {
+                base: 'data',
+                tags: '${base}-tags',
+                _tags: {
+                    instanceOf: 'Array',
+                    mapsTo: 'tagList'
+                }
+            });
+            displayResult(8, result8, { tagList: ['javascript', 'typescript', 'web'] });
+        } catch (e) {
+            displayError(8, e);
+        }
+        
+        // Test 9
+        try {
+            const el9 = document.getElementById('test9');
+            const result9 = parseWithAttrs(el9, {
+                base: 'data',
+                timestamp: '${base}-timestamp',
+                _timestamp: {
+                    instanceOf: 'Number',
+                    mapsTo: 'createdAt',
+                    parser: (v) => v ? new Date(v).getTime() : null
+                }
+            });
+            displayResult(9, result9, { createdAt: 1705315800000 });
+        } catch (e) {
+            displayError(9, e);
+        }
+        
+        // Test 10
+        try {
+            const el10 = document.getElementById('test10');
+            const result10 = parseWithAttrs(el10, {
+                base: 'x',
+                level1: '${base}-level1',
+                level2: '${level1}-level2',
+                level3: '${level2}-level3'
+            });
+            displayResult(10, result10, { level3: 'deep-value' });
+        } catch (e) {
+            displayError(10, e);
+        }
+        
+        // Test 11
+        try {
+            const el11 = document.getElementById('test11');
+            const result11 = parseWithAttrs(el11, {
+                base: 'config',
+                _base: {
+                    mapsTo: 'settings',
+                    instanceOf: 'Object'
+                },
+                override: '${base}-override',
+                _override: {
+                    mapsTo: 'overrideValue',
+                    instanceOf: 'String'
+                }
+            });
+            displayResult(11, result11, { settings: { theme: 'dark', lang: 'en' }, overrideValue: 'light' });
+        } catch (e) {
+            displayError(11, e);
+        }
+        
+        // Test 12 - Error test
+        try {
+            const el12 = document.getElementById('test12');
+            const result12 = parseWithAttrs(el12, {
+                base: 'data',
+                obj: '${base}-obj',
+                _obj: {
+                    instanceOf: 'Object'
+                }
+            });
+            displayResult(12, result12, { error: 'Should have thrown' });
+        } catch (e) {
+            const resultDiv = document.getElementById('result12');
+            const hasExpectedError = e.message.includes('Failed to parse JSON') && e.message.includes('{invalid json}');
+            resultDiv.innerHTML = `
+                <div class="${hasExpectedError ? 'success' : 'error'}">
+                    <strong>Error (Expected):</strong> ${e.message}
+                    <strong>Status:</strong> ${hasExpectedError ? '✓ PASS' : '✗ FAIL'}
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

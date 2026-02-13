@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test parseWithAttrs</title>
+</head>
+<body>
+    <div id="test1" greet-ings='{"hello": "world"}'></div>
+    <div id="test2" greet-ings='{"hello": "world", "goodbye": {"place": "Mars"}}'></div>
+    <div id="test3" greet-ings-hello='how-are-you'></div>
+    
+    <script type="module">
+        import { parseWithAttrs } from '../parseWithAttrs.js';
+        
+        // Test 1
+        const el1 = document.getElementById('test1');
+        const result1 = parseWithAttrs(el1, {
+            base: 'greet-ings'
+        });
+        console.log('Test 1:', result1);
+        
+        // Test 2
+        const el2 = document.getElementById('test2');
+        const result2 = parseWithAttrs(el2, {
+            base: 'greet-ings',
+            _base: {
+                mapsTo: 'greetings',
+                instanceOf: 'Object'
+            }
+        });
+        console.log('Test 2:', result2);
+        
+        // Test 3
+        const el3 = document.getElementById('test3');
+        const result3 = parseWithAttrs(el3, {
+            base: 'greet-ings',
+            hello: '${base}-hello'
+        });
+        console.log('Test 3:', result3);
+    </script>
+</body>
+</html>

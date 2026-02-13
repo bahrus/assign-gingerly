@@ -1,4 +1,5 @@
 import assignGingerly, { BaseRegistry, getInstanceMap } from './assignGingerly.js';
+import { parseWithAttrs } from './parseWithAttrs.js';
 /**
  * Adds assignGingerlyRegistry to CustomElementRegistry prototype as a lazy getter
  */
@@ -62,10 +63,26 @@ class ElementEnhancementContainer {
             if (registryItem.enhKey) {
                 const ctx = { mountInfo: registryItem };
                 const self = this;
-                const initVals = self[registryItem.enhKey] &&
+                // Parse attributes if withAttrs is defined
+                let attrInitVals = undefined;
+                if (registryItem.withAttrs && element) {
+                    try {
+                        attrInitVals = parseWithAttrs(element, registryItem.withAttrs);
+                    }
+                    catch (e) {
+                        console.error('Error parsing attributes:', e);
+                        throw e;
+                    }
+                }
+                // Get existing initVals from enhKey
+                const existingInitVals = self[registryItem.enhKey] &&
                     !(self[registryItem.enhKey] instanceof SpawnClass)
                     ? self[registryItem.enhKey]
                     : undefined;
+                // Merge attrInitVals with existingInitVals (existingInitVals takes precedence)
+                const initVals = attrInitVals
+                    ? (existingInitVals ? { ...attrInitVals, ...existingInitVals } : attrInitVals)
+                    : existingInitVals;
                 instance = new SpawnClass(element, ctx, initVals);
                 // Store on enh container
                 self[registryItem.enhKey] = instance;
