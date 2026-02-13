@@ -82,7 +82,9 @@ console.log(obj);
 // }
 ```
 
-When the right hand side of an expression is an object, assignGingerly is recursively applied (passing the third argument in if applicable, which will be discussed below) 
+When the right hand side of an expression is an object, assignGingerly is recursively applied (passing the third argument in if applicable, which will be discussed below).
+
+While we are in the business of passing values of object A into object B, we might as well add some extremely common behavior that allows updating properties of object B based on the current values of object B -- things like incrementing, toggling, and deleting.  Deleting is critical for assignTentatively, but is included with both functions
 
 ## Example 4 - Incrementing values with !inc command
 
@@ -97,8 +99,8 @@ const obj = {
     }
 };
 assignGingerly(obj, {
-    '!inc ?.a?.b?.c': 3,
-    '!inc ?.a?.d?.e': -2
+    '?.a?.b?.c +=': 3,
+    '?.a?.d?.e +=': -2
 });
 console.log(obj);
 // {
@@ -109,7 +111,7 @@ console.log(obj);
 // }
 ```
 
-The `!inc` command syntax is `!inc <path>` where the path can use the `?.` nested notation. The right-hand side value is added to the existing value using `+=`. If the path doesn't exist, it's created and set directly to the value. Non-numeric increments will allow JavaScript to throw its natural error.
+The `+=` command syntax is `<path> +=` where the path can use the `?.` nested notation. The right-hand side value is added to the existing value using `+=`. If the path doesn't exist, it's created and set directly to the value.  If the expression is a string, string concatenation is used.  If the expression can't be "added to", it allows JavaScript to throw its natural error.
 
 ## Example 5 - Toggling boolean values with !toggle command
 
@@ -124,7 +126,7 @@ const obj = {
     }
 };
 assignGingerly(obj, {
-    '!toggle ?.a?.b?.c': 0,      // Toggle immediately
+    '?.a?.b?.c !=': 0,      // Toggle immediately
     '!toggle ?.a?.d?.e': 20      // Toggle after 20ms
 });
 console.log(obj);
