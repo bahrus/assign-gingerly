@@ -19,7 +19,7 @@ has the "side effect" of enhancing the platform API in a way that this proposal 
 
 One can achieve the same functionality with a little more, and "playing nicer" with the platform by importing assign-gingerly.js and/or assign-tentatively.js, which has no such side effects.
 
-Not only does this polyfill package allow merging data properties onto objects that are expecting them, this polyfill also provides the ability to merge *augmented behavior* onto run-time objects without sub classing all such objects of the same type. This includes the ability to spawn an instance of a class and "merge" it into the API of the original object without ever blocking access to the original object.
+Not only does this polyfill package allow merging data properties onto objects that are expecting them, this polyfill also provides the ability to merge *augmented behavior* onto run-time objects without sub classing all such objects of the same type. This includes the ability to spawn an instance of a class and "merge" it into the API of the original object in an elegant way that is easy to wrap one's brain around, without ever blocking access to the original object or breaking it.
 
 So we are providing a form of the ["Decorator Pattern"](https://en.wikipedia.org/wiki/Decorator_pattern) or perhaps more accurately the [Extension Object Pattern](https://swiftorial.com/swiftlessons/design-patterns/structural-patterns/extension-object-pattern) as tailored for the quirks of the web.  
 
