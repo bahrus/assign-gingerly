@@ -11,9 +11,15 @@
 
 This package starts out innocently enough -- it provides two utility functions for carefully merging one object into another.  This is a primitive sorely lacking in the web, and this package is a polyfill for what we would like to see built into the platform.  We make no apologies about adding these features directly to the underlying API's, as it is part of a proposal which is sitting there gathering dust, with no apparent alternatives under consideration.
 
-Not only does this polyfill package allow merging data properties onto objects that are expecting them, this polyfill also provides the ability to merge *augmented behavior" onto run time objects without sub classing all such objects.  So we are providing a form of the ["Decorator Pattern"](https://en.wikipedia.org/wiki/Decorator_pattern) as tailored for the quirks of the web.  So in our view this package helps fill the void left by not supporting the "is" attribute for built-in elements (but is not a complete solution, just a critical building board).
+Not only does this polyfill package allow merging data properties onto objects that are expecting them, this polyfill also provides the ability to merge *augmented behavior* onto run-time objects without sub classing all such objects of the same type. This includes the ability to spawn an instance of a class and "merge" it into the API of the original object without ever blocking access to the original object.
 
-Anyway, those two utility functions are:
+So we are providing a form of the ["Decorator Pattern"](https://en.wikipedia.org/wiki/Decorator_pattern) or perhaps more accurately the [Extension Object Pattern](https://swiftorial.com/swiftlessons/design-patterns/structural-patterns/extension-object-pattern) as tailored for the quirks of the web.  
+
+So in our view this package helps fill the void left by not supporting the "is" attribute for built-in elements (but is not a complete solution, just a critical building board).  Mount-observer, mount-observer-script-element, and custom enhancements builds on top of the critical role that assign-gingerly plays.
+
+Anyway, let's start out detailing the more innocent features of this package / polyfill.
+
+The two utility functions are:
 
 ## assignGingerly
 
@@ -26,7 +32,7 @@ and
 
 ## assignTentatively
 
-assignTentatively provides a far more limited scope compared to assignGingerly.     The tradeoff is that assignTentatively can be "reversed", which can be useful for some use cases (think of how css "turns on" visual effects while conditions are met, then reverts to how things were before the conditions aren't met they no longer match the conditions).
+assignTentatively provides a far more limited subset of functionality compared to assignGingerly.   The tradeoff is that assignTentatively can do something important assignTentatively cannot do -- be "reversed". This can be quite useful for some scenarios (think of how css "turns on" visual effects while conditions are met, then reverts to how things were before the conditions were met).  Another example is allowing user edits to be rolled back as they repeatedly hit "ctrl+z".
 
 ## Example 1 - assignGingerly is mostly a "superset" of Object.assign:
 
@@ -35,7 +41,8 @@ const sourceObj = {hello: 'world'};
 assignGingerly(sourceObj, {hello: 'Venus', foo: 'bar'});
 // Because none of the keys of the second parameter start with "?.", 
 // nor includes any symbols keys,
-// assign gingerly produces identical results as Object.assign:
+// assign gingerly produces identical results 
+// as Object.assign,  and is synchronous:
 console.log(sourceObj);
 //{hello: 'Venus', foo: 'bar'}
 ```
