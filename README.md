@@ -9,7 +9,15 @@
 
 ## Introduction
 
-This package starts out innocently enough -- it provides two utility functions for carefully merging one object into another.  This is a primitive sorely lacking in the web, and this package is a polyfill for what we would like to see built into the platform.  We make no apologies about adding these features directly to the underlying API's, as it is part of a proposal which is sitting there gathering dust, with no apparent alternatives under consideration.  However, much of the functionality is exposed in a way that doesn't add anything on top of existing api's.
+This package starts out innocently enough -- it provides two utility functions for carefully merging one object into another.  This is a primitive sorely lacking in the web, and this package is a polyfill for what we would like to see built into the platform.  We make no apologies about adding these features directly to the underlying API's, as it is part of a proposal which is sitting there gathering dust, with no apparent alternatives under consideration.  In particular the reference:
+
+```JavaScript
+import from 'assign-gingerly/object-extension.js';
+```
+
+has the "side effect" of enhancing the platform API in a way that this proposal can only hope the platform chooses to adopt in the future (or some variation).
+
+One can achieve the same functionality with a little more, and "playing nicer" with the platform by importing assign-gingerly.js and/or assign-tentatively.js, which has no such side effects.
 
 Not only does this polyfill package allow merging data properties onto objects that are expecting them, this polyfill also provides the ability to merge *augmented behavior* onto run-time objects without sub classing all such objects of the same type. This includes the ability to spawn an instance of a class and "merge" it into the API of the original object without ever blocking access to the original object.
 
