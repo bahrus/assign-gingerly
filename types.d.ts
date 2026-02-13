@@ -33,7 +33,7 @@ export interface IBaseRegistryItem<T = any> {
   spawn: { new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T  };
   
   //Applicable to passing in the initVals during the spawn lifecycle event
-  attrs?: AttrPatterns<T>;
+  withAttrs?: AttrPatterns<T>;
   
   //keys of type symbol are used for dependency injection
   //and are used by assign-gingerly
@@ -70,8 +70,11 @@ export interface AttrConfig<T = any> {
   /**
    * Property name on the spawned class instance to map to
    * Use '.' to map to the root object using assignGingerly
+   * Is optional.
+   * If not specified, we assume it is the key without the underscore first
+   * character, unless the key is _base in which case it assume mapsTo = "."
    */
-  mapsTo: 
+  mapsTo?: 
     | '.' 
     | keyof T 
     | pathString 

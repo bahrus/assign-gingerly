@@ -19,7 +19,7 @@ class MyEnhancement {
 
 const regItem: IBaseRegistryItem<MyEnhancement> = {
     spawn: MyEnhancement,
-    attrs: {
+    withAttrs: {
         base: 'greetings',
         howAreYou: '${base}:how-are-you',
         _hello: {
