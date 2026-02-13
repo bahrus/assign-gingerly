@@ -113,9 +113,9 @@ console.log(obj);
 
 The `+=` command syntax is `<path> +=` where the path can use the `?.` nested notation. The right-hand side value is added to the existing value using `+=`. If the path doesn't exist, it's created and set directly to the value.  If the expression is a string, string concatenation is used.  If the expression can't be "added to", it allows JavaScript to throw its natural error.
 
-## Example 5 - Toggling boolean values with !toggle command
+## Example 5 - Toggling boolean values and negating
 
-The `!toggle` command allows you to toggle boolean values either immediately or after a delay:
+The `=!` command allows you to toggle boolean values either immediately or after a delay:
 
 ```TypeScript
 const obj = {
@@ -126,8 +126,11 @@ const obj = {
     }
 };
 assignGingerly(obj, {
-    '?.a?.b?.c !=': 0,      // Toggle immediately
-    '!toggle ?.a?.d?.e': 20      // Toggle after 20ms
+    '?.a?.b?.c =!': '.',      // Toggle itself
+    // Negates another property.  
+    // The RHS doesn't spawn new objects
+    // and evaluates to true if it doesn't exist
+    '?.a?.d?.e =!': '?.a?.d?.e'       
 });
 console.log(obj);
 // {
@@ -136,27 +139,15 @@ console.log(obj);
 //     // d doesn't exist yet
 //   }
 // }
-
-setTimeout(() => {
-    console.log(obj);
-    // {
-    //   a: {
-    //     b: { c: false },
-    //     d: { e: true }         // Created and toggled after 20ms
-    //   }
-    // }
-}, 40);
 ```
 
-The `!toggle` command syntax is `!toggle <path>` where the path can use the `?.` nested notation. The right-hand side value determines the behavior:
-- **RHS = 0**: Toggle the existing value immediately (non-existent paths are not created)
-- **RHS > 0**: Schedule the toggle to happen after N milliseconds (non-existent paths are created and initialized to `true`)
+The `=!` command syntax is `<path> =!` where the path can use the `?.` nested notation. 
 
-For existing values, the toggle is performed using JavaScript's logical NOT operator (`!value`). Non-numeric delay values will be passed to `setTimeout` and may throw an error.
+For existing values, the toggle is performed using JavaScript's logical NOT operator (`!value`), regardless of what type it is.
 
 ## Example 6 - Deleting properties with !delete command
 
-The `!delete` command allows you to delete properties either immediately or after a delay:
+The `??x: null` command allows us to delete properties.
 
 ```TypeScript
 const obj = {
@@ -168,29 +159,18 @@ const obj = {
     }
 };
 assignGingerly(obj, {
-    '!delete ?.a?.b?.c': 0,      // Delete immediately
-    '!delete ?.a?.b': 20         // Delete after 20ms
+    //deletes obj.a.b.c if it exists
+    '?.a?.b??c': null,      
 });
 console.log(obj);
 // {
 //   a: {
-//     b: { d: 'hello' }          // c deleted immediately
+//     b: { d: 'hello' }          // c deleted 
 //   }
 // }
 
-setTimeout(() => {
-    console.log(obj);
-    // {
-    //   a: {}                     // b deleted after 20ms
-    // }
-}, 40);
 ```
 
-The `!delete` command syntax is `!delete <path>` where the path can use the `?.` nested notation. The right-hand side value determines the behavior:
-- **RHS = 0**: Delete the final property immediately (non-existent paths are silently skipped)
-- **RHS > 0**: Schedule the deletion to happen after N milliseconds (non-existent paths are silently skipped)
-
-**Important**: The `!delete` command only deletes the **final property** in the path. The entire nested chain is not deleted. For example, `'!delete ?.a?.b?.c': 0` only deletes property `c`, leaving the structure `a.b` intact. If any intermediate path doesn't exist, the command is silently skipped without error.
 
 ## Example 7 - Reversible assignments with assignTentatively
 
