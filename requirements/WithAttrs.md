@@ -341,37 +341,34 @@ console.log(initVals);
 - A template variable references an undefined key (e.g., `${nonexistent}`)?
 - `Number()` parsing results in `NaN`?
 
-**Proposed**: 
-- Log a warning and skip adding that property to `initVals`
-- Throw an error during initialization for undefined template variables
-- For `NaN`, either skip or pass `NaN` through (needs decision)
+**Answer**: 
+- Throw an error which includes the string it couldn't parse in the error message.
+
 
 ### 2. Boolean Attribute Values
 **Question**: Should boolean attributes support explicit `'true'`/`'false'` strings, or only presence/absence?
 
-**Current behavior**: Presence check (`v !== null`)
-
-**Alternative**: Could parse `'true'`/`'false'` strings: `v => v === 'true' || (v !== null && v !== 'false')`
+Answer:  By default, only set to true if attribute present.  Never set it to false (as the attribute won't exist).  We may allow for nuance based on additional config settings in the future.
 
 ### 3. Null vs Undefined Attributes
 **Question**: If an attribute exists but has an empty value (`data-count=''`), should it be treated differently than a missing attribute?
 
-**Proposed**: Empty string should be passed to the parser, allowing custom handling
+**Answer**: Empty string should be passed to the parser, allowing custom handling
 
 ### 4. Order of Processing
 **Question**: Should attributes be processed in a specific order (e.g., `base` first, then others)?
 
-**Proposed**: Process in definition order, but ensure template resolution happens correctly regardless
+**Answer**: Process in definition order, but ensure template resolution happens correctly regardless
 
 ### 5. Case Sensitivity
 **Question**: Are attribute names case-sensitive? HTML attributes are case-insensitive, but the resolved template strings might have specific casing.
 
-**Proposed**: Use `getAttribute()` which is case-insensitive in HTML, case-sensitive in XML/SVG
+**Answer**: Use `getAttribute()` which is case-insensitive in HTML, case-sensitive in XML/SVG
 
 ### 6. mapsTo Default for _base
 **Question**: The document states `_base` defaults to `mapsTo: '.'`, but should this be explicit in the code?
 
-**Clarification needed**: Confirm that when `_base` is omitted entirely, it defaults to `{ mapsTo: '.', instanceOf: 'Object' }`
+**Answer**: Confirm that when `_base` is omitted entirely, it defaults to `{ mapsTo: '.', instanceOf: 'Object' }`
 
 ## Implementation Checklist
 
