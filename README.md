@@ -9,7 +9,7 @@
 
 ## Introduction
 
-This package starts out innocently enough -- it provides two utility functions for carefully merging one object into another.  This is a primitive sorely lacking in the web, and this package is a polyfill for what we would like to see built into the platform.  We make no apologies about adding these features directly to the underlying API's, as it is part of a proposal which is sitting there gathering dust, with no apparent alternatives under consideration.
+This package starts out innocently enough -- it provides two utility functions for carefully merging one object into another.  This is a primitive sorely lacking in the web, and this package is a polyfill for what we would like to see built into the platform.  We make no apologies about adding these features directly to the underlying API's, as it is part of a proposal which is sitting there gathering dust, with no apparent alternatives under consideration.  However, much of the functionality is exposed in a way that doesn't add anything on top of existing api's.
 
 Not only does this polyfill package allow merging data properties onto objects that are expecting them, this polyfill also provides the ability to merge *augmented behavior* onto run-time objects without sub classing all such objects of the same type. This includes the ability to spawn an instance of a class and "merge" it into the API of the original object without ever blocking access to the original object.
 
@@ -38,7 +38,7 @@ assignTentatively provides a far more limited subset of functionality compared t
 
 ```TypeScript
 const sourceObj = {hello: 'world'};
-assignGingerly(sourceObj, {hello: 'Venus', foo: 'bar'});
+sourceObj.assignGingerly({hello: 'Venus', foo: 'bar'});
 // Because none of the keys of the second parameter start with "?.", 
 // nor includes any symbols keys,
 // assign gingerly produces identical results 
@@ -57,7 +57,7 @@ console.log(sourceObj);
 
 ```TypeScript
 const oInput = document.querySelector('#myInput');
-assignGingerly(oInput, {'?.style?.height': '15px'});
+oInput.assignGingerly({'?.style?.height': '15px'});
 console.log(oInput.style.height);
 // 15px
 ```
@@ -86,9 +86,9 @@ When the right hand side of an expression is an object, assignGingerly is recurs
 
 While we are in the business of passing values of object A into object B, we might as well add some extremely common behavior that allows updating properties of object B based on the current values of object B -- things like incrementing, toggling, and deleting.  Deleting is critical for assignTentatively, but is included with both functions
 
-## Example 4 - Incrementing values with !inc command
+## Example 4 - Incrementing values with += command
 
-The `!inc` command allows you to increment numeric values:
+The `+=` command allows you to increment numeric values:
 
 ```TypeScript
 const obj = {
@@ -115,7 +115,7 @@ The `+=` command syntax is `<path> +=` where the path can use the `?.` nested no
 
 ## Example 5 - Toggling boolean values and negating
 
-The `=!` command allows you to toggle boolean values either immediately or after a delay:
+The `=!` command allows us to toggle boolean values:
 
 ```TypeScript
 const obj = {
@@ -145,7 +145,7 @@ The `=!` command syntax is `<path> =!` where the path can use the `?.` nested no
 
 For existing values, the toggle is performed using JavaScript's logical NOT operator (`!value`), regardless of what type it is.
 
-## Example 6 - Deleting properties with !delete command
+## Example 6 - Deleting properties with "... ??x": null command
 
 The `??x: null` command allows us to delete properties.
 
@@ -200,8 +200,8 @@ console.log(obj);
 
 console.log(reversal);
 // {
-//   '!delete ?.a': 0,
-//   '!delete ?.style': 0,
+//   '"... ??x": null ?.a': 0,
+//   '"... ??x": null ?.style': 0,
 //   '?.f?.g': 'hello'
 // }
 
@@ -214,11 +214,10 @@ console.log(obj);
 ```
 
 **Key differences from assignGingerly:**
-- **No setTimeout support**: All `!toggle`, `!inc`, and `!delete` commands execute immediately, regardless of the RHS value
-- **No registry/DI support**: Dependency injection features are not available (pass it in and it will be ignored)
+- **No registry/DI support**: Dependency injection features are not available (pass it in and it will be ignored).  Dependency injection is discussed below.
 - **Reversal tracking**: Maintains a reversal object that records:
   - **Original values** of modified existing properties
-  - **!delete commands** for newly created top-level paths (e.g., `!delete ?.a` for paths created under `a`)
+  - **"... ??x": null commands** for newly created top-level paths (e.g., `"... ??x": null ?.a` for paths created under `a`)
   - **Original values** for deleted properties
 
 **Reversal guarantee:**
@@ -236,22 +235,24 @@ console.log(string1 === string2); // true
 
 This guarantees that applying the reversal object restores the object to its exact original state.
 
-## Dependency injection based on a registry object and a Symbolic reference
+## Dependency injection based on a registry object and a Symbolic reference mapping
 
 ```Typescript
 interface IBaseRegistryItem<T = any> {
     spawn: {new(): T} | Promise<{new(): T}>
-    map: {[key: string | symbol]: keyof T}
+    map: {[key: symbol]: keyof T}
 }
 
 export const isHappy = Symbol.for('TFWsx0YH5E6eSfhE7zfLxA');
-class MyEnhancement extends ElementEnhancement(EventTarget){
+class MyEnhancement{
+    //optional
+    constructor(augmentedObj?: Object){}
     get isHappy(){}
     set isHappy(nv){}
 }
 
 export const isMellow = Symbol.for('BqnnTPWRHkWdVGWcGQoAiw');
-class YourEnhancement extends ElementEnhancement(EventTarget){
+class YourEnhancement{
     get isMellow(){}
     set isMellow(nv){}
     get madAboutFourteen(){}
@@ -293,7 +294,7 @@ const result = assignGingerly({}, {
 result.set[isMellow] = false;
 ```
 
-The assignGingerly searches the registry for any items that has a mapping with a matching symbol of isHappy and isMellow, and if found, sees if it already has an instance of the spawn class associated with the first passed in parameter.  If no such instance is found, it instantiates one, associates the instance with the first parameter, then sets the property value.
+The assignGingerly function searches the registry for any items that has a mapping with a matching symbol of isHappy and isMellow, and if found, sees if it already has an instance of the spawn class associated with the first passed in parameter.  If no such instance is found, it instantiates one, associates the instance with the first parameter, then sets the property value.
 
 It also adds a lazy property to the first passed in parameter, "set", which returns a proxy, and that proxy watches for symbol references passed in a value, and sets the value from that spawned instance.  Again, if the spawned instance is not found, it re-spawns it.
 
