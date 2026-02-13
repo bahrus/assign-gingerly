@@ -962,3 +962,274 @@ console.log(instance1 === instance2); // true - same instance
 ```
 
 **Browser Support**: This feature requires Chrome 146+ with scoped custom element registry support.
+
+## Parsing Attributes with `parseWithAttrs`
+
+The `parseWithAttrs` function provides a declarative way to read and parse HTML attributes into structured data objects. It's particularly useful for custom elements and web components that need to extract configuration from attributes.
+
+### Basic Usage
+
+```TypeScript
+import { parseWithAttrs } from 'assign-gingerly/parseWithAttrs';
+
+const element = document.querySelector('#myElement');
+const config = parseWithAttrs(element, {
+  base: 'data',
+  count: '${base}-count',
+  _count: {
+    instanceOf: 'Number',
+    mapsTo: 'itemCount'
+  }
+});
+```
+
+### AttrPatterns Configuration
+
+The `parseWithAttrs` function accepts an `AttrPatterns` object that defines:
+
+1. **Attribute name templates**: String values with `${variable}` placeholders
+2. **Configuration objects**: Properties prefixed with `_` that specify parsing behavior
+
+```TypeScript
+interface AttrPatterns<T> {
+  base?: string;                    // Base attribute name prefix
+  _base?: AttrConfig<T>;            // Configuration for base attribute
+  [key: string]: string | AttrConfig<T>;  // Other attributes and configs
+}
+
+interface AttrConfig<T> {
+  mapsTo?: keyof T | '.';           // Target property name (or '.' to spread)
+  instanceOf?: string | Function;   // Type for default parser
+  parser?: (v: string | null) => any;  // Custom parser function
+}
+```
+
+### Template Variables
+
+Attribute names support template variables using `${varName}` syntax:
+
+```TypeScript
+// HTML: <div data-user-name="Alice" data-user-age="30"></div>
+
+const result = parseWithAttrs(element, {
+  base: 'data',
+  user: '${base}-user',
+  name: '${user}-name',
+  age: '${user}-age'
+});
+// Result: { name: 'Alice', age: '30' }
+```
+
+Template variables are resolved recursively and cached for performance. Circular references are detected and throw an error.
+
+### Type Parsing with instanceOf
+
+The `instanceOf` property determines how attribute values are parsed:
+
+```TypeScript
+// HTML: <div data-count="42" data-active data-tags='["a","b"]'></div>
+
+const result = parseWithAttrs(element, {
+  base: 'data',
+  count: '${base}-count',
+  _count: { instanceOf: 'Number' },
+  
+  active: '${base}-active',
+  _active: { instanceOf: 'Boolean' },  // Presence check
+  
+  tags: '${base}-tags',
+  _tags: { instanceOf: 'Array' }
+});
+// Result: { count: 42, active: true, tags: ['a', 'b'] }
+```
+
+**Built-in type parsers:**
+- `String`: Identity (default)
+- `Number`: Parses numeric values, throws on invalid numbers
+- `Boolean`: Presence check (attribute exists = true)
+- `Object`: Parses JSON objects
+- `Array`: Parses JSON arrays
+
+### Custom Parsers
+
+Provide a custom `parser` function for specialized parsing:
+
+```TypeScript
+// HTML: <div data-timestamp="2024-01-15T10:30:00Z"></div>
+
+const result = parseWithAttrs(element, {
+  base: 'data',
+  timestamp: '${base}-timestamp',
+  _timestamp: {
+    mapsTo: 'createdAt',
+    parser: (v) => v ? new Date(v).getTime() : null
+  }
+});
+// Result: { createdAt: 1705315800000 }
+```
+
+### Property Mapping with mapsTo
+
+The `mapsTo` property controls where parsed values are placed:
+
+```TypeScript
+// HTML: <div data-count="5"></div>
+
+const result = parseWithAttrs(element, {
+  base: 'data',
+  count: '${base}-count',
+  _count: {
+    instanceOf: 'Number',
+    mapsTo: 'itemCount'  // Maps to different property name
+  }
+});
+// Result: { itemCount: 5 }
+```
+
+**Special value `'.'`**: Spreads the parsed object into the root:
+
+```TypeScript
+// HTML: <div config='{"theme":"dark","lang":"en"}'></div>
+
+const result = parseWithAttrs(element, {
+  base: 'config',
+  _base: {
+    instanceOf: 'Object',
+    mapsTo: '.'  // Spread into root
+  }
+});
+// Result: { theme: 'dark', lang: 'en' }
+```
+
+### Base Attribute
+
+The special `base` property handles a single attribute that spreads into the result:
+
+```TypeScript
+// HTML: <div greetings='{"hello":"world","goodbye":"Mars"}'></div>
+
+const result = parseWithAttrs(element, {
+  base: 'greetings'
+  // Default: spreads into root with Object parser
+});
+// Result: { hello: 'world', goodbye: 'Mars' }
+
+// With custom mapsTo:
+const result2 = parseWithAttrs(element, {
+  base: 'greetings',
+  _base: {
+    mapsTo: 'greetings',
+    instanceOf: 'Object'
+  }
+});
+// Result: { greetings: { hello: 'world', goodbye: 'Mars' } }
+```
+
+### Nested Paths with assignGingerly
+
+Combine `parseWithAttrs` with `assignGingerly` for nested property assignment:
+
+```TypeScript
+// HTML: <div data-height="100px" data-is-happy></div>
+
+const element = document.createElement('div');
+const attrs = parseWithAttrs(element, {
+  base: 'data',
+  height: '${base}-height',
+  _height: {
+    mapsTo: '?.style?.height'
+  },
+  isHappy: '${base}-is-happy',
+  _isHappy: {
+    instanceOf: 'Boolean',
+    mapsTo: '?.moods?.personIsHappy'
+  }
+});
+
+assignGingerly(element, attrs);
+// element.style.height === '100px'
+// element.moods.personIsHappy === true
+```
+
+### Complete Example
+
+```TypeScript
+// HTML: <user-card 
+//   config='{"theme":"dark"}' 
+//   config-name="Alice" 
+//   config-age="30" 
+//   config-active
+// ></user-card>
+
+const element = document.querySelector('user-card');
+const result = parseWithAttrs(element, {
+  base: 'config',
+  _base: {
+    mapsTo: 'settings',
+    instanceOf: 'Object'
+  },
+  name: '${base}-name',
+  age: '${base}-age',
+  _age: {
+    instanceOf: 'Number',
+    mapsTo: 'userAge'
+  },
+  active: '${base}-active',
+  _active: {
+    instanceOf: 'Boolean',
+    mapsTo: 'isActive'
+  }
+});
+
+console.log(result);
+// {
+//   settings: { theme: 'dark' },
+//   name: 'Alice',
+//   userAge: 30,
+//   isActive: true
+// }
+```
+
+### Error Handling
+
+The function throws descriptive errors for common issues:
+
+```TypeScript
+// Circular reference
+parseWithAttrs(element, {
+  a: '${b}',
+  b: '${a}'  // Error: Circular reference detected
+});
+
+// Undefined variable
+parseWithAttrs(element, {
+  name: '${missing}'  // Error: Undefined template variable: missing
+});
+
+// Invalid JSON
+// HTML: <div data-obj='{invalid}'></div>
+parseWithAttrs(element, {
+  base: 'data',
+  obj: '${base}-obj',
+  _obj: { instanceOf: 'Object' }
+  // Error: Failed to parse JSON: "{invalid}"
+});
+
+// Invalid number
+// HTML: <div data-count="abc"></div>
+parseWithAttrs(element, {
+  base: 'data',
+  count: '${base}-count',
+  _count: { instanceOf: 'Number' }
+  // Error: Failed to parse number: "abc"
+});
+```
+
+### Best Practices
+
+1. **Use base for common prefixes**: Reduces repetition in attribute names
+2. **Leverage template variables**: Build complex attribute names from simple parts
+3. **Specify instanceOf**: Ensures proper type conversion
+4. **Use mapsTo for clarity**: Map attribute names to meaningful property names
+5. **Combine with assignGingerly**: Use nested paths (`?.`) for deep property assignment
+6. **Handle missing attributes**: Non-existent attributes are skipped (except Boolean types)
