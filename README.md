@@ -11,7 +11,9 @@
 
 This package starts out innocently enough -- it provides two utility functions for carefully merging one object into another.  This is a primitive sorely lacking in the web, and this package is a polyfill for what we would like to see built into the platform.  We make no apologies about adding these features directly to the underlying API's, as it is part of a proposal which is sitting there gathering dust, with no apparent alternatives under consideration.
 
-Not only does this polyfill package allow merging data properties onto objects that are expecting them, this polyfill also provides the ability to merge *augmented behavior" onto run time objects without sub classing all such objects.  So we are providing a form of the ["Decorator Pattern"](https://en.wikipedia.org/wiki/Decorator_pattern) as tailored for the quirks of the web. 
+Not only does this polyfill package allow merging data properties onto objects that are expecting them, this polyfill also provides the ability to merge *augmented behavior" onto run time objects without sub classing all such objects.  So we are providing a form of the ["Decorator Pattern"](https://en.wikipedia.org/wiki/Decorator_pattern) as tailored for the quirks of the web.  So in our view this package helps fill the void left by not supporting the "is" attribute for built-in elements (but is not a complete solution, just a critical building board).
+
+Anyway, those two utility functions are:
 
 ## assignGingerly
 
@@ -19,6 +21,12 @@ assignGingerly builds on Object.assign.  assign-gingerly adds support for:
 
 1.  Carefully merging in nested properties.
 2.  Dependency injection based on a mapping protocol.
+
+and 
+
+## assignTentatively
+
+assignTentatively provides a far more limited scope compared to assignGingerly.     The tradeoff is that assignTentatively can be "reversed", which can be useful for some use cases (think of how css "turns on" visual effects while conditions are met, then reverts to how things were before the conditions aren't met they no longer match the conditions).
 
 ## Example 1 - assignGingerly is mostly a "superset" of Object.assign:
 
