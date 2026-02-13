@@ -17,13 +17,15 @@ import from 'assign-gingerly/object-extension.js';
 
 has the "side effect" of enhancing the platform API in a way that this proposal can only hope the platform chooses to adopt in the future (or some variation).
 
-One can achieve the same functionality with a little more, and "playing nicer" with the platform by importing assign-gingerly.js and/or assign-tentatively.js, which has no such side effects.
+One can achieve the same functionality with a little more work, and "playing nicer" with the platform by importing assign-gingerly.js and/or assign-tentatively.js, which has no such side effects.
+
+## Object Extension Pattern
 
 Not only does this polyfill package allow merging data properties onto objects that are expecting them, this polyfill also provides the ability to merge *augmented behavior* onto run-time objects without sub classing all such objects of the same type. This includes the ability to spawn an instance of a class and "merge" it into the API of the original object in an elegant way that is easy to wrap one's brain around, without ever blocking access to the original object or breaking it.
 
 So we are providing a form of the ["Decorator Pattern"](https://en.wikipedia.org/wiki/Decorator_pattern) or perhaps more accurately the [Extension Object Pattern](https://swiftorial.com/swiftlessons/design-patterns/structural-patterns/extension-object-pattern) as tailored for the quirks of the web.  
 
-So in our view this package helps fill the void left by not supporting the "is" attribute for built-in elements (but is not a complete solution, just a critical building board).  Mount-observer, mount-observer-script-element, and custom enhancements builds on top of the critical role that assign-gingerly plays.
+So in our view this package helps fill the void left by not supporting the "is" attribute for built-in elements (but is not a complete solution, just a critical building block).  Mount-observer, mount-observer-script-element, and custom enhancements builds on top of the critical role that assign-gingerly plays.
 
 Anyway, let's start out detailing the more innocent features of this package / polyfill.
 
@@ -31,7 +33,9 @@ The two utility functions are:
 
 ## assignGingerly
 
-assignGingerly builds on Object.assign.  assign-gingerly adds support for:
+assignGingerly builds on Object.assign.  Like Object.assign, the object getting assigned can be a JSON stringified object.  Some of the unusual syntax we see with assignGingerly is there to continue to support JSON deserialized objects as a viable argument to be passed.  
+
+assign-gingerly adds support for:
 
 1.  Carefully merging in nested properties.
 2.  Dependency injection based on a mapping protocol.
@@ -40,9 +44,9 @@ and
 
 ## assignTentatively
 
-assignTentatively provides a far more limited subset of functionality compared to assignGingerly.   The tradeoff is that assignTentatively can do something important assignTentatively cannot do -- be "reversed". This can be quite useful for some scenarios (think of how css "turns on" visual effects while conditions are met, then reverts to how things were before the conditions were met).  Another example is allowing user edits to be rolled back as they repeatedly hit "ctrl+z".
+assignTentatively provides a far more limited subset of functionality compared to assignGingerly.   The tradeoff is that assignTentatively can do something important assignGingerly cannot do -- be "reversed". This can be quite useful for some scenarios.  Think of how css "turns on" visual effects while conditions are met, then reverts to how things were before the conditions were met when needed without as if nothing happened.  Another example is allowing user edits to be rolled back as they repeatedly hit "ctrl+z".
 
-## Example 1 - assignGingerly is mostly a "superset" of Object.assign:
+## Example 1 - assignGingerly as a "superset" of Object.assign:
 
 ```TypeScript
 const sourceObj = {hello: 'world'};
