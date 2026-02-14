@@ -1,6 +1,20 @@
 import assignGingerly, { BaseRegistry, getInstanceMap } from './assignGingerly.js';
 import { parseWithAttrs } from './parseWithAttrs.js';
 /**
+ * Normalizes lifecycleKeys to always return an object with dispose and resolved keys
+ * @param lifecycleKeys - The lifecycleKeys from registry item (true or object)
+ * @returns Normalized object with dispose and resolved keys, or undefined
+ */
+function normalizeLifecycleKeys(lifecycleKeys) {
+    if (lifecycleKeys === true) {
+        return {
+            dispose: 'dispose',
+            resolved: 'resolved'
+        };
+    }
+    return lifecycleKeys;
+}
+/**
  * Adds assignGingerlyRegistry to CustomElementRegistry prototype as a lazy getter
  */
 if (typeof CustomElementRegistry !== 'undefined') {
@@ -122,7 +136,8 @@ class ElementEnhancementContainer {
             return; // No instance for this registry item
         }
         // Call dispose lifecycle method if it exists
-        const disposeKey = registryItem?.lifecycleKeys?.dispose;
+        const lifecycleKeys = normalizeLifecycleKeys(registryItem?.lifecycleKeys);
+        const disposeKey = lifecycleKeys?.dispose;
         if (disposeKey && typeof spawnedInstance[disposeKey] === 'function') {
             spawnedInstance[disposeKey](registryItem);
         }
@@ -140,7 +155,8 @@ class ElementEnhancementContainer {
      * @returns Promise that resolves with the spawned instance
      */
     async whenResolved(registryItem) {
-        const resolvedKey = registryItem?.lifecycleKeys?.resolved;
+        const lifecycleKeys = normalizeLifecycleKeys(registryItem?.lifecycleKeys);
+        const resolvedKey = lifecycleKeys?.resolved;
         if (resolvedKey === undefined) {
             throw new Error('Must specify resolved key in lifecycleKeys');
         }
@@ -156,7 +172,8 @@ class ElementEnhancementContainer {
         }
         // Lazy load waitForEvent
         const { waitForEvent } = await import('./waitForEvent.js');
-        // Wait for the 'resolved' event
+        // Wait for the resolved event (use resolvedKey as event name)
+        // Note: When symbols are supported as event names, this will work with symbol keys too
         await waitForEvent(spawnedInstance, resolvedKey);
         // Check if resolved flag is now set
         if (spawnedInstance[resolvedKey]) {

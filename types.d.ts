@@ -46,10 +46,12 @@ export interface IBaseRegistryItem<T = any> {
   symlinks?: { [key: symbol]: keyof T };
   //only applicable when spawning from a DOM Element reference
   enhKey?: EnhKey;
-  lifecycleKeys?: {
-    dispose?: string | symbol,
-    resolved?: string | symbol
-  }
+  lifecycleKeys?: 
+    | true  // Use standard names: "dispose" method, "resolved" property/event
+    | {
+        dispose?: string | symbol,
+        resolved?: string | symbol
+      }
   //used by mount-observer, not by assign-gingerly
   //impossible to polyfill, but will always be disposed
   //when oElement's reference count goes to zero

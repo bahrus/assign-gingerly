@@ -647,7 +647,7 @@ All parameters are optional for backward compatibility with existing code.
 
 ### Registry Item with enhKey
 
-Registry items now support optional `enhKey`, `withAttrs`, and `canSpawn` properties:
+Registry items now support optional `enhKey`, `withAttrs`, `canSpawn`, and `lifecycleKeys` properties:
 
 ```TypeScript
 interface IBaseRegistryItem<T> {
@@ -658,16 +658,20 @@ interface IBaseRegistryItem<T> {
   symlinks: { [key: string | symbol]: keyof T };
   enhKey?: string;  // String identifier for set proxy access
   withAttrs?: AttrPatterns<T>;  // Automatic attribute parsing during spawn
-  lifecycleKeys?: {
-    dispose?: string;  // Method name to call on disposal
-    resolved?: string;  // Property name indicating async resolution
-  };
+  lifecycleKeys?: 
+    | true  // Use standard names: "dispose" method, "resolved" property/event
+    | {
+        dispose?: string | symbol;  // Method name to call on disposal
+        resolved?: string | symbol;  // Property name and event name for async resolution
+      };
 }
 ```
 
 The `withAttrs` property enables automatic attribute parsing when the enhancement is spawned. See the [Parsing Attributes with parseWithAttrs](#parsing-attributes-with-parsewithattrs) section for details.
 
 The `canSpawn` static method allows enhancement classes to conditionally block spawning based on the target object. See the [Conditional Spawning with canSpawn](#conditional-spawning-with-canspawn) section for details.
+
+The `lifecycleKeys` property configures lifecycle integration without requiring base classes. See the [Lifecycle Keys: Configuration vs Convention](#lifecycle-keys-configuration-vs-convention) section for details.
 
 ### Advanced Examples
 
@@ -805,6 +809,81 @@ console.log(element.enh.myEnh.prop2); // 'from set'
 console.log(element.enh.myEnh.value); // 'from assign'
 ```
 
+### Lifecycle Keys: Configuration vs Convention
+
+Enhancement classes can integrate with the lifecycle system through configurable method/property names, avoiding the need for base classes or mixins.
+
+**Why configurable lifecycle keys?**
+
+1. **Zero coupling**: Enhancement classes remain plain classes with no framework dependencies
+2. **Framework agnostic**: Works with classes from any source - your own, third-party libraries, generated code, legacy code
+3. **Naming freedom**: Avoids debates over standard names. One team's `dispose()` is another's `cleanup()`, `destroy()`, or `teardown()`
+4. **Multiple patterns**: Different enhancement libraries can coexist with different conventions
+5. **Gradual adoption**: Integrate with existing classes without refactoring
+6. **Testability**: Enhancement classes remain simple POJOs (Plain Old JavaScript Objects) that are easy to test in isolation
+
+**The shortcut: `lifecycleKeys: true`**
+
+For convenience, you can use `lifecycleKeys: true` to adopt standard naming conventions:
+
+```TypeScript
+const registryItem = {
+  spawn: MyEnhancement,
+  symlinks: {},
+  enhKey: 'myEnh',
+  lifecycleKeys: true  // Uses standard names: "dispose" and "resolved"
+};
+```
+
+This is equivalent to:
+
+```TypeScript
+lifecycleKeys: {
+  dispose: 'dispose',
+  resolved: 'resolved'
+}
+```
+
+**Custom lifecycle keys:**
+
+When you need different names (for legacy code, team conventions, or avoiding conflicts):
+
+```TypeScript
+lifecycleKeys: {
+  dispose: 'cleanup',      // Call cleanup() method on disposal
+  resolved: 'isReady'      // Watch isReady property and dispatch "isReady" event
+}
+```
+
+**Symbol support:**
+
+Lifecycle keys can be symbols to avoid naming collisions:
+
+```TypeScript
+const DISPOSE = Symbol('dispose');
+const RESOLVED = Symbol('resolved');
+
+class MyEnhancement {
+  [DISPOSE]() {
+    // Cleanup code
+  }
+  
+  [RESOLVED] = false;
+}
+
+const registryItem = {
+  spawn: MyEnhancement,
+  symlinks: {},
+  enhKey: 'myEnh',
+  lifecycleKeys: {
+    dispose: DISPOSE,
+    resolved: RESOLVED
+  }
+};
+```
+
+Note: Symbol event names are not yet supported by the platform but have been requested. When supported, the `resolved` key will work as both property name and event name.
+
 ### Disposing Enhancement Instances with `enh.dispose()`
 
 The `enh.dispose()` method provides a way to clean up and remove enhancement instances:
@@ -830,8 +909,16 @@ const registryItem = {
   spawn: MyEnhancement,
   symlinks: {},
   enhKey: 'myEnh',
+  lifecycleKeys: true  // Standard: calls dispose() method
+};
+
+// Or with custom name:
+const customRegistryItem = {
+  spawn: MyEnhancement,
+  symlinks: {},
+  enhKey: 'myEnh',
   lifecycleKeys: {
-    dispose: 'cleanup'  // Method name to call on disposal
+    dispose: 'cleanup'  // Custom: calls cleanup() method
   }
 };
 
@@ -868,7 +955,7 @@ class TimerEnhancement {
     }, 1000);
   }
   
-  cleanup() {
+  dispose() {
     if (this.timerId) {
       clearInterval(this.timerId);
       this.timerId = null;
@@ -881,9 +968,7 @@ const registryItem = {
   spawn: TimerEnhancement,
   symlinks: {},
   enhKey: 'timer',
-  lifecycleKeys: {
-    dispose: 'cleanup'
-  }
+  lifecycleKeys: true  // Standard: calls dispose() method
 };
 
 element.enh.get(registryItem); // Starts timer
@@ -921,7 +1006,7 @@ class AsyncEnhancement extends EventTarget {
     this.data = await response.json();
     
     // Mark as resolved and dispatch event
-    this.isResolved = true;
+    this.resolved = true;
     this.dispatchEvent(new Event('resolved'));
   }
 }
@@ -930,8 +1015,16 @@ const registryItem = {
   spawn: AsyncEnhancement,
   symlinks: {},
   enhKey: 'asyncEnh',
+  lifecycleKeys: true  // Standard: watches "resolved" property and event
+};
+
+// Or with custom name:
+const customRegistryItem = {
+  spawn: AsyncEnhancement,
+  symlinks: {},
+  enhKey: 'asyncEnh',
   lifecycleKeys: {
-    resolved: 'isResolved'  // Property name that indicates resolution
+    resolved: 'isReady'  // Custom: watches "isReady" property and event
   }
 };
 
@@ -946,14 +1039,16 @@ console.log(instance.data); // Data is loaded and ready
 2. **Gets instance**: Calls `enh.get()` to get or spawn the instance
 3. **Checks if resolved**: If the resolved property is already true, returns immediately
 4. **Validates EventTarget**: Throws error if instance is not an EventTarget
-5. **Waits for event**: Lazy loads the `waitForEvent` module and waits for the 'resolved' event
+5. **Waits for event**: Lazy loads the `waitForEvent` module and waits for the resolved event (using the same name as the property)
 6. **Returns or rejects**: Returns the instance if resolved flag is set, otherwise throws
 
 **Requirements:**
 - Enhancement class must extend `EventTarget`
-- Must specify `lifecycleKeys.resolved` property name
-- Instance must dispatch a 'resolved' event when ready
+- Must specify `lifecycleKeys.resolved` property name (or use `lifecycleKeys: true` for standard "resolved")
+- Instance must dispatch an event with the same name as the resolved property when ready
 - Instance must set the resolved property to a truthy value
+
+**Note**: The `resolved` key serves dual purpose - it's both the property name to check AND the event name to listen for. When `lifecycleKeys: true`, both use "resolved".
 
 **Benefits:**
 - **Async-aware**: Properly handles asynchronous initialization
@@ -966,7 +1061,7 @@ console.log(instance.data); // Data is loaded and ready
 ```TypeScript
 class DataEnhancement extends EventTarget {
   element;
-  isResolved = false;
+  resolved = false;
   users = null;
   settings = null;
   
@@ -988,7 +1083,7 @@ class DataEnhancement extends EventTarget {
       this.settings = await settingsRes.json();
       
       // Mark as resolved
-      this.isResolved = true;
+      this.resolved = true;
       this.dispatchEvent(new Event('resolved'));
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -1001,9 +1096,7 @@ const registryItem = {
   spawn: DataEnhancement,
   symlinks: {},
   enhKey: 'data',
-  lifecycleKeys: {
-    resolved: 'isResolved'
-  }
+  lifecycleKeys: true  // Standard: watches "resolved" property and event
 };
 
 // Wait for all data to be loaded
