@@ -15,7 +15,7 @@ test.describe('assignTentatively', () => {
       '?.a?.b?.c': 'hello'
     }, { reversal });
     expect(obj).toEqual({ a: { b: { c: 'hello' } } });
-    expect(reversal).toEqual({ '!delete ?.a': 0 });
+    expect(reversal).toEqual({ ' -=': ['a'] });
   });
 
   test('should preserve existing properties and not create delete for them', () => {
@@ -47,60 +47,59 @@ test.describe('assignTentatively', () => {
     });
 
     expect(reversal).toEqual({
-      '!delete ?.a': 0,
-      '!delete ?.style': 0,
+      ' -=': ['style', 'a'],
       '?.f?.g': 'hello'
     });
   });
 
-  test('should support !inc command immediately', () => {
+  test('should support += command immediately', () => {
     const obj = { a: { b: { c: 5 } } };
     const reversal = {};
     assignTentatively(obj, {
-      '!inc ?.a?.b?.c': 3
+      '?.a?.b?.c +=': 3
     }, { reversal });
     expect(obj).toEqual({ a: { b: { c: 8 } } });
     expect(reversal).toEqual({ '?.a?.b?.c': 5 });
   });
 
-  test('should support !inc command on non-existent path', () => {
+  test('should support += command on non-existent path', () => {
     const obj = {};
     const reversal = {};
     assignTentatively(obj, {
-      '!inc ?.x?.y?.z': 10
+      '?.x?.y?.z +=': 10
     }, { reversal });
     expect(obj).toEqual({ x: { y: { z: 10 } } });
-    expect(reversal).toEqual({ '!delete ?.x': 0 });
+    expect(reversal).toEqual({ ' -=': ['x'] });
   });
 
-  test('should support !toggle command immediately on existing value', () => {
+  test('should support =! command immediately on existing value', () => {
     const obj = { a: { b: { c: true } } };
     const reversal = {};
     assignTentatively(obj, {
-      '!toggle ?.a?.b?.c': 100  // RHS ignored for tentatively
+      '?.a?.b?.c =!': '.'
     }, { reversal });
     expect(obj).toEqual({ a: { b: { c: false } } });
     expect(reversal).toEqual({ '?.a?.b?.c': true });
   });
 
-  test('should support !toggle command on non-existent path', () => {
+  test('should support =! command on non-existent path', () => {
     const obj = {};
     const reversal = {};
     assignTentatively(obj, {
-      '!toggle ?.x?.y?.z': 50  // RHS ignored for tentatively
+      '?.x?.y?.z =!': '.'
     }, { reversal });
     expect(obj).toEqual({ x: { y: { z: true } } });
-    expect(reversal).toEqual({ '!delete ?.x': 0 });
+    expect(reversal).toEqual({ ' -=': ['x'] });
   });
 
-  test('should support !delete command', () => {
+  test('should support -= command', () => {
     const obj = { a: { b: { c: 'value', d: 'keep' } } };
     const reversal = {};
     assignTentatively(obj, {
-      '!delete ?.a?.b?.c': 0  // RHS ignored for tentatively
+      '?.a?.b -=': 'c'
     }, { reversal });
     expect(obj).toEqual({ a: { b: { d: 'keep' } } });
-    expect(reversal).toEqual({ '?.a?.b?.c': 'value' });
+    expect(reversal).toEqual({ '?.a?.b.c': 'value' });
   });
 
   test('should guarantee reversal restores original state', async ({ }, t) => {
@@ -117,7 +116,7 @@ test.describe('assignTentatively', () => {
         e: 'world'
       },
       '?.f?.g': 'bye',
-      '!inc ?.x': 50
+      '?.x +=': 50
     }, { reversal });
 
     // Apply reversal to restore state
@@ -143,9 +142,7 @@ test.describe('assignTentatively', () => {
     });
 
     expect(reversal).toEqual({
-      '!delete ?.a': 0,
-      '!delete ?.c': 0,
-      '!delete ?.e': 0
+      ' -=': ['a', 'c', 'e']
     });
   });
 
@@ -161,9 +158,9 @@ test.describe('assignTentatively', () => {
       a: { b: 1, c: 2 }
     });
 
-    // Should only have one delete for ?.a, not multiple
+    // Should only have one delete for a, not multiple
     expect(reversal).toEqual({
-      '!delete ?.a': 0
+      ' -=': ['a']
     });
   });
 
@@ -181,7 +178,7 @@ test.describe('assignTentatively', () => {
       }
     });
 
-    // Should not delete ?.a since it already existed
+    // Should not delete a since it already existed
     expect(reversal).toEqual({});
   });
 
@@ -221,7 +218,7 @@ test.describe('assignTentatively', () => {
     });
 
     expect(reversal).toEqual({
-      '!delete ?.a': 0
+      ' -=': ['a']
     });
   });
 
@@ -239,9 +236,9 @@ test.describe('assignTentatively', () => {
       nested: { path: 'created' }
     });
 
-    // simple and nested are new top-level properties
+    // nested is a new top-level property
     expect(reversal).toEqual({
-      '!delete ?.nested': 0
+      ' -=': ['nested']
     });
   });
 
@@ -295,7 +292,7 @@ test.describe('assignTentatively', () => {
     }, { reversal: reversal, registry: fakeRegistry } as any);
 
     expect(obj).toEqual({ a: 1 });
-    expect(reversal).toEqual({ '!delete ?.a': 0 });
+    expect(reversal).toEqual({ ' -=': ['a'] });
   });
 
   test('should support sequential assignments with proper reversal', () => {
@@ -311,8 +308,8 @@ test.describe('assignTentatively', () => {
       c: { d: 2 }
     });
 
-    expect(reversal1).toEqual({ '!delete ?.a': 0 });
-    expect(reversal2).toEqual({ '!delete ?.c': 0 });
+    expect(reversal1).toEqual({ ' -=': ['a'] });
+    expect(reversal2).toEqual({ ' -=': ['c'] });
   });
 
   test('should support numeric property names', () => {
@@ -342,14 +339,14 @@ test.describe('assignTentatively', () => {
     }, { reversal });
 
     expect(obj).toEqual({ data: [1, 2, 3] });
-    expect(reversal).toEqual({ '!delete ?.data': 0 });
+    expect(reversal).toEqual({ ' -=': ['data'] });
   });
 
-  test('should combine !inc with nested path creation', () => {
+  test('should combine += with nested path creation', () => {
     const obj = { base: 10 };
     const reversal = {};
     assignTentatively(obj, {
-      '!inc ?.counters?.total': 5
+      '?.counters?.total +=': 5
     }, { reversal });
 
     expect(obj).toEqual({
@@ -358,7 +355,7 @@ test.describe('assignTentatively', () => {
     });
 
     expect(reversal).toEqual({
-      '!delete ?.counters': 0
+      ' -=': ['counters']
     });
   });
 
@@ -370,7 +367,7 @@ test.describe('assignTentatively', () => {
     }, { reversal });
 
     expect(obj.l1.l2.l3.l4.l5).toEqual('deep');
-    expect(reversal).toEqual({ '!delete ?.l1': 0 });
+    expect(reversal).toEqual({ ' -=': ['l1'] });
   });
 
   test('should preserve object identity for modified existing objects', () => {
@@ -386,7 +383,7 @@ test.describe('assignTentatively', () => {
     expect(obj.data).toEqual({ x: 1, y: 2 });
   });
 
-  test('should support !delete on created nested paths', () => {
+  test('should support -= on created nested paths', () => {
     const obj = { keep: true };
     const reversal = {};
     assignTentatively(obj, {
@@ -395,7 +392,7 @@ test.describe('assignTentatively', () => {
 
     const reversal2 = {};
     assignTentatively(obj, {
-      '!delete ?.temp?.data': 0
+      '?.temp -=': 'data'
     }, { reversal: reversal2 });
 
     expect(obj).toEqual({
@@ -404,7 +401,7 @@ test.describe('assignTentatively', () => {
     });
 
     expect(reversal2).toEqual({
-      '?.temp?.data': 'value'
+      '?.temp.data': 'value'
     });
   });
 
@@ -445,16 +442,11 @@ test.describe('assignTentatively', () => {
     const reversal = {};
     assignTentatively(obj, {
       '?.new?.path': 'created',
-      '?.x': 200,
-      '!inc ?.keep': 'ignored'  // This will fail but shows intent
+      '?.x': 200
     }, { reversal });
 
-    // Manual fix for the test
-    assignTentatively(obj, {
-      '?.x': 100,
-      '!delete ?.new': 0,
-      '?.keep': 'me'
-    });
+    // Apply reversal
+    assignTentatively(obj, reversal);
 
     const string2 = JSON.stringify(obj);
     expect(string1).toEqual(string2);

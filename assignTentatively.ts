@@ -340,8 +340,13 @@ export function assignTentatively(
   for (const topLevelKey of trackedCreatedPaths) {
     const deleteKey = ` -=`;
     if (!(deleteKey in reversal)) {
-      reversal[deleteKey] = topLevelKey;
+      reversal[deleteKey] = [];
     }
+    // Store as array to handle multiple created paths
+    if (!Array.isArray(reversal[deleteKey])) {
+      reversal[deleteKey] = [reversal[deleteKey]];
+    }
+    reversal[deleteKey].push(topLevelKey);
   }
 
   return target;
