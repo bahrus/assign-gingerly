@@ -1226,10 +1226,10 @@ registry.push({
   symlinks: {},
   enhKey: 'myEnh',
   withAttrs: {
-    base: 'data',
-    count: '${base}-count',
+    base: 'data-',
+    count: '${base}count',
     _count: { instanceOf: 'Number' },
-    theme: '${base}-theme'
+    theme: '${base}theme'
   }
 });
 
@@ -1329,8 +1329,8 @@ import { parseWithAttrs } from 'assign-gingerly/parseWithAttrs';
 
 const element = document.querySelector('#myElement');
 const config = parseWithAttrs(element, {
-  base: 'data',
-  count: '${base}-count',
+  base: 'data-',
+  count: '${base}count',
   _count: {
     instanceOf: 'Number',
     mapsTo: 'itemCount'
@@ -1367,8 +1367,8 @@ Attribute names support template variables using `${varName}` syntax:
 // HTML: <div data-user-name="Alice" data-user-age="30"></div>
 
 const result = parseWithAttrs(element, {
-  base: 'data',
-  user: '${base}-user',
+  base: 'data-',
+  user: '${base}user',
   name: '${user}-name',
   age: '${user}-age'
 });
@@ -1385,11 +1385,11 @@ The `instanceOf` property determines how attribute values are parsed:
 // HTML: <div data-count="42" data-active data-tags='["a","b"]'></div>
 
 const result = parseWithAttrs(element, {
-  base: 'data',
-  count: '${base}-count',
+  base: 'data-',
+  count: '${base}count',
   _count: { instanceOf: 'Number' },
   
-  active: '${base}-active',
+  active: '${base}active',
   _active: { instanceOf: 'Boolean' },  // Presence check
   
   tags: '${base}-tags',
@@ -1413,8 +1413,8 @@ Provide a custom `parser` function for specialized parsing:
 // HTML: <div data-timestamp="2024-01-15T10:30:00Z"></div>
 
 const result = parseWithAttrs(element, {
-  base: 'data',
-  timestamp: '${base}-timestamp',
+  base: 'data-',
+  timestamp: '${base}timestamp',
   _timestamp: {
     mapsTo: 'createdAt',
     parser: (v) => v ? new Date(v).getTime() : null
@@ -1431,8 +1431,8 @@ The `mapsTo` property controls where parsed values are placed:
 // HTML: <div data-count="5"></div>
 
 const result = parseWithAttrs(element, {
-  base: 'data',
-  count: '${base}-count',
+  base: 'data-',
+  count: '${base}count',
   _count: {
     instanceOf: 'Number',
     mapsTo: 'itemCount'  // Maps to different property name
@@ -1444,10 +1444,10 @@ const result = parseWithAttrs(element, {
 **Special value `'.'`**: Spreads the parsed object into the root:
 
 ```TypeScript
-// HTML: <div config='{"theme":"dark","lang":"en"}'></div>
+// HTML: <div data-config='{"theme":"dark","lang":"en"}'></div>
 
 const result = parseWithAttrs(element, {
-  base: 'config',
+  base: 'data-config',
   _base: {
     instanceOf: 'Object',
     mapsTo: '.'  // Spread into root
@@ -1461,17 +1461,17 @@ const result = parseWithAttrs(element, {
 The special `base` property handles a single attribute that spreads into the result:
 
 ```TypeScript
-// HTML: <div greetings='{"hello":"world","goodbye":"Mars"}'></div>
+// HTML: <div data-greetings='{"hello":"world","goodbye":"Mars"}'></div>
 
 const result = parseWithAttrs(element, {
-  base: 'greetings'
+  base: 'data-greetings'
   // Default: spreads into root with Object parser
 });
 // Result: { hello: 'world', goodbye: 'Mars' }
 
 // With custom mapsTo:
 const result2 = parseWithAttrs(element, {
-  base: 'greetings',
+  base: 'data-greetings',
   _base: {
     mapsTo: 'greetings',
     instanceOf: 'Object'
@@ -1489,8 +1489,8 @@ Combine `parseWithAttrs` with `assignGingerly` for nested property assignment:
 
 const element = document.createElement('div');
 const attrs = parseWithAttrs(element, {
-  base: 'data',
-  height: '${base}-height',
+  base: 'data-',
+  height: '${base}height',
   _height: {
     mapsTo: '?.style?.height'
   },
@@ -1510,15 +1510,15 @@ assignGingerly(element, attrs);
 
 ```TypeScript
 // HTML: <user-card 
-//   config='{"theme":"dark"}' 
-//   config-name="Alice" 
-//   config-age="30" 
-//   config-active
+//   data-config='{"theme":"dark"}' 
+//   data-config-name="Alice" 
+//   data-config-age="30" 
+//   data-config-active
 // ></user-card>
 
 const element = document.querySelector('user-card');
 const result = parseWithAttrs(element, {
-  base: 'config',
+  base: 'data-config',
   _base: {
     mapsTo: 'settings',
     instanceOf: 'Object'
@@ -1564,8 +1564,8 @@ parseWithAttrs(element, {
 // Invalid JSON
 // HTML: <div data-obj='{invalid}'></div>
 parseWithAttrs(element, {
-  base: 'data',
-  obj: '${base}-obj',
+  base: 'data-',
+  obj: '${base}obj',
   _obj: { instanceOf: 'Object' }
   // Error: Failed to parse JSON: "{invalid}"
 });
@@ -1573,8 +1573,8 @@ parseWithAttrs(element, {
 // Invalid number
 // HTML: <div data-count="abc"></div>
 parseWithAttrs(element, {
-  base: 'data',
-  count: '${base}-count',
+  base: 'data-',
+  count: '${base}count',
   _count: { instanceOf: 'Number' }
   // Error: Failed to parse number: "abc"
 });
