@@ -12,7 +12,7 @@
 This package starts out innocently enough -- it provides two utility functions for carefully merging one object into another.  This is a primitive sorely lacking in the web, and this package is a polyfill for what we would like to see built into the platform.  We make no apologies about adding these features directly to the underlying API's, as it is part of a proposal which is sitting there gathering dust, with no apparent alternatives under consideration.  In particular the reference:
 
 ```JavaScript
-import from 'assign-gingerly/object-extension.js';
+import 'assign-gingerly/object-extension.js';
 ```
 
 has the "side effect" of enhancing the platform API in a way that this proposal can only hope the platform chooses to adopt in the future (or some variation).
@@ -216,7 +216,7 @@ console.log(obj);
 //   }
 // }
 
-```
+
 
 
 ## Example 7 - Reversible assignments with assignTentatively
