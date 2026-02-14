@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -74,7 +74,7 @@
       
       const registryItem = {
         spawn: TestEnhancement,
-        map: {
+        symlinks: {
           [symbol1]: 'prop1',
           [symbol2]: 'prop2'
         }
@@ -129,12 +129,12 @@
 
       const registryItem1 = {
         spawn: Enhancement1,
-        map: { [sharedSymbol]: 'value' }
+        symlinks: { [sharedSymbol]: 'value' }
       };
 
       const registryItem2 = {
         spawn: Enhancement2,
-        map: { [sharedSymbol]: 'value' }
+        symlinks: { [sharedSymbol]: 'value' }
       };
 
       const registry2 = new BaseRegistry();
@@ -168,7 +168,7 @@
 
       const sharedRegistryItem = {
         spawn: SharedEnhancement,
-        map: { [symbol3]: 'value' }
+        symlinks: { [symbol3]: 'value' }
       };
 
       const registry3 = new BaseRegistry();
@@ -212,7 +212,7 @@
 
       const counterRegistryItem = {
         spawn: CounterEnhancement,
-        map: { [symbol4]: 'count' }
+        symlinks: { [symbol4]: 'count' }
       };
 
       const registry4 = new BaseRegistry();
@@ -254,7 +254,7 @@
 
       const testRegistryItem = {
         spawn: TestClass,
-        map: { [symbol5]: 'value' }
+        symlinks: { [symbol5]: 'value' }
       };
 
       const registry5 = new BaseRegistry();

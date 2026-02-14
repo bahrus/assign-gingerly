@@ -3,7 +3,7 @@
  */
 export interface IBaseRegistryItem<T = any> {
   spawn: { new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T };
-  map: { [key: string | symbol]: keyof T };
+  symlinks: { [key: string | symbol]: keyof T };
   enhKey?: string;
   lifecycleKeys?: {
     dispose?: string;
@@ -59,13 +59,14 @@ export class BaseRegistry {
 
   findBySymbol(symbol: symbol | string): IBaseRegistryItem | undefined {
     return this.items.find(item => {
-      const map = item.map;
-      return Object.keys(map).some(key => {
-        if (typeof key === 'symbol' || (typeof map[key as any] === 'symbol')) {
-          return key === symbol || map[key as any] === symbol;
+      const symlinks = item.symlinks;
+      if (!symlinks) return false;
+      return Object.keys(symlinks).some(key => {
+        if (typeof key === 'symbol' || (typeof symlinks[key as any] === 'symbol')) {
+          return key === symbol || symlinks[key as any] === symbol;
         }
         return false;
-      }) || Object.getOwnPropertySymbols(map).some(sym => sym === symbol);
+      }) || Object.getOwnPropertySymbols(symlinks).some(sym => sym === symbol);
     });
   }
 
@@ -393,7 +394,7 @@ export function assignGingerly(
         }
 
         // Find the mapped property name
-        const mappedKey = registryItem.map[sym];
+        const mappedKey = registryItem.symlinks[sym];
         if (mappedKey && instance && typeof instance === 'object') {
           (instance as any)[mappedKey] = value;
         }
@@ -445,7 +446,7 @@ export function assignGingerly(
                     }
                   }
                   
-                  const mappedKey = registryItem.map[prop];
+                  const mappedKey = registryItem.symlinks[prop];
                   if (mappedKey && instance && typeof instance === 'object') {
                     (instance as any)[mappedKey] = value;
                   }

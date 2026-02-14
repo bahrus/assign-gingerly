@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -108,7 +108,7 @@
         const testDiv1 = document.createElement('div');
         const registryItem1 = {
           spawn: TestEnhancement,
-          map: {},
+          symlinks: {},
           enhKey: 'disposeEnh',
           lifecycleKeys: {
             dispose: 'cleanup'
@@ -135,7 +135,7 @@
         const testDiv2 = document.createElement('div');
         const registryItem2 = {
           spawn: TestEnhancement,
-          map: {},
+          symlinks: {},
           enhKey: 'removeEnh'
         };
 
@@ -162,7 +162,7 @@
         const testDiv3 = document.createElement('div');
         const registryItem3 = {
           spawn: TestEnhancement,
-          map: {},
+          symlinks: {},
           enhKey: 'containerEnh'
         };
 
@@ -185,7 +185,7 @@
         const testDiv4 = document.createElement('div');
         const registryItem4 = {
           spawn: TestEnhancement,
-          map: {},
+          symlinks: {},
           enhKey: 'noLifecycleEnh'
           // No lifecycleKeys
         };
@@ -215,7 +215,7 @@
         const testDiv5 = document.createElement('div');
         const registryItem5 = {
           spawn: TestEnhancement,
-          map: {},
+          symlinks: {},
           enhKey: 'neverSpawnedEnh'
         };
 
@@ -238,7 +238,7 @@
         const testDiv6 = document.createElement('div');
         const registryItem6 = {
           spawn: TestEnhancement,
-          map: {},
+          symlinks: {},
           enhKey: 'respawnEnh'
         };
 
@@ -267,12 +267,12 @@
         const testDiv7 = document.createElement('div');
         const registryItem7a = {
           spawn: TestEnhancement,
-          map: {},
+          symlinks: {},
           enhKey: 'keepEnh1'
         };
         const registryItem7b = {
           spawn: TestEnhancement,
-          map: {},
+          symlinks: {},
           enhKey: 'keepEnh2'
         };
 

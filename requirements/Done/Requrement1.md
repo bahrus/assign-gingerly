@@ -1,4 +1,4 @@
-## No more asynchronous + AttrPatterns Support
+﻿## No more asynchronous + AttrPatterns Support
 
 Let's simplify this package and add declarative attribute pattern support by:
 
@@ -7,7 +7,7 @@ Let's simplify this package and add declarative attribute pattern support by:
 ```TypeScript
 export interface IBaseRegistryItem<T = any> {
   spawn: { new (): T } | Promise<{ new (): T }>;
-  map: { [key: string | symbol]: keyof T };
+  symlinks: { [key: string | symbol]: keyof T };
   enhKey?: string;
 }
 ```
@@ -17,7 +17,7 @@ becomes:
 ```TypeScript
 export interface IBaseRegistryItem<T = any> {
   spawn: { new (oElement?: Element, ctx?: any, initVals?: Partial<T>): T };
-  map: { [key: string | symbol]: keyof T };
+  symlinks: { [key: string | symbol]: keyof T };
   enhKey?: string;
   lifecycleKeys?: {
     dispose?: string;

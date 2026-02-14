@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -116,7 +116,7 @@
           }
           testRegistry.push({
             spawn: TestClass,
-            map: { [testSymbol]: 'value' }
+            symlinks: { [testSymbol]: 'value' }
           });
 
           // Call assignGingerly without options
@@ -144,7 +144,7 @@
           }
           customRegistry.push({
             spawn: CustomClass,
-            map: { [customSymbol]: 'customValue' }
+            symlinks: { [customSymbol]: 'customValue' }
           });
 
           testDiv2.assignGingerly({

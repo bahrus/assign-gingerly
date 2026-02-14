@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - README Examples', () => {
@@ -65,13 +65,13 @@ test.describe('assignGingerly - README Examples', () => {
     const baseRegistry = new BaseRegistry();
     baseRegistry.push([
       {
-        map: {
+        symlinks: {
           [isHappy]: 'isHappy'
         },
         spawn: MyEnhancement
       },
       {
-        map: {
+        symlinks: {
           [isMellow]: 'isMellow',
           madAboutFourteen: 'madAboutFourteen'
         },
@@ -107,7 +107,7 @@ test.describe('assignGingerly - README Examples', () => {
     
     const baseRegistry = new BaseRegistry();
     baseRegistry.push({
-      map: { [isMellow]: 'isMellow' },
+      symlinks: { [isMellow]: 'isMellow' },
       spawn: YourEnhancement
     });
     
@@ -129,7 +129,7 @@ test.describe('assignGingerly - README Examples', () => {
     
     const registry = new BaseRegistry();
     registry.push({
-      map: { [enhSym]: 'enabled' },
+      symlinks: { [enhSym]: 'enabled' },
       spawn: Enhancement
     });
     

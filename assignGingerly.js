@@ -31,13 +31,15 @@ export class BaseRegistry {
     }
     findBySymbol(symbol) {
         return this.items.find(item => {
-            const map = item.map;
-            return Object.keys(map).some(key => {
-                if (typeof key === 'symbol' || (typeof map[key] === 'symbol')) {
-                    return key === symbol || map[key] === symbol;
+            const symlinks = item.symlinks;
+            if (!symlinks)
+                return false;
+            return Object.keys(symlinks).some(key => {
+                if (typeof key === 'symbol' || (typeof symlinks[key] === 'symbol')) {
+                    return key === symbol || symlinks[key] === symbol;
                 }
                 return false;
-            }) || Object.getOwnPropertySymbols(map).some(sym => sym === symbol);
+            }) || Object.getOwnPropertySymbols(symlinks).some(sym => sym === symbol);
         });
     }
     findByEnhKey(enhKey) {
@@ -334,7 +336,7 @@ export function assignGingerly(target, source, options) {
                     }
                 }
                 // Find the mapped property name
-                const mappedKey = registryItem.map[sym];
+                const mappedKey = registryItem.symlinks[sym];
                 if (mappedKey && instance && typeof instance === 'object') {
                     instance[mappedKey] = value;
                 }
@@ -379,7 +381,7 @@ export function assignGingerly(target, source, options) {
                                         target.enh[registryItem.enhKey] = instance;
                                     }
                                 }
-                                const mappedKey = registryItem.map[prop];
+                                const mappedKey = registryItem.symlinks[prop];
                                 if (mappedKey && instance && typeof instance === 'object') {
                                     instance[mappedKey] = value;
                                 }

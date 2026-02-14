@@ -12,7 +12,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     const isHappy = Symbol.for('test-isHappy');
     
     registry.push({
-      map: { [isHappy]: 'isHappy' },
+      symlinks: { [isHappy]: 'isHappy' },
       spawn: MyEnhancement
     });
     
@@ -29,8 +29,8 @@ test.describe('assignGingerly - Dependency Injection', () => {
     class Class2 {}
     
     registry.push([
-      { map: { [sym1]: 'prop1' }, spawn: Class1 },
-      { map: { [sym2]: 'prop2' }, spawn: Class2 }
+      { symlinks: { [sym1]: 'prop1' }, spawn: Class1 },
+      { symlinks: { [sym2]: 'prop2' }, spawn: Class2 }
     ]);
     
     expect(registry.getItems().length).toBe(2);
@@ -43,13 +43,13 @@ test.describe('assignGingerly - Dependency Injection', () => {
     class TestClass {}
     
     registry.push({
-      map: { [testSymbol]: 'testProp' },
+      symlinks: { [testSymbol]: 'testProp' },
       spawn: TestClass
     });
     
     const item = registry.findBySymbol(testSymbol);
     expect(item).toBeDefined();
-    expect(item?.map[testSymbol]).toBe('testProp');
+    expect(item?.symlinks[testSymbol]).toBe('testProp');
   });
 
   test('should inject dependency with symbol key', () => {
@@ -61,7 +61,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     }
     
     registry.push({
-      map: { [isHappy]: 'isHappy' },
+      symlinks: { [isHappy]: 'isHappy' },
       spawn: MyEnhancement
     });
     
@@ -81,7 +81,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     }
     
     registry.push({
-      map: { [mySymbol]: 'value' },
+      symlinks: { [mySymbol]: 'value' },
       spawn: MyClass
     });
     
@@ -103,7 +103,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     }
     
     registry.push({
-      map: { [mySymbol]: 'count' },
+      symlinks: { [mySymbol]: 'count' },
       spawn: CounterClass
     });
     
@@ -128,8 +128,8 @@ test.describe('assignGingerly - Dependency Injection', () => {
     }
     
     registry.push([
-      { map: { [sym1]: 'prop1' }, spawn: Class1 },
-      { map: { [sym2]: 'prop2' }, spawn: Class2 }
+      { symlinks: { [sym1]: 'prop1' }, spawn: Class1 },
+      { symlinks: { [sym2]: 'prop2' }, spawn: Class2 }
     ]);
     
     const target = {};
@@ -150,7 +150,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     }
     
     registry.push({
-      map: { [mySymbol]: 'value' },
+      symlinks: { [mySymbol]: 'value' },
       spawn: MyClass
     });
     
@@ -172,7 +172,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     }
     
     registry.push({
-      map: { [testSymbol]: 'value' },
+      symlinks: { [testSymbol]: 'value' },
       spawn: TestClass
     });
     
@@ -191,7 +191,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
     }
     
     registry.push({
-      map: { [testSymbol]: 'value' },
+      symlinks: { [testSymbol]: 'value' },
       spawn: TestClass
     });
     

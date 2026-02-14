@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -84,7 +84,7 @@
       const registry = new BaseRegistry();
       registry.push({
         spawn: TestEnhancement,
-        map: { [testSymbol]: 'value' }
+        symlinks: { [testSymbol]: 'value' }
       });
 
       const target = {};
@@ -197,7 +197,7 @@
       const registry2 = new BaseRegistry();
       registry2.push({
         spawn: TestEnhancement,
-        map: { [testSymbol]: 'value' }
+        symlinks: { [testSymbol]: 'value' }
       });
 
       const sharedTarget = {};

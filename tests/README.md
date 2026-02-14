@@ -1,4 +1,4 @@
-# assign-gingerly Test Suite
+﻿# assign-gingerly Test Suite
 
 This directory contains comprehensive unit tests for the assign-gingerly library using Playwright.
 
@@ -135,7 +135,7 @@ const symbol = Symbol.for('test');
 class MyClass { value = 'initial'; }
 
 registry.push({
-  map: { [symbol]: 'value' },
+  symlinks: { [symbol]: 'value' },
   spawn: MyClass
 });
 

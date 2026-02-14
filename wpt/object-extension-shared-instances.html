@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -96,7 +96,7 @@
         
         registry1.push({
           spawn: TestEnhancement,
-          map: { [symbol1]: 'prop1' },
+          symlinks: { [symbol1]: 'prop1' },
           enhKey: 'myEnh'
         });
 
@@ -123,7 +123,7 @@
         
         registry2.push({
           spawn: TestEnhancement,
-          map: { [symbol2]: 'prop2' },
+          symlinks: { [symbol2]: 'prop2' },
           enhKey: 'sharedEnh'
         });
 
@@ -156,7 +156,7 @@
         
         registry3.push({
           spawn: TestEnhancement,
-          map: { [symbol3]: 'prop2' },
+          symlinks: { [symbol3]: 'prop2' },
           enhKey: 'reverseEnh'
         });
 
@@ -191,7 +191,7 @@
         
         registry4.push({
           spawn: TestEnhancement,
-          map: {
+          symlinks: {
             [symbol4a]: 'prop1',
             [symbol4b]: 'prop2'
           },
@@ -239,7 +239,7 @@
         
         const registryItem5 = {
           spawn: TestEnhancement,
-          map: { [symbol5]: 'prop1' },
+          symlinks: { [symbol5]: 'prop1' },
           enhKey: 'globalMapEnh'
         };
         
@@ -270,7 +270,7 @@
         
         registry6.push({
           spawn: TestEnhancement,
-          map: { [symbol6]: 'prop1' },
+          symlinks: { [symbol6]: 'prop1' },
           enhKey: 'elemRefEnh'
         });
 

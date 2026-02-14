@@ -1,4 +1,4 @@
-# Web Platform Tests (WPT) for Object.prototype.assignGingerly
+﻿# Web Platform Tests (WPT) for Object.prototype.assignGingerly
 
 This directory contains Web Platform Tests for the `Object.prototype.assignGingerly` extension.
 
@@ -185,7 +185,7 @@ promise_test(async (t) => {
     
     class TestClass { value = 'initial'; }
     
-    registry.push({ map: { [sym]: 'value' }, spawn: TestClass });
+    registry.push({ symlinks: { [sym]: 'value' }, spawn: TestClass });
     
     const target = {};
     await target.assignGingerly({ [sym]: 'updated' }, { registry });

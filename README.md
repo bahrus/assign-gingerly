@@ -1,4 +1,4 @@
-# assign-gingerly and assign-tentatively
+﻿# assign-gingerly and assign-tentatively
 
 [![Playwright Tests](https://github.com/bahrus/assign-gingerly/actions/workflows/CI.yml/badge.svg?branch=baseline)](https://github.com/bahrus/assign-gingerly/actions/workflows/CI.yml)
 [![NPM version](https://badge.fury.io/js/assign-gingerly.png)](http://badge.fury.io/js/assign-gingerly)
@@ -287,7 +287,7 @@ This guarantees that applying the reversal object restores the object to its exa
 ```Typescript
 interface IBaseRegistryItem<T = any> {
     spawn: {new(): T} | Promise<{new(): T}>
-    map: {[key: symbol]: keyof T}
+    symlinks: {[key: symbol]: keyof T}
 }
 
 export const isHappy = Symbol.for('TFWsx0YH5E6eSfhE7zfLxA');
@@ -316,13 +316,13 @@ class BaseRegistry{
 const baseRegistry = new BaseRegistry;
 baseRegistry.push([
     {
-        map: {
+        symlinks: {
             [isHappy]: 'isHappy'
         },
         spawn: MyEnhancement,
     },{
        
-       map: {
+       symlinks: {
            [isMellow]: 'isMellow'
        },
        spawn: YourEnhancement,
@@ -382,7 +382,7 @@ class MyEnhancement {
 
 const registryItem = {
   spawn: MyEnhancement,
-  map: {
+  symlinks: {
     [symbol1]: 'prop1',
     [symbol2]: 'prop2'
   },
@@ -420,7 +420,7 @@ class MyEnhancement {
 
 const registryItem = {
   spawn: MyEnhancement,
-  map: {
+  symlinks: {
     [symbol1]: 'prop1',
     [symbol2]: 'prop2'
   }
@@ -512,7 +512,7 @@ class MyEnhancement {
 
 registry.push({
   spawn: MyEnhancement,
-  map: { [mySymbol]: 'value' }
+  symlinks: { [mySymbol]: 'value' }
 });
 
 // No need to pass registry option - it's automatically used!
@@ -586,7 +586,7 @@ const registry = myElement.customElementRegistry.assignGingerlyRegistry;
 
 registry.push({
   spawn: MyEnhancement,
-  map: {},
+  symlinks: {},
   enhKey: 'myEnh'  // Key identifier for this enhancement
 });
 
@@ -650,7 +650,7 @@ Registry items now support an optional `enhKey` property:
 ```TypeScript
 interface IBaseRegistryItem<T> {
   spawn: { new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T };
-  map: { [key: string | symbol]: keyof T };
+  symlinks: { [key: string | symbol]: keyof T };
   enhKey?: string;  // String identifier for set proxy access
 }
 ```
@@ -678,8 +678,8 @@ const element = document.createElement('div');
 const registry = element.customElementRegistry.assignGingerlyRegistry;
 
 registry.push([
-  { spawn: StyleEnhancement, map: {}, enhKey: 'styles' },
-  { spawn: DataEnhancement, map: {}, enhKey: 'data' }
+  { spawn: StyleEnhancement, symlinks: {}, enhKey: 'styles' },
+  { spawn: DataEnhancement, symlinks: {}, enhKey: 'data' }
 ]);
 
 element.enh.set.styles.height = '100px';
@@ -696,7 +696,7 @@ const registry = element.customElementRegistry.assignGingerlyRegistry;
 
 registry.push({
   spawn: MyEnhancement,
-  map: {},
+  symlinks: {},
   enhKey: 'config'
 });
 
@@ -730,7 +730,7 @@ The `BaseRegistry` class includes a `findByEnhKey` method:
 const registry = new BaseRegistry();
 registry.push({
   spawn: MyEnhancement,
-  map: {},
+  symlinks: {},
   enhKey: 'myEnh'
 });
 
@@ -745,7 +745,7 @@ The `enh.get()` method provides a programmatic way to spawn or retrieve enhancem
 ```TypeScript
 const registryItem = {
   spawn: MyEnhancement,
-  map: {},
+  symlinks: {},
   enhKey: 'myEnh'
 };
 
@@ -772,7 +772,7 @@ console.log(element.enh.myEnh === instance); // true
 ```TypeScript
 const registryItem = {
   spawn: MyEnhancement,
-  map: { [mySymbol]: 'value' },
+  symlinks: { [mySymbol]: 'value' },
   enhKey: 'myEnh'
 };
 
@@ -814,7 +814,7 @@ class MyEnhancement {
 
 const registryItem = {
   spawn: MyEnhancement,
-  map: {},
+  symlinks: {},
   enhKey: 'myEnh',
   lifecycleKeys: {
     dispose: 'cleanup'  // Method name to call on disposal
@@ -865,7 +865,7 @@ class TimerEnhancement {
 
 const registryItem = {
   spawn: TimerEnhancement,
-  map: {},
+  symlinks: {},
   enhKey: 'timer',
   lifecycleKeys: {
     dispose: 'cleanup'
@@ -914,7 +914,7 @@ class AsyncEnhancement extends EventTarget {
 
 const registryItem = {
   spawn: AsyncEnhancement,
-  map: {},
+  symlinks: {},
   enhKey: 'asyncEnh',
   lifecycleKeys: {
     resolved: 'isResolved'  // Property name that indicates resolution
@@ -985,7 +985,7 @@ class DataEnhancement extends EventTarget {
 
 const registryItem = {
   spawn: DataEnhancement,
-  map: {},
+  symlinks: {},
   enhKey: 'data',
   lifecycleKeys: {
     resolved: 'isResolved'

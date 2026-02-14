@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -20,7 +20,7 @@
         }
         
         registry.push({
-            map: { [testSym]: 'value' },
+            symlinks: { [testSym]: 'value' },
             spawn: TestClass
         });
         
@@ -39,8 +39,8 @@
         class Class2 { prop2 = 'initial'; }
         
         registry.push([
-            { map: { [sym1]: 'prop1' }, spawn: Class1 },
-            { map: { [sym2]: 'prop2' }, spawn: Class2 }
+            { symlinks: { [sym1]: 'prop1' }, spawn: Class1 },
+            { symlinks: { [sym2]: 'prop2' }, spawn: Class2 }
         ]);
         
         const target = {};
@@ -61,7 +61,7 @@
         }
         
         registry.push({
-            map: { [testSym]: 'value' },
+            symlinks: { [testSym]: 'value' },
             spawn: Promise.resolve(AsyncClass)
         });
         
@@ -80,7 +80,7 @@
         }
         
         registry.push({
-            map: { [testSym]: 'count' },
+            symlinks: { [testSym]: 'count' },
             spawn: ReuseClass
         });
         
@@ -100,7 +100,7 @@
         }
         
         registry.push({
-            map: { [testSym]: 'value' },
+            symlinks: { [testSym]: 'value' },
             spawn: ComboClass
         });
         
@@ -122,7 +122,7 @@
         }
         
         registry.push({
-            map: { [testSym]: 'value' },
+            symlinks: { [testSym]: 'value' },
             spawn: SetTestClass
         });
         
@@ -140,7 +140,7 @@
         }
         
         registry.push({
-            map: { [testSym]: 'value' },
+            symlinks: { [testSym]: 'value' },
             spawn: ProxyTestClass
         });
         
@@ -165,8 +165,8 @@
         
         const registry = new BaseRegistry();
         registry.push([
-            { map: { [isHappy]: 'isHappy' }, spawn: Enhancement1 },
-            { map: { [isMellow]: 'isMellow' }, spawn: Enhancement2 }
+            { symlinks: { [isHappy]: 'isHappy' }, spawn: Enhancement1 },
+            { symlinks: { [isMellow]: 'isMellow' }, spawn: Enhancement2 }
         ]);
         
         const target = {};

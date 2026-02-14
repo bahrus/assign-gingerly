@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+﻿import { test, expect } from '@playwright/test';
 import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - JSON Symbol.for Support', () => {
@@ -11,7 +11,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     }
     
     registry.push({
-      map: { [testSymbol]: 'value' },
+      symlinks: { [testSymbol]: 'value' },
       spawn: TestClass
     });
     
@@ -37,8 +37,8 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     }
     
     registry.push([
-      { map: { [sym1]: 'prop1' }, spawn: Class1 },
-      { map: { [sym2]: 'prop2' }, spawn: Class2 }
+      { symlinks: { [sym1]: 'prop1' }, spawn: Class1 },
+      { symlinks: { [sym2]: 'prop2' }, spawn: Class2 }
     ]);
     
     const target = {};
@@ -65,11 +65,11 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     const baseRegistry = new BaseRegistry();
     baseRegistry.push([
       {
-        map: { [isHappy]: 'isHappy' },
+        symlinks: { [isHappy]: 'isHappy' },
         spawn: MyEnhancement
       },
       {
-        map: { [isMellow]: 'isMellow' },
+        symlinks: { [isMellow]: 'isMellow' },
         spawn: YourEnhancement
       }
     ]);
@@ -102,8 +102,8 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     }
     
     registry.push([
-      { map: { [actualSymbol]: 'value1' }, spawn: Class1 },
-      { map: { [stringSymbol]: 'value2' }, spawn: Class2 }
+      { symlinks: { [actualSymbol]: 'value1' }, spawn: Class1 },
+      { symlinks: { [stringSymbol]: 'value2' }, spawn: Class2 }
     ]);
     
     const target = {};
@@ -124,7 +124,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     }
     
     registry.push({
-      map: { [testSymbol]: 'value' },
+      symlinks: { [testSymbol]: 'value' },
       spawn: TestClass
     });
     
@@ -145,7 +145,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     }
     
     registry.push({
-      map: { [testSymbol]: 'value' },
+      symlinks: { [testSymbol]: 'value' },
       spawn: TestClass
     });
     
@@ -184,7 +184,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     }
     
     registry.push({
-      map: { [testSymbol]: 'value' },
+      symlinks: { [testSymbol]: 'value' },
       spawn: TestClass
     });
     
