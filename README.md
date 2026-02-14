@@ -100,7 +100,7 @@ While we are in the business of passing values of object A into object B, we mig
 
 ## Example 4 - Incrementing values with += command
 
-The `+=` command allows you to increment numeric values:
+The `+=` command allows us to increment numeric values and concatenate string values:
 
 ```TypeScript
 const obj = {
@@ -142,7 +142,7 @@ assignGingerly(obj, {
     // Negates another property.  
     // The RHS doesn't spawn new objects
     // and evaluates to true if it doesn't exist
-    '?.a?.d?.e =!': '?.a?.d?.e'       
+    '?.a?.d?.c =!': '?.a?.d?.e'       
 });
 console.log(obj);
 // {
