@@ -2,7 +2,10 @@
  * Interface for registry items that define dependency injection mappings
  */
 export interface IBaseRegistryItem<T = any> {
-  spawn: { new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T };
+  spawn: { 
+    new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
+    canSpawn?: (obj: any, ctx?: SpawnContext<T>) => boolean;
+  };
   symlinks: { [key: string | symbol]: keyof T };
   enhKey?: string;
   lifecycleKeys?: {
@@ -369,6 +372,15 @@ export function assignGingerly(
         if (!instance) {
           const SpawnClass = registryItem.spawn;
           
+          // Check canSpawn if it exists
+          if (typeof SpawnClass.canSpawn === 'function') {
+            const ctx = { mountInfo: registryItem };
+            if (!SpawnClass.canSpawn(target, ctx)) {
+              // canSpawn returned false, skip spawning
+              continue;
+            }
+          }
+          
           // If target is an Element and registryItem has enhKey, pass element to constructor
           if (registryItem.enhKey && typeof Element !== 'undefined' && target instanceof Element) {
             const ctx = { mountInfo: registryItem };
@@ -422,6 +434,15 @@ export function assignGingerly(
 
                   if (!instance) {
                     const SpawnClass = registryItem.spawn;
+                    
+                    // Check canSpawn if it exists
+                    if (typeof SpawnClass.canSpawn === 'function') {
+                      const ctx = { mountInfo: registryItem };
+                      if (!SpawnClass.canSpawn(target, ctx)) {
+                        // canSpawn returned false, skip spawning
+                        return true;
+                      }
+                    }
                     
                     // If target is an Element and registryItem has enhKey, pass element to constructor
                     if (registryItem.enhKey && typeof Element !== 'undefined' && target instanceof Element) {

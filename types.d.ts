@@ -30,7 +30,10 @@ type DisposeEvent =
  */
 export interface IBaseRegistryItem<T = any> {
   
-  spawn: { new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T  };
+  spawn: { 
+    new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
+    canSpawn?: (obj: any, ctx?: SpawnContext<T>) => boolean;
+  };
   
   //Applicable to passing in the initVals during the spawn lifecycle event
   withAttrs?: AttrPatterns<T>;

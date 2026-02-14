@@ -647,11 +647,14 @@ All parameters are optional for backward compatibility with existing code.
 
 ### Registry Item with enhKey
 
-Registry items now support optional `enhKey` and `withAttrs` properties:
+Registry items now support optional `enhKey`, `withAttrs`, and `canSpawn` properties:
 
 ```TypeScript
 interface IBaseRegistryItem<T> {
-  spawn: { new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T };
+  spawn: { 
+    new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
+    canSpawn?: (obj: any, ctx?: SpawnContext<T>) => boolean;  // Optional spawn guard
+  };
   symlinks: { [key: string | symbol]: keyof T };
   enhKey?: string;  // String identifier for set proxy access
   withAttrs?: AttrPatterns<T>;  // Automatic attribute parsing during spawn
@@ -663,6 +666,8 @@ interface IBaseRegistryItem<T> {
 ```
 
 The `withAttrs` property enables automatic attribute parsing when the enhancement is spawned. See the [Parsing Attributes with parseWithAttrs](#parsing-attributes-with-parsewithattrs) section for details.
+
+The `canSpawn` static method allows enhancement classes to conditionally block spawning based on the target object. See the [Conditional Spawning with canSpawn](#conditional-spawning-with-canspawn) section for details.
 
 ### Advanced Examples
 
@@ -1022,6 +1027,166 @@ console.log(instance1 === instance2); // true - same instance
 ```
 
 **Browser Support**: This feature requires Chrome 146+ with scoped custom element registry support.
+
+## Conditional Spawning with `canSpawn`
+
+Enhancement classes can implement a static `canSpawn` method to conditionally block spawning based on the target object. This is useful for:
+- Restricting enhancements to specific element types
+- Checking object compatibility before spawning
+- Implementing version-based feature gates
+- Validating object state before enhancement
+
+### Basic Usage
+
+```TypeScript
+class DivOnlyEnhancement {
+  element;
+  ctx;
+  
+  constructor(oElement, ctx, initVals) {
+    this.element = oElement;
+    this.ctx = ctx;
+    if (initVals) {
+      Object.assign(this, initVals);
+    }
+  }
+  
+  // Static method to control spawning
+  static canSpawn(obj, ctx) {
+    // Only spawn for div elements
+    return obj.tagName && obj.tagName.toLowerCase() === 'div';
+  }
+}
+
+const registry = new BaseRegistry();
+registry.push({
+  spawn: DivOnlyEnhancement,
+  symlinks: {},
+  enhKey: 'divOnly'
+});
+
+const div = document.createElement('div');
+const span = document.createElement('span');
+
+// Will spawn - div is allowed
+const divInstance = div.enh.get(registry.getItems()[0]);
+console.log(divInstance instanceof DivOnlyEnhancement); // true
+
+// Will NOT spawn - span is blocked
+const spanInstance = span.enh.get(registry.getItems()[0]);
+console.log(spanInstance); // undefined
+```
+
+### How It Works
+
+1. **Called before spawning**: When an enhancement is about to be spawned (via `assignGingerly`, `enh.get()`, or `enh.set`), the `canSpawn` method is called first
+2. **Receives context**: The method receives the target object and spawn context with registry item information
+3. **Returns boolean**: Return `true` to allow spawning, `false` to block it
+4. **Applies everywhere**: Works consistently across all spawning methods (dependency injection, `enh.get()`, `enh.set`)
+5. **Optional**: If not defined, spawning proceeds normally
+
+### Parameters
+
+```TypeScript
+static canSpawn(obj: any, ctx?: SpawnContext<T>): boolean
+```
+
+- `obj`: The target object being enhanced (element, plain object, etc.)
+- `ctx`: Optional spawn context containing `{ mountInfo: IBaseRegistryItem<T> }`
+- Returns: `true` to allow spawning, `false` to block
+
+### Use Cases
+
+**Element Type Checking:**
+```TypeScript
+class ButtonEnhancement {
+  static canSpawn(obj, ctx) {
+    return obj.tagName && obj.tagName.toLowerCase() === 'button';
+  }
+}
+```
+
+**Version Gating:**
+```TypeScript
+class ModernFeature {
+  static canSpawn(obj, ctx) {
+    // Only spawn for objects with version 2+
+    return obj.version && obj.version >= 2;
+  }
+}
+```
+
+**Custom Type Checking:**
+```TypeScript
+class CustomTypeEnhancement {
+  static canSpawn(obj, ctx) {
+    return obj instanceof MyCustomClass;
+  }
+}
+```
+
+**Attribute-Based Conditions:**
+```TypeScript
+class OptInEnhancement {
+  static canSpawn(obj, ctx) {
+    // Only spawn if element has opt-in attribute
+    return obj.hasAttribute && obj.hasAttribute('data-enhanced');
+  }
+}
+```
+
+**Complex Validation:**
+```TypeScript
+class ValidatedEnhancement {
+  static canSpawn(obj, ctx) {
+    // Multiple conditions
+    if (!obj.id) return false;
+    if (obj.disabled) return false;
+    if (!obj.dataset?.ready) return false;
+    return true;
+  }
+}
+```
+
+### Behavior Notes
+
+- **No spawning**: When `canSpawn` returns `false`, no instance is created and no constructor is called
+- **Returns undefined**: Methods like `enh.get()` return `undefined` when spawning is blocked
+- **Silent blocking**: No errors are thrown - spawning is simply skipped
+- **Reuse unaffected**: If an instance already exists, `canSpawn` is not called again
+- **Performance**: `canSpawn` is only called once per spawn attempt, not on every access
+
+### Example with Dependency Injection
+
+```TypeScript
+import assignGingerly, { BaseRegistry } from 'assign-gingerly';
+
+class ElementOnlyEnhancement {
+  value = null;
+  
+  static canSpawn(obj, ctx) {
+    return typeof Element !== 'undefined' && obj instanceof Element;
+  }
+}
+
+const registry = new BaseRegistry();
+const enhSymbol = Symbol.for('myEnhancement');
+
+registry.push({
+  spawn: ElementOnlyEnhancement,
+  symlinks: { [enhSymbol]: 'value' }
+});
+
+// Plain object - will not spawn
+const plainObj = {};
+assignGingerly(plainObj, { [enhSymbol]: 'test' }, { registry });
+// No enhancement created
+
+// Element - will spawn
+const element = document.createElement('div');
+assignGingerly(element, { [enhSymbol]: 'test' }, { registry });
+// Enhancement created and value set
+```
 
 ## Parsing Attributes with `parseWithAttrs`
 

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Element.enh canSpawn Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .test-section h3 {
+      margin-top: 0;
+    }
+    .pass {
+      color: green;
+      font-weight: bold;
+    }
+    .fail {
+      color: red;
+      font-weight: bold;
+    }
+    .result {
+      margin: 10px 0;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Element.enh canSpawn Test</h1>
+  <p>This test verifies the canSpawn static method support for blocking enhancement spawning.</p>
+  
+  <div id="results"></div>
+
+  <script type="module">
+    import '../object-extension.js';
+    import { BaseRegistry } from '../assignGingerly.js';
+
+    const results = document.getElementById('results');
+
+    function addResult(title, passed, message) {
+      const section = document.createElement('div');
+      section.className = 'test-section';
+      section.innerHTML = `
+        <h3>${title}</h3>
+        <div class="result">
+          <span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
+          <p>${message}</p>
+        </div>
+      `;
+      results.appendChild(section);
+    }
+
+    try {
+      const div = document.createElement('div');
+      const hasCustomElementRegistry = 'customElementRegistry' in div;
+      
+      if (!hasCustomElementRegistry) {
+        addResult(
+          'Browser Support',
+          false,
+          'This browser does not support customElementRegistry on elements. Chrome 146+ required.'
+        );
+      } else {
+        // Test 1: canSpawn blocks spawning via enh.get()
+        const testDiv1 = document.createElement('div');
+        testDiv1.setAttribute('data-allowed', 'false');
+        
+        class BlockedEnhancement {
+          element;
+          ctx;
+          value = null;
+          
+          constructor(oElement, ctx, initVals) {
+            this.element = oElement;
+            this.ctx = ctx;
+            if (initVals) {
+              Object.assign(this, initVals);
+            }
+          }
+          
+          static canSpawn(obj, ctx) {
+            // Only spawn if data-allowed="true"
+            return obj.getAttribute && obj.getAttribute('data-allowed') === 'true';
+          }
+        }
+        
+        const registryItem1 = {
+          spawn: BlockedEnhancement,
+          symlinks: {},
+          enhKey: 'blockedEnh'
+        };
+        
+        const result1 = testDiv1.enh.get(registryItem1);
+        const wasBlocked = result1 === undefined;
+        const notOnEnh = testDiv1.enh.blockedEnh === undefined;
+        
+        addResult(
+          'Test 1: canSpawn blocks spawning via enh.get()',
+          wasBlocked && notOnEnh,
+          wasBlocked && notOnEnh
+            ? 'Enhancement was correctly blocked from spawning'
+            : `Failed: wasBlocked=${wasBlocked}, notOnEnh=${notOnEnh}`
+        );
+        
+        // Test 2: canSpawn allows spawning when condition is met
+        const testDiv2 = document.createElement('div');
+        testDiv2.setAttribute('data-allowed', 'true');
+        
+        const registryItem2 = {
+          spawn: BlockedEnhancement,
+          symlinks: {},
+          enhKey: 'allowedEnh'
+        };
+        
+        const result2 = testDiv2.enh.get(registryItem2);
+        const wasAllowed = result2 instanceof BlockedEnhancement;
+        const onEnh = testDiv2.enh.allowedEnh instanceof BlockedEnhancement;
+        
+        addResult(
+          'Test 2: canSpawn allows spawning when condition is met',
+          wasAllowed && onEnh,
+          wasAllowed && onEnh
+            ? 'Enhancement was correctly allowed to spawn'
+            : `Failed: wasAllowed=${wasAllowed}, onEnh=${onEnh}`
+        );
+        
+        // Test 3: canSpawn blocks spawning via enh.set
+        const testDiv3 = document.createElement('div');
+        testDiv3.setAttribute('data-allowed', 'false');
+        
+        const registry3 = testDiv3.customElementRegistry.assignGingerlyRegistry;
+        registry3.push({
+          spawn: BlockedEnhancement,
+          symlinks: {},
+          enhKey: 'setBlockedEnh'
+        });
+        
+        const result3 = testDiv3.enh.set.setBlockedEnh;
+        const setBlocked = result3 === undefined;
+        
+        addResult(
+          'Test 3: canSpawn blocks spawning via enh.set',
+          setBlocked,
+          setBlocked
+            ? 'Enhancement was correctly blocked via enh.set'
+            : 'Enhancement was spawned when it should have been blocked'
+        );
+        
+        // Test 4: canSpawn allows spawning via enh.set when condition is met
+        const testDiv4 = document.createElement('div');
+        testDiv4.setAttribute('data-allowed', 'true');
+        
+        const registry4 = testDiv4.customElementRegistry.assignGingerlyRegistry;
+        registry4.push({
+          spawn: BlockedEnhancement,
+          symlinks: {},
+          enhKey: 'setAllowedEnh'
+        });
+        
+        const result4 = testDiv4.enh.set.setAllowedEnh;
+        const setAllowed = result4 instanceof BlockedEnhancement;
+        
+        addResult(
+          'Test 4: canSpawn allows spawning via enh.set when condition is met',
+          setAllowed,
+          setAllowed
+            ? 'Enhancement was correctly allowed via enh.set'
+            : 'Enhancement was blocked when it should have been allowed'
+        );
+        
+        // Test 5: canSpawn receives correct context
+        const testDiv5 = document.createElement('div');
+        
+        let receivedObj = null;
+        let receivedCtx = null;
+        
+        class ContextCheckEnhancement {
+          element;
+          ctx;
+          
+          constructor(oElement, ctx, initVals) {
+            this.element = oElement;
+            this.ctx = ctx;
+          }
+          
+          static canSpawn(obj, ctx) {
+            receivedObj = obj;
+            receivedCtx = ctx;
+            return true;
+          }
+        }
+        
+        const registryItem5 = {
+          spawn: ContextCheckEnhancement,
+          symlinks: {},
+          enhKey: 'ctxCheckEnh'
+        };
+        
+        testDiv5.enh.get(registryItem5);
+        
+        const correctObj = receivedObj === testDiv5;
+        const hasCtx = receivedCtx !== null;
+        const hasMountInfo = receivedCtx && receivedCtx.mountInfo === registryItem5;
+        
+        addResult(
+          'Test 5: canSpawn receives correct context',
+          correctObj && hasCtx && hasMountInfo,
+          correctObj && hasCtx && hasMountInfo
+            ? 'Context was correctly passed to canSpawn'
+            : `Failed: correctObj=${correctObj}, hasCtx=${hasCtx}, hasMountInfo=${hasMountInfo}`
+        );
+        
+        // Test 6: Works without canSpawn method (default behavior)
+        const testDiv6 = document.createElement('div');
+        
+        class NoCanSpawnEnhancement {
+          element;
+          ctx;
+          
+          constructor(oElement, ctx, initVals) {
+            this.element = oElement;
+            this.ctx = ctx;
+          }
+          // No canSpawn method
+        }
+        
+        const registryItem6 = {
+          spawn: NoCanSpawnEnhancement,
+          symlinks: {},
+          enhKey: 'noCanSpawnEnh'
+        };
+        
+        const result6 = testDiv6.enh.get(registryItem6);
+        const spawned = result6 instanceof NoCanSpawnEnhancement;
+        
+        addResult(
+          'Test 6: Works without canSpawn method (default behavior)',
+          spawned,
+          spawned
+            ? 'Enhancement spawned normally without canSpawn'
+            : 'Enhancement failed to spawn without canSpawn'
+        );
+        
+        // Test 7: canSpawn with element type checking
+        const testDiv7 = document.createElement('div');
+        const testSpan7 = document.createElement('span');
+        
+        class DivOnlyEnhancement {
+          element;
+          ctx;
+          
+          constructor(oElement, ctx, initVals) {
+            this.element = oElement;
+            this.ctx = ctx;
+          }
+          
+          static canSpawn(obj, ctx) {
+            // Only spawn for div elements
+            return obj.tagName && obj.tagName.toLowerCase() === 'div';
+          }
+        }
+        
+        const registryItem7 = {
+          spawn: DivOnlyEnhancement,
+          symlinks: {},
+          enhKey: 'divOnlyEnh'
+        };
+        
+        const divResult = testDiv7.enh.get(registryItem7);
+        const spanResult = testSpan7.enh.get(registryItem7);
+        
+        const divSpawned = divResult instanceof DivOnlyEnhancement;
+        const spanBlocked = spanResult === undefined;
+        
+        addResult(
+          'Test 7: canSpawn with element type checking',
+          divSpawned && spanBlocked,
+          divSpawned && spanBlocked
+            ? 'Enhancement correctly spawned for div but not span'
+            : `Failed: divSpawned=${divSpawned}, spanBlocked=${spanBlocked}`
+        );
+        
+        // Test 8: canSpawn doesn't prevent reusing existing instance
+        const testDiv8 = document.createElement('div');
+        testDiv8.setAttribute('data-allowed', 'true');
+        
+        let spawnCount = 0;
+        
+        class CountedEnhancement {
+          element;
+          ctx;
+          
+          constructor(oElement, ctx, initVals) {
+            spawnCount++;
+            this.element = oElement;
+            this.ctx = ctx;
+          }
+          
+          static canSpawn(obj, ctx) {
+            return obj.getAttribute && obj.getAttribute('data-allowed') === 'true';
+          }
+        }
+        
+        const registryItem8 = {
+          spawn: CountedEnhancement,
+          symlinks: {},
+          enhKey: 'countedEnh'
+        };
+        
+        // First call - should spawn
+        const first = testDiv8.enh.get(registryItem8);
+        const firstCount = spawnCount;
+        
+        // Second call - should reuse
+        const second = testDiv8.enh.get(registryItem8);
+        const secondCount = spawnCount;
+        
+        const spawnedOnce = firstCount === 1;
+        const reused = secondCount === 1;
+        const sameInstance = first === second;
+        
+        addResult(
+          'Test 8: canSpawn doesn\'t prevent reusing existing instance',
+          spawnedOnce && reused && sameInstance,
+          spawnedOnce && reused && sameInstance
+            ? 'Instance was spawned once and reused correctly'
+            : `Failed: spawnedOnce=${spawnedOnce}, reused=${reused}, sameInstance=${sameInstance}`
+        );
+      }
+    } catch (error) {
+      addResult(
+        'Error',
+        false,
+        `An error occurred: ${error.message}\n${error.stack}`
+      );
+    }
+  </script>
+</body>
+</html>

@@ -313,6 +313,14 @@ export function assignGingerly(target, source, options) {
                 let instance = instances.get(registryItem);
                 if (!instance) {
                     const SpawnClass = registryItem.spawn;
+                    // Check canSpawn if it exists
+                    if (typeof SpawnClass.canSpawn === 'function') {
+                        const ctx = { mountInfo: registryItem };
+                        if (!SpawnClass.canSpawn(target, ctx)) {
+                            // canSpawn returned false, skip spawning
+                            continue;
+                        }
+                    }
                     // If target is an Element and registryItem has enhKey, pass element to constructor
                     if (registryItem.enhKey && typeof Element !== 'undefined' && target instanceof Element) {
                         const ctx = { mountInfo: registryItem };
@@ -360,6 +368,14 @@ export function assignGingerly(target, source, options) {
                                 let instance = instances.get(registryItem);
                                 if (!instance) {
                                     const SpawnClass = registryItem.spawn;
+                                    // Check canSpawn if it exists
+                                    if (typeof SpawnClass.canSpawn === 'function') {
+                                        const ctx = { mountInfo: registryItem };
+                                        if (!SpawnClass.canSpawn(target, ctx)) {
+                                            // canSpawn returned false, skip spawning
+                                            return true;
+                                        }
+                                    }
                                     // If target is an Element and registryItem has enhKey, pass element to constructor
                                     if (registryItem.enhKey && typeof Element !== 'undefined' && target instanceof Element) {
                                         const ctx = { mountInfo: registryItem };

@@ -131,6 +131,15 @@ class ElementEnhancementContainer {
       // Need to spawn
       const SpawnClass = registryItem.spawn;
       
+      // Check canSpawn if it exists
+      if (typeof SpawnClass.canSpawn === 'function') {
+        const ctx = { mountInfo: registryItem };
+        if (!SpawnClass.canSpawn(element, ctx)) {
+          // canSpawn returned false, return undefined
+          return undefined;
+        }
+      }
+      
       // Check if there's an enhKey
       if (registryItem.enhKey) {
         const ctx = { mountInfo: registryItem };
@@ -280,6 +289,17 @@ class ElementEnhancementContainer {
               
               if (!instance) {
                 // Need to spawn
+                const SpawnClass = registryItem.spawn;
+                
+                // Check canSpawn if it exists
+                if (typeof SpawnClass.canSpawn === 'function') {
+                  const ctx = { mountInfo: registryItem };
+                  if (!SpawnClass.canSpawn(element, ctx)) {
+                    // canSpawn returned false, return undefined
+                    return undefined;
+                  }
+                }
+                
                 let initVals: any = undefined;
                 
                 // If property exists but isn't the right instance, pass it as initVals
