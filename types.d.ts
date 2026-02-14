@@ -1,20 +1,20 @@
 export type EnhKey = string | symbol;
 
-type NoUnderscore<T extends string> = T extends `_${string}` ? never : T;
+// type NoUnderscore<T extends string> = T extends `_${string}` ? never : T;
 
-type YesUnderscore = `_${string}`;
+// type YesUnderscore = `_${string}`;
 
-export type StringWithAutocompleteOptions<TOptions> = 
-    | (string & {})
-    | TOptions;
+// export type StringWithAutocompleteOptions<TOptions> = 
+//     | (string & {})
+//     | TOptions;
 
-export type StringNotStartWithUnderscoreAutocompleteOptions<TOptions> = 
-    | (NoUnderscore<string> & {})
-    | TOptions;
+// export type StringNotStartWithUnderscoreAutocompleteOptions<TOptions> = 
+//     | (NoUnderscore<string> & {})
+//     | TOptions;
 
-export type StringStartWithUnderscoreAutocompleteOptions<TOptions> = 
-    | (YesUnderscore & {})
-    | TOptions;
+// export type StringStartWithUnderscoreAutocompleteOptions<TOptions> = 
+//     | (YesUnderscore & {})
+//     | TOptions;
 
 //used by mount-observer, not by assign-gingerly
 type DisposeEvent = 

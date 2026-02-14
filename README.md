@@ -288,6 +288,8 @@ This guarantees that applying the reversal object restores the object to its exa
 interface IBaseRegistryItem<T = any> {
     spawn: {new(): T} | Promise<{new(): T}>
     symlinks: {[key: symbol]: keyof T}
+    enhKey?: string  // Optional: for element enhancement access
+    withAttrs?: AttrPatterns<T>  // Optional: automatic attribute parsing
 }
 
 export const isHappy = Symbol.for('TFWsx0YH5E6eSfhE7zfLxA');
@@ -645,15 +647,22 @@ All parameters are optional for backward compatibility with existing code.
 
 ### Registry Item with enhKey
 
-Registry items now support an optional `enhKey` property:
+Registry items now support optional `enhKey` and `withAttrs` properties:
 
 ```TypeScript
 interface IBaseRegistryItem<T> {
   spawn: { new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T };
   symlinks: { [key: string | symbol]: keyof T };
   enhKey?: string;  // String identifier for set proxy access
+  withAttrs?: AttrPatterns<T>;  // Automatic attribute parsing during spawn
+  lifecycleKeys?: {
+    dispose?: string;  // Method name to call on disposal
+    resolved?: string;  // Property name indicating async resolution
+  };
 }
 ```
+
+The `withAttrs` property enables automatic attribute parsing when the enhancement is spawned. See the [Parsing Attributes with parseWithAttrs](#parsing-attributes-with-parsewithattrs) section for details.
 
 ### Advanced Examples
 
@@ -1017,6 +1026,66 @@ console.log(instance1 === instance2); // true - same instance
 ## Parsing Attributes with `parseWithAttrs`
 
 The `parseWithAttrs` function provides a declarative way to read and parse HTML attributes into structured data objects. It's particularly useful for custom elements and web components that need to extract configuration from attributes.
+
+### Automatic Integration with Enhancement Spawning
+
+**Important**: When using the `enh.get()`, `enh.set`, or `assignGingerly()` methods with registry items, you typically **do not need to call `parseWithAttrs()` manually**. The attribute parsing happens automatically during enhancement spawning when you include a `withAttrs` property in your registry item.
+
+```TypeScript
+import 'assign-gingerly/object-extension.js';
+
+// HTML: <my-element data-count="42" data-theme="dark"></my-element>
+
+class MyEnhancement {
+  element;
+  ctx;
+  count = 0;
+  theme = 'light';
+  
+  constructor(oElement, ctx, initVals) {
+    this.element = oElement;
+    this.ctx = ctx;
+    // initVals automatically contains parsed attributes!
+    if (initVals) {
+      Object.assign(this, initVals);
+    }
+  }
+}
+
+const element = document.querySelector('my-element');
+const registry = element.customElementRegistry.assignGingerlyRegistry;
+
+// Define withAttrs in the registry item
+registry.push({
+  spawn: MyEnhancement,
+  symlinks: {},
+  enhKey: 'myEnh',
+  withAttrs: {
+    base: 'data',
+    count: '${base}-count',
+    _count: { instanceOf: 'Number' },
+    theme: '${base}-theme'
+  }
+});
+
+// Spawn the enhancement - attributes are automatically parsed!
+const instance = element.enh.get(registry.getItems()[0]);
+console.log(instance.count);  // 42 (parsed from attribute)
+console.log(instance.theme);  // 'dark' (parsed from attribute)
+```
+
+**How it works:**
+1. When an enhancement is spawned via `enh.get()`, `enh.set`, or `assignGingerly()`
+2. If the registry item has a `withAttrs` property defined
+3. `parseWithAttrs(element, registryItem.withAttrs)` is automatically called
+4. The parsed attributes are merged into `initVals` (along with any existing values from `element.enh[enhKey]`)
+5. The merged `initVals` is passed to the enhancement constructor
+
+**Precedence**: If both parsed attributes and existing `element.enh[enhKey]` values exist, the existing values take precedence over parsed attributes.
+
+### Manual Usage
+
+While automatic parsing is the recommended approach, you can also call `parseWithAttrs()` manually when needed:
 
 ### Basic Usage
 
