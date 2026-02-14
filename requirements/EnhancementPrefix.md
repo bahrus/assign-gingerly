@@ -9,3 +9,5 @@ So the aforementioned suite is advocating:
 1.  Allowing any attribute name that either contains a dash, or one or more non ascii characters like an emoji for built-in non SVG elements.
 2.  Requiring enh- prefix for elements that are instances of SVGElement, or custom elements (based on the presence of a dash in the name, which will also include Angular elements that don't use the custom element API).
 3.  For simplicity, event built-in elements should treat enh- prefix as the same attribute as the one without the enh-prefix
+
+I would like to support all this without overly complicating the configuration of withAttrs.  Ideally, the withAttrs wouldn't have to mention anything about enh-, the parseWithAttrs.js would factor in all these quirks quietly, but maybe that's not possible, maybe a little bit of acknowledgement is needed when configuring the withAttrs settings. 
