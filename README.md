@@ -1252,6 +1252,76 @@ console.log(instance.theme);  // 'dark' (parsed from attribute)
 
 While automatic parsing is the recommended approach, you can also call `parseWithAttrs()` manually when needed:
 
+### The `enh-` Prefix for Attribute Isolation
+
+The `parseWithAttrs` function supports an `enh-` prefix for attributes to provide better isolation and avoid conflicts, especially for custom elements and SVG elements.
+
+**Behavior by Element Type:**
+
+- **Built-in HTML elements** (div, span, etc.): The `enh-` prefix acts as an **alias**. The function tries `enh-` prefixed attributes first, then falls back to unprefixed attributes.
+  ```html
+  <!-- Both work for built-in elements -->
+  <div data-count="42"></div>
+  <div enh-data-count="42"></div>
+  
+  <!-- enh- prefix takes precedence -->
+  <div data-count="10" enh-data-count="42"></div>  <!-- Uses 42 -->
+  ```
+
+- **Custom elements and SVG elements**: The `enh-` prefix is **strictly enforced** by default. Only `enh-` prefixed attributes are read.
+  ```html
+  <!-- Only enh- prefixed attributes work -->
+  <my-element data-count="42"></my-element>           <!-- Ignored -->
+  <my-element enh-data-count="42"></my-element>       <!-- Works -->
+  
+  <svg enh-data-theme="dark"></svg>                   <!-- Works -->
+  <svg data-theme="dark"></svg>                       <!-- Ignored -->
+  ```
+
+**Overriding with `allowUnprefixed`:**
+
+For custom elements and SVG, you can opt-in to reading unprefixed attributes by setting `allowUnprefixed: true` in the registry item:
+
+```TypeScript
+registry.push({
+  spawn: MyEnhancement,
+  symlinks: {},
+  enhKey: 'myEnh',
+  allowUnprefixed: true,  // Allow unprefixed attributes
+  withAttrs: {
+    base: 'data-',
+    count: '${base}count',
+    _count: { instanceOf: 'Number' }
+  }
+});
+```
+
+When calling `parseWithAttrs()` manually, pass `true` as the third parameter:
+
+```TypeScript
+const result = parseWithAttrs(element, attrPatterns, true);  // allowUnprefixed
+```
+
+**Base Attribute Validation:**
+
+The `base` attribute must contain either a dash (`-`) or a non-ASCII character to prevent conflicts with native attributes:
+
+```TypeScript
+// Valid base attributes
+parseWithAttrs(element, { base: 'data-config' });     // Has dash
+parseWithAttrs(element, { base: '🎨-theme' });        // Has non-ASCII
+
+// Invalid - throws error
+parseWithAttrs(element, { base: 'config' });          // No dash or non-ASCII
+```
+
+**Why use `enh-` prefix?**
+
+1. **Avoid conflicts**: Custom elements may use unprefixed attributes for their own purposes
+2. **Clear intent**: Makes it obvious which attributes are for enhancements
+3. **Future-proof**: Protects against future attribute additions to custom elements
+4. **Consistency**: Provides a standard convention across all enhanced elements
+
 ### Basic Usage
 
 ```TypeScript

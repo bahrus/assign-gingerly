@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>parseWithAttrs enh- Prefix Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .test-section h3 {
+      margin-top: 0;
+    }
+    .pass {
+      color: green;
+      font-weight: bold;
+    }
+    .fail {
+      color: red;
+      font-weight: bold;
+    }
+    .result {
+      margin: 10px 0;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <h1>parseWithAttrs enh- Prefix Test</h1>
+  <p>This test verifies the enh- prefix support for attribute parsing.</p>
+  
+  <div id="results"></div>
+
+  <script type="module">
+    import { parseWithAttrs } from '../parseWithAttrs.js';
+
+    const results = document.getElementById('results');
+
+    function addResult(title, passed, message) {
+      const section = document.createElement('div');
+      section.className = 'test-section';
+      section.innerHTML = `
+        <h3>${title}</h3>
+        <div class="result">
+          <span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span>
+          <p>${message}</p>
+        </div>
+      `;
+      results.appendChild(section);
+    }
+
+    try {
+      // Test 1: should throw error if base does not contain dash or non-ASCII
+      try {
+        const element = document.createElement('div');
+        element.setAttribute('config', 'value');
+        
+        parseWithAttrs(element, {
+          base: 'config'  // No dash or non-ASCII
+        });
+        
+        addResult('Test 1: Throw error for invalid base', false, 'Should have thrown error');
+      } catch (error) {
+        const hasCorrectMessage = error.message.includes('dash') && error.message.includes('non-ASCII');
+        addResult(
+          'Test 1: Throw error for invalid base',
+          hasCorrectMessage,
+          hasCorrectMessage ? 'Correctly threw error for invalid base' : `Wrong error: ${error.message}`
+        );
+      }
+
+      // Test 2: should accept base with dash
+      const element2 = document.createElement('div');
+      element2.setAttribute('data-config', '{"test": true}');
+      
+      const result2 = parseWithAttrs(element2, {
+        base: 'data-config'  // Has dash
+      });
+      
+      const test2Pass = result2.test === true;
+      addResult(
+        'Test 2: Accept base with dash',
+        test2Pass,
+        test2Pass ? 'Base with dash accepted' : `Failed: ${JSON.stringify(result2)}`
+      );
+
+      // Test 3: should accept base with non-ASCII character
+      const element3 = document.createElement('div');
+      element3.setAttribute('🎨-theme', '{"color": "blue"}');
+      
+      const result3 = parseWithAttrs(element3, {
+        base: '🎨-theme'  // Has non-ASCII
+      });
+      
+      const test3Pass = result3.color === 'blue';
+      addResult(
+        'Test 3: Accept base with non-ASCII',
+        test3Pass,
+        test3Pass ? 'Base with non-ASCII accepted' : `Failed: ${JSON.stringify(result3)}`
+      );
+
+      // Test 4: built-in element should read unprefixed attribute
+      const element4 = document.createElement('div');
+      element4.setAttribute('data-count', '42');
+      
+      const result4 = parseWithAttrs(element4, {
+        base: 'data-',
+        count: '${base}count',
+        _count: { instanceOf: 'Number' }
+      });
+      
+      const test4Pass = result4.count === 42;
+      addResult(
+        'Test 4: Built-in element reads unprefixed',
+        test4Pass,
+        test4Pass ? 'Unprefixed attribute read correctly' : `Failed: count=${result4.count}`
+      );
+
+      // Test 5: built-in element should prefer enh- prefixed attribute
+      const element5 = document.createElement('div');
+      element5.setAttribute('data-count', '42');
+      element5.setAttribute('enh-data-count', '100');
+      
+      const result5 = parseWithAttrs(element5, {
+        base: 'data-',
+        count: '${base}count',
+        _count: { instanceOf: 'Number' }
+      });
+      
+      const test5Pass = result5.count === 100;
+      addResult(
+        'Test 5: Built-in element prefers enh- prefix',
+        test5Pass,
+        test5Pass ? 'enh- prefixed value used' : `Failed: count=${result5.count}, expected 100`
+      );
+
+      // Test 6: custom element should ignore unprefixed attribute by default
+      const element6 = document.createElement('my-element');
+      element6.setAttribute('data-count', '42');
+      
+      const result6 = parseWithAttrs(element6, {
+        base: 'data-',
+        count: '${base}count',
+        _count: { instanceOf: 'Number' }
+      });
+      
+      const test6Pass = result6.count === undefined;
+      addResult(
+        'Test 6: Custom element ignores unprefixed',
+        test6Pass,
+        test6Pass ? 'Unprefixed attribute correctly ignored' : `Failed: count=${result6.count}, expected undefined`
+      );
+
+      // Test 7: custom element should read enh- prefixed attribute
+      const element7 = document.createElement('my-element');
+      element7.setAttribute('enh-data-count', '42');
+      
+      const result7 = parseWithAttrs(element7, {
+        base: 'data-',
+        count: '${base}count',
+        _count: { instanceOf: 'Number' }
+      });
+      
+      const test7Pass = result7.count === 42;
+      addResult(
+        'Test 7: Custom element reads enh- prefix',
+        test7Pass,
+        test7Pass ? 'enh- prefixed attribute read correctly' : `Failed: count=${result7.count}`
+      );
+
+      // Test 8: custom element should read unprefixed with allowUnprefixed flag
+      const element8 = document.createElement('my-element');
+      element8.setAttribute('data-count', '42');
+      
+      const result8 = parseWithAttrs(
+        element8,
+        {
+          base: 'data-',
+          count: '${base}count',
+          _count: { instanceOf: 'Number' }
+        },
+        true  // allowUnprefixed
+      );
+      
+      const test8Pass = result8.count === 42;
+      addResult(
+        'Test 8: Custom element with allowUnprefixed',
+        test8Pass,
+        test8Pass ? 'Unprefixed read with flag' : `Failed: count=${result8.count}`
+      );
+
+      // Test 9: custom element should prefer enh- even with allowUnprefixed
+      const element9 = document.createElement('my-element');
+      element9.setAttribute('data-count', '42');
+      element9.setAttribute('enh-data-count', '100');
+      
+      const result9 = parseWithAttrs(
+        element9,
+        {
+          base: 'data-',
+          count: '${base}count',
+          _count: { instanceOf: 'Number' }
+        },
+        true  // allowUnprefixed
+      );
+      
+      const test9Pass = result9.count === 100;
+      addResult(
+        'Test 9: Custom element prefers enh- with allowUnprefixed',
+        test9Pass,
+        test9Pass ? 'enh- preferred over unprefixed' : `Failed: count=${result9.count}, expected 100`
+      );
+
+      // Test 10: SVG element should ignore unprefixed attribute by default
+      const element10 = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      element10.setAttribute('data-count', '42');
+      
+      const result10 = parseWithAttrs(element10, {
+        base: 'data-',
+        count: '${base}count',
+        _count: { instanceOf: 'Number' }
+      });
+      
+      const test10Pass = result10.count === undefined;
+      addResult(
+        'Test 10: SVG element ignores unprefixed',
+        test10Pass,
+        test10Pass ? 'SVG unprefixed correctly ignored' : `Failed: count=${result10.count}`
+      );
+
+      // Test 11: SVG element should read enh- prefixed attribute
+      const element11 = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      element11.setAttribute('enh-data-count', '42');
+      
+      const result11 = parseWithAttrs(element11, {
+        base: 'data-',
+        count: '${base}count',
+        _count: { instanceOf: 'Number' }
+      });
+      
+      const test11Pass = result11.count === 42;
+      addResult(
+        'Test 11: SVG element reads enh- prefix',
+        test11Pass,
+        test11Pass ? 'SVG enh- prefixed read correctly' : `Failed: count=${result11.count}`
+      );
+
+      // Test 12: SVG element should read unprefixed with allowUnprefixed flag
+      const element12 = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      element12.setAttribute('data-count', '42');
+      
+      const result12 = parseWithAttrs(
+        element12,
+        {
+          base: 'data-',
+          count: '${base}count',
+          _count: { instanceOf: 'Number' }
+        },
+        true  // allowUnprefixed
+      );
+      
+      const test12Pass = result12.count === 42;
+      addResult(
+        'Test 12: SVG element with allowUnprefixed',
+        test12Pass,
+        test12Pass ? 'SVG unprefixed read with flag' : `Failed: count=${result12.count}`
+      );
+
+      // Test 13: multiple attributes with mixed prefixes on built-in element
+      const element13 = document.createElement('div');
+      element13.setAttribute('data-name', 'Alice');
+      element13.setAttribute('enh-data-age', '30');
+      element13.setAttribute('data-active', '');
+      
+      const result13 = parseWithAttrs(element13, {
+        base: 'data-',
+        name: '${base}name',
+        age: '${base}age',
+        _age: { instanceOf: 'Number' },
+        active: '${base}active',
+        _active: { instanceOf: 'Boolean' }
+      });
+      
+      const test13Pass = result13.name === 'Alice' && result13.age === 30 && result13.active === true;
+      addResult(
+        'Test 13: Multiple mixed attributes on built-in',
+        test13Pass,
+        test13Pass ? 'All attributes parsed correctly' : `Failed: ${JSON.stringify(result13)}`
+      );
+
+      // Test 14: multiple attributes with enh- prefix on custom element
+      const element14 = document.createElement('my-element');
+      element14.setAttribute('enh-data-name', 'Bob');
+      element14.setAttribute('enh-data-age', '25');
+      element14.setAttribute('enh-data-active', '');
+      
+      const result14 = parseWithAttrs(element14, {
+        base: 'data-',
+        name: '${base}name',
+        age: '${base}age',
+        _age: { instanceOf: 'Number' },
+        active: '${base}active',
+        _active: { instanceOf: 'Boolean' }
+      });
+      
+      const test14Pass = result14.name === 'Bob' && result14.age === 25 && result14.active === true;
+      addResult(
+        'Test 14: Multiple enh- attributes on custom element',
+        test14Pass,
+        test14Pass ? 'All enh- attributes parsed correctly' : `Failed: ${JSON.stringify(result14)}`
+      );
+
+      // Test 15: base attribute with enh- prefix on custom element
+      const element15 = document.createElement('my-element');
+      element15.setAttribute('enh-config-data', '{"theme": "dark", "lang": "en"}');
+      
+      const result15 = parseWithAttrs(element15, {
+        base: 'config-data',
+        _base: {
+          instanceOf: 'Object',
+          mapsTo: 'settings'
+        }
+      });
+      
+      const test15Pass = result15.settings && result15.settings.theme === 'dark' && result15.settings.lang === 'en';
+      addResult(
+        'Test 15: Base attribute with enh- on custom element',
+        test15Pass,
+        test15Pass ? 'Base attribute parsed correctly' : `Failed: ${JSON.stringify(result15)}`
+      );
+
+      // Test 16: complex nested attributes with enh- prefix
+      const element16 = document.createElement('my-widget');
+      element16.setAttribute('enh-widget-config', '{"enabled": true}');
+      element16.setAttribute('enh-widget-config-theme', 'dark');
+      element16.setAttribute('enh-widget-config-size', '42');
+      
+      const result16 = parseWithAttrs(element16, {
+        base: 'widget-config',
+        _base: {
+          instanceOf: 'Object',
+          mapsTo: '.'
+        },
+        theme: '${base}-theme',
+        size: '${base}-size',
+        _size: { instanceOf: 'Number' }
+      });
+      
+      const test16Pass = result16.enabled === true && result16.theme === 'dark' && result16.size === 42;
+      addResult(
+        'Test 16: Complex nested attributes',
+        test16Pass,
+        test16Pass ? 'Nested attributes parsed correctly' : `Failed: ${JSON.stringify(result16)}`
+      );
+
+      // Test 17: error message should be descriptive
+      try {
+        const element17 = document.createElement('div');
+        
+        parseWithAttrs(element17, {
+          base: 'myconfig'  // Invalid
+        });
+        
+        addResult('Test 17: Descriptive error message', false, 'Should have thrown error');
+      } catch (error) {
+        const hasAllParts = error.message.includes('myconfig') &&
+                           error.message.includes('dash') &&
+                           error.message.includes('non-ASCII') &&
+                           error.message.includes('data-config');
+        addResult(
+          'Test 17: Descriptive error message',
+          hasAllParts,
+          hasAllParts ? 'Error message is descriptive' : `Missing parts: ${error.message}`
+        );
+      }
+
+      // Test 18: Angular-style element (has dash but not custom element)
+      const element18 = document.createElement('app-component');
+      element18.setAttribute('data-count', '42');
+      element18.setAttribute('enh-data-count', '100');
+      
+      const result18 = parseWithAttrs(element18, {
+        base: 'data-',
+        count: '${base}count',
+        _count: { instanceOf: 'Number' }
+      });
+      
+      const test18Pass = result18.count === 100;
+      addResult(
+        'Test 18: Angular-style element (dash in name)',
+        test18Pass,
+        test18Pass ? 'Treated as custom element, enh- preferred' : `Failed: count=${result18.count}, expected 100`
+      );
+
+    } catch (error) {
+      addResult(
+        'Error',
+        false,
+        `An error occurred: ${error.message}\n${error.stack}`
+      );
+    }
+  </script>
+</body>
+</html>

@@ -149,7 +149,11 @@ class ElementEnhancementContainer {
         let attrInitVals: any = undefined;
         if (registryItem.withAttrs && element) {
           try {
-            attrInitVals = parseWithAttrs(element, registryItem.withAttrs);
+            attrInitVals = parseWithAttrs(
+              element, 
+              registryItem.withAttrs,
+              registryItem.allowUnprefixed || false
+            );
           } catch (e) {
             console.error('Error parsing attributes:', e);
             throw e;

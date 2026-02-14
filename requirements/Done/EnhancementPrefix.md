@@ -175,3 +175,94 @@ withAttrs: {
 - Test performance impact
 
 Would you like me to implement Option 1? 
+
+
+---
+
+## FINAL SPECIFICATION (APPROVED)
+
+**Implementation with User Amendments**:
+
+1. **Validation**: Throw error if `base` attribute name doesn't contain a dash or non-ASCII character
+2. **Custom Elements/SVG**: ONLY read attributes with `enh-` prefix (strict enforcement)
+3. **Built-in Elements**: Try `enh-` prefix first, fallback to non-prefixed (enh- as alias)
+4. **Override**: Add optional `allowUnprefixed` flag in registry item to override strict enforcement for custom elements/SVG
+
+**Behavior**:
+```typescript
+function getAttributeValue(
+  element: Element, 
+  attrName: string, 
+  allowUnprefixed: boolean = false
+): string | null {
+  const isCustomElement = element.tagName.includes('-');
+  const isSVGElement = typeof SVGElement !== 'undefined' && element instanceof SVGElement;
+  
+  // For custom elements and SVG - strict enh- requirement
+  if (isCustomElement || isSVGElement) {
+    const enhValue = element.getAttribute(`enh-${attrName}`);
+    if (enhValue !== null) return enhValue;
+    
+    // Only fallback if explicitly allowed
+    if (allowUnprefixed) {
+      return element.getAttribute(attrName);
+    }
+    return null;
+  }
+  
+  // For built-in elements - enh- is alias
+  const enhValue = element.getAttribute(`enh-${attrName}`);
+  if (enhValue !== null) return enhValue;
+  return element.getAttribute(attrName);
+}
+```
+
+**Examples**:
+```html
+<!-- Built-in element -->
+<div data-count="5">              ✓ Works (fallback)
+<div enh-data-count="5">          ✓ Works (preferred)
+
+<!-- Custom element (strict) -->
+<my-element data-count="5">       ✗ Ignored (no enh- prefix)
+<my-element enh-data-count="5">   ✓ Works (required)
+
+<!-- Custom element with allowUnprefixed -->
+<my-element data-count="5">       ✓ Works (override enabled)
+<my-element enh-data-count="5">   ✓ Works (still preferred)
+
+<!-- SVG element (strict) -->
+<svg data-count="5">              ✗ Ignored (no enh- prefix)
+<svg enh-data-count="5">          ✓ Works (required)
+
+<!-- Base validation -->
+withAttrs: { base: 'config' }     ✗ Error: base must contain dash or non-ASCII
+withAttrs: { base: 'data-config' } ✓ Valid
+withAttrs: { base: '🎨-theme' }    ✓ Valid (non-ASCII)
+```
+
+**Registry Configuration**:
+```typescript
+// Standard usage (strict for custom elements/SVG)
+{
+  spawn: MyEnhancement,
+  symlinks: {},
+  enhKey: 'myEnh',
+  withAttrs: {
+    base: 'data-config',  // Must have dash
+    count: '${base}-count'
+  }
+}
+
+// With override (rare case)
+{
+  spawn: MyEnhancement,
+  symlinks: {},
+  enhKey: 'myEnh',
+  withAttrs: {
+    base: 'data-config',
+    count: '${base}-count'
+  },
+  allowUnprefixed: true  // Allow non-prefixed on custom elements/SVG
+}
+```

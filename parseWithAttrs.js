@@ -1,4 +1,44 @@
 /**
+ * Checks if a string contains a dash or non-ASCII character
+ */
+function hasDashOrNonASCII(str) {
+    if (str.includes('-'))
+        return true;
+    // Check for non-ASCII characters
+    for (let i = 0; i < str.length; i++) {
+        if (str.charCodeAt(i) > 127)
+            return true;
+    }
+    return false;
+}
+/**
+ * Gets attribute value with smart enh- prefix handling
+ * @param element - The element to read from
+ * @param attrName - The attribute name (without enh- prefix)
+ * @param allowUnprefixed - Whether to allow unprefixed attributes for custom elements/SVG
+ * @returns The attribute value or null
+ */
+function getAttributeValue(element, attrName, allowUnprefixed = false) {
+    const isCustomElement = element.tagName.includes('-');
+    const isSVGElement = typeof SVGElement !== 'undefined' && element instanceof SVGElement;
+    // For custom elements and SVG - strict enh- requirement
+    if (isCustomElement || isSVGElement) {
+        const enhValue = element.getAttribute(`enh-${attrName}`);
+        if (enhValue !== null)
+            return enhValue;
+        // Only fallback if explicitly allowed
+        if (allowUnprefixed) {
+            return element.getAttribute(attrName);
+        }
+        return null;
+    }
+    // For built-in elements - enh- is alias (try enh- first, fallback to unprefixed)
+    const enhValue = element.getAttribute(`enh-${attrName}`);
+    if (enhValue !== null)
+        return enhValue;
+    return element.getAttribute(attrName);
+}
+/**
  * Resolves template variables in a string recursively
  * @param template - Template string with ${var} placeholders
  * @param patterns - The patterns object containing variable values
@@ -84,9 +124,18 @@ function getDefaultParser(instanceOf) {
  * Parses attributes from an element based on AttrPatterns configuration
  * @param element - The DOM element to read attributes from
  * @param attrPatterns - The attribute patterns configuration
+ * @param allowUnprefixed - Whether to allow unprefixed attributes for custom elements/SVG
  * @returns Object with parsed attribute values ready for initVals
  */
-export function parseWithAttrs(element, attrPatterns) {
+export function parseWithAttrs(element, attrPatterns, allowUnprefixed = false) {
+    // Validate base attribute if present
+    if ('base' in attrPatterns) {
+        const baseValue = attrPatterns.base;
+        if (!hasDashOrNonASCII(baseValue)) {
+            throw new Error(`Invalid base attribute "${baseValue}": must contain a dash (-) or non-ASCII character. ` +
+                `Examples: "data-config", "my-attr", "🎨-theme"`);
+        }
+    }
     const result = {};
     const resolvedCache = new Map();
     // First pass: resolve all template strings
@@ -134,7 +183,7 @@ export function parseWithAttrs(element, attrPatterns) {
     }
     // Second pass: read attributes and parse values
     for (const [key, { attrName, config }] of resolvedAttrs) {
-        const attrValue = element.getAttribute(attrName);
+        const attrValue = getAttributeValue(element, attrName, allowUnprefixed);
         // Skip if attribute doesn't exist
         if (attrValue === null && config.instanceOf !== 'Boolean') {
             continue;
