@@ -81,9 +81,9 @@ export interface AttrConfig<T = any> {
     | '.' 
     | keyof T 
     | pathString 
-    | `!delete ${pathString}`
-    | `!toggle ${pathString}`
-    | `!inc ${pathString}`
+    | `${pathString} +=`
+    | `${pathString} =!`
+    | `${pathString} -=`
   
   /**
    * Optional parser function to transform attribute string value
