@@ -1533,7 +1533,7 @@ const result2 = parseWithAttrs(element, {
 Combine `parseWithAttrs` with `assignGingerly` for nested property assignment:
 
 ```TypeScript
-// HTML: <div data-height="100px" data-is-happy></div>
+// HTML: <div data-height="100px" data--is-happy></div>
 
 const element = document.createElement('div');
 const attrs = parseWithAttrs(element, {
