@@ -31,7 +31,7 @@ type DisposeEvent =
 export interface IBaseRegistryItem<T = any> {
   
   spawn: { 
-    new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
+    new (obj?: any, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
     canSpawn?: (obj: any, ctx?: SpawnContext<T>) => boolean;
   };
   
@@ -40,7 +40,7 @@ export interface IBaseRegistryItem<T = any> {
   
   //keys of type symbol are used for dependency injection
   //and are used by assign-gingerly
-  map?: { [key: symbol]: keyof T };
+  symlinks?: { [key: symbol]: keyof T };
   //only applicable when spawning from a DOM Element reference
   enhKey?: EnhKey;
   lifecycleKeys?: {
