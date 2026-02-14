@@ -15,10 +15,10 @@ function hasDashOrNonASCII(str) {
  * Gets attribute value with smart enh- prefix handling
  * @param element - The element to read from
  * @param attrName - The attribute name (without enh- prefix)
- * @param allowUnprefixed - Whether to allow unprefixed attributes for custom elements/SVG
+ * @param allowUnprefixed - Pattern (string or RegExp) that element tag name must match to allow unprefixed attributes
  * @returns The attribute value or null
  */
-function getAttributeValue(element, attrName, allowUnprefixed = false) {
+function getAttributeValue(element, attrName, allowUnprefixed) {
     const isCustomElement = element.tagName.includes('-');
     const isSVGElement = typeof SVGElement !== 'undefined' && element instanceof SVGElement;
     // For custom elements and SVG - strict enh- requirement
@@ -26,9 +26,13 @@ function getAttributeValue(element, attrName, allowUnprefixed = false) {
         const enhValue = element.getAttribute(`enh-${attrName}`);
         if (enhValue !== null)
             return enhValue;
-        // Only fallback if explicitly allowed
+        // Only fallback if tag name matches the allowUnprefixed pattern
         if (allowUnprefixed) {
-            return element.getAttribute(attrName);
+            const pattern = typeof allowUnprefixed === 'string' ? new RegExp(allowUnprefixed) : allowUnprefixed;
+            const tagName = element.tagName.toLowerCase();
+            if (pattern.test(tagName)) {
+                return element.getAttribute(attrName);
+            }
         }
         return null;
     }
@@ -124,10 +128,10 @@ function getDefaultParser(instanceOf) {
  * Parses attributes from an element based on AttrPatterns configuration
  * @param element - The DOM element to read attributes from
  * @param attrPatterns - The attribute patterns configuration
- * @param allowUnprefixed - Whether to allow unprefixed attributes for custom elements/SVG
+ * @param allowUnprefixed - Pattern (string or RegExp) that element tag name must match to allow unprefixed attributes
  * @returns Object with parsed attribute values ready for initVals
  */
-export function parseWithAttrs(element, attrPatterns, allowUnprefixed = false) {
+export function parseWithAttrs(element, attrPatterns, allowUnprefixed) {
     // Validate base attribute if present
     if ('base' in attrPatterns) {
         const baseValue = attrPatterns.base;

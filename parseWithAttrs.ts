@@ -16,13 +16,13 @@ function hasDashOrNonASCII(str: string): boolean {
  * Gets attribute value with smart enh- prefix handling
  * @param element - The element to read from
  * @param attrName - The attribute name (without enh- prefix)
- * @param allowUnprefixed - Whether to allow unprefixed attributes for custom elements/SVG
+ * @param allowUnprefixed - Pattern (string or RegExp) that element tag name must match to allow unprefixed attributes
  * @returns The attribute value or null
  */
 function getAttributeValue(
   element: Element,
   attrName: string,
-  allowUnprefixed: boolean = false
+  allowUnprefixed?: string | RegExp
 ): string | null {
   const isCustomElement = element.tagName.includes('-');
   const isSVGElement = typeof SVGElement !== 'undefined' && element instanceof SVGElement;
@@ -32,9 +32,13 @@ function getAttributeValue(
     const enhValue = element.getAttribute(`enh-${attrName}`);
     if (enhValue !== null) return enhValue;
     
-    // Only fallback if explicitly allowed
+    // Only fallback if tag name matches the allowUnprefixed pattern
     if (allowUnprefixed) {
-      return element.getAttribute(attrName);
+      const pattern = typeof allowUnprefixed === 'string' ? new RegExp(allowUnprefixed) : allowUnprefixed;
+      const tagName = element.tagName.toLowerCase();
+      if (pattern.test(tagName)) {
+        return element.getAttribute(attrName);
+      }
     }
     return null;
   }
@@ -140,13 +144,13 @@ function getDefaultParser(instanceOf?: string | Function): (v: string | null) =>
  * Parses attributes from an element based on AttrPatterns configuration
  * @param element - The DOM element to read attributes from
  * @param attrPatterns - The attribute patterns configuration
- * @param allowUnprefixed - Whether to allow unprefixed attributes for custom elements/SVG
+ * @param allowUnprefixed - Pattern (string or RegExp) that element tag name must match to allow unprefixed attributes
  * @returns Object with parsed attribute values ready for initVals
  */
 export function parseWithAttrs<T = any>(
     element: Element,
     attrPatterns: AttrPatterns<T>,
-    allowUnprefixed: boolean = false
+    allowUnprefixed?: string | RegExp
 ): Partial<T> {
     // Validate base attribute if present
     if ('base' in attrPatterns) {

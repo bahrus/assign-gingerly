@@ -179,28 +179,70 @@
         test7Pass ? 'enh- prefixed attribute read correctly' : `Failed: count=${result7.count}`
       );
 
-      // Test 8: custom element should read unprefixed with allowUnprefixed flag
-      const element8 = document.createElement('my-element');
-      element8.setAttribute('data-count', '42');
+      // Test 8: custom element with allowUnprefixed pattern (string) - matching
+      const element8a = document.createElement('my-element');
+      element8a.setAttribute('data-count', '42');
       
-      const result8 = parseWithAttrs(
-        element8,
+      const result8a = parseWithAttrs(
+        element8a,
         {
           base: 'data-',
           count: '${base}count',
           _count: { instanceOf: 'Number' }
         },
-        true  // allowUnprefixed
+        '^my-'  // Pattern matches "my-element"
       );
       
-      const test8Pass = result8.count === 42;
+      const test8aPass = result8a.count === 42;
       addResult(
-        'Test 8: Custom element with allowUnprefixed',
-        test8Pass,
-        test8Pass ? 'Unprefixed read with flag' : `Failed: count=${result8.count}`
+        'Test 8a: Custom element with pattern match (string)',
+        test8aPass,
+        test8aPass ? 'Unprefixed read with matching pattern' : `Failed: count=${result8a.count}`
       );
 
-      // Test 9: custom element should prefer enh- even with allowUnprefixed
+      // Test 8b: custom element with allowUnprefixed pattern - not matching
+      const element8b = document.createElement('other-element');
+      element8b.setAttribute('data-count', '42');
+      
+      const result8b = parseWithAttrs(
+        element8b,
+        {
+          base: 'data-',
+          count: '${base}count',
+          _count: { instanceOf: 'Number' }
+        },
+        '^my-'  // Pattern doesn't match "other-element"
+      );
+      
+      const test8bPass = result8b.count === undefined;
+      addResult(
+        'Test 8b: Custom element with pattern mismatch',
+        test8bPass,
+        test8bPass ? 'Unprefixed ignored with non-matching pattern' : `Failed: count=${result8b.count}, expected undefined`
+      );
+
+      // Test 8c: custom element with allowUnprefixed pattern (RegExp)
+      const element8c = document.createElement('app-widget');
+      element8c.setAttribute('data-count', '42');
+      
+      const result8c = parseWithAttrs(
+        element8c,
+        {
+          base: 'data-',
+          count: '${base}count',
+          _count: { instanceOf: 'Number' }
+        },
+        /^(my-|app-)/  // RegExp matches "app-widget"
+      );
+      
+      const test8cPass = result8c.count === 42;
+      addResult(
+        'Test 8c: Custom element with pattern match (RegExp)',
+        test8cPass,
+        test8cPass ? 'Unprefixed read with matching RegExp' : `Failed: count=${result8c.count}`
+      );
+
+      // Test 9: custom element should prefer enh- even with allowUnprefixed pattern
       const element9 = document.createElement('my-element');
       element9.setAttribute('data-count', '42');
       element9.setAttribute('enh-data-count', '100');
@@ -212,12 +254,12 @@
           count: '${base}count',
           _count: { instanceOf: 'Number' }
         },
-        true  // allowUnprefixed
+        '^my-'  // Pattern matches
       );
       
       const test9Pass = result9.count === 100;
       addResult(
-        'Test 9: Custom element prefers enh- with allowUnprefixed',
+        'Test 9: Custom element prefers enh- with pattern',
         test9Pass,
         test9Pass ? 'enh- preferred over unprefixed' : `Failed: count=${result9.count}, expected 100`
       );
@@ -256,7 +298,7 @@
         test11Pass ? 'SVG enh- prefixed read correctly' : `Failed: count=${result11.count}`
       );
 
-      // Test 12: SVG element should read unprefixed with allowUnprefixed flag
+      // Test 12: SVG element with allowUnprefixed pattern
       const element12 = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       element12.setAttribute('data-count', '42');
       
@@ -267,14 +309,14 @@
           count: '${base}count',
           _count: { instanceOf: 'Number' }
         },
-        true  // allowUnprefixed
+        'svg'  // Pattern matches "svg"
       );
       
       const test12Pass = result12.count === 42;
       addResult(
-        'Test 12: SVG element with allowUnprefixed',
+        'Test 12: SVG element with pattern match',
         test12Pass,
-        test12Pass ? 'SVG unprefixed read with flag' : `Failed: count=${result12.count}`
+        test12Pass ? 'SVG unprefixed read with matching pattern' : `Failed: count=${result12.count}`
       );
 
       // Test 13: multiple attributes with mixed prefixes on built-in element

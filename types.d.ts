@@ -38,8 +38,8 @@ export interface IBaseRegistryItem<T = any> {
   //Applicable to passing in the initVals during the spawn lifecycle event
   withAttrs?: AttrPatterns<T>;
   
-  //Allow unprefixed attributes for custom elements and SVG (overrides strict enh- requirement)
-  allowUnprefixed?: boolean;
+  //Allow unprefixed attributes for custom elements and SVG when element tag name matches pattern
+  allowUnprefixed?: string | RegExp;
   
   //keys of type symbol are used for dependency injection
   //and are used by assign-gingerly

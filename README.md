@@ -1280,14 +1280,28 @@ The `parseWithAttrs` function supports an `enh-` prefix for attributes to provid
 
 **Overriding with `allowUnprefixed`:**
 
-For custom elements and SVG, you can opt-in to reading unprefixed attributes by setting `allowUnprefixed: true` in the registry item:
+For custom elements and SVG, you can opt-in to reading unprefixed attributes by specifying a pattern (string or RegExp) that the element's tag name must match:
 
 ```TypeScript
+// Allow unprefixed for elements matching pattern
 registry.push({
   spawn: MyEnhancement,
   symlinks: {},
   enhKey: 'myEnh',
-  allowUnprefixed: true,  // Allow unprefixed attributes
+  allowUnprefixed: '^my-',  // Only for elements starting with "my-"
+  withAttrs: {
+    base: 'data-',
+    count: '${base}count',
+    _count: { instanceOf: 'Number' }
+  }
+});
+
+// Or use RegExp for more complex patterns
+registry.push({
+  spawn: MyEnhancement,
+  symlinks: {},
+  enhKey: 'myEnh',
+  allowUnprefixed: /^(my-|app-)/,  // For "my-*" or "app-*" elements
   withAttrs: {
     base: 'data-',
     count: '${base}count',
@@ -1296,10 +1310,43 @@ registry.push({
 });
 ```
 
-When calling `parseWithAttrs()` manually, pass `true` as the third parameter:
+When calling `parseWithAttrs()` manually, pass the pattern as the third parameter:
 
 ```TypeScript
-const result = parseWithAttrs(element, attrPatterns, true);  // allowUnprefixed
+// Allow unprefixed only for elements matching pattern
+const result = parseWithAttrs(element, attrPatterns, '^my-');
+
+// Or with RegExp
+const result = parseWithAttrs(element, attrPatterns, /^(my-|app-)/);
+```
+
+**Pattern Matching:**
+- The pattern is tested against the element's **lowercase tag name**
+- String patterns are automatically converted to RegExp
+- If the tag name matches, unprefixed attributes are allowed (but `enh-` still takes precedence)
+- If the tag name doesn't match, only `enh-` prefixed attributes are read
+
+**Example:**
+```html
+<my-widget data-count="42"></my-widget>
+<other-widget data-count="42"></other-widget>
+```
+
+```TypeScript
+// Pattern: '^my-' (only matches "my-widget")
+const result1 = parseWithAttrs(
+  document.querySelector('my-widget'),
+  { base: 'data-', count: '${base}count', _count: { instanceOf: 'Number' } },
+  '^my-'
+);
+// result1.count = 42 (unprefixed allowed because tag matches)
+
+const result2 = parseWithAttrs(
+  document.querySelector('other-widget'),
+  { base: 'data-', count: '${base}count', _count: { instanceOf: 'Number' } },
+  '^my-'
+);
+// result2.count = undefined (unprefixed ignored because tag doesn't match)
 ```
 
 **Base Attribute Validation:**
@@ -1321,6 +1368,7 @@ parseWithAttrs(element, { base: 'config' });          // No dash or non-ASCII
 2. **Clear intent**: Makes it obvious which attributes are for enhancements
 3. **Future-proof**: Protects against future attribute additions to custom elements
 4. **Consistency**: Provides a standard convention across all enhanced elements
+5. **Selective override**: Pattern-based `allowUnprefixed` lets you opt-in specific element families while maintaining strict isolation for others
 
 ### Basic Usage
 
