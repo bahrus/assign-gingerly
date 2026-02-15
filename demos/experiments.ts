@@ -1,4 +1,4 @@
-import {BaseRegistry, IBaseRegistryItem} from '../types';
+import {BaseRegistry, EnhancementConfig} from '../types';
 
 class MyEnhancement {
     hello: string = '';
@@ -17,7 +17,7 @@ class MyEnhancement {
     }
 }
 
-const regItem: IBaseRegistryItem<MyEnhancement> = {
+const regItem: EnhancementConfig<MyEnhancement> = {
     spawn: MyEnhancement,
     withAttrs: {
         base: 'greetings',

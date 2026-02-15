@@ -1,7 +1,7 @@
 /**
- * Interface for registry items that define dependency injection mappings
+ * Configuration for enhancing elements with class instances
  */
-export interface IBaseRegistryItem<T = any> {
+export interface EnhancementConfig<T = any> {
   spawn: { 
     new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
     canSpawn?: (obj: any, ctx?: SpawnContext<T>) => boolean;
@@ -15,8 +15,13 @@ export interface IBaseRegistryItem<T = any> {
 }
 
 export interface SpawnContext<T = any> {
-  mountInfo: IBaseRegistryItem<T>;
+  mountInfo: EnhancementConfig<T>;
 }
+
+/**
+ * @deprecated Use EnhancementConfig instead
+ */
+export type IBaseRegistryItem<T = any> = EnhancementConfig<T>;
 
 /**
  * Interface for the options passed to assignGingerly
@@ -35,20 +40,20 @@ export const INSTANCE_MAP_GUID = 'HDBhTPLuIUyooMxK88m68Q';
  * Stored in globalThis to ensure uniqueness across different package versions
  * Maps objects to a Map of registry items to their spawned instances
  */
-export function getInstanceMap(): WeakMap<object, Map<IBaseRegistryItem, any>> {
+export function getInstanceMap(): WeakMap<object, Map<EnhancementConfig, any>> {
   if (!(globalThis as any)[INSTANCE_MAP_GUID]) {
-    (globalThis as any)[INSTANCE_MAP_GUID] = new WeakMap<object, Map<IBaseRegistryItem, any>>();
+    (globalThis as any)[INSTANCE_MAP_GUID] = new WeakMap<object, Map<EnhancementConfig, any>>();
   }
   return (globalThis as any)[INSTANCE_MAP_GUID];
 }
 
 /**
- * Base registry class for managing dependency injection
+ * Base registry class for managing enhancement configurations
  */
 export class BaseRegistry {
-  private items: IBaseRegistryItem[] = [];
+  private items: EnhancementConfig[] = [];
 
-  push(items: IBaseRegistryItem | IBaseRegistryItem[]): void {
+  push(items: EnhancementConfig | EnhancementConfig[]): void {
     if (Array.isArray(items)) {
       this.items.push(...items);
     } else {
@@ -56,11 +61,11 @@ export class BaseRegistry {
     }
   }
 
-  getItems(): IBaseRegistryItem[] {
+  getItems(): EnhancementConfig[] {
     return this.items;
   }
 
-  findBySymbol(symbol: symbol | string): IBaseRegistryItem | undefined {
+  findBySymbol(symbol: symbol | string): EnhancementConfig | undefined {
     return this.items.find(item => {
       const symlinks = item.symlinks;
       if (!symlinks) return false;
@@ -73,7 +78,7 @@ export class BaseRegistry {
     });
   }
 
-  findByEnhKey(enhKey: string | symbol): IBaseRegistryItem | undefined {
+  findByEnhKey(enhKey: string | symbol): EnhancementConfig | undefined {
     return this.items.find(item => item.enhKey === enhKey);
   }
 }

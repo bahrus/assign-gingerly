@@ -14,7 +14,7 @@ export function getInstanceMap() {
     return globalThis[INSTANCE_MAP_GUID];
 }
 /**
- * Base registry class for managing dependency injection
+ * Base registry class for managing enhancement configurations
  */
 export class BaseRegistry {
     items = [];
