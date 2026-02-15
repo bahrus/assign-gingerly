@@ -72,7 +72,7 @@ Object.defineProperty(Element.prototype, 'set', {
             const proxy = new Proxy(self, {
                 get(obj: any, prop: EnhKey){
                     //do the spawning if found in registry or set oElement[enhKey] = {}
-                    const ctx: SpawnContext = { mountInfo: registryItem };
+                    const ctx: SpawnContext = { config: registryItem };
                 }
             })
             wm.set(this, proxy);

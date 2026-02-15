@@ -114,7 +114,7 @@ test.describe('assignGingerly - canSpawn Support', () => {
     
     expect(receivedObj).toBe(target);
     expect(receivedCtx).toBeDefined();
-    expect(receivedCtx.mountInfo).toBe(registryItem);
+    expect(receivedCtx.config).toBe(registryItem);
   });
 
   test('should respect canSpawn for set proxy', () => {

@@ -211,14 +211,14 @@
         
         const correctObj = receivedObj === testDiv5;
         const hasCtx = receivedCtx !== null;
-        const hasMountInfo = receivedCtx && receivedCtx.mountInfo === registryItem5;
+        const hasconfig = receivedCtx && receivedCtx.config === registryItem5;
         
         addResult(
           'Test 5: canSpawn receives correct context',
-          correctObj && hasCtx && hasMountInfo,
-          correctObj && hasCtx && hasMountInfo
+          correctObj && hasCtx && hasconfig,
+          correctObj && hasCtx && hasconfig
             ? 'Context was correctly passed to canSpawn'
-            : `Failed: correctObj=${correctObj}, hasCtx=${hasCtx}, hasMountInfo=${hasMountInfo}`
+            : `Failed: correctObj=${correctObj}, hasCtx=${hasCtx}, hasconfig=${hasconfig}`
         );
         
         // Test 6: Works without canSpawn method (default behavior)

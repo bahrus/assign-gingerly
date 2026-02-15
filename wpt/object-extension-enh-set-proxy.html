@@ -140,7 +140,7 @@
         const isMyEnhancement = testDiv.enh.myEnh instanceof MyEnhancement;
         const hasCorrectValue = testDiv.enh.myEnh.myProp === 'hello';
         const hasElement = testDiv.enh.myEnh.element === testDiv;
-        const hasContext = testDiv.enh.myEnh.ctx && testDiv.enh.myEnh.ctx.mountInfo;
+        const hasContext = testDiv.enh.myEnh.ctx && testDiv.enh.myEnh.ctx.config;
         
         addResult(
           'Test 3: enh.set.myEnh spawns MyEnhancement instance',

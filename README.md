@@ -607,7 +607,7 @@ When you access `element.enh.set.enhKey.property`, the proxy:
 
 1. **Checks the registry**: Looks for a registry item with `enhKey` matching the property name
 2. **Spawns if needed**: If found and the enhancement doesn't exist or is the wrong type:
-   - Creates a `SpawnContext` with `{ mountInfo: registryItem }`
+   - Creates a `SpawnContext` with `{ config: registryItem }`
    - Calls the constructor with `(element, ctx, initVals)`
    - If a non-matching object already exists at `element.enh[enhKey]`, it's passed as `initVals`
    - Stores the spawned instance at `element.enh[enhKey]`
@@ -629,7 +629,7 @@ Enhancement classes should follow this constructor signature:
 
 ```TypeScript
 interface SpawnContext<T> {
-  mountInfo: IBaseRegistryItem<T>;
+  config: IBaseRegistryItem<T>;
 }
 
 class Enhancement {
@@ -1185,7 +1185,7 @@ static canSpawn(obj: any, ctx?: SpawnContext<T>): boolean
 ```
 
 - `obj`: The target object being enhanced (element, plain object, etc.)
-- `ctx`: Optional spawn context containing `{ mountInfo: IBaseRegistryItem<T> }`
+- `ctx`: Optional spawn context containing `{ config: IBaseRegistryItem<T> }`
 - Returns: `true` to allow spawning, `false` to block
 
 ### Use Cases

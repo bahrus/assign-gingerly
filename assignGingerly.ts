@@ -15,7 +15,7 @@ export interface EnhancementConfig<T = any> {
 }
 
 export interface SpawnContext<T = any> {
-  mountInfo: EnhancementConfig<T>;
+  config: EnhancementConfig<T>;
 }
 
 /**
@@ -379,7 +379,7 @@ export function assignGingerly(
           
           // Check canSpawn if it exists
           if (typeof SpawnClass.canSpawn === 'function') {
-            const ctx = { mountInfo: registryItem };
+            const ctx = { config: registryItem };
             if (!SpawnClass.canSpawn(target, ctx)) {
               // canSpawn returned false, skip spawning
               continue;
@@ -388,7 +388,7 @@ export function assignGingerly(
           
           // If target is an Element and registryItem has enhKey, pass element to constructor
           if (registryItem.enhKey && typeof Element !== 'undefined' && target instanceof Element) {
-            const ctx = { mountInfo: registryItem };
+            const ctx = { config: registryItem };
             const initVals = (target as any).enh?.[registryItem.enhKey] && 
                             !((target as any).enh[registryItem.enhKey] instanceof SpawnClass)
                             ? (target as any).enh[registryItem.enhKey]
@@ -442,7 +442,7 @@ export function assignGingerly(
                     
                     // Check canSpawn if it exists
                     if (typeof SpawnClass.canSpawn === 'function') {
-                      const ctx = { mountInfo: registryItem };
+                      const ctx = { config: registryItem };
                       if (!SpawnClass.canSpawn(target, ctx)) {
                         // canSpawn returned false, skip spawning
                         return true;
@@ -451,7 +451,7 @@ export function assignGingerly(
                     
                     // If target is an Element and registryItem has enhKey, pass element to constructor
                     if (registryItem.enhKey && typeof Element !== 'undefined' && target instanceof Element) {
-                      const ctx = { mountInfo: registryItem };
+                      const ctx = { config: registryItem };
                       const initVals = (target as any).enh?.[registryItem.enhKey] && 
                                       !((target as any).enh[registryItem.enhKey] instanceof SpawnClass)
                                       ? (target as any).enh[registryItem.enhKey]

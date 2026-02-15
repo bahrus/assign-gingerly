@@ -148,7 +148,7 @@ class ElementEnhancementContainer {
       
       // Check canSpawn if it exists
       if (typeof SpawnClass.canSpawn === 'function') {
-        const ctx = { mountInfo: registryItem };
+        const ctx = { config: registryItem };
         if (!SpawnClass.canSpawn(element, ctx)) {
           // canSpawn returned false, return undefined
           return undefined;
@@ -157,7 +157,7 @@ class ElementEnhancementContainer {
       
       // Check if there's an enhKey
       if (registryItem.enhKey) {
-        const ctx = { mountInfo: registryItem };
+        const ctx = { config: registryItem };
         const self = this as any;
         
         // Parse attributes if withAttrs is defined
@@ -192,7 +192,7 @@ class ElementEnhancementContainer {
         self[registryItem.enhKey] = instance;
       } else {
         // No enhKey, just spawn with element
-        const ctx = { mountInfo: registryItem };
+        const ctx = { config: registryItem };
         instance = new SpawnClass(element, ctx);
       }
       
@@ -315,7 +315,7 @@ class ElementEnhancementContainer {
                 
                 // Check canSpawn if it exists
                 if (typeof SpawnClass.canSpawn === 'function') {
-                  const ctx = { mountInfo: registryItem };
+                  const ctx = { config: registryItem };
                   if (!SpawnClass.canSpawn(element, ctx)) {
                     // canSpawn returned false, return undefined
                     return undefined;
@@ -330,7 +330,7 @@ class ElementEnhancementContainer {
                 }
                 
                 // Create spawn context
-                const ctx = { mountInfo: registryItem };
+                const ctx = { config: registryItem };
                 
                 // Spawn the instance
                 instance = new SpawnClass(element, ctx, initVals);

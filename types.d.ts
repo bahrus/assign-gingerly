@@ -122,7 +122,7 @@ export type AttrPatterns<T = any> = {
 
 
 export interface SpawnContext<T = any> {
-  mountInfo: EnhancementConfig<T>;
+  config: EnhancementConfig<T>;
 }
 
 /**

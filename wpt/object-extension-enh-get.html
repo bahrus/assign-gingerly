@@ -110,7 +110,7 @@
         
         const isInstance = instance1 instanceof TestEnhancement;
         const hasElement = instance1.element === testDiv1;
-        const hasContext = instance1.ctx && instance1.ctx.mountInfo === registryItem1;
+        const hasContext = instance1.ctx && instance1.ctx.config === registryItem1;
         const onEnh = testDiv1.enh.myEnh === instance1;
         
         addResult(
