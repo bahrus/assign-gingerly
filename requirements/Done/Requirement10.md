@@ -12,7 +12,7 @@ oElement.set.myEnh.myEnhProp = 'hello'
 
 does the following:
 
-Checks if there's a registry item in oElement.customElementRegistry.assignGingerlyRegistry which has enhKey === 'myEnh'.
+Checks if there's a registry item in oElement.customElementRegistry.enhancementRegistry which has enhKey === 'myEnh'.
 
 If so,
 
@@ -34,7 +34,7 @@ oElement.enh.set.myEnh.myEnhProp = 'hello'
 
 does the following:
 
-Checks if there's a registry item in oElement.customElementRegistry.assignGingerlyRegistry which has enhKey === 'myEnh'.
+Checks if there's a registry item in oElement.customElementRegistry.enhancementRegistry which has enhKey === 'myEnh'.
 
 If so,
 

@@ -61,7 +61,7 @@
       results.appendChild(section);
     }
 
-    // Test 1: Check if CustomElementRegistry has assignGingerlyRegistry
+    // Test 1: Check if CustomElementRegistry has enhancementRegistry
     try {
       const div = document.createElement('div');
       const hasCustomElementRegistry = 'customElementRegistry' in div;
@@ -73,29 +73,29 @@
           'This browser does not support customElementRegistry on elements. Chrome 146+ required.'
         );
       } else {
-        const hasAssignGingerlyRegistry = 'assignGingerlyRegistry' in div.customElementRegistry;
+        const hasenhancementRegistry = 'enhancementRegistry' in div.customElementRegistry;
         addResult(
-          'Test 1: CustomElementRegistry has assignGingerlyRegistry',
-          hasAssignGingerlyRegistry,
-          hasAssignGingerlyRegistry 
-            ? 'assignGingerlyRegistry property exists on customElementRegistry'
-            : 'assignGingerlyRegistry property NOT found on customElementRegistry'
+          'Test 1: CustomElementRegistry has enhancementRegistry',
+          hasenhancementRegistry,
+          hasenhancementRegistry 
+            ? 'enhancementRegistry property exists on customElementRegistry'
+            : 'enhancementRegistry property NOT found on customElementRegistry'
         );
 
-        // Test 2: Check if assignGingerlyRegistry is a BaseRegistry instance
-        if (hasAssignGingerlyRegistry) {
-          const registry = div.customElementRegistry.assignGingerlyRegistry;
+        // Test 2: Check if enhancementRegistry is a BaseRegistry instance
+        if (hasenhancementRegistry) {
+          const registry = div.customElementRegistry.enhancementRegistry;
           const isBaseRegistry = registry instanceof BaseRegistry;
           addResult(
-            'Test 2: assignGingerlyRegistry is BaseRegistry instance',
+            'Test 2: enhancementRegistry is BaseRegistry instance',
             isBaseRegistry,
             isBaseRegistry
-              ? `assignGingerlyRegistry is an instance of BaseRegistry`
-              : `assignGingerlyRegistry is NOT a BaseRegistry instance (type: ${typeof registry})`
+              ? `enhancementRegistry is an instance of BaseRegistry`
+              : `enhancementRegistry is NOT a BaseRegistry instance (type: ${typeof registry})`
           );
 
           // Test 3: Check lazy getter behavior (same instance on multiple accesses)
-          const registry2 = div.customElementRegistry.assignGingerlyRegistry;
+          const registry2 = div.customElementRegistry.enhancementRegistry;
           const isSameInstance = registry === registry2;
           addResult(
             'Test 3: Lazy getter returns same instance',
@@ -107,7 +107,7 @@
 
           // Test 4: Test auto-population of registry in assignGingerly
           const testDiv = document.createElement('div');
-          const testRegistry = testDiv.customElementRegistry.assignGingerlyRegistry;
+          const testRegistry = testDiv.customElementRegistry.enhancementRegistry;
           
           // Add a test item to the registry
           const testSymbol = Symbol.for('testProperty');
@@ -130,7 +130,7 @@
             'Test 4: assignGingerly auto-uses customElementRegistry',
             hasSetProperty,
             hasSetProperty
-              ? 'assignGingerly automatically used the customElementRegistry.assignGingerlyRegistry'
+              ? 'assignGingerly automatically used the customElementRegistry.enhancementRegistry'
               : 'assignGingerly did not use the registry (no "set" property created)'
           );
 

@@ -6,7 +6,7 @@ const spawnedInstance = oElement.enh.get(registryItem: IBaseRegistryItem)
 
 should:
 
-1.  If registryItem isn't in oElement.customElementRegistry.assignGingerlyRegistry, add it.
+1.  If registryItem isn't in oElement.customElementRegistry.enhancementRegistry, add it.
 2.  If spawned instance doesn't exist, spawn it (attaching to enhKey if applicable)
 3.  Return the spawned instance.
 

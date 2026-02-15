@@ -9,14 +9,14 @@ Please add a global interface for CustomElementRegistry in object-extension.ts:
 ```TypeScript
 declare global {
   interface CustomElementRegistry {
-    "assignGingerlyRegistry": typeof BaseRegistry | BaseRegistry;
+    "enhancementRegistry": typeof BaseRegistry | BaseRegistry;
   }
 }
 ```
 
 The type should match the existing IAssignGingerlyOptions.registry type exactly.
 
-Please add assignGingerlyRegistry to the CustomElementRegistry prototype with an instance of new BaseRegistry().  Because this is part of a polyfill implementation for a web standards proposal, no effort should be made to shield the developer from future platform API's.
+Please add enhancementRegistry to the CustomElementRegistry prototype with an instance of new BaseRegistry().  Because this is part of a polyfill implementation for a web standards proposal, no effort should be made to shield the developer from future platform API's.
 
 The creation of the BaseRegistry should be done via a lazy getter property added to the CustomElementRegistry.
 
@@ -67,7 +67,7 @@ call assignGingerly with:
 // Modify options before calling
 if (this instanceof Element && (!options || !options.registry)) {
   if (!options) options = {};
-  options.registry = (this as any).customElementRegistry?.assignGingerlyRegistry;
+  options.registry = (this as any).customElementRegistry?.enhancementRegistry;
 }
 assignGingerly(this, source, options);
 ```

@@ -147,7 +147,7 @@
 
         // Test 4: get() adds registry item to registry if not present
         const testDiv3 = document.createElement('div');
-        const registry3 = testDiv3.customElementRegistry.assignGingerlyRegistry;
+        const registry3 = testDiv3.customElementRegistry.enhancementRegistry;
         
         const registryItem3 = {
           spawn: TestEnhancement,
@@ -265,7 +265,7 @@
         import assignGingerly from '../assignGingerly.js';
         assignGingerly(testDiv7, {
           [symbol8]: 'fromAssign'
-        }, { registry: testDiv7.customElementRegistry.assignGingerlyRegistry });
+        }, { registry: testDiv7.customElementRegistry.enhancementRegistry });
         
         const id7b = testDiv7.enh.assignEnh.instanceId;
         

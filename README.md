@@ -395,7 +395,7 @@ const registry = new BaseRegistry();
 registry.push(registryItem);
 
 const element = document.createElement('div');
-element.customElementRegistry.assignGingerlyRegistry.push(registryItem);
+element.customElementRegistry.enhancementRegistry.push(registryItem);
 
 // Use assignGingerly first
 assignGingerly(element, { [symbol1]: 'value1' }, { registry });
@@ -497,7 +497,7 @@ This package includes support for Chrome's scoped custom element registries, whi
 
 ### Automatic Registry Population
 
-When `assignGingerly` or `assignTentatively` is called on an Element instance without providing an explicit `registry` option, it automatically uses the registry from `element.customElementRegistry.assignGingerlyRegistry`:
+When `assignGingerly` or `assignTentatively` is called on an Element instance without providing an explicit `registry` option, it automatically uses the registry from `element.customElementRegistry.enhancementRegistry`:
 
 ```TypeScript
 import 'assign-gingerly/object-extension.js';
@@ -505,7 +505,7 @@ import { BaseRegistry } from 'assign-gingerly';
 
 // Set up a registry on the custom element registry
 const myElement = document.createElement('div');
-const registry = myElement.customElementRegistry.assignGingerlyRegistry;
+const registry = myElement.customElementRegistry.enhancementRegistry;
 
 const mySymbol = Symbol.for('myProperty');
 class MyEnhancement {
@@ -525,18 +525,18 @@ myElement.assignGingerly({
 
 ### Lazy Registry Creation
 
-Each `CustomElementRegistry` instance gets its own `assignGingerlyRegistry` property via a lazy getter. The `BaseRegistry` instance is created on first access and cached for subsequent uses:
+Each `CustomElementRegistry` instance gets its own `enhancementRegistry` property via a lazy getter. The `BaseRegistry` instance is created on first access and cached for subsequent uses:
 
 ```TypeScript
 const element1 = document.createElement('div');
 const element2 = document.createElement('span');
 
 // Each element's customElementRegistry gets its own registry
-const registry1 = element1.customElementRegistry.assignGingerlyRegistry;
-const registry2 = element2.customElementRegistry.assignGingerlyRegistry;
+const registry1 = element1.customElementRegistry.enhancementRegistry;
+const registry2 = element2.customElementRegistry.enhancementRegistry;
 
 // Multiple accesses return the same instance
-console.log(registry1 === element1.customElementRegistry.assignGingerlyRegistry); // true
+console.log(registry1 === element1.customElementRegistry.enhancementRegistry); // true
 ```
 
 ### Explicit Registry Override
@@ -584,7 +584,7 @@ class MyEnhancement {
 
 // Register the enhancement with an enhKey
 const myElement = document.createElement('div');
-const registry = myElement.customElementRegistry.assignGingerlyRegistry;
+const registry = myElement.customElementRegistry.enhancementRegistry;
 
 registry.push({
   spawn: MyEnhancement,
@@ -693,7 +693,7 @@ class DataEnhancement {
 }
 
 const element = document.createElement('div');
-const registry = element.customElementRegistry.assignGingerlyRegistry;
+const registry = element.customElementRegistry.enhancementRegistry;
 
 registry.push([
   { spawn: StyleEnhancement, symlinks: {}, enhKey: 'styles' },
@@ -710,7 +710,7 @@ console.log(element.enh.data instanceof DataEnhancement); // true
 **Preserving Existing Data with initVals:**
 ```TypeScript
 const element = document.createElement('div');
-const registry = element.customElementRegistry.assignGingerlyRegistry;
+const registry = element.customElementRegistry.enhancementRegistry;
 
 registry.push({
   spawn: MyEnhancement,
@@ -776,7 +776,7 @@ console.log(element.enh.myEnh === instance); // true
 
 **How `enh.get()` works:**
 
-1. **Adds to registry**: If the registry item isn't already in `element.customElementRegistry.assignGingerlyRegistry`, it's automatically added
+1. **Adds to registry**: If the registry item isn't already in `element.customElementRegistry.enhancementRegistry`, it's automatically added
 2. **Spawns if needed**: If no instance exists for this registry item, it spawns one (passing element, context, and initVals if applicable)
 3. **Stores on enh**: If the registry item has an `enhKey`, the instance is stored at `element.enh[enhKey]`
 4. **Returns instance**: Returns the spawned or existing instance
@@ -1311,7 +1311,7 @@ class MyEnhancement {
 }
 
 const element = document.querySelector('my-element');
-const registry = element.customElementRegistry.assignGingerlyRegistry;
+const registry = element.customElementRegistry.enhancementRegistry;
 
 // Define withAttrs in the registry item
 registry.push({

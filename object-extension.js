@@ -15,15 +15,15 @@ function normalizeLifecycleKeys(lifecycleKeys) {
     return lifecycleKeys;
 }
 /**
- * Adds assignGingerlyRegistry to CustomElementRegistry prototype as a lazy getter
+ * Adds enhancementRegistry to CustomElementRegistry prototype as a lazy getter
  */
 if (typeof CustomElementRegistry !== 'undefined') {
-    Object.defineProperty(CustomElementRegistry.prototype, 'assignGingerlyRegistry', {
+    Object.defineProperty(CustomElementRegistry.prototype, 'enhancementRegistry', {
         get: function () {
             // Create a new BaseRegistry instance on first access and cache it
             const registry = new BaseRegistry();
             // Replace the getter with the actual value
-            Object.defineProperty(this, 'assignGingerlyRegistry', {
+            Object.defineProperty(this, 'enhancementRegistry', {
                 value: registry,
                 writable: true,
                 enumerable: false,
@@ -53,9 +53,9 @@ class ElementEnhancementContainer {
     get(registryItem) {
         const element = this.element;
         // Get the registry from customElementRegistry
-        const registry = element.customElementRegistry?.assignGingerlyRegistry;
+        const registry = element.customElementRegistry?.enhancementRegistry;
         if (!registry) {
-            throw new Error('customElementRegistry.assignGingerlyRegistry not available');
+            throw new Error('customElementRegistry.enhancementRegistry not available');
         }
         // Check if registryItem is in the registry
         const items = registry.getItems();
@@ -191,7 +191,7 @@ class ElementEnhancementContainer {
             this._setProxy = new Proxy(this, {
                 get(obj, prop) {
                     // Get the registry from customElementRegistry
-                    const registry = element.customElementRegistry?.assignGingerlyRegistry;
+                    const registry = element.customElementRegistry?.enhancementRegistry;
                     if (registry) {
                         // Check if there's a registry item with matching enhKey
                         const registryItem = registry.findByEnhKey(prop);
@@ -275,7 +275,7 @@ Object.defineProperty(Object.prototype, 'assignGingerly', {
         if (this instanceof Element && (!options || !options.registry)) {
             if (!options)
                 options = {};
-            options.registry = this.customElementRegistry?.assignGingerlyRegistry;
+            options.registry = this.customElementRegistry?.enhancementRegistry;
         }
         assignGingerly(this, source, options);
         return this;
@@ -294,7 +294,7 @@ Object.defineProperty(Object.prototype, 'assignTentatively', {
         if (this instanceof Element && (!options || !options.registry)) {
             if (!options)
                 options = {};
-            options.registry = this.customElementRegistry?.assignGingerlyRegistry;
+            options.registry = this.customElementRegistry?.enhancementRegistry;
         }
         assignGingerly(this, source, options);
         return this;

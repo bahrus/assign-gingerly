@@ -92,7 +92,7 @@
         // Test 1: assignGingerly with enhKey creates instance on enh
         const symbol1 = Symbol.for('test1');
         const testDiv1 = document.createElement('div');
-        const registry1 = testDiv1.customElementRegistry.assignGingerlyRegistry;
+        const registry1 = testDiv1.customElementRegistry.enhancementRegistry;
         
         registry1.push({
           spawn: TestEnhancement,
@@ -119,7 +119,7 @@
         // Test 2: enh.set and assignGingerly share the same instance
         const symbol2 = Symbol.for('test2');
         const testDiv2 = document.createElement('div');
-        const registry2 = testDiv2.customElementRegistry.assignGingerlyRegistry;
+        const registry2 = testDiv2.customElementRegistry.enhancementRegistry;
         
         registry2.push({
           spawn: TestEnhancement,
@@ -152,7 +152,7 @@
         // Test 3: assignGingerly first, then enh.set
         const symbol3 = Symbol.for('test3');
         const testDiv3 = document.createElement('div');
-        const registry3 = testDiv3.customElementRegistry.assignGingerlyRegistry;
+        const registry3 = testDiv3.customElementRegistry.enhancementRegistry;
         
         registry3.push({
           spawn: TestEnhancement,
@@ -187,7 +187,7 @@
         const symbol4a = Symbol.for('test4a');
         const symbol4b = Symbol.for('test4b');
         const testDiv4 = document.createElement('div');
-        const registry4 = testDiv4.customElementRegistry.assignGingerlyRegistry;
+        const registry4 = testDiv4.customElementRegistry.enhancementRegistry;
         
         registry4.push({
           spawn: TestEnhancement,
@@ -235,7 +235,7 @@
         
         const symbol5 = Symbol.for('test5');
         const testDiv5 = document.createElement('div');
-        const registry5 = testDiv5.customElementRegistry.assignGingerlyRegistry;
+        const registry5 = testDiv5.customElementRegistry.enhancementRegistry;
         
         const registryItem5 = {
           spawn: TestEnhancement,
@@ -266,7 +266,7 @@
         // Test 6: Element reference passed to constructor
         const symbol6 = Symbol.for('test6');
         const testDiv6 = document.createElement('div');
-        const registry6 = testDiv6.customElementRegistry.assignGingerlyRegistry;
+        const registry6 = testDiv6.customElementRegistry.enhancementRegistry;
         
         registry6.push({
           spawn: TestEnhancement,

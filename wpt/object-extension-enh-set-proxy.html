@@ -126,7 +126,7 @@
 
         // Test 3: Set up registry with enhKey
         const testDiv = document.createElement('div');
-        const registry = testDiv.customElementRegistry.assignGingerlyRegistry;
+        const registry = testDiv.customElementRegistry.enhancementRegistry;
         
         registry.push({
           spawn: MyEnhancement,
@@ -179,7 +179,7 @@
 
         // Test 7: initVals passed when property exists but wrong type
         const testDiv3 = document.createElement('div');
-        const registry3 = testDiv3.customElementRegistry.assignGingerlyRegistry;
+        const registry3 = testDiv3.customElementRegistry.enhancementRegistry;
         
         registry3.push({
           spawn: YourEnhancement,
@@ -206,7 +206,7 @@
 
         // Test 8: Multiple enhancements on same element
         const testDiv4 = document.createElement('div');
-        const registry4 = testDiv4.customElementRegistry.assignGingerlyRegistry;
+        const registry4 = testDiv4.customElementRegistry.enhancementRegistry;
         
         registry4.push([
           {
@@ -237,7 +237,7 @@
 
         // Test 9: Nested property access
         const testDiv5 = document.createElement('div');
-        const registry5 = testDiv5.customElementRegistry.assignGingerlyRegistry;
+        const registry5 = testDiv5.customElementRegistry.enhancementRegistry;
         
         registry5.push({
           spawn: MyEnhancement,
@@ -262,7 +262,7 @@
 
         // Test 10: Enhancements don't pollute element namespace
         const testDiv6 = document.createElement('div');
-        const registry6 = testDiv6.customElementRegistry.assignGingerlyRegistry;
+        const registry6 = testDiv6.customElementRegistry.enhancementRegistry;
         
         registry6.push({
           spawn: MyEnhancement,

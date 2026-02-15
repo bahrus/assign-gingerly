@@ -139,7 +139,7 @@
         const testDiv3 = document.createElement('div');
         testDiv3.setAttribute('data-allowed', 'false');
         
-        const registry3 = testDiv3.customElementRegistry.assignGingerlyRegistry;
+        const registry3 = testDiv3.customElementRegistry.enhancementRegistry;
         registry3.push({
           spawn: BlockedEnhancement,
           symlinks: {},
@@ -161,7 +161,7 @@
         const testDiv4 = document.createElement('div');
         testDiv4.setAttribute('data-allowed', 'true');
         
-        const registry4 = testDiv4.customElementRegistry.assignGingerlyRegistry;
+        const registry4 = testDiv4.customElementRegistry.enhancementRegistry;
         registry4.push({
           spawn: BlockedEnhancement,
           symlinks: {},
