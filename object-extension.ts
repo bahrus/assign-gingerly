@@ -114,9 +114,10 @@ class ElementEnhancementContainer {
   /**
    * Get or spawn an instance for a registry item
    * @param registryItem - The registry item to get/spawn instance for
+   * @param mountCtx - Optional context to pass to the spawned instance
    * @returns The spawned instance
    */
-  get(registryItem: any): any {
+  get(registryItem: any, mountCtx?: any): any {
     const element = this.element;
     
     // Get the registry from customElementRegistry
@@ -148,7 +149,7 @@ class ElementEnhancementContainer {
       
       // Check canSpawn if it exists
       if (typeof SpawnClass.canSpawn === 'function') {
-        const ctx = { config: registryItem };
+        const ctx = { config: registryItem, mountCtx };
         if (!SpawnClass.canSpawn(element, ctx)) {
           // canSpawn returned false, return undefined
           return undefined;
@@ -157,7 +158,7 @@ class ElementEnhancementContainer {
       
       // Check if there's an enhKey
       if (registryItem.enhKey) {
-        const ctx = { config: registryItem };
+        const ctx = { config: registryItem, mountCtx };
         const self = this as any;
         
         // Parse attributes if withAttrs is defined
@@ -192,7 +193,7 @@ class ElementEnhancementContainer {
         self[registryItem.enhKey] = instance;
       } else {
         // No enhKey, just spawn with element
-        const ctx = { config: registryItem };
+        const ctx = { config: registryItem, mountCtx };
         instance = new SpawnClass(element, ctx);
       }
       
@@ -243,9 +244,10 @@ class ElementEnhancementContainer {
   /**
    * Wait for an enhancement instance to be resolved
    * @param registryItem - The registry item to wait for
+   * @param mountCtx - Optional context to pass to the spawned instance
    * @returns Promise that resolves with the spawned instance
    */
-  async whenResolved(registryItem: any): Promise<any> {
+  async whenResolved(registryItem: any, mountCtx?: any): Promise<any> {
     const lifecycleKeys = normalizeLifecycleKeys(registryItem?.lifecycleKeys);
     const resolvedKey = lifecycleKeys?.resolved;
     
@@ -253,8 +255,8 @@ class ElementEnhancementContainer {
       throw new Error('Must specify resolved key in lifecycleKeys');
     }
     
-    // Get or spawn the instance
-    const spawnedInstance = this.get(registryItem);
+    // Get or spawn the instance (pass mountCtx through)
+    const spawnedInstance = this.get(registryItem, mountCtx);
     
     // Check if already resolved
     if ((spawnedInstance as any)[resolvedKey]) {

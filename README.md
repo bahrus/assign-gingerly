@@ -628,22 +628,50 @@ This approach is part of a proposal to WHATWG for standardizing element enhancem
 Enhancement classes should follow this constructor signature:
 
 ```TypeScript
-interface SpawnContext<T> {
+interface SpawnContext<T, TMountContext = any> {
   config: IBaseRegistryItem<T>;
+  mountCtx?: TMountContext;  // Optional custom context passed by caller
 }
 
 class Enhancement {
   constructor(
     oElement?: Element,      // The element being enhanced
-    ctx?: SpawnContext,      // Context with registry item info
+    ctx?: SpawnContext,      // Context with registry item info and optional mountCtx
     initVals?: Partial<T>    // Initial values if property existed
   ) {
     // Your initialization logic
+    // Access custom context via ctx.mountCtx if provided
   }
 }
 ```
 
 All parameters are optional for backward compatibility with existing code.
+
+**Passing Custom Context:**
+
+You can pass custom context when calling `enh.get()` or `enh.whenResolved()`:
+
+```TypeScript
+// Pass custom context to the spawned instance
+const myContext = { userId: 123, permissions: ['read', 'write'] };
+const instance = element.enh.get(registryItem, myContext);
+
+// The constructor receives it via ctx.mountCtx
+class MyEnhancement {
+  constructor(oElement, ctx, initVals) {
+    console.log(ctx.mountCtx.userId);        // 123
+    console.log(ctx.mountCtx.permissions);   // ['read', 'write']
+  }
+}
+```
+
+This is useful for:
+- Passing authentication/authorization context
+- Providing configuration that varies per invocation
+- Sharing state between caller and enhancement
+- Dependency injection of services or utilities
+
+**Note**: The `mountCtx` is only available when explicitly calling `enh.get()` or `enh.whenResolved()`. It's not available when accessing via the `enh.set` proxy (since that's a property getter with no way to pass parameters).
 
 ### Registry Item with enhKey
 
@@ -1031,6 +1059,11 @@ const customRegistryItem = {
 // Wait for the enhancement to be fully initialized
 const instance = await element.enh.whenResolved(registryItem);
 console.log(instance.data); // Data is loaded and ready
+
+// With custom context
+const authContext = { token: 'abc123', userId: 456 };
+const instanceWithContext = await element.enh.whenResolved(registryItem, authContext);
+// The constructor receives authContext via ctx.mountCtx
 ```
 
 **How `enh.whenResolved()` works:**
