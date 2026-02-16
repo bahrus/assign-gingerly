@@ -588,7 +588,6 @@ const registry = myElement.customElementRegistry.enhancementRegistry;
 
 registry.push({
   spawn: MyEnhancement,
-  symlinks: {},
   enhKey: 'myEnh'  // Key identifier for this enhancement
 });
 
@@ -724,8 +723,8 @@ const element = document.createElement('div');
 const registry = element.customElementRegistry.enhancementRegistry;
 
 registry.push([
-  { spawn: StyleEnhancement, symlinks: {}, enhKey: 'styles' },
-  { spawn: DataEnhancement, symlinks: {}, enhKey: 'data' }
+  { spawn: StyleEnhancement, enhKey: 'styles' },
+  { spawn: DataEnhancement, enhKey: 'data' }
 ]);
 
 element.enh.set.styles.height = '100px';
@@ -742,7 +741,6 @@ const registry = element.customElementRegistry.enhancementRegistry;
 
 registry.push({
   spawn: MyEnhancement,
-  symlinks: {},
   enhKey: 'config'
 });
 
@@ -776,7 +774,6 @@ The `BaseRegistry` class includes a `findByEnhKey` method:
 const registry = new BaseRegistry();
 registry.push({
   spawn: MyEnhancement,
-  symlinks: {},
   enhKey: 'myEnh'
 });
 
@@ -791,7 +788,6 @@ The `enh.get()` method provides a programmatic way to spawn or retrieve enhancem
 ```TypeScript
 const registryItem = {
   spawn: MyEnhancement,
-  symlinks: {},
   enhKey: 'myEnh'
 };
 
@@ -857,7 +853,6 @@ For convenience, you can use `lifecycleKeys: true` to adopt standard naming conv
 ```TypeScript
 const registryItem = {
   spawn: MyEnhancement,
-  symlinks: {},
   enhKey: 'myEnh',
   lifecycleKeys: true  // Uses standard names: "dispose" and "resolved"
 };
@@ -901,7 +896,6 @@ class MyEnhancement {
 
 const registryItem = {
   spawn: MyEnhancement,
-  symlinks: {},
   enhKey: 'myEnh',
   lifecycleKeys: {
     dispose: DISPOSE,
@@ -935,7 +929,6 @@ class MyEnhancement {
 
 const registryItem = {
   spawn: MyEnhancement,
-  symlinks: {},
   enhKey: 'myEnh',
   lifecycleKeys: true  // Standard: calls dispose() method
 };
@@ -943,7 +936,6 @@ const registryItem = {
 // Or with custom name:
 const customRegistryItem = {
   spawn: MyEnhancement,
-  symlinks: {},
   enhKey: 'myEnh',
   lifecycleKeys: {
     dispose: 'cleanup'  // Custom: calls cleanup() method
@@ -994,7 +986,6 @@ class TimerEnhancement {
 
 const registryItem = {
   spawn: TimerEnhancement,
-  symlinks: {},
   enhKey: 'timer',
   lifecycleKeys: true  // Standard: calls dispose() method
 };
@@ -1041,7 +1032,6 @@ class AsyncEnhancement extends EventTarget {
 
 const registryItem = {
   spawn: AsyncEnhancement,
-  symlinks: {},
   enhKey: 'asyncEnh',
   lifecycleKeys: true  // Standard: watches "resolved" property and event
 };
@@ -1049,7 +1039,6 @@ const registryItem = {
 // Or with custom name:
 const customRegistryItem = {
   spawn: AsyncEnhancement,
-  symlinks: {},
   enhKey: 'asyncEnh',
   lifecycleKeys: {
     resolved: 'isReady'  // Custom: watches "isReady" property and event
@@ -1127,7 +1116,6 @@ class DataEnhancement extends EventTarget {
 
 const registryItem = {
   spawn: DataEnhancement,
-  symlinks: {},
   enhKey: 'data',
   lifecycleKeys: true  // Standard: watches "resolved" property and event
 };
@@ -1187,7 +1175,6 @@ class DivOnlyEnhancement {
 const registry = new BaseRegistry();
 registry.push({
   spawn: DivOnlyEnhancement,
-  symlinks: {},
   enhKey: 'divOnly'
 });
 
@@ -1349,7 +1336,6 @@ const registry = element.customElementRegistry.enhancementRegistry;
 // Define withAttrs in the registry item
 registry.push({
   spawn: MyEnhancement,
-  symlinks: {},
   enhKey: 'myEnh',
   withAttrs: {
     base: 'data-',
@@ -1412,7 +1398,6 @@ For custom elements and SVG, you can opt-in to reading unprefixed attributes by 
 // Allow unprefixed for elements matching pattern
 registry.push({
   spawn: MyEnhancement,
-  symlinks: {},
   enhKey: 'myEnh',
   allowUnprefixed: '^my-',  // Only for elements starting with "my-"
   withAttrs: {
@@ -1425,7 +1410,6 @@ registry.push({
 // Or use RegExp for more complex patterns
 registry.push({
   spawn: MyEnhancement,
-  symlinks: {},
   enhKey: 'myEnh',
   allowUnprefixed: /^(my-|app-)/,  // For "my-*" or "app-*" elements
   withAttrs: {

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -119,7 +119,7 @@
         
         registry.push({
           spawn: MyEnhancement,
-          symlinks: {},
+
           enhKey: 'myEnh'
         });
 
@@ -172,7 +172,7 @@
         
         registry3.push({
           spawn: YourEnhancement,
-          symlinks: {},
+
           enhKey: 'yourEnh'
         });
 
@@ -200,12 +200,12 @@
         registry4.push([
           {
             spawn: MyEnhancement,
-            symlinks: {},
+
             enhKey: 'enh1'
           },
           {
             spawn: YourEnhancement,
-            symlinks: {},
+
             enhKey: 'enh2'
           }
         ]);
@@ -230,7 +230,7 @@
         
         registry5.push({
           spawn: MyEnhancement,
-          symlinks: {},
+
           enhKey: 'nested'
         });
 
@@ -253,7 +253,7 @@
         const testRegistry = new BaseRegistry();
         const testItem = {
           spawn: MyEnhancement,
-          symlinks: {},
+
           enhKey: 'testKey'
         };
         testRegistry.push(testItem);

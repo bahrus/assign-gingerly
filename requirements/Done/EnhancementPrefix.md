@@ -246,7 +246,6 @@ withAttrs: { base: '🎨-theme' }    ✓ Valid (non-ASCII)
 // Standard usage (strict for custom elements/SVG)
 {
   spawn: MyEnhancement,
-  symlinks: {},
   enhKey: 'myEnh',
   withAttrs: {
     base: 'data-config',  // Must have dash
@@ -257,7 +256,6 @@ withAttrs: { base: '🎨-theme' }    ✓ Valid (non-ASCII)
 // With override (rare case)
 {
   spawn: MyEnhancement,
-  symlinks: {},
   enhKey: 'myEnh',
   withAttrs: {
     base: 'data-config',

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -111,7 +111,7 @@
         const testDiv1 = document.createElement('div');
         const registryItem1 = {
           spawn: AsyncEnhancement,
-          symlinks: {},
+
           enhKey: 'asyncEnh',
           lifecycleKeys: {
             resolved: 'isResolved'
@@ -143,7 +143,7 @@
         const testDiv2 = document.createElement('div');
         const registryItem2 = {
           spawn: AsyncEnhancement,
-          symlinks: {},
+
           enhKey: 'preResolvedEnh',
           lifecycleKeys: {
             resolved: 'isResolved'
@@ -173,7 +173,7 @@
         const testDiv3 = document.createElement('div');
         const registryItem3 = {
           spawn: AsyncEnhancement,
-          symlinks: {},
+
           enhKey: 'noResolvedKeyEnh'
           // No lifecycleKeys.resolved
         };
@@ -212,7 +212,7 @@
         const testDiv4 = document.createElement('div');
         const registryItem4 = {
           spawn: NonEventTargetEnhancement,
-          symlinks: {},
+
           enhKey: 'nonEventTargetEnh',
           lifecycleKeys: {
             resolved: 'isResolved'
@@ -242,7 +242,7 @@
         const testDiv5 = document.createElement('div');
         const registryItem5 = {
           spawn: AsyncEnhancement,
-          symlinks: {},
+
           enhKey: 'multiCallEnh',
           lifecycleKeys: {
             resolved: 'isResolved'
@@ -275,7 +275,7 @@
         const testDiv6 = document.createElement('div');
         const registryItem6 = {
           spawn: AsyncEnhancement,
-          symlinks: {},
+
           enhKey: 'lazyLoadEnh',
           lifecycleKeys: {
             resolved: 'isResolved'
