@@ -1,3 +1,18 @@
+// /**
+//  * Configuration for enhancing elements with class instances
+//  */
+// export interface EnhancementConfig<T = any> {
+//   spawn: { 
+//     new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
+//     canSpawn?: (obj: any, ctx?: SpawnContext<T>) => boolean;
+//   };
+//   symlinks: { [key: string | symbol]: keyof T };
+//   enhKey?: string;
+//   lifecycleKeys?: {
+//     dispose?: string;
+//     resolved?: string;
+//   };
+// }
 /**
  * GUID for global instance map storage to ensure uniqueness across package versions
  */
@@ -344,9 +359,11 @@ export function assignGingerly(target, source, options) {
                     }
                 }
                 // Find the mapped property name
-                const mappedKey = registryItem.symlinks[sym];
-                if (mappedKey && instance && typeof instance === 'object') {
-                    instance[mappedKey] = value;
+                if (registryItem.symlinks) {
+                    const mappedKey = registryItem.symlinks[sym];
+                    if (mappedKey && instance && typeof instance === 'object') {
+                        instance[mappedKey] = value;
+                    }
                 }
             }
         }
@@ -397,9 +414,11 @@ export function assignGingerly(target, source, options) {
                                         target.enh[registryItem.enhKey] = instance;
                                     }
                                 }
-                                const mappedKey = registryItem.symlinks[prop];
-                                if (mappedKey && instance && typeof instance === 'object') {
-                                    instance[mappedKey] = value;
+                                if (registryItem.symlinks) {
+                                    const mappedKey = registryItem.symlinks[prop];
+                                    if (mappedKey && instance && typeof instance === 'object') {
+                                        instance[mappedKey] = value;
+                                    }
                                 }
                             }
                         }

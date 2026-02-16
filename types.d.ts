@@ -121,8 +121,9 @@ export type AttrPatterns<T = any> = {
 };
 
 
-export interface SpawnContext<T = any> {
+export interface SpawnContext<T = any, TMountContext = any> {
   config: EnhancementConfig<T>;
+  mountCtx?: TMountContext;
 }
 
 /**

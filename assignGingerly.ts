@@ -1,22 +1,24 @@
-/**
- * Configuration for enhancing elements with class instances
- */
-export interface EnhancementConfig<T = any> {
-  spawn: { 
-    new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
-    canSpawn?: (obj: any, ctx?: SpawnContext<T>) => boolean;
-  };
-  symlinks: { [key: string | symbol]: keyof T };
-  enhKey?: string;
-  lifecycleKeys?: {
-    dispose?: string;
-    resolved?: string;
-  };
-}
+// /**
+//  * Configuration for enhancing elements with class instances
+//  */
+// export interface EnhancementConfig<T = any> {
+//   spawn: { 
+//     new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
+//     canSpawn?: (obj: any, ctx?: SpawnContext<T>) => boolean;
+//   };
+//   symlinks: { [key: string | symbol]: keyof T };
+//   enhKey?: string;
+//   lifecycleKeys?: {
+//     dispose?: string;
+//     resolved?: string;
+//   };
+// }
 
-export interface SpawnContext<T = any> {
-  config: EnhancementConfig<T>;
-}
+// export interface SpawnContext<T = any> {
+//   config: EnhancementConfig<T>;
+// }
+
+import { EnhancementConfig } from "./types";
 
 /**
  * @deprecated Use EnhancementConfig instead
@@ -411,10 +413,13 @@ export function assignGingerly(
         }
 
         // Find the mapped property name
-        const mappedKey = registryItem.symlinks[sym];
-        if (mappedKey && instance && typeof instance === 'object') {
-          (instance as any)[mappedKey] = value;
+        if(registryItem.symlinks){
+          const mappedKey = registryItem.symlinks[sym];
+          if (mappedKey && instance && typeof instance === 'object') {
+            (instance as any)[mappedKey] = value;
+          }
         }
+
       }
     }
   }
@@ -471,11 +476,13 @@ export function assignGingerly(
                       (target as any).enh[registryItem.enhKey] = instance;
                     }
                   }
-                  
-                  const mappedKey = registryItem.symlinks[prop];
-                  if (mappedKey && instance && typeof instance === 'object') {
-                    (instance as any)[mappedKey] = value;
+                  if(registryItem.symlinks){
+                    const mappedKey = registryItem.symlinks[prop];
+                    if (mappedKey && instance && typeof instance === 'object') {
+                      (instance as any)[mappedKey] = value;
+                    }
                   }
+
                 }
               }
               return true;
