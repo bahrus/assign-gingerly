@@ -1,22 +1,4 @@
-// /**
-//  * Configuration for enhancing elements with class instances
-//  */
-// export interface EnhancementConfig<T = any> {
-//   spawn: { 
-//     new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
-//     canSpawn?: (obj: any, ctx?: SpawnContext<T>) => boolean;
-//   };
-//   symlinks: { [key: string | symbol]: keyof T };
-//   enhKey?: string;
-//   lifecycleKeys?: {
-//     dispose?: string;
-//     resolved?: string;
-//   };
-// }
 
-// export interface SpawnContext<T = any> {
-//   config: EnhancementConfig<T>;
-// }
 
 import { EnhancementConfig } from "./types";
 
