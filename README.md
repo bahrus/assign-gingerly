@@ -349,7 +349,8 @@ It also adds a lazy property to the first passed in parameter, "set", which retu
 
 The suggestion to use Symbol.for with a guid, as opposed to just Symbol(), is based on some negative experiences I've had with multiple versions of the same library being referenced, but is not required. Regular symbols could also be used when that risk can be avoided.
 
-### Global Instance Map for Cross-Version Compatibility
+<details>
+<summary>Global Instance Map for Cross-Version Compatibility</summary>
 
 To ensure instance uniqueness even when multiple versions of this package are loaded, spawned instances are stored in a global WeakMap at `globalThis['HDBhTPLuIUyooMxK88m68Q']`. This guarantees that:
 
@@ -443,7 +444,10 @@ console.log(target.set[symbol1].prop1); // 'value1'
 console.log(target.set[symbol1].prop2); // 'value2'
 ```
 
-## Support for JSON assignment with Symbol.for symbols
+</details>
+
+<details>
+  <summary>Support for JSON assignment with Symbol.for symbols</summary>
 
 ```JavaScript
 const result = assignGingerly({}, {
@@ -455,8 +459,13 @@ const result = assignGingerly({}, {
     registry: BaseRegistry
 });
 ```
+</details>
 
 
+<!--
+
+
+Already covered, I think 
 
 ## Object.prototype Extensions
 
@@ -491,11 +500,14 @@ console.log(obj); // { a: 1, b: { c: 2 }, d: 3 }
 
 The prototype extensions are non-enumerable and won't appear in `Object.keys()` or `for...in` loops.
 
+-->
+
 ## Custom Element Registry Integration (Chrome 146+)
 
-This package includes support for Chrome's scoped custom element registries, which automatically integrates dependency injection with custom elements.
+This package includes support for Chrome's scoped custom element registries, which automatically integrates dependency injection in harmony with scoped custom elements DOM sections or ShadowRoots.
 
-### Automatic Registry Population
+<details>
+  <summary>Automatic Registry Population</summary>
 
 When `assignGingerly` or `assignTentatively` is called on an Element instance without providing an explicit `registry` option, it automatically uses the registry from `element.customElementRegistry.enhancementRegistry`:
 
@@ -523,7 +535,10 @@ myElement.assignGingerly({
 });
 ```
 
-### Lazy Registry Creation
+</details>
+
+<details>
+<summary>Lazy Registry Creation</summary>
 
 Each `CustomElementRegistry` instance gets its own `enhancementRegistry` property via a lazy getter. The `BaseRegistry` instance is created on first access and cached for subsequent uses:
 
@@ -538,6 +553,7 @@ const registry2 = element2.customElementRegistry.enhancementRegistry;
 // Multiple accesses return the same instance
 console.log(registry1 === element1.customElementRegistry.enhancementRegistry); // true
 ```
+</details>
 
 ### Explicit Registry Override
 
