@@ -602,7 +602,7 @@ console.log(myElement.enh.myEnh.element === myElement); // true
 
 <details>
 <summary>
-### How It Works
+How It Works
 </summary>
 
 When you access `element.enh.set.enhKey.property`, the proxy:
@@ -623,7 +623,7 @@ When you access `element.enh.set.enhKey.property`, the proxy:
 The `enh` property provides a dedicated namespace for enhancements, similar to how `dataset` provides a namespace for data attributes. This prevents conflicts with:
 - Future platform properties that might be added to Element
 - Existing element properties and methods
-- Other libraries that might extend Element
+- Other libraries that might extend HTMLElement
 
 This approach is part of a proposal to WHATWG for standardizing element enhancements.
 
@@ -651,7 +651,8 @@ class Enhancement {
 
 All parameters are optional for backward compatibility with existing code.
 
-**Passing Custom Context:**
+<details>
+<summary>**Passing Custom Context:**</summary>
 
 You can pass custom context when calling `enh.get()` or `enh.whenResolved()`:
 
@@ -676,6 +677,8 @@ This is useful for:
 - Dependency injection of services or utilities
 
 **Note**: The `mountCtx` is only available when explicitly calling `enh.get()` or `enh.whenResolved()`. It's not available when accessing via the `enh.set` proxy (since that's a property getter with no way to pass parameters).
+
+</details>
 
 ### Registry Item with enhKey
 
