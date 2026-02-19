@@ -652,7 +652,7 @@ class Enhancement {
 All parameters are optional for backward compatibility with existing code.
 
 <details>
-<summary>**Passing Custom Context:**</summary>
+<summary>Passing Custom Context</summary>
 
 You can pass custom context when calling `enh.get()` or `enh.whenResolved()`:
 
@@ -682,7 +682,7 @@ This is useful for:
 
 ### Registry Item with enhKey
 
-Registry items now support optional `enhKey`, `withAttrs`, `canSpawn`, and `lifecycleKeys` properties:
+In addition to spawn and symlinks, registry items support optional properties `enhKey`, `withAttrs`, `canSpawn`, and `lifecycleKeys`:
 
 ```TypeScript
 interface IBaseRegistryItem<T> {
@@ -690,7 +690,7 @@ interface IBaseRegistryItem<T> {
     new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
     canSpawn?: (obj: any, ctx?: SpawnContext<T>) => boolean;  // Optional spawn guard
   };
-  symlinks: { [key: string | symbol]: keyof T };
+  symlinks?: { [key: string | symbol]: keyof T };
   enhKey?: string;  // String identifier for set proxy access
   withAttrs?: AttrPatterns<T>;  // Automatic attribute parsing during spawn
   lifecycleKeys?: 
@@ -704,11 +704,14 @@ interface IBaseRegistryItem<T> {
 
 The `withAttrs` property enables automatic attribute parsing when the enhancement is spawned. See the [Parsing Attributes with parseWithAttrs](#parsing-attributes-with-parsewithattrs) section for details.
 
+It also tips off extending polyfills / libraries, in particular mount-observer, to be on te lookout for the attributes specified by withAttrs.  But *assign-gingerly, by itself, performs **no** DOM observing to automatically spawn the class instance*.  It expects consumers of the polyfill to programmatically attach such behavior/enhancements, and/or rely on alternative, higher level packages to be vigilant for enhancement opportunities. 
+
 The `canSpawn` static method allows enhancement classes to conditionally block spawning based on the target object. See the [Conditional Spawning with canSpawn](#conditional-spawning-with-canspawn) section for details.
 
 The `lifecycleKeys` property configures lifecycle integration without requiring base classes. See the [Lifecycle Keys: Configuration vs Convention](#lifecycle-keys-configuration-vs-convention) section for details.
 
-### Advanced Examples
+<details>
+   <summary>Advanced Examples</summary>
 
 **Multiple Enhancements:**
 ```TypeScript
@@ -772,6 +775,7 @@ element.enh.set.plainData.prop1 = 'value1';
 element.enh.set.plainData.prop2 = 'value2';
 
 console.log(element.enh.plainData); // { prop1: 'value1', prop2: 'value2' }
+</details>
 ```
 
 ### Finding Registry Items by enhKey
