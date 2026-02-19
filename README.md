@@ -555,7 +555,8 @@ console.log(registry1 === element1.customElementRegistry.enhancementRegistry); /
 ```
 </details>
 
-### Explicit Registry Override
+<details>
+  <summary>Explicit Registry Override</summary>
 
 You can still provide an explicit `registry` option to override the automatic behavior:
 
@@ -569,6 +570,7 @@ myElement.assignGingerly({
 ```
 
 **Browser Support**: This feature requires Chrome 146+ with scoped custom element registry support. The implementation is designed as a polyfill for the web standards proposal and does not include fallback behavior for older browsers.
+</details>
 
 ## Enhanced Element Property Assignment with `enh.set` Proxy (Chrome 146+)
 
@@ -580,7 +582,7 @@ The `enh.set` proxy allows you to assign properties to enhancements using a clea
 
 ```TypeScript
 import 'assign-gingerly/object-extension.js';
-import { BaseRegistry } from 'assign-gingerly';
+//import { BaseRegistry } from 'assign-gingerly';
 
 // Define an enhancement class
 class MyEnhancement {
