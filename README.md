@@ -778,7 +778,8 @@ console.log(element.enh.plainData); // { prop1: 'value1', prop2: 'value2' }
 </details>
 ```
 
-### Finding Registry Items by enhKey
+<details>
+<summary>Finding Registry Items by enhKey</summary>
 
 The `BaseRegistry` class includes a `findByEnhKey` method:
 
@@ -792,10 +793,11 @@ registry.push({
 const item = registry.findByEnhKey('myEnh');
 console.log(item.enhKey); // 'myEnh'
 ```
+</details>
 
 ### Programmatic Instance Spawning with `enh.get()`
 
-The `enh.get()` method provides a programmatic way to spawn or retrieve enhancement instances:
+The `enh.get(registryItem)` method provides a programmatic way to spawn or retrieve enhancement instances:
 
 ```TypeScript
 const registryItem = {
@@ -822,7 +824,9 @@ console.log(element.enh.myEnh === instance); // true
 - **Shared instances**: Uses the same global instance map as `assignGingerly` and `enh.set`, ensuring only one instance per registry item
 - **Auto-registration**: Automatically adds registry items to the element's registry if not present
 
-**Example with shared instances:**
+<details>
+<summary>Example with shared instances</summary>
+
 ```TypeScript
 const registryItem = {
   spawn: MyEnhancement,
@@ -845,7 +849,10 @@ console.log(element.enh.myEnh.prop2); // 'from set'
 console.log(element.enh.myEnh.value); // 'from assign'
 ```
 
-### Lifecycle Keys: Configuration vs Convention
+</details>
+
+<details>
+  <summary>Lifecycle Keys: Configuration vs Convention</summary>
 
 Enhancement classes can integrate with the lifecycle system through configurable method/property names, avoiding the need for base classes or mixins.
 
@@ -917,6 +924,8 @@ const registryItem = {
 ```
 
 Note: Symbol event names are not yet supported by the platform but have been requested. When supported, the `resolved` key will work as both property name and event name.
+
+</details>
 
 ### Disposing Enhancement Instances with `enh.dispose()`
 
