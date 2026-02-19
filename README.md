@@ -549,7 +549,7 @@ const customRegistry = new BaseRegistry();
 
 myElement.assignGingerly({
   [mySymbol]: 'value'
-}, { registry: customRegistry }); // Uses customRegistry instead of customElementRegistry
+}, { registry: customRegistry }); // Uses customRegistry instead of customElementRegistry.enhancementRegistry
 ```
 
 **Browser Support**: This feature requires Chrome 146+ with scoped custom element registry support. The implementation is designed as a polyfill for the web standards proposal and does not include fallback behavior for older browsers.
@@ -600,7 +600,10 @@ console.log(myElement.enh.myEnh.myProp); // 'hello'
 console.log(myElement.enh.myEnh.element === myElement); // true
 ```
 
+<details>
+<summary>
 ### How It Works
+</summary>
 
 When you access `element.enh.set.enhKey.property`, the proxy:
 
@@ -612,6 +615,8 @@ When you access `element.enh.set.enhKey.property`, the proxy:
    - Stores the spawned instance at `element.enh[enhKey]`
 3. **Reuses existing instances**: If the enhancement already exists and is the correct type, it reuses it
 4. **Falls back to plain objects**: If no registry item is found, creates a plain object at `element.enh[enhKey]`
+
+</details>
 
 ### Why the `enh` Namespace?
 
