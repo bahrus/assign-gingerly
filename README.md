@@ -1355,19 +1355,21 @@ The `parseWithAttrs` function provides a declarative way to read and parse HTML 
 
 **Important**: When using the `enh.get()`, `enh.set`, or `assignGingerly()` methods with registry items, you typically **do not need to call `parseWithAttrs()` manually**. The attribute parsing happens automatically during enhancement spawning when you include a `withAttrs` property in your registry item.
 
+```html
+<my-element my-enhancement-count="42" my-enhancement-theme="dark"></my-element>
+```
+
 ```TypeScript
 import 'assign-gingerly/object-extension.js';
 
-// HTML: <my-element data-count="42" data-theme="dark"></my-element>
-
 class MyEnhancement {
-  element;
+  elementRef;
   ctx;
   count = 0;
   theme = 'light';
   
   constructor(oElement, ctx, initVals) {
-    this.element = oElement;
+    this.element = new WeakRef(oElement);
     this.ctx = ctx;
     // initVals automatically contains parsed attributes!
     if (initVals) {
@@ -1377,22 +1379,20 @@ class MyEnhancement {
 }
 
 const element = document.querySelector('my-element');
-const registry = element.customElementRegistry.enhancementRegistry;
-
-// Define withAttrs in the registry item
-registry.push({
+const enhancementConfig = {
   spawn: MyEnhancement,
   enhKey: 'myEnh',
   withAttrs: {
-    base: 'data-',
-    count: '${base}count',
+    base: 'my-enhancement',
+    count: '${base}-count',
     _count: { instanceOf: 'Number' },
-    theme: '${base}theme'
+    theme: '${base}-theme'
   }
-});
+};
+
 
 // Spawn the enhancement - attributes are automatically parsed!
-const instance = element.enh.get(registry.getItems()[0]);
+const instance = element.enh.get(enhancementConfig);
 console.log(instance.count);  // 42 (parsed from attribute)
 console.log(instance.theme);  // 'dark' (parsed from attribute)
 ```
@@ -1406,9 +1406,7 @@ console.log(instance.theme);  // 'dark' (parsed from attribute)
 
 **Precedence**: If both parsed attributes and existing `element.enh[enhKey]` values exist, the existing values take precedence over parsed attributes.
 
-### Manual Usage
 
-While automatic parsing is the recommended approach, you can also call `parseWithAttrs()` manually when needed:
 
 ### The `enh-` Prefix for Attribute Isolation
 
@@ -1466,7 +1464,23 @@ registry.push({
 });
 ```
 
-When calling `parseWithAttrs()` manually, pass the pattern as the third parameter:
+<details>
+  <summary>Why use `enh-` prefix?</summary>
+
+1. **Avoid conflicts**: Custom elements may use unprefixed attributes for their own purposes
+2. **Clear intent**: Makes it obvious which attributes are for enhancements
+3. **Future-proof**: Protects against future attribute additions to custom elements
+4. **Consistency**: Provides a standard convention across all enhanced elements
+5. **Selective override**: Pattern-based `allowUnprefixed` lets you opt-in specific element families while maintaining strict isolation for others
+
+</details>
+
+<details>
+  <summary>Manual Usage</summary>
+
+While automatic parsing is the recommended approach, you can also call `parseWithAttrs()` manually when needed.
+
+When calling `parseWithAttrs()` manually, pass the pattern as the third (optional) parameter:
 
 ```TypeScript
 // Allow unprefixed only for elements matching pattern
@@ -1505,27 +1519,6 @@ const result2 = parseWithAttrs(
 // result2.count = undefined (unprefixed ignored because tag doesn't match)
 ```
 
-**Base Attribute Validation:**
-
-The `base` attribute must contain either a dash (`-`) or a non-ASCII character to prevent conflicts with native attributes:
-
-```TypeScript
-// Valid base attributes
-parseWithAttrs(element, { base: 'data-config' });     // Has dash
-parseWithAttrs(element, { base: '🎨-theme' });        // Has non-ASCII
-
-// Invalid - throws error
-parseWithAttrs(element, { base: 'config' });          // No dash or non-ASCII
-```
-
-**Why use `enh-` prefix?**
-
-1. **Avoid conflicts**: Custom elements may use unprefixed attributes for their own purposes
-2. **Clear intent**: Makes it obvious which attributes are for enhancements
-3. **Future-proof**: Protects against future attribute additions to custom elements
-4. **Consistency**: Provides a standard convention across all enhanced elements
-5. **Selective override**: Pattern-based `allowUnprefixed` lets you opt-in specific element families while maintaining strict isolation for others
-
 ### Basic Usage
 
 ```TypeScript
@@ -1542,7 +1535,59 @@ const config = parseWithAttrs(element, {
 });
 ```
 
-### AttrPatterns Configuration
+### Error Handling
+
+The function throws descriptive errors for common issues:
+
+```TypeScript
+// Circular reference
+parseWithAttrs(element, {
+  a: '${b}',
+  b: '${a}'  // Error: Circular reference detected
+});
+
+// Undefined variable
+parseWithAttrs(element, {
+  name: '${missing}'  // Error: Undefined template variable: missing
+});
+
+// Invalid JSON
+// HTML: <div data-obj='{invalid}'></div>
+parseWithAttrs(element, {
+  base: 'data-',
+  obj: '${base}obj',
+  _obj: { instanceOf: 'Object' }
+  // Error: Failed to parse JSON: "{invalid}"
+});
+
+// Invalid number
+// HTML: <div data-count="abc"></div>
+parseWithAttrs(element, {
+  base: 'data-',
+  count: '${base}count',
+  _count: { instanceOf: 'Number' }
+  // Error: Failed to parse number: "abc"
+});
+```
+
+</details>
+
+**Base Attribute Validation:**
+
+The `base` attribute must contain either a dash (`-`) or a non-ASCII character to prevent conflicts with native attributes:
+
+```TypeScript
+// Valid base attributes
+const enhConfig1 = { base: 'data-config' };     // Has dash
+const enhConfig2 =  { base: '🎨-theme' });        // Has non-ASCII (and dash)
+
+// Invalid - throws error
+const enhConig3 = { base: 'config' };          // No dash or non-ASCII
+```
+
+
+<details>
+  <summary>AttrPatterns Configuration</summary>
 
 The `parseWithAttrs` function accepts an `AttrPatterns` object that defines:
 
@@ -1684,6 +1729,15 @@ const result2 = parseWithAttrs(element, {
 // Result: { greetings: { hello: 'world', goodbye: 'Mars' } }
 ```
 
+### Best Practices
+
+1. **Use base for common prefixes**: Reduces repetition in attribute names
+2. **Leverage template variables**: Build complex attribute names from simple parts
+3. **Specify instanceOf**: Ensures proper type conversion
+4. **Use mapsTo for clarity**: Map attribute names to meaningful property names
+5. **Combine with assignGingerly**: Use nested paths (`?.`) for deep property assignment
+6. **Handle missing attributes**: Non-existent attributes are skipped (except Boolean types)
+
 ### Nested Paths with assignGingerly
 
 Combine `parseWithAttrs` with `assignGingerly` for nested property assignment:
@@ -1709,6 +1763,10 @@ assignGingerly(element, attrs);
 // element.style.height === '100px'
 // element.moods.personIsHappy === true
 ```
+
+</details>
+
+<!--
 
 ### Complete Example
 
@@ -1749,46 +1807,8 @@ console.log(result);
 // }
 ```
 
-### Error Handling
+-->
 
-The function throws descriptive errors for common issues:
 
-```TypeScript
-// Circular reference
-parseWithAttrs(element, {
-  a: '${b}',
-  b: '${a}'  // Error: Circular reference detected
-});
 
-// Undefined variable
-parseWithAttrs(element, {
-  name: '${missing}'  // Error: Undefined template variable: missing
-});
 
-// Invalid JSON
-// HTML: <div data-obj='{invalid}'></div>
-parseWithAttrs(element, {
-  base: 'data-',
-  obj: '${base}obj',
-  _obj: { instanceOf: 'Object' }
-  // Error: Failed to parse JSON: "{invalid}"
-});
-
-// Invalid number
-// HTML: <div data-count="abc"></div>
-parseWithAttrs(element, {
-  base: 'data-',
-  count: '${base}count',
-  _count: { instanceOf: 'Number' }
-  // Error: Failed to parse number: "abc"
-});
-```
-
-### Best Practices
-
-1. **Use base for common prefixes**: Reduces repetition in attribute names
-2. **Leverage template variables**: Build complex attribute names from simple parts
-3. **Specify instanceOf**: Ensures proper type conversion
-4. **Use mapsTo for clarity**: Map attribute names to meaningful property names
-5. **Combine with assignGingerly**: Use nested paths (`?.`) for deep property assignment
-6. **Handle missing attributes**: Non-existent attributes are skipped (except Boolean types)
