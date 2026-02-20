@@ -1095,7 +1095,8 @@ const instanceWithContext = await element.enh.whenResolved(registryItem, authCon
 // The constructor receives authContext via ctx.mountCtx
 ```
 
-**How `enh.whenResolved()` works:**
+<details>
+<summary>How `enh.whenResolved()` works:</summary>
 
 1. **Validates configuration**: Throws error if `lifecycleKeys.resolved` is not specified
 2. **Gets instance**: Calls `enh.get()` to get or spawn the instance
@@ -1182,6 +1183,8 @@ console.log(instance1 === instance2); // true - same instance
 
 **Browser Support**: This feature requires Chrome 146+ with scoped custom element registry support.
 
+</details>
+
 ## Conditional Spawning with `canSpawn`
 
 Enhancement classes can implement a static `canSpawn` method to conditionally block spawning based on the target object. This is useful for:
@@ -1230,7 +1233,8 @@ const spanInstance = span.enh.get(registry.getItems()[0]);
 console.log(spanInstance); // undefined
 ```
 
-### How It Works
+<details>
+  <summary>How It Works</summary>
 
 1. **Called before spawning**: When an enhancement is about to be spawned (via `assignGingerly`, `enh.get()`, or `enh.set`), the `canSpawn` method is called first
 2. **Receives context**: The method receives the target object and spawn context with registry item information
@@ -1340,6 +1344,8 @@ const element = document.createElement('div');
 assignGingerly(element, { [enhSymbol]: 'test' }, { registry });
 // Enhancement created and value set
 ```
+
+</details>
 
 ## Parsing Attributes with `parseWithAttrs`
 
