@@ -793,8 +793,9 @@ element.enh.set.plainData.prop1 = 'value1';
 element.enh.set.plainData.prop2 = 'value2';
 
 console.log(element.enh.plainData); // { prop1: 'value1', prop2: 'value2' }
-</details>
 ```
+
+</details>
 
 <details>
 <summary>Finding Registry Items by enhKey</summary>
