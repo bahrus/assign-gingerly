@@ -221,15 +221,37 @@ export function parseWithAttrs<T = any>(
     for (const [key, { attrName, config }] of resolvedAttrs) {
         const attrValue = getAttributeValue(element, attrName, allowUnprefixed);
         
-        // Skip if attribute doesn't exist
-        if (attrValue === null && config.instanceOf !== 'Boolean') {
+        // Handle missing attribute
+        if (attrValue === null) {
+            // Use valIfNull if defined
+            if (config.valIfNull !== undefined) {
+                const mapsTo = config.mapsTo ?? (key === 'base' ? '.' : key);
+                
+                if (mapsTo === '.') {
+                    // Spread into root
+                    if (typeof config.valIfNull === 'object' && config.valIfNull !== null) {
+                        Object.assign(result, config.valIfNull);
+                    }
+                } else {
+                    result[mapsTo as string] = config.valIfNull;
+                }
+            }
+            // Skip if no valIfNull and not Boolean (Boolean uses presence check)
+            else if (config.instanceOf !== 'Boolean') {
+                continue;
+            }
+            // For Boolean without valIfNull, fall through to parser
+            else {
+                const parser = config.parser || getDefaultParser(config.instanceOf);
+                const parsedValue = parser(attrValue);
+                const mapsTo = config.mapsTo ?? (key === 'base' ? '.' : key);
+                result[mapsTo as string] = parsedValue;
+            }
             continue;
         }
         
-        // Get parser
+        // Attribute exists - parse normally
         const parser = config.parser || getDefaultParser(config.instanceOf);
-        
-        // Parse value
         const parsedValue = parser(attrValue);
         
         // Determine target property

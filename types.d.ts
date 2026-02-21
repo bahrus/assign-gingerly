@@ -92,6 +92,13 @@ export interface AttrConfig<T = any> {
    */
   parser?: (attrValue: string | null) => any;
   
+  /**
+   * Default value to use when attribute is missing
+   * If defined, bypasses parser when attribute is not present
+   * If undefined, property is not added to initVals when attribute is missing
+   */
+  valIfNull?: any;
+  
   // /**
   //  * Whether to only read the initial value (true) or continue observing changes (false)
   //  * Defaults to true (initial read only)

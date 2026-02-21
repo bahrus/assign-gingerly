@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>parseWithAttrs valIfNull Tests</title>
+    <script src="https://unpkg.com/@esm-bundle/chai@4.3.4-fix.0/esm/chai.js"></script>
+</head>
+<body>
+    <h1>parseWithAttrs valIfNull Tests</h1>
+    <div id="test-results"></div>
+
+    <script type="module">
+        import { parseWithAttrs } from '../parseWithAttrs.js';
+        const { assert } = chai;
+
+        const results = [];
+        
+        function test(name, fn) {
+            try {
+                fn();
+                results.push({ name, status: 'PASS' });
+                console.log(`✓ ${name}`);
+            } catch (error) {
+                results.push({ name, status: 'FAIL', error: error.message });
+                console.error(`✗ ${name}:`, error.message);
+            }
+        }
+
+        // Test 1: String default value
+        test('String default value when attribute missing', () => {
+            const div = document.createElement('div');
+            
+            const result = parseWithAttrs(div, {
+                base: 'config',
+                theme: '${base}-theme',
+                _theme: {
+                    instanceOf: 'String',
+                    mapsTo: 'theme',
+                    valIfNull: 'light'
+                }
+            });
+            
+            assert.deepEqual(result, { theme: 'light' });
+        });
+
+        // Test 2: Numeric default value
+        test('Numeric default value when attribute missing', () => {
+            const div = document.createElement('div');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data',
+                count: '${base}-count',
+                _count: {
+                    instanceOf: 'Number',
+                    mapsTo: 'count',
+                    valIfNull: 0
+                }
+            });
+            
+            assert.deepEqual(result, { count: 0 });
+        });
+
+        // Test 3: No default (current behavior)
+        test('No default - property not added when attribute missing', () => {
+            const div = document.createElement('div');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data',
+                optional: '${base}-optional',
+                _optional: {
+                    instanceOf: 'String',
+                    mapsTo: 'optional'
+                }
+            });
+            
+            assert.deepEqual(result, {});
+        });
+
+        // Test 4: Object default value
+        test('Object default value when attribute missing', () => {
+            const div = document.createElement('div');
+            
+            const result = parseWithAttrs(div, {
+                base: 'config',
+                settings: '${base}-settings',
+                _settings: {
+                    instanceOf: 'Object',
+                    mapsTo: 'settings',
+                    valIfNull: { enabled: false }
+                }
+            });
+            
+            assert.deepEqual(result, { settings: { enabled: false } });
+        });
+
+        // Test 5: Boolean default value
+        test('Boolean default value when attribute missing', () => {
+            const div = document.createElement('div');
+            
+            const result = parseWithAttrs(div, {
+                base: 'feature',
+                enabled: '${base}-enabled',
+                _enabled: {
+                    instanceOf: 'Boolean',
+                    mapsTo: 'isEnabled',
+                    valIfNull: false
+                }
+            });
+            
+            assert.deepEqual(result, { isEnabled: false });
+        });
+
+        // Test 6: Empty string vs missing - parser should be called for empty string
+        test('Empty string attribute calls parser, not valIfNull', () => {
+            const div = document.createElement('div');
+            div.setAttribute('data-count', '');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data',
+                count: '${base}-count',
+                _count: {
+                    instanceOf: 'Number',
+                    mapsTo: 'count',
+                    valIfNull: 99
+                }
+            });
+            
+            // Empty string parsed as Number returns null
+            assert.deepEqual(result, { count: null });
+        });
+
+        // Test 7: Attribute present with value - parser should be called
+        test('Attribute present with value uses parser, not valIfNull', () => {
+            const div = document.createElement('div');
+            div.setAttribute('data-count', '42');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data',
+                count: '${base}-count',
+                _count: {
+                    instanceOf: 'Number',
+                    mapsTo: 'count',
+                    valIfNull: 0
+                }
+            });
+            
+            assert.deepEqual(result, { count: 42 });
+        });
+
+        // Test 8: Array default value
+        test('Array default value when attribute missing', () => {
+            const div = document.createElement('div');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data',
+                items: '${base}-items',
+                _items: {
+                    instanceOf: 'Array',
+                    mapsTo: 'items',
+                    valIfNull: []
+                }
+            });
+            
+            assert.deepEqual(result, { items: [] });
+        });
+
+        // Test 9: null as default value
+        test('null as valIfNull default value', () => {
+            const div = document.createElement('div');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data',
+                value: '${base}-value',
+                _value: {
+                    instanceOf: 'String',
+                    mapsTo: 'value',
+                    valIfNull: null
+                }
+            });
+            
+            assert.deepEqual(result, { value: null });
+        });
+
+        // Test 10: Multiple attributes with mixed valIfNull
+        test('Multiple attributes with mixed valIfNull behavior', () => {
+            const div = document.createElement('div');
+            div.setAttribute('config-name', 'MyApp');
+            
+            const result = parseWithAttrs(div, {
+                base: 'config',
+                name: '${base}-name',
+                _name: {
+                    instanceOf: 'String',
+                    mapsTo: 'name'
+                },
+                theme: '${base}-theme',
+                _theme: {
+                    instanceOf: 'String',
+                    mapsTo: 'theme',
+                    valIfNull: 'dark'
+                },
+                count: '${base}-count',
+                _count: {
+                    instanceOf: 'Number',
+                    mapsTo: 'count',
+                    valIfNull: 10
+                }
+            });
+            
+            assert.deepEqual(result, { 
+                name: 'MyApp',
+                theme: 'dark',
+                count: 10
+            });
+        });
+
+        // Test 11: valIfNull with mapsTo '.' (spread into root)
+        test('valIfNull with mapsTo "." spreads object into root', () => {
+            const div = document.createElement('div');
+            
+            const result = parseWithAttrs(div, {
+                base: 'config',
+                _base: {
+                    instanceOf: 'Object',
+                    mapsTo: '.',
+                    valIfNull: { x: 1, y: 2 }
+                }
+            });
+            
+            assert.deepEqual(result, { x: 1, y: 2 });
+        });
+
+        // Test 12: valIfNull = 0 (falsy but defined)
+        test('valIfNull with falsy value 0 is used', () => {
+            const div = document.createElement('div');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data',
+                value: '${base}-value',
+                _value: {
+                    instanceOf: 'Number',
+                    mapsTo: 'value',
+                    valIfNull: 0
+                }
+            });
+            
+            assert.deepEqual(result, { value: 0 });
+        });
+
+        // Test 13: valIfNull = false (falsy but defined)
+        test('valIfNull with falsy value false is used', () => {
+            const div = document.createElement('div');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data',
+                flag: '${base}-flag',
+                _flag: {
+                    instanceOf: 'Boolean',
+                    mapsTo: 'flag',
+                    valIfNull: false
+                }
+            });
+            
+            assert.deepEqual(result, { flag: false });
+        });
+
+        // Test 14: valIfNull = '' (empty string, falsy but defined)
+        test('valIfNull with empty string is used', () => {
+            const div = document.createElement('div');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data',
+                text: '${base}-text',
+                _text: {
+                    instanceOf: 'String',
+                    mapsTo: 'text',
+                    valIfNull: ''
+                }
+            });
+            
+            assert.deepEqual(result, { text: '' });
+        });
+
+        // Display results
+        const resultsDiv = document.getElementById('test-results');
+        const passCount = results.filter(r => r.status === 'PASS').length;
+        const failCount = results.filter(r => r.status === 'FAIL').length;
+        
+        resultsDiv.innerHTML = `
+            <h2>Results: ${passCount} passed, ${failCount} failed</h2>
+            <ul>
+                ${results.map(r => `
+                    <li style="color: ${r.status === 'PASS' ? 'green' : 'red'}">
+                        ${r.status}: ${r.name}
+                        ${r.error ? `<br><small>${r.error}</small>` : ''}
+                    </li>
+                `).join('')}
+            </ul>
+        `;
+    </script>
+</body>
+</html>

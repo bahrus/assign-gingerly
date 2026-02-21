@@ -1389,7 +1389,7 @@ const enhancementConfig = {
     count: '${base}-count',
     _count: { instanceOf: 'Number' },
     theme: '${base}-theme'
-    
+
   }
 };
 
@@ -1706,6 +1706,117 @@ const result = parseWithAttrs(element, {
   }
 });
 // Result: { theme: 'dark', lang: 'en' }
+```
+
+### Default Values with valIfNull
+
+The `valIfNull` property allows you to specify default values when attributes are missing:
+
+```TypeScript
+// HTML: <div></div>  (no attributes)
+
+const result = parseWithAttrs(element, {
+  base: 'data-',
+  theme: '${base}theme',
+  _theme: {
+    instanceOf: 'String',
+    valIfNull: 'light'  // Default when attribute is missing
+  },
+  count: '${base}count',
+  _count: {
+    instanceOf: 'Number',
+    valIfNull: 0  // Default to 0
+  }
+});
+// Result: { theme: 'light', count: 0 }
+```
+
+**How it works:**
+- **Attribute missing**: If the attribute doesn't exist and `valIfNull` is defined, the default value is used **without calling the parser**
+- **Attribute present**: If the attribute exists (even if empty string), the parser is called normally and `valIfNull` is ignored
+- **No valIfNull**: If `valIfNull` is undefined and the attribute is missing, the property is not added to the result (current behavior)
+
+**Important notes:**
+1. **Parser is bypassed**: When `valIfNull` is used, the parser is NOT called - the default value is used as-is
+2. **Empty string vs missing**: `valIfNull` only applies when the attribute is completely absent. If the attribute exists but is empty (`data-count=""`), the parser IS called
+3. **Any value allowed**: `valIfNull` can be any JavaScript value: string, number, boolean, object, array, null, etc.
+4. **Falsy values work**: Even falsy values like `0`, `false`, `''`, or `null` are valid defaults
+
+**Examples with different types:**
+
+```TypeScript
+// Object default
+const result1 = parseWithAttrs(element, {
+  base: 'config-',
+  settings: '${base}settings',
+  _settings: {
+    instanceOf: 'Object',
+    valIfNull: { enabled: false, mode: 'auto' }
+  }
+});
+// Result: { settings: { enabled: false, mode: 'auto' } }
+
+// Boolean default
+const result2 = parseWithAttrs(element, {
+  base: 'feature-',
+  enabled: '${base}enabled',
+  _enabled: {
+    instanceOf: 'Boolean',
+    valIfNull: false
+  }
+});
+// Result: { enabled: false }
+
+// Array default
+const result3 = parseWithAttrs(element, {
+  base: 'data-',
+  items: '${base}items',
+  _items: {
+    instanceOf: 'Array',
+    valIfNull: []
+  }
+});
+// Result: { items: [] }
+
+// null as default
+const result4 = parseWithAttrs(element, {
+  base: 'data-',
+  value: '${base}value',
+  _value: {
+    instanceOf: 'String',
+    valIfNull: null
+  }
+});
+// Result: { value: null }
+```
+
+**Comparison: Empty string vs missing attribute:**
+
+```html
+<!-- Attribute is missing -->
+<div></div>
+
+<!-- Attribute exists but is empty -->
+<div data-count=""></div>
+```
+
+```TypeScript
+const config = {
+  base: 'data-',
+  count: '${base}count',
+  _count: {
+    instanceOf: 'Number',
+    valIfNull: 99
+  }
+};
+
+// Missing attribute - uses valIfNull
+const result1 = parseWithAttrs(document.querySelector('div:nth-child(1)'), config);
+// Result: { count: 99 }
+
+// Empty string - calls parser (returns null for empty Number)
+const result2 = parseWithAttrs(document.querySelector('div:nth-child(2)'), config);
+// Result: { count: null }
 ```
 
 ### Base Attribute
