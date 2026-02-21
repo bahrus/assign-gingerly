@@ -1389,6 +1389,7 @@ const enhancementConfig = {
     count: '${base}-count',
     _count: { instanceOf: 'Number' },
     theme: '${base}-theme'
+    
   }
 };
 
