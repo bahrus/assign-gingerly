@@ -288,8 +288,10 @@ This guarantees that applying the reversal object restores the object to its exa
 interface IBaseRegistryItem<T = any> {
     spawn: {new(): T} | Promise<{new(): T}>
     symlinks: {[key: symbol]: keyof T}
-    enhKey?: string  // Optional: for element enhancement access
-    withAttrs?: AttrPatterns<T>  // Optional: automatic attribute parsing
+    // Optional: for element enhancement access
+    enhKey?: string
+    // Optional: automatic attribute parsing 
+    withAttrs?: AttrPatterns<T>  
 }
 
 export const isHappy = Symbol.for('TFWsx0YH5E6eSfhE7zfLxA');
