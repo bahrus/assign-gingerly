@@ -9,3 +9,5 @@ export interface AttrConfig<T = any> {
   valIfNull?: 'nothing'
 }
 ```
+
+This would override any built in parsing (based on instance type) or custom parser.
