@@ -1675,6 +1675,139 @@ const result = parseWithAttrs(element, {
 // Result: { createdAt: 1705315800000 }
 ```
 
+### Named Parsers for Reusability and JSON Serialization
+
+Instead of inline functions, you can reference parsers by name, making configs JSON serializable and parsers reusable:
+
+```TypeScript
+import { globalParserRegistry, parseWithAttrs } from 'assign-gingerly';
+
+// Register parsers once (typically in app initialization)
+globalParserRegistry.register('timestamp', (v) => 
+  v ? new Date(v).getTime() : null
+);
+
+globalParserRegistry.register('csv', (v) => 
+  v ? v.split(',').map(s => s.trim()) : []
+);
+
+// Use by name - config is now JSON serializable!
+const config = {
+  base: 'data-',
+  created: '${base}created',
+  _created: {
+    parser: 'timestamp'  // String reference instead of function
+  },
+  tags: '${base}tags',
+  _tags: {
+    parser: 'csv'
+  }
+};
+
+// Can serialize to JSON
+const json = JSON.stringify(config);
+
+// Use the config
+const result = parseWithAttrs(element, config);
+```
+
+**Built-in Named Parsers:**
+
+The following parsers are pre-registered in `globalParserRegistry`:
+
+- `'timestamp'` - Parses ISO date string to Unix timestamp (milliseconds)
+- `'date'` - Parses string to Date object
+- `'csv'` - Splits comma-separated values into trimmed array
+- `'int'` - Parses integer with `parseInt(v, 10)`
+- `'float'` - Parses float with `parseFloat(v)`
+- `'boolean'` - Presence check (same as `instanceOf: 'Boolean'`)
+- `'json'` - Parses JSON (same as `instanceOf: 'Object'` or `'Array'`)
+
+**Custom Element Static Method Parsers:**
+
+You can also reference static methods on custom elements using dot notation:
+
+```TypeScript
+class MyWidget extends HTMLElement {
+  static parseSpecialFormat(v) {
+    return v ? v.toUpperCase() : null;
+  }
+  
+  static parseWithPrefix(v) {
+    return v ? `PREFIX:${v}` : null;
+  }
+}
+customElements.define('my-widget', MyWidget);
+
+// Reference custom element parsers
+const config = {
+  base: 'data-',
+  value: '${base}value',
+  _value: {
+    parser: 'my-widget.parseSpecialFormat'  // element-name.methodName
+  }
+};
+```
+
+**Parser Resolution Order:**
+
+When a string parser is specified:
+
+1. **Check for dot notation** - If parser contains `.`, try to resolve as `element-name.methodName`
+2. **Try custom element** - Look up element in `customElements` registry and check for static method
+3. **Fall back to global registry** - If custom element not found, check `globalParserRegistry`
+4. **Throw error** - If not found anywhere, throw descriptive error
+
+This allows:
+- Element-specific parsers to be scoped to their custom elements
+- Fallback to global registry for shared parsers
+- Dot notation in global registry names (e.g., `'utils.parseDate'`)
+
+**Example: Organizing Parsers**
+
+```TypeScript
+// parsers.js - Centralized parser definitions
+export function registerCommonParsers(registry) {
+  registry.register('uppercase', (v) => v ? v.toUpperCase() : null);
+  registry.register('lowercase', (v) => v ? v.toLowerCase() : null);
+  registry.register('trim', (v) => v ? v.trim() : null);
+  registry.register('phone', (v) => v ? v.replace(/\D/g, '') : null);
+}
+
+// app.js - Register at startup
+import { globalParserRegistry } from 'assign-gingerly';
+import { registerCommonParsers } from './parsers.js';
+
+registerCommonParsers(globalParserRegistry);
+
+// Now all configs can use these parsers by name
+```
+
+**Benefits of Named Parsers:**
+
+- ✅ **JSON serializable** - Configs can be stored/transmitted as JSON
+- ✅ **Reusable** - Define once, use everywhere
+- ✅ **Maintainable** - Update parser logic in one place
+- ✅ **Testable** - Test parsers independently
+- ✅ **Discoverable** - `globalParserRegistry.getNames()` lists all available parsers
+- ✅ **Backward compatible** - Inline functions still work
+
+**Mixing Inline and Named Parsers:**
+
+```TypeScript
+const config = {
+  base: 'data-',
+  created: '${base}created',
+  _created: {
+    parser: 'timestamp'  // Named parser
+  },
+  special: '${base}special',
+  _special: {
+    parser: (v) => v ? v.split('').reverse().join('') : null  // Inline
+  }
+};
+```
+
 ### Property Mapping with mapsTo
 
 The `mapsTo` property controls where parsed values are placed:

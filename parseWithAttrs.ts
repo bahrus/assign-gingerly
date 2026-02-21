@@ -1,19 +1,91 @@
 import { AttrPatterns, AttrConfig } from './types';
+import { globalParserRegistry } from './parserRegistry.js';
 
 // Module-level cache for parsed attribute values
 // Structure: Map<configKey, Map<attrValue, parsedValue>>
 const parseCache = new Map<string, Map<string, any>>();
 
 /**
+ * Resolves a parser specification to an actual parser function
+ * Supports:
+ * - Inline functions (direct use)
+ * - Named parsers from global registry
+ * - Custom element static methods (element-name.methodName)
+ * 
+ * @param parserSpec - Parser function or string reference
+ * @returns The resolved parser function
+ * @throws Error if parser cannot be resolved
+ */
+function resolveParser(parserSpec: ((v: string | null) => any) | string | undefined): ((v: string | null) => any) | undefined {
+  // Undefined - no parser specified
+  if (parserSpec === undefined) {
+    return undefined;
+  }
+  
+  // Inline function - use directly
+  if (typeof parserSpec === 'function') {
+    return parserSpec;
+  }
+  
+  // String reference - resolve it
+  if (typeof parserSpec === 'string') {
+    // Check if it's a custom element reference (contains dot)
+    if (parserSpec.includes('.')) {
+      const dotIndex = parserSpec.indexOf('.');
+      const elementName = parserSpec.substring(0, dotIndex);
+      const methodName = parserSpec.substring(dotIndex + 1);
+      
+      // Try custom element lookup
+      if (typeof customElements !== 'undefined') {
+        try {
+          const ctr = customElements.get(elementName);
+          if (ctr && typeof (ctr as any)[methodName] === 'function') {
+            return (ctr as any)[methodName];
+          }
+        } catch (e) {
+          // customElements.get might throw, fall through to registry
+        }
+      }
+      
+      // Fall through to global registry (allows dot notation in registry too)
+    }
+    
+    // Try global registry
+    const parser = globalParserRegistry.get(parserSpec);
+    if (parser) {
+      return parser;
+    }
+    
+    // Not found anywhere
+    throw new Error(
+      `Parser "${parserSpec}" not found. ` +
+      `Check that it's registered in globalParserRegistry or exists as a static method on the custom element.`
+    );
+  }
+  
+  return undefined;
+}
+
+/**
  * Creates a cache key from an AttrConfig
- * Includes instanceOf and whether parser is custom to ensure correct cache hits
+ * Includes instanceOf and parser identifier to ensure correct cache hits
  */
 function getCacheKey(config: AttrConfig<any>): string {
   const instanceOfStr = typeof config.instanceOf === 'function' 
     ? config.instanceOf.name 
     : (config.instanceOf || 'default');
-  const parserType = config.parser ? 'custom' : 'builtin';
-  return `${instanceOfStr}|${parserType}`;
+  
+  // Include parser in cache key
+  let parserStr: string;
+  if (config.parser === undefined) {
+    parserStr = 'builtin';
+  } else if (typeof config.parser === 'string') {
+    parserStr = `named:${config.parser}`;
+  } else {
+    parserStr = 'custom';
+  }
+  
+  return `${instanceOfStr}|${parserStr}`;
 }
 
 /**
@@ -314,7 +386,7 @@ export function parseWithAttrs<T = any>(
             }
             // For Boolean without valIfNull, fall through to parser
             else {
-                const parser = config.parser || getDefaultParser(config.instanceOf);
+                const parser = resolveParser(config.parser) || getDefaultParser(config.instanceOf);
                 const parsedValue = parser(attrValue);
                 const mapsTo = config.mapsTo ?? (key === 'base' ? '.' : key);
                 result[mapsTo as string] = parsedValue;
@@ -323,7 +395,7 @@ export function parseWithAttrs<T = any>(
         }
         
         // Attribute exists - parse normally
-        const parser = config.parser || getDefaultParser(config.instanceOf);
+        const parser = resolveParser(config.parser) || getDefaultParser(config.instanceOf);
         
         // Use cache if parseCache is specified
         const parsedValue = config.parseCache 

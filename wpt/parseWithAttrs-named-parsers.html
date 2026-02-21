@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>parseWithAttrs Named Parsers Tests</title>
+    <script src="https://unpkg.com/@esm-bundle/chai@4.3.4-fix.0/esm/chai.js"></script>
+</head>
+<body>
+    <h1>parseWithAttrs Named Parsers Tests</h1>
+    <div id="test-results"></div>
+
+    <script type="module">
+        import { parseWithAttrs } from '../parseWithAttrs.js';
+        import { globalParserRegistry } from '../parserRegistry.js';
+        const { assert } = chai;
+
+        const results = [];
+        
+        function test(name, fn) {
+            try {
+                fn();
+                results.push({ name, status: 'PASS' });
+                console.log(`✓ ${name}`);
+            } catch (error) {
+                results.push({ name, status: 'FAIL', error: error.message });
+                console.error(`✗ ${name}:`, error.message);
+            }
+        }
+
+        // Test 1: Built-in timestamp parser
+        test('Built-in timestamp parser', () => {
+            const div = document.createElement('div');
+            div.setAttribute('data-created', '2024-01-15T10:30:00Z');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data-',
+                created: '${base}created',
+                _created: {
+                    parser: 'timestamp'
+                }
+            });
+            
+            assert.equal(result.created, new Date('2024-01-15T10:30:00Z').getTime());
+        });
+
+        // Test 2: Built-in date parser
+        test('Built-in date parser', () => {
+            const div = document.createElement('div');
+            div.setAttribute('data-birthday', '2024-01-15');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data-',
+                birthday: '${base}birthday',
+                _birthday: {
+                    parser: 'date'
+                }
+            });
+            
+            assert.instanceOf(result.birthday, Date);
+            assert.equal(result.birthday.toISOString().split('T')[0], '2024-01-15');
+        });
+
+        // Test 3: Built-in csv parser
+        test('Built-in csv parser', () => {
+            const div = document.createElement('div');
+            div.setAttribute('data-tags', 'javascript, typescript, web');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data-',
+                tags: '${base}tags',
+                _tags: {
+                    parser: 'csv'
+                }
+            });
+            
+            assert.deepEqual(result.tags, ['javascript', 'typescript', 'web']);
+        });
+
+        // Test 4: Built-in int parser
+        test('Built-in int parser', () => {
+            const div = document.createElement('div');
+            div.setAttribute('data-count', '42');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data-',
+                count: '${base}count',
+                _count: {
+                    parser: 'int'
+                }
+            });
+            
+            assert.strictEqual(result.count, 42);
+        });
+
+        // Test 5: Built-in float parser
+        test('Built-in float parser', () => {
+            const div = document.createElement('div');
+            div.setAttribute('data-price', '19.99');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data-',
+                price: '${base}price',
+                _price: {
+                    parser: 'float'
+                }
+            });
+            
+            assert.strictEqual(result.price, 19.99);
+        });
+
+        // Test 6: Built-in json parser
+        test('Built-in json parser', () => {
+            const div = document.createElement('div');
+            div.setAttribute('data-config', '{"theme":"dark","size":"large"}');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data-',
+                config: '${base}config',
+                _config: {
+                    parser: 'json'
+                }
+            });
+            
+            assert.deepEqual(result.config, { theme: 'dark', size: 'large' });
+        });
+
+        // Test 7: Custom registered parser
+        test('Custom registered parser', () => {
+            globalParserRegistry.register('uppercase', (v) => 
+                v ? v.toUpperCase() : null
+            );
+            
+            const div = document.createElement('div');
+            div.setAttribute('data-name', 'hello world');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data-',
+                name: '${base}name',
+                _name: {
+                    parser: 'uppercase'
+                }
+            });
+            
+            assert.equal(result.name, 'HELLO WORLD');
+        });
+
+        // Test 8: Custom element static method parser
+        test('Custom element static method parser', () => {
+            class TestWidget extends HTMLElement {
+                static parseSpecial(v) {
+                    return v ? `[${v}]` : null;
+                }
+            }
+            customElements.define('test-widget', TestWidget);
+            
+            const div = document.createElement('div');
+            div.setAttribute('data-value', 'wrapped');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data-',
+                value: '${base}value',
+                _value: {
+                    parser: 'test-widget.parseSpecial'
+                }
+            });
+            
+            assert.equal(result.value, '[wrapped]');
+        });
+
+        // Test 9: Custom element parser with multiple methods
+        test('Custom element parser with multiple methods', () => {
+            class MultiParser extends HTMLElement {
+                static parseA(v) {
+                    return v ? v + '-A' : null;
+                }
+                
+                static parseB(v) {
+                    return v ? v + '-B' : null;
+                }
+            }
+            customElements.define('multi-parser', MultiParser);
+            
+            const div = document.createElement('div');
+            div.setAttribute('data-a', 'test');
+            div.setAttribute('data-b', 'test');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data-',
+                a: '${base}a',
+                _a: {
+                    parser: 'multi-parser.parseA'
+                },
+                b: '${base}b',
+                _b: {
+                    parser: 'multi-parser.parseB'
+                }
+            });
+            
+            assert.equal(result.a, 'test-A');
+            assert.equal(result.b, 'test-B');
+        });
+
+        // Test 10: Fallback to global registry when custom element not found
+        test('Fallback to global registry when custom element not found', () => {
+            globalParserRegistry.register('nonexistent-element.fallback', (v) => 
+                v ? v + '-fallback' : null
+            );
+            
+            const div = document.createElement('div');
+            div.setAttribute('data-value', 'test');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data-',
+                value: '${base}value',
+                _value: {
+                    parser: 'nonexistent-element.fallback'
+                }
+            });
+            
+            assert.equal(result.value, 'test-fallback');
+        });
+
+        // Test 11: Error when parser not found
+        test('Error when parser not found', () => {
+            const div = document.createElement('div');
+            div.setAttribute('data-value', 'test');
+            
+            try {
+                parseWithAttrs(div, {
+                    base: 'data-',
+                    value: '${base}value',
+                    _value: {
+                        parser: 'nonexistent-parser'
+                    }
+                });
+                assert.fail('Should have thrown error');
+            } catch (error) {
+                assert.include(error.message, 'Parser "nonexistent-parser" not found');
+            }
+        });
+
+        // Test 12: Inline function parser still works
+        test('Inline function parser still works', () => {
+            const div = document.createElement('div');
+            div.setAttribute('data-value', 'test');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data-',
+                value: '${base}value',
+                _value: {
+                    parser: (v) => v ? v.split('').reverse().join('') : null
+                }
+            });
+            
+            assert.equal(result.value, 'tset');
+        });
+
+        // Test 13: Named parser with caching (shared)
+        test('Named parser with caching (shared)', () => {
+            let parseCount = 0;
+            globalParserRegistry.register('counted', (v) => {
+                parseCount++;
+                return v ? v.toUpperCase() : null;
+            });
+            
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-text', 'hello');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-text', 'hello');
+            
+            const config = {
+                base: 'data-',
+                text: '${base}text',
+                _text: {
+                    parser: 'counted',
+                    parseCache: 'shared'
+                }
+            };
+            
+            parseWithAttrs(div1, config);
+            parseWithAttrs(div2, config);
+            
+            // Should only parse once due to caching
+            assert.equal(parseCount, 1);
+        });
+
+        // Test 14: Multiple named parsers in one config
+        test('Multiple named parsers in one config', () => {
+            const div = document.createElement('div');
+            div.setAttribute('data-created', '2024-01-15T10:30:00Z');
+            div.setAttribute('data-tags', 'a, b, c');
+            div.setAttribute('data-count', '42');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data-',
+                created: '${base}created',
+                _created: {
+                    parser: 'timestamp'
+                },
+                tags: '${base}tags',
+                _tags: {
+                    parser: 'csv'
+                },
+                count: '${base}count',
+                _count: {
+                    parser: 'int'
+                }
+            });
+            
+            assert.isNumber(result.created);
+            assert.isArray(result.tags);
+            assert.equal(result.count, 42);
+        });
+
+        // Test 15: Named parser with null value
+        test('Named parser with null value', () => {
+            const div = document.createElement('div');
+            div.setAttribute('data-optional', '');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data-',
+                optional: '${base}optional',
+                _optional: {
+                    parser: 'timestamp'
+                }
+            });
+            
+            assert.isNull(result.optional);
+        });
+
+        // Test 16: Custom element parser with context
+        test('Custom element parser can access static properties', () => {
+            class ConfigParser extends HTMLElement {
+                static prefix = 'PREFIX:';
+                
+                static parseWithPrefix(v) {
+                    return v ? this.prefix + v : null;
+                }
+            }
+            customElements.define('config-parser', ConfigParser);
+            
+            const div = document.createElement('div');
+            div.setAttribute('data-value', 'test');
+            
+            const result = parseWithAttrs(div, {
+                base: 'data-',
+                value: '${base}value',
+                _value: {
+                    parser: 'config-parser.parseWithPrefix'
+                }
+            });
+            
+            assert.equal(result.value, 'PREFIX:test');
+        });
+
+        // Test 17: Registry can be updated at runtime
+        test('Registry can be updated at runtime', () => {
+            globalParserRegistry.register('dynamic', (v) => v ? v + '-v1' : null);
+            
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-value', 'test');
+            
+            const result1 = parseWithAttrs(div1, {
+                base: 'data-',
+                value: '${base}value',
+                _value: { parser: 'dynamic' }
+            });
+            
+            assert.equal(result1.value, 'test-v1');
+            
+            // Update parser
+            globalParserRegistry.register('dynamic', (v) => v ? v + '-v2' : null);
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-value', 'test');
+            
+            const result2 = parseWithAttrs(div2, {
+                base: 'data-',
+                value: '${base}value',
+                _value: { parser: 'dynamic' }
+            });
+            
+            assert.equal(result2.value, 'test-v2');
+        });
+
+        // Display results
+        const resultsDiv = document.getElementById('test-results');
+        const passCount = results.filter(r => r.status === 'PASS').length;
+        const failCount = results.filter(r => r.status === 'FAIL').length;
+        
+        resultsDiv.innerHTML = `
+            <h2>Results: ${passCount} passed, ${failCount} failed</h2>
+            <ul>
+                ${results.map(r => `
+                    <li style="color: ${r.status === 'PASS' ? 'green' : 'red'}">
+                        ${r.status}: ${r.name}
+                        ${r.error ? `<br><small>${r.error}</small>` : ''}
+                    </li>
+                `).join('')}
+            </ul>
+        `;
+    </script>
+</body>
+</html>

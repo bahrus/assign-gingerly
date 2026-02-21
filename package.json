@@ -35,6 +35,13 @@
     },
     "./waitForEvent.js": {
       "default": "./waitForEvent.js"
+    },
+    "./parserRegistry.js": {
+      "default": "./parserRegistry.js"
+    },
+    "./parseWithAttrs.js": {
+      "default": "./parseWithAttrs.js",
+      "types": "./types.d.ts"
     }
   },
   "main": "index.js",

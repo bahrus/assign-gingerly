@@ -88,9 +88,14 @@ export interface AttrConfig<T = any> {
     | `${pathString} -=`
   
   /**
-   * Optional parser function to transform attribute string value
+   * Parser to transform attribute string value
+   * - Function: Inline parser function (not JSON serializable)
+   * - String: Named parser reference (JSON serializable)
+   *   - Simple name: Looks up in global parser registry (e.g., 'timestamp', 'csv')
+   *   - Dot notation: Looks up static method on custom element (e.g., 'my-widget.parseSpecial')
+   *     Falls back to global registry if custom element not found
    */
-  parser?: (attrValue: string | null) => any;
+  parser?: ((attrValue: string | null) => any) | string;
   
   /**
    * Default value to use when attribute is missing
