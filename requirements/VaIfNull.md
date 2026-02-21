@@ -6,6 +6,6 @@ So we should enhance AttrConfig with:
 
 ```TypeScript
 export interface AttrConfig<T = any> {
-  valIfNull: 'nothing'
+  valIfNull?: 'nothing'
 }
 ```
