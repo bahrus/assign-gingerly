@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>parseWithAttrs Caching Tests</title>
+    <script src="https://unpkg.com/@esm-bundle/chai@4.3.4-fix.0/esm/chai.js"></script>
+</head>
+<body>
+    <h1>parseWithAttrs Caching Tests</h1>
+    <div id="test-results"></div>
+
+    <script type="module">
+        import { parseWithAttrs } from '../parseWithAttrs.js';
+        const { assert } = chai;
+
+        const results = [];
+        
+        function test(name, fn) {
+            try {
+                fn();
+                results.push({ name, status: 'PASS' });
+                console.log(`✓ ${name}`);
+            } catch (error) {
+                results.push({ name, status: 'FAIL', error: error.message });
+                console.error(`✗ ${name}:`, error.message);
+            }
+        }
+
+        // Test 1: Shared cache returns same object reference
+        test('Shared cache returns same object reference', () => {
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-config', '{"theme":"dark","count":42}');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-config', '{"theme":"dark","count":42}');
+            
+            const config = {
+                base: 'data-config',
+                _base: {
+                    instanceOf: 'Object',
+                    mapsTo: 'config',
+                    parseCache: 'shared'
+                }
+            };
+            
+            const result1 = parseWithAttrs(div1, config);
+            const result2 = parseWithAttrs(div2, config);
+            
+            // Should be the exact same object reference
+            assert.strictEqual(result1.config, result2.config);
+        });
+
+        // Test 2: Cloned cache returns different object references
+        test('Cloned cache returns different object references', () => {
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-settings', '{"mode":"auto","level":5}');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-settings', '{"mode":"auto","level":5}');
+            
+            const config = {
+                base: 'data-',
+                settings: '${base}settings',
+                _settings: {
+                    instanceOf: 'Object',
+                    mapsTo: 'settings',
+                    parseCache: 'cloned'
+                }
+            };
+            
+            const result1 = parseWithAttrs(div1, config);
+            const result2 = parseWithAttrs(div2, config);
+            
+            // Should be different object references
+            assert.notStrictEqual(result1.settings, result2.settings);
+            
+            // But should have same values
+            assert.deepEqual(result1.settings, result2.settings);
+        });
+
+        // Test 3: Shared cache - mutation affects all references
+        test('Shared cache - mutation affects all references', () => {
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-obj', '{"x":1,"y":2}');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-obj', '{"x":1,"y":2}');
+            
+            const config = {
+                base: 'data-',
+                obj: '${base}obj',
+                _obj: {
+                    instanceOf: 'Object',
+                    parseCache: 'shared'
+                }
+            };
+            
+            const result1 = parseWithAttrs(div1, config);
+            result1.obj.x = 999; // Mutate
+            
+            const result2 = parseWithAttrs(div2, config);
+            
+            // Mutation should be visible in second result
+            assert.equal(result2.obj.x, 999);
+        });
+
+        // Test 4: Cloned cache - mutation does not affect other references
+        test('Cloned cache - mutation does not affect other references', () => {
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-data', '{"a":10,"b":20}');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-data', '{"a":10,"b":20}');
+            
+            const config = {
+                base: 'data-',
+                data: '${base}data',
+                _data: {
+                    instanceOf: 'Object',
+                    parseCache: 'cloned'
+                }
+            };
+            
+            const result1 = parseWithAttrs(div1, config);
+            result1.data.a = 999; // Mutate
+            
+            const result2 = parseWithAttrs(div2, config);
+            
+            // Mutation should NOT be visible in second result
+            assert.equal(result2.data.a, 10);
+        });
+
+        // Test 5: Array caching with shared
+        test('Array caching with shared reference', () => {
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-items', '[1,2,3,4,5]');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-items', '[1,2,3,4,5]');
+            
+            const config = {
+                base: 'data-',
+                items: '${base}items',
+                _items: {
+                    instanceOf: 'Array',
+                    parseCache: 'shared'
+                }
+            };
+            
+            const result1 = parseWithAttrs(div1, config);
+            const result2 = parseWithAttrs(div2, config);
+            
+            // Should be same reference
+            assert.strictEqual(result1.items, result2.items);
+        });
+
+        // Test 6: Array caching with cloned
+        test('Array caching with cloned reference', () => {
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-list', '["a","b","c"]');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-list', '["a","b","c"]');
+            
+            const config = {
+                base: 'data-',
+                list: '${base}list',
+                _list: {
+                    instanceOf: 'Array',
+                    parseCache: 'cloned'
+                }
+            };
+            
+            const result1 = parseWithAttrs(div1, config);
+            result1.list.push('d'); // Mutate
+            
+            const result2 = parseWithAttrs(div2, config);
+            
+            // Should not have the mutation
+            assert.deepEqual(result2.list, ['a', 'b', 'c']);
+        });
+
+        // Test 7: Number caching
+        test('Number caching works correctly', () => {
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-count', '42');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-count', '42');
+            
+            const config = {
+                base: 'data-',
+                count: '${base}count',
+                _count: {
+                    instanceOf: 'Number',
+                    parseCache: 'shared'
+                }
+            };
+            
+            const result1 = parseWithAttrs(div1, config);
+            const result2 = parseWithAttrs(div2, config);
+            
+            // Numbers are primitives, so they're always "shared" by value
+            assert.equal(result1.count, 42);
+            assert.equal(result2.count, 42);
+        });
+
+        // Test 8: String caching
+        test('String caching works correctly', () => {
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-text', 'hello world');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-text', 'hello world');
+            
+            const config = {
+                base: 'data-',
+                text: '${base}text',
+                _text: {
+                    instanceOf: 'String',
+                    parseCache: 'shared'
+                }
+            };
+            
+            const result1 = parseWithAttrs(div1, config);
+            const result2 = parseWithAttrs(div2, config);
+            
+            // Strings are primitives
+            assert.equal(result1.text, 'hello world');
+            assert.equal(result2.text, 'hello world');
+        });
+
+        // Test 9: Different values don't share cache
+        test('Different attribute values have separate cache entries', () => {
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-obj', '{"value":1}');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-obj', '{"value":2}');
+            
+            const config = {
+                base: 'data-',
+                obj: '${base}obj',
+                _obj: {
+                    instanceOf: 'Object',
+                    parseCache: 'shared'
+                }
+            };
+            
+            const result1 = parseWithAttrs(div1, config);
+            const result2 = parseWithAttrs(div2, config);
+            
+            // Should have different values
+            assert.equal(result1.obj.value, 1);
+            assert.equal(result2.obj.value, 2);
+        });
+
+        // Test 10: Custom parser with shared cache
+        test('Custom parser with shared cache', () => {
+            let parseCount = 0;
+            
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-timestamp', '2024-01-15T10:30:00Z');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-timestamp', '2024-01-15T10:30:00Z');
+            
+            const config = {
+                base: 'data-',
+                timestamp: '${base}timestamp',
+                _timestamp: {
+                    parser: (v) => {
+                        parseCount++;
+                        return v ? new Date(v).getTime() : null;
+                    },
+                    parseCache: 'shared'
+                }
+            };
+            
+            const result1 = parseWithAttrs(div1, config);
+            const result2 = parseWithAttrs(div2, config);
+            
+            // Parser should only be called once due to caching
+            assert.equal(parseCount, 1);
+            assert.equal(result1.timestamp, result2.timestamp);
+        });
+
+        // Test 11: Custom parser with cloned cache
+        test('Custom parser with cloned cache', () => {
+            let parseCount = 0;
+            
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-obj', 'custom:value');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-obj', 'custom:value');
+            
+            const config = {
+                base: 'data-',
+                obj: '${base}obj',
+                _obj: {
+                    parser: (v) => {
+                        parseCount++;
+                        return { parsed: v, count: 1 };
+                    },
+                    parseCache: 'cloned'
+                }
+            };
+            
+            const result1 = parseWithAttrs(div1, config);
+            result1.obj.count = 999;
+            
+            const result2 = parseWithAttrs(div2, config);
+            
+            // Parser should only be called once
+            assert.equal(parseCount, 1);
+            
+            // But values should be independent
+            assert.equal(result2.obj.count, 1);
+        });
+
+        // Test 12: No caching when parseCache not specified
+        test('No caching when parseCache not specified', () => {
+            let parseCount = 0;
+            
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-value', 'test');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-value', 'test');
+            
+            const config = {
+                base: 'data-',
+                value: '${base}value',
+                _value: {
+                    parser: (v) => {
+                        parseCount++;
+                        return v;
+                    }
+                    // No parseCache specified
+                }
+            };
+            
+            parseWithAttrs(div1, config);
+            parseWithAttrs(div2, config);
+            
+            // Parser should be called twice (no caching)
+            assert.equal(parseCount, 2);
+        });
+
+        // Test 13: Null value caching
+        test('Null value caching works correctly', () => {
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-nullable', '');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-nullable', '');
+            
+            const config = {
+                base: 'data-',
+                nullable: '${base}nullable',
+                _nullable: {
+                    instanceOf: 'Object',
+                    parseCache: 'shared'
+                }
+            };
+            
+            const result1 = parseWithAttrs(div1, config);
+            const result2 = parseWithAttrs(div2, config);
+            
+            // Both should be null (empty string parses to null for Object)
+            assert.isNull(result1.nullable);
+            assert.isNull(result2.nullable);
+        });
+
+        // Test 14: Deep nested object cloning
+        test('Deep nested object cloning works correctly', () => {
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-nested', '{"a":{"b":{"c":1}}}');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-nested', '{"a":{"b":{"c":1}}}');
+            
+            const config = {
+                base: 'data-',
+                nested: '${base}nested',
+                _nested: {
+                    instanceOf: 'Object',
+                    parseCache: 'cloned'
+                }
+            };
+            
+            const result1 = parseWithAttrs(div1, config);
+            result1.nested.a.b.c = 999; // Deep mutation
+            
+            const result2 = parseWithAttrs(div2, config);
+            
+            // Deep mutation should not affect cloned copy
+            assert.equal(result2.nested.a.b.c, 1);
+        });
+
+        // Test 15: Multiple attributes with mixed caching strategies
+        test('Multiple attributes with mixed caching strategies', () => {
+            const div1 = document.createElement('div');
+            div1.setAttribute('data-shared', '{"x":1}');
+            div1.setAttribute('data-cloned', '{"y":2}');
+            div1.setAttribute('data-nocache', '{"z":3}');
+            
+            const div2 = document.createElement('div');
+            div2.setAttribute('data-shared', '{"x":1}');
+            div2.setAttribute('data-cloned', '{"y":2}');
+            div2.setAttribute('data-nocache', '{"z":3}');
+            
+            const config = {
+                base: 'data-',
+                shared: '${base}shared',
+                _shared: {
+                    instanceOf: 'Object',
+                    parseCache: 'shared'
+                },
+                cloned: '${base}cloned',
+                _cloned: {
+                    instanceOf: 'Object',
+                    parseCache: 'cloned'
+                },
+                nocache: '${base}nocache',
+                _nocache: {
+                    instanceOf: 'Object'
+                }
+            };
+            
+            const result1 = parseWithAttrs(div1, config);
+            const result2 = parseWithAttrs(div2, config);
+            
+            // Shared should be same reference
+            assert.strictEqual(result1.shared, result2.shared);
+            
+            // Cloned should be different reference
+            assert.notStrictEqual(result1.cloned, result2.cloned);
+            
+            // Both should have correct values
+            assert.deepEqual(result1, {
+                shared: { x: 1 },
+                cloned: { y: 2 },
+                nocache: { z: 3 }
+            });
+        });
+
+        // Display results
+        const resultsDiv = document.getElementById('test-results');
+        const passCount = results.filter(r => r.status === 'PASS').length;
+        const failCount = results.filter(r => r.status === 'FAIL').length;
+        
+        resultsDiv.innerHTML = `
+            <h2>Results: ${passCount} passed, ${failCount} failed</h2>
+            <ul>
+                ${results.map(r => `
+                    <li style="color: ${r.status === 'PASS' ? 'green' : 'red'}">
+                        ${r.status}: ${r.name}
+                        ${r.error ? `<br><small>${r.error}</small>` : ''}
+                    </li>
+                `).join('')}
+            </ul>
+        `;
+    </script>
+</body>
+</html>

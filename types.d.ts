@@ -99,6 +99,14 @@ export interface AttrConfig<T = any> {
    */
   valIfNull?: any;
   
+  /**
+   * Enable caching of parsed attribute values
+   * - 'shared': Cache and reuse the same parsed object (fast, but enhancements must not mutate)
+   * - 'cloned': Cache and return a structural clone (safer, but slower)
+   * Note: Parsers should be pure functions when using caching
+   */
+  parseCache?: 'shared' | 'cloned';
+  
   // /**
   //  * Whether to only read the initial value (true) or continue observing changes (false)
   //  * Defaults to true (initial read only)

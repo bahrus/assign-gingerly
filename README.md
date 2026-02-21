@@ -1819,6 +1819,139 @@ const result2 = parseWithAttrs(document.querySelector('div:nth-child(2)'), confi
 // Result: { count: null }
 ```
 
+### Performance Optimization with parseCache
+
+The `parseCache` property enables caching of parsed attribute values to improve performance when the same attribute values appear repeatedly throughout the document:
+
+```TypeScript
+// HTML: Multiple elements with same attribute values
+// <div data-config='{"theme":"dark","size":"large"}'></div>
+// <div data-config='{"theme":"dark","size":"large"}'></div>
+// <div data-config='{"theme":"dark","size":"large"}'></div>
+
+const config = {
+  base: 'data-',
+  config: '${base}config',
+  _config: {
+    instanceOf: 'Object',
+    parseCache: 'shared'  // Cache and reuse parsed objects
+  }
+};
+
+// First parse - parses and caches
+const result1 = parseWithAttrs(element1, config);
+
+// Subsequent parses - returns cached value (no parsing)
+const result2 = parseWithAttrs(element2, config);
+const result3 = parseWithAttrs(element3, config);
+```
+
+**Cache Strategies:**
+
+1. **`'shared'`**: Returns the same object reference from cache
+   - **Fastest**: No cloning overhead
+   - **Risk**: Enhancements that mutate the object will affect all instances
+   - **Best for**: Immutable data or when you trust enhancements not to mutate
+
+2. **`'cloned'`**: Returns a structural clone of the cached object
+   - **Safer**: Each instance gets its own copy
+   - **Slower**: Uses `structuredClone()` which has overhead
+   - **Best for**: Mutable data or when enhancements might modify values
+
+**Examples:**
+
+```TypeScript
+// Shared cache - fast but requires discipline
+const sharedConfig = {
+  base: 'data-',
+  settings: '${base}settings',
+  _settings: {
+    instanceOf: 'Object',
+    parseCache: 'shared'  // All instances share same object
+  }
+};
+
+// Cloned cache - safer for mutable data
+const clonedConfig = {
+  base: 'data-',
+  state: '${base}state',
+  _state: {
+    instanceOf: 'Object',
+    parseCache: 'cloned'  // Each instance gets a copy
+  }
+};
+
+// Custom parser with caching
+let parseCount = 0;
+const customConfig = {
+  base: 'data-',
+  timestamp: '${base}timestamp',
+  _timestamp: {
+    parser: (v) => {
+      parseCount++;  // Track parse calls
+      return v ? new Date(v).getTime() : null;
+    },
+    parseCache: 'shared'  // Parser only called once per unique value
+  }
+};
+```
+
+**Important Notes:**
+
+1. **Parser purity**: Parsers should be pure functions (no side effects) when using caching
+2. **Boolean types**: Caching is skipped for Boolean types (presence check doesn't benefit)
+3. **Cache scope**: Cache is module-level and persists across all `parseWithAttrs()` calls
+4. **Cache key**: Values are cached per `(instanceOf, parserType, attributeValue)` tuple
+5. **Memory**: Cache grows with unique attribute values encountered (no automatic cleanup)
+6. **Browser support**: `'cloned'` strategy requires `structuredClone()` (modern browsers)
+
+**Performance Considerations:**
+
+- **Shared cache**: Best for simple objects, arrays, or when parsing is expensive
+- **Cloned cache**: Overhead may negate benefits for simple values (strings, numbers)
+- **No cache**: Better for unique values or when parsing is trivial
+- **Custom parsers**: Caching is most beneficial when parser does expensive operations (Date parsing, complex transformations)
+
+**Example: Shared cache mutation risk**
+
+```TypeScript
+const config = {
+  base: 'data-',
+  items: '${base}items',
+  _items: {
+    instanceOf: 'Array',
+    parseCache: 'shared'
+  }
+};
+
+// HTML: <div data-items='[1,2,3]'></div>
+
+const result1 = parseWithAttrs(element1, config);
+result1.items.push(4);  // Mutation!
+
+const result2 = parseWithAttrs(element2, config);
+console.log(result2.items);  // [1,2,3,4] - mutation is visible!
+```
+
+**Example: Cloned cache safety**
+
+```TypeScript
+const config = {
+  base: 'data-',
+  items: '${base}items',
+  _items: {
+    instanceOf: 'Array',
+    parseCache: 'cloned'  // Safe from mutations
+  }
+};
+
+const result1 = parseWithAttrs(element1, config);
+result1.items.push(4);  // Mutation
+
+const result2 = parseWithAttrs(element2, config);
+console.log(result2.items);  // [1,2,3] - original value preserved
+```
+
 ### Base Attribute
 
 The special `base` property handles a single attribute that spreads into the result:

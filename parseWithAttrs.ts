@@ -1,5 +1,77 @@
 import { AttrPatterns, AttrConfig } from './types';
 
+// Module-level cache for parsed attribute values
+// Structure: Map<configKey, Map<attrValue, parsedValue>>
+const parseCache = new Map<string, Map<string, any>>();
+
+/**
+ * Creates a cache key from an AttrConfig
+ * Includes instanceOf and whether parser is custom to ensure correct cache hits
+ */
+function getCacheKey(config: AttrConfig<any>): string {
+  const instanceOfStr = typeof config.instanceOf === 'function' 
+    ? config.instanceOf.name 
+    : (config.instanceOf || 'default');
+  const parserType = config.parser ? 'custom' : 'builtin';
+  return `${instanceOfStr}|${parserType}`;
+}
+
+/**
+ * Gets a cached parsed value or parses and caches it
+ * @param attrValue - The attribute value to parse (or null)
+ * @param config - The attribute configuration
+ * @param parser - The parser function to use
+ * @returns The parsed value
+ */
+function parseWithCache(
+  attrValue: string | null,
+  config: AttrConfig<any>,
+  parser: (v: string | null) => any
+): any {
+  // Skip caching for Boolean (presence check doesn't benefit from caching)
+  if (config.instanceOf === 'Boolean') {
+    return parser(attrValue);
+  }
+  
+  // Get or create cache for this config
+  const cacheKey = getCacheKey(config);
+  if (!parseCache.has(cacheKey)) {
+    parseCache.set(cacheKey, new Map());
+  }
+  
+  const valueCache = parseCache.get(cacheKey)!;
+  
+  // Use special key for null values
+  const valueCacheKey = attrValue === null ? '__NULL__' : attrValue;
+  
+  // Check if we have a cached value
+  if (valueCache.has(valueCacheKey)) {
+    const cachedValue = valueCache.get(valueCacheKey);
+    
+    // Return clone if requested
+    if (config.parseCache === 'cloned') {
+      // Use structuredClone for deep cloning
+      return structuredClone(cachedValue);
+    }
+    
+    // Return shared reference
+    return cachedValue;
+  }
+  
+  // Parse the value
+  const parsedValue = parser(attrValue);
+  
+  // Store in cache
+  valueCache.set(valueCacheKey, parsedValue);
+  
+  // Return clone if requested (even on first parse)
+  if (config.parseCache === 'cloned') {
+    return structuredClone(parsedValue);
+  }
+  
+  return parsedValue;
+}
+
 /**
  * Checks if a string contains a dash or non-ASCII character
  */
@@ -252,7 +324,11 @@ export function parseWithAttrs<T = any>(
         
         // Attribute exists - parse normally
         const parser = config.parser || getDefaultParser(config.instanceOf);
-        const parsedValue = parser(attrValue);
+        
+        // Use cache if parseCache is specified
+        const parsedValue = config.parseCache 
+          ? parseWithCache(attrValue, config, parser)
+          : parser(attrValue);
         
         // Determine target property
         const mapsTo = config.mapsTo ?? (key === 'base' ? '.' : key);
