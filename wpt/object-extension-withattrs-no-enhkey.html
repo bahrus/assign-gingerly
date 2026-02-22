@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>withAttrs without enhKey Tests</title>
+    <script src="https://unpkg.com/@esm-bundle/chai@4.3.4-fix.0/esm/chai.js"></script>
+</head>
+<body>
+    <h1>withAttrs without enhKey Tests</h1>
+    <div id="test-results"></div>
+
+    <script type="module">
+        import '../object-extension.js';
+        const { assert } = chai;
+
+        const results = [];
+        
+        function test(name, fn) {
+            try {
+                fn();
+                results.push({ name, status: 'PASS' });
+                console.log(`✓ ${name}`);
+            } catch (error) {
+                results.push({ name, status: 'FAIL', error: error.message });
+                console.error(`✗ ${name}:`, error.message);
+            }
+        }
+
+        // Test 1: withAttrs works without enhKey
+        test('withAttrs parses attributes even without enhKey', () => {
+            class TestEnhancement {
+                element;
+                ctx;
+                count = 0;
+                theme = 'default';
+                
+                constructor(oElement, ctx, initVals) {
+                    this.element = oElement;
+                    this.ctx = ctx;
+                    if (initVals) {
+                        Object.assign(this, initVals);
+                    }
+                }
+            }
+            
+            const element = document.createElement('div');
+            element.setAttribute('data-count', '42');
+            element.setAttribute('data-theme', 'dark');
+            
+            const registryItem = {
+                spawn: TestEnhancement,
+                // No enhKey specified!
+                withAttrs: {
+                    base: 'data-',
+                    count: '${base}count',
+                    _count: {
+                        instanceOf: 'Number'
+                    },
+                    theme: '${base}theme'
+                }
+            };
+            
+            const registry = element.customElementRegistry.enhancementRegistry;
+            registry.push(registryItem);
+            
+            const instance = element.enh.get(registryItem);
+            
+            assert.instanceOf(instance, TestEnhancement);
+            assert.equal(instance.count, 42);
+            assert.equal(instance.theme, 'dark');
+        });
+
+        // Test 2: withAttrs with enhKey still works (regression test)
+        test('withAttrs with enhKey still works correctly', () => {
+            class EnhancementWithKey {
+                element;
+                ctx;
+                value = null;
+                
+                constructor(oElement, ctx, initVals) {
+                    this.element = oElement;
+                    this.ctx = ctx;
+                    if (initVals) {
+                        Object.assign(this, initVals);
+                    }
+                }
+            }
+            
+            const element = document.createElement('div');
+            element.setAttribute('data-value', 'test123');
+            
+            const registryItem = {
+                spawn: EnhancementWithKey,
+                enhKey: 'withKey',
+                withAttrs: {
+                    base: 'data-',
+                    value: '${base}value'
+                }
+            };
+            
+            const registry = element.customElementRegistry.enhancementRegistry;
+            registry.push(registryItem);
+            
+            const instance = element.enh.get(registryItem);
+            
+            assert.instanceOf(instance, EnhancementWithKey);
+            assert.equal(instance.value, 'test123');
+            assert.equal(element.enh.withKey, instance);
+        });
+
+        // Test 3: Multiple attributes without enhKey
+        test('Multiple attributes parsed without enhKey', () => {
+            class MultiAttrEnhancement {
+                element;
+                ctx;
+                name = '';
+                age = 0;
+                active = false;
+                tags = [];
+                
+                constructor(oElement, ctx, initVals) {
+                    this.element = oElement;
+                    this.ctx = ctx;
+                    if (initVals) {
+                        Object.assign(this, initVals);
+                    }
+                }
+            }
+            
+            const element = document.createElement('div');
+            element.setAttribute('config-name', 'Alice');
+            element.setAttribute('config-age', '30');
+            element.setAttribute('config-active', '');
+            element.setAttribute('config-tags', '["a","b","c"]');
+            
+            const registryItem = {
+                spawn: MultiAttrEnhancement,
+                withAttrs: {
+                    base: 'config-',
+                    name: '${base}name',
+                    age: '${base}age',
+                    _age: { instanceOf: 'Number' },
+                    active: '${base}active',
+                    _active: { instanceOf: 'Boolean' },
+                    tags: '${base}tags',
+                    _tags: { instanceOf: 'Array' }
+                }
+            };
+            
+            const registry = element.customElementRegistry.enhancementRegistry;
+            registry.push(registryItem);
+            
+            const instance = element.enh.get(registryItem);
+            
+            assert.equal(instance.name, 'Alice');
+            assert.equal(instance.age, 30);
+            assert.equal(instance.active, true);
+            assert.deepEqual(instance.tags, ['a', 'b', 'c']);
+        });
+
+        // Test 4: Named parser without enhKey
+        test('Named parser works without enhKey', () => {
+            class ParserEnhancement {
+                element;
+                ctx;
+                created = null;
+                
+                constructor(oElement, ctx, initVals) {
+                    this.element = oElement;
+                    this.ctx = ctx;
+                    if (initVals) {
+                        Object.assign(this, initVals);
+                    }
+                }
+            }
+            
+            const element = document.createElement('div');
+            element.setAttribute('data-created', '2024-01-15T10:30:00Z');
+            
+            const registryItem = {
+                spawn: ParserEnhancement,
+                withAttrs: {
+                    base: 'data-',
+                    created: '${base}created',
+                    _created: {
+                        parser: 'timestamp'
+                    }
+                }
+            };
+            
+            const registry = element.customElementRegistry.enhancementRegistry;
+            registry.push(registryItem);
+            
+            const instance = element.enh.get(registryItem);
+            
+            assert.isNumber(instance.created);
+            assert.equal(instance.created, new Date('2024-01-15T10:30:00Z').getTime());
+        });
+
+        // Test 5: valIfNull without enhKey
+        test('valIfNull works without enhKey', () => {
+            class DefaultsEnhancement {
+                element;
+                ctx;
+                theme = null;
+                count = null;
+                
+                constructor(oElement, ctx, initVals) {
+                    this.element = oElement;
+                    this.ctx = ctx;
+                    if (initVals) {
+                        Object.assign(this, initVals);
+                    }
+                }
+            }
+            
+            const element = document.createElement('div');
+            // No attributes set
+            
+            const registryItem = {
+                spawn: DefaultsEnhancement,
+                withAttrs: {
+                    base: 'data-',
+                    theme: '${base}theme',
+                    _theme: {
+                        valIfNull: 'light'
+                    },
+                    count: '${base}count',
+                    _count: {
+                        instanceOf: 'Number',
+                        valIfNull: 0
+                    }
+                }
+            };
+            
+            const registry = element.customElementRegistry.enhancementRegistry;
+            registry.push(registryItem);
+            
+            const instance = element.enh.get(registryItem);
+            
+            assert.equal(instance.theme, 'light');
+            assert.equal(instance.count, 0);
+        });
+
+        // Test 6: Caching with withAttrs without enhKey
+        test('parseCache works without enhKey', () => {
+            class CachedEnhancement {
+                element;
+                ctx;
+                config = null;
+                
+                constructor(oElement, ctx, initVals) {
+                    this.element = oElement;
+                    this.ctx = ctx;
+                    if (initVals) {
+                        Object.assign(this, initVals);
+                    }
+                }
+            }
+            
+            const element1 = document.createElement('div');
+            element1.setAttribute('data-config', '{"x":1,"y":2}');
+            
+            const element2 = document.createElement('div');
+            element2.setAttribute('data-config', '{"x":1,"y":2}');
+            
+            const registryItem = {
+                spawn: CachedEnhancement,
+                withAttrs: {
+                    base: 'data-',
+                    config: '${base}config',
+                    _config: {
+                        instanceOf: 'Object',
+                        parseCache: 'shared'
+                    }
+                }
+            };
+            
+            const registry1 = element1.customElementRegistry.enhancementRegistry;
+            registry1.push(registryItem);
+            
+            const registry2 = element2.customElementRegistry.enhancementRegistry;
+            registry2.push(registryItem);
+            
+            const instance1 = element1.enh.get(registryItem);
+            const instance2 = element2.enh.get(registryItem);
+            
+            // Both should have the config
+            assert.deepEqual(instance1.config, { x: 1, y: 2 });
+            assert.deepEqual(instance2.config, { x: 1, y: 2 });
+            
+            // Should be same reference due to shared cache
+            assert.strictEqual(instance1.config, instance2.config);
+        });
+
+        // Test 7: Empty withAttrs without enhKey doesn't break
+        test('Empty withAttrs without enhKey does not break', () => {
+            class EmptyAttrsEnhancement {
+                element;
+                ctx;
+                
+                constructor(oElement, ctx, initVals) {
+                    this.element = oElement;
+                    this.ctx = ctx;
+                }
+            }
+            
+            const element = document.createElement('div');
+            
+            const registryItem = {
+                spawn: EmptyAttrsEnhancement,
+                withAttrs: {
+                    base: 'data-'
+                }
+            };
+            
+            const registry = element.customElementRegistry.enhancementRegistry;
+            registry.push(registryItem);
+            
+            const instance = element.enh.get(registryItem);
+            
+            assert.instanceOf(instance, EmptyAttrsEnhancement);
+        });
+
+        // Test 8: No withAttrs and no enhKey still works
+        test('No withAttrs and no enhKey still works', () => {
+            class MinimalEnhancement {
+                element;
+                ctx;
+                
+                constructor(oElement, ctx, initVals) {
+                    this.element = oElement;
+                    this.ctx = ctx;
+                }
+            }
+            
+            const element = document.createElement('div');
+            
+            const registryItem = {
+                spawn: MinimalEnhancement
+            };
+            
+            const registry = element.customElementRegistry.enhancementRegistry;
+            registry.push(registryItem);
+            
+            const instance = element.enh.get(registryItem);
+            
+            assert.instanceOf(instance, MinimalEnhancement);
+        });
+
+        // Display results
+        const resultsDiv = document.getElementById('test-results');
+        const passCount = results.filter(r => r.status === 'PASS').length;
+        const failCount = results.filter(r => r.status === 'FAIL').length;
+        
+        resultsDiv.innerHTML = `
+            <h2>Results: ${passCount} passed, ${failCount} failed</h2>
+            <ul>
+                ${results.map(r => `
+                    <li style="color: ${r.status === 'PASS' ? 'green' : 'red'}">
+                        ${r.status}: ${r.name}
+                        ${r.error ? `<br><small>${r.error}</small>` : ''}
+                    </li>
+                `).join('')}
+            </ul>
+        `;
+    </script>
+</body>
+</html>

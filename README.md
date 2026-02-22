@@ -1400,14 +1400,48 @@ console.log(instance.count);  // 42 (parsed from attribute)
 console.log(instance.theme);  // 'dark' (parsed from attribute)
 ```
 
+**Example without enhKey:**
+
+```TypeScript
+// withAttrs works even without enhKey
+class SimpleEnhancement {
+  element;
+  ctx;
+  value = null;
+  
+  constructor(oElement, ctx, initVals) {
+    this.element = oElement;
+    this.ctx = ctx;
+    if (initVals) {
+      Object.assign(this, initVals);
+    }
+  }
+}
+
+const element = document.createElement('div');
+element.setAttribute('data-value', 'test123');
+
+const config = {
+  spawn: SimpleEnhancement,
+  // No enhKey - attributes still parsed!
+  withAttrs: {
+    base: 'data-',
+    value: '${base}value'
+  }
+};
+
+const instance = element.enh.get(config);
+console.log(instance.value);  // 'test123' (parsed from attribute)
+```
+
 **How it works:**
 1. When an enhancement is spawned via `enh.get()`, `enh.set`, or `assignGingerly()`
 2. If the registry item has a `withAttrs` property defined
 3. `parseWithAttrs(element, registryItem.withAttrs)` is automatically called
-4. The parsed attributes are merged into `initVals` (along with any existing values from `element.enh[enhKey]`)
-5. The merged `initVals` is passed to the enhancement constructor
+4. The parsed attributes are passed to the enhancement constructor as `initVals`
+5. If the registry item also has an `enhKey`, the parsed attributes are merged with any existing values from `element.enh[enhKey]` (existing values take precedence)
 
-**Precedence**: If both parsed attributes and existing `element.enh[enhKey]` values exist, the existing values take precedence over parsed attributes.
+**Note**: `withAttrs` works with or without `enhKey`. When there's no `enhKey`, the parsed attributes are passed directly to the constructor. When there is an `enhKey`, they're merged with any pre-existing values on the enh container.
 
 
 

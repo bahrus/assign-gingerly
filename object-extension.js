@@ -82,21 +82,21 @@ class ElementEnhancementContainer {
                     return undefined;
                 }
             }
+            // Parse attributes if withAttrs is defined (regardless of enhKey)
+            let attrInitVals = undefined;
+            if (registryItem.withAttrs && element) {
+                try {
+                    attrInitVals = parseWithAttrs(element, registryItem.withAttrs, registryItem.allowUnprefixed || false);
+                }
+                catch (e) {
+                    console.error('Error parsing attributes:', e);
+                    throw e;
+                }
+            }
             // Check if there's an enhKey
             if (registryItem.enhKey) {
                 const ctx = { config: registryItem, mountCtx };
                 const self = this;
-                // Parse attributes if withAttrs is defined
-                let attrInitVals = undefined;
-                if (registryItem.withAttrs && element) {
-                    try {
-                        attrInitVals = parseWithAttrs(element, registryItem.withAttrs, registryItem.allowUnprefixed || false);
-                    }
-                    catch (e) {
-                        console.error('Error parsing attributes:', e);
-                        throw e;
-                    }
-                }
                 // Get existing initVals from enhKey
                 const existingInitVals = self[registryItem.enhKey] &&
                     !(self[registryItem.enhKey] instanceof SpawnClass)
@@ -111,9 +111,9 @@ class ElementEnhancementContainer {
                 self[registryItem.enhKey] = instance;
             }
             else {
-                // No enhKey, just spawn with element
+                // No enhKey, still pass attrInitVals
                 const ctx = { config: registryItem, mountCtx };
-                instance = new SpawnClass(element, ctx);
+                instance = new SpawnClass(element, ctx, attrInitVals);
             }
             // Store in global instance map
             instances.set(registryItem, instance);
