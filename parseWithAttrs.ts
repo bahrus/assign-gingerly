@@ -1,4 +1,4 @@
-import { AttrPatterns, AttrConfig } from './types';
+import { AttrPatterns, AttrConfig } from './types/assign-gingerly/types';
 import { globalParserRegistry } from './parserRegistry.js';
 
 // Module-level cache for parsed attribute values

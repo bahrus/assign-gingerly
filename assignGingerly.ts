@@ -1,6 +1,6 @@
 
 
-import { EnhancementConfig } from "./types";
+import { EnhancementConfig } from "./types/assign-gingerly/types";
 
 /**
  * @deprecated Use EnhancementConfig instead
