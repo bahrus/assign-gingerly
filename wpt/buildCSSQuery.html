@@ -155,8 +155,8 @@
             assert.equal(result, '');
         });
 
-        // Test 8: Empty selectors returns empty string
-        test('Empty selectors returns empty string', () => {
+        // Test 8: Empty selectors returns attribute selectors only
+        test('Empty selectors returns attribute selectors only', () => {
             const config = {
                 spawn: class {},
                 withAttrs: {
@@ -166,7 +166,28 @@
             
             const result = buildCSSQuery(config, '');
             
-            assert.equal(result, '');
+            assert.equal(result, '[attr], [enh-attr]');
+        });
+
+        // Test 8b: Empty selectors with multiple attributes
+        test('Empty selectors with multiple attributes', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    base: 'my-component',
+                    theme: '${base}-theme',
+                    size: '${base}-size'
+                }
+            };
+            
+            const result = buildCSSQuery(config, '');
+            
+            assert.include(result, '[my-component]');
+            assert.include(result, '[enh-my-component]');
+            assert.include(result, '[my-component-theme]');
+            assert.include(result, '[enh-my-component-theme]');
+            assert.include(result, '[my-component-size]');
+            assert.include(result, '[enh-my-component-size]');
         });
 
         // Test 9: No withAttrs returns empty string

@@ -65,6 +65,7 @@ function extractAttributeNames(withAttrs) {
  *
  * @param config - Enhancement configuration with withAttrs
  * @param selectors - Comma-separated CSS selectors to match (e.g., 'template, script')
+ *                    If empty, returns just the attribute selectors without element prefix
  * @returns CSS query string with cross-product of selectors and attributes
  *
  * @example
@@ -76,36 +77,47 @@ function extractAttributeNames(withAttrs) {
  *   }
  * };
  *
+ * // With selectors
  * buildCSSQuery(config, 'div, span');
  * // Returns: 'div[my-attr], span[my-attr], div[enh-my-attr], span[enh-my-attr],
  * //           div[my-attr-theme], span[my-attr-theme], div[enh-my-attr-theme], span[enh-my-attr-theme]'
+ *
+ * // Without selectors (matches any element)
+ * buildCSSQuery(config, '');
+ * // Returns: '[my-attr], [enh-my-attr], [my-attr-theme], [enh-my-attr-theme]'
  */
 export function buildCSSQuery(config, selectors) {
     // Validate inputs
-    if (!config.withAttrs || !selectors) {
+    if (!config.withAttrs) {
         return '';
     }
-    // Parse and normalize selectors
-    const selectorList = selectors
-        .split(',')
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
-    if (selectorList.length === 0) {
-        return '';
-    }
-    // Extract and resolve attribute names
+    // Extract and resolve attribute names first
     const attrNames = extractAttributeNames(config.withAttrs);
     if (attrNames.length === 0) {
         return '';
     }
-    // Build cross-product of selectors × attributes × prefixes
+    // Parse and normalize selectors
+    const selectorList = selectors
+        ? selectors.split(',').map(s => s.trim()).filter(s => s.length > 0)
+        : [];
+    // Build queries
     const queries = [];
-    for (const selector of selectorList) {
+    if (selectorList.length === 0) {
+        // No selectors provided - return just attribute selectors
         for (const attrName of attrNames) {
-            // Unprefixed version
-            queries.push(`${selector}[${attrName}]`);
-            // enh- prefixed version
-            queries.push(`${selector}[enh-${attrName}]`);
+            queries.push(`[${attrName}]`);
+            queries.push(`[enh-${attrName}]`);
+        }
+    }
+    else {
+        // Build cross-product of selectors × attributes × prefixes
+        for (const selector of selectorList) {
+            for (const attrName of attrNames) {
+                // Unprefixed version
+                queries.push(`${selector}[${attrName}]`);
+                // enh- prefixed version
+                queries.push(`${selector}[enh-${attrName}]`);
+            }
         }
     }
     // Deduplicate and join

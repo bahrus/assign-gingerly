@@ -2206,6 +2206,17 @@ console.log(query);
 const elements = document.querySelectorAll(query);
 ```
 
+**Without selectors (matches any element):**
+
+```TypeScript
+const query = buildCSSQuery(config, '');
+console.log(query);
+// '[my-component], [enh-my-component], [my-component-theme], [enh-my-component-theme]'
+
+// Matches any element with these attributes
+const elements = document.querySelectorAll(query);
+```
+
 ### How It Works
 
 `buildCSSQuery` creates a cross-product of:
@@ -2289,11 +2300,25 @@ buildCSSQuery(config, 'div');
 
 ### Edge Cases
 
-**Empty inputs return empty string:**
+**Empty selectors return attribute-only selectors:**
+```TypeScript
+const config = {
+  spawn: MyClass,
+  withAttrs: {
+    base: 'my-attr',
+    theme: '${base}-theme'
+  }
+};
+
+buildCSSQuery(config, '');
+// '[my-attr], [enh-my-attr], [my-attr-theme], [enh-my-attr-theme]'
+// Matches any element with these attributes
+```
+
+**Empty withAttrs returns empty string:**
 ```TypeScript
 buildCSSQuery({ spawn: MyClass }, 'div');  // '' (no withAttrs)
 buildCSSQuery({ spawn: MyClass, withAttrs: {} }, 'div');  // '' (empty withAttrs)
-buildCSSQuery({ spawn: MyClass, withAttrs: { base: 'x' } }, '');  // '' (empty selectors)
 ```
 
 **Deduplication:**
@@ -2312,14 +2337,15 @@ buildCSSQuery(config, '  div  ,  span  ,  p  ');
 
 1. **Mount Observer Integration**: Find elements that need enhancement
    ```TypeScript
-   const query = buildCSSQuery(enhancementConfig, '*');
+   // Match any element with the attributes
+   const query = buildCSSQuery(enhancementConfig, '');
    const observer = new MutationObserver(() => {
      const elements = document.querySelectorAll(query);
      elements.forEach(el => enhance(el));
    });
    ```
 
-2. **Batch Enhancement**: Enhance all matching elements at once
+2. **Specific Element Types**: Enhance only certain element types
    ```TypeScript
    const query = buildCSSQuery(config, 'template, script');
    document.querySelectorAll(query).forEach(el => {
@@ -2345,10 +2371,13 @@ function buildCSSQuery(
 **Parameters:**
 - `config`: Enhancement configuration with `withAttrs` property
 - `selectors`: Comma-separated CSS selectors (e.g., `'div, span'`)
+  - If empty string or whitespace only, returns attribute selectors without element prefix
+  - This matches any element with the specified attributes
 
 **Returns:**
 - CSS query string with cross-product of selectors and attributes
-- Empty string if `withAttrs` is missing or empty
+- If selectors is empty: returns attribute-only selectors (e.g., `'[attr], [enh-attr]'`)
+- If withAttrs is missing or empty: returns empty string
 
 **Throws:**
 - Error if template variables have circular references
