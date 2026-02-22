@@ -13,25 +13,26 @@
   "license": "MIT",
   "author": "Bruce B. Anderson <andeson.bruce.b@gmail.com>",
   "type": "module",
-  "types": "types.d.ts",
+  "types": "types/assign-gingerly/types.d.ts",
   "files": [
     "*.js",
     "*.ts",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "types/assign-gingerly/types.d.ts"
   ],
   "exports": {
     ".": {
       "default": "./index.js",
-      "types": "./types.d.ts"
+      "types": "./index.ts"
     },
     "./assignGingerly.js": {
       "default": "./assignGingerly.js",
-      "types": "./types.d.ts"
+      "types": "./assignGingerly.ts"
     },
     "./assignTentatively.js": {
       "default": "./assignTentatively.js",
-      "types": "./types.d.ts"
+      "types": "./assignTentatively.ts"
     },
     "./waitForEvent.js": {
       "default": "./waitForEvent.js"
@@ -41,7 +42,7 @@
     },
     "./parseWithAttrs.js": {
       "default": "./parseWithAttrs.js",
-      "types": "./types.d.ts"
+      "types": "./parseWithAttrs.ts"
     }
   },
   "main": "index.js",
