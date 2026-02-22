@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>buildCSSQuery Tests</title>
+    <script src="https://unpkg.com/@esm-bundle/chai@4.3.4-fix.0/esm/chai.js"></script>
+</head>
+<body>
+    <h1>buildCSSQuery Tests</h1>
+    <div id="test-results"></div>
+
+    <script type="module">
+        import { buildCSSQuery } from '../buildCSSQuery.js';
+        const { assert } = chai;
+
+        const results = [];
+        
+        function test(name, fn) {
+            try {
+                fn();
+                results.push({ name, status: 'PASS' });
+                console.log(`✓ ${name}`);
+            } catch (error) {
+                results.push({ name, status: 'FAIL', error: error.message });
+                console.error(`✗ ${name}:`, error.message);
+            }
+        }
+
+        // Test 1: Basic cross-product with base and template variable
+        test('Basic cross-product with base and template variable', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    base: 'be-a-beacon',
+                    _base: {
+                        mapsTo: 'eventName'
+                    },
+                    theme: '${base}-theme'
+                }
+            };
+            
+            const result = buildCSSQuery(config, 'template, script');
+            
+            // Should include both attributes (base and theme) with both prefixes
+            assert.include(result, 'template[be-a-beacon]');
+            assert.include(result, 'script[be-a-beacon]');
+            assert.include(result, 'template[enh-be-a-beacon]');
+            assert.include(result, 'script[enh-be-a-beacon]');
+            assert.include(result, 'template[be-a-beacon-theme]');
+            assert.include(result, 'script[be-a-beacon-theme]');
+            assert.include(result, 'template[enh-be-a-beacon-theme]');
+            assert.include(result, 'script[enh-be-a-beacon-theme]');
+        });
+
+        // Test 2: Single selector
+        test('Single selector', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    base: 'my-attr'
+                }
+            };
+            
+            const result = buildCSSQuery(config, 'div');
+            
+            assert.equal(result, 'div[my-attr], div[enh-my-attr]');
+        });
+
+        // Test 3: Multiple attributes without base
+        test('Multiple attributes without base', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    name: 'data-name',
+                    value: 'data-value'
+                }
+            };
+            
+            const result = buildCSSQuery(config, 'span');
+            
+            assert.include(result, 'span[data-name]');
+            assert.include(result, 'span[enh-data-name]');
+            assert.include(result, 'span[data-value]');
+            assert.include(result, 'span[enh-data-value]');
+        });
+
+        // Test 4: Underscore-prefixed keys are excluded
+        test('Underscore-prefixed keys are excluded', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    base: 'my-base',
+                    _base: {
+                        mapsTo: 'something'
+                    },
+                    attr: 'my-attr',
+                    _attr: {
+                        instanceOf: 'String'
+                    }
+                }
+            };
+            
+            const result = buildCSSQuery(config, 'div');
+            
+            // Should include base and attr, but not _base or _attr
+            assert.include(result, 'div[my-base]');
+            assert.include(result, 'div[my-attr]');
+            assert.notInclude(result, '_base');
+            assert.notInclude(result, '_attr');
+        });
+
+        // Test 5: Complex selectors with classes and IDs
+        test('Complex selectors with classes and IDs', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    base: 'data-config'
+                }
+            };
+            
+            const result = buildCSSQuery(config, 'div.highlight, span#special');
+            
+            assert.include(result, 'div.highlight[data-config]');
+            assert.include(result, 'span#special[data-config]');
+            assert.include(result, 'div.highlight[enh-data-config]');
+            assert.include(result, 'span#special[enh-data-config]');
+        });
+
+        // Test 6: Selectors with extra spaces
+        test('Selectors with extra spaces', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    base: 'attr'
+                }
+            };
+            
+            const result = buildCSSQuery(config, '  div  ,  span  ,  p  ');
+            
+            assert.include(result, 'div[attr]');
+            assert.include(result, 'span[attr]');
+            assert.include(result, 'p[attr]');
+        });
+
+        // Test 7: Empty withAttrs returns empty string
+        test('Empty withAttrs returns empty string', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {}
+            };
+            
+            const result = buildCSSQuery(config, 'div');
+            
+            assert.equal(result, '');
+        });
+
+        // Test 8: Empty selectors returns empty string
+        test('Empty selectors returns empty string', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    base: 'attr'
+                }
+            };
+            
+            const result = buildCSSQuery(config, '');
+            
+            assert.equal(result, '');
+        });
+
+        // Test 9: No withAttrs returns empty string
+        test('No withAttrs returns empty string', () => {
+            const config = {
+                spawn: class {}
+            };
+            
+            const result = buildCSSQuery(config, 'div');
+            
+            assert.equal(result, '');
+        });
+
+        // Test 10: Only underscore keys returns empty string
+        test('Only underscore keys returns empty string', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    _config: {
+                        mapsTo: 'something'
+                    },
+                    _other: {
+                        instanceOf: 'String'
+                    }
+                }
+            };
+            
+            const result = buildCSSQuery(config, 'div');
+            
+            assert.equal(result, '');
+        });
+
+        // Test 11: Template variable resolution
+        test('Template variable resolution', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    base: 'data',
+                    prefix: '${base}-prefix',
+                    full: '${prefix}-full'
+                }
+            };
+            
+            const result = buildCSSQuery(config, 'div');
+            
+            assert.include(result, 'div[data]');
+            assert.include(result, 'div[data-prefix]');
+            assert.include(result, 'div[data-prefix-full]');
+        });
+
+        // Test 12: Deduplication of selectors
+        test('Deduplication of selectors', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    base: 'attr'
+                }
+            };
+            
+            const result = buildCSSQuery(config, 'div, div, div');
+            
+            // Count occurrences of 'div[attr]'
+            const matches = result.match(/div\[attr\]/g);
+            assert.equal(matches.length, 1, 'Should only have one div[attr]');
+        });
+
+        // Test 13: Combinator selectors
+        test('Combinator selectors', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    base: 'data-item'
+                }
+            };
+            
+            const result = buildCSSQuery(config, 'div > span, ul li');
+            
+            assert.include(result, 'div > span[data-item]');
+            assert.include(result, 'ul li[data-item]');
+            assert.include(result, 'div > span[enh-data-item]');
+            assert.include(result, 'ul li[enh-data-item]');
+        });
+
+        // Test 14: Attribute selector in input (edge case)
+        test('Attribute selector in input', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    base: 'data-config'
+                }
+            };
+            
+            const result = buildCSSQuery(config, 'div[existing-attr]');
+            
+            assert.include(result, 'div[existing-attr][data-config]');
+            assert.include(result, 'div[existing-attr][enh-data-config]');
+        });
+
+        // Test 15: Multiple template variables
+        test('Multiple template variables', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    base: 'my-component',
+                    theme: '${base}-theme',
+                    size: '${base}-size',
+                    variant: '${base}-variant'
+                }
+            };
+            
+            const result = buildCSSQuery(config, 'div');
+            
+            assert.include(result, 'div[my-component]');
+            assert.include(result, 'div[my-component-theme]');
+            assert.include(result, 'div[my-component-size]');
+            assert.include(result, 'div[my-component-variant]');
+        });
+
+        // Test 16: No base attribute
+        test('No base attribute', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    name: 'data-name',
+                    value: 'data-value'
+                }
+            };
+            
+            const result = buildCSSQuery(config, 'span');
+            
+            // Should work without base
+            assert.include(result, 'span[data-name]');
+            assert.include(result, 'span[data-value]');
+            assert.notInclude(result, 'undefined');
+        });
+
+        // Test 17: Circular reference throws error
+        test('Circular reference throws error', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    a: '${b}',
+                    b: '${a}'
+                }
+            };
+            
+            try {
+                buildCSSQuery(config, 'div');
+                assert.fail('Should have thrown error');
+            } catch (error) {
+                assert.include(error.message, 'Circular reference');
+            }
+        });
+
+        // Test 18: Undefined template variable throws error
+        test('Undefined template variable throws error', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    attr: '${nonexistent}'
+                }
+            };
+            
+            try {
+                buildCSSQuery(config, 'div');
+                assert.fail('Should have thrown error');
+            } catch (error) {
+                assert.include(error.message, 'Undefined template variable');
+            }
+        });
+
+        // Test 19: Real-world example from requirement
+        test('Real-world example from requirement', () => {
+            const config = {
+                spawn: class BeABeacon {},
+                withAttrs: {
+                    base: 'be-a-beacon',
+                    _base: {
+                        mapsTo: 'eventName'
+                    },
+                    theme: '${base}-theme'
+                }
+            };
+            
+            const result = buildCSSQuery(config, 'template, script');
+            
+            // Verify all expected selectors are present
+            const expected = [
+                'template[be-a-beacon]',
+                'script[be-a-beacon]',
+                'template[enh-be-a-beacon]',
+                'script[enh-be-a-beacon]',
+                'template[be-a-beacon-theme]',
+                'script[be-a-beacon-theme]',
+                'template[enh-be-a-beacon-theme]',
+                'script[enh-be-a-beacon-theme]'
+            ];
+            
+            for (const selector of expected) {
+                assert.include(result, selector, `Should include ${selector}`);
+            }
+        });
+
+        // Test 20: Pseudo-class selectors
+        test('Pseudo-class selectors', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    base: 'data-active'
+                }
+            };
+            
+            const result = buildCSSQuery(config, 'div:hover, span:first-child');
+            
+            assert.include(result, 'div:hover[data-active]');
+            assert.include(result, 'span:first-child[data-active]');
+        });
+
+        // Display results
+        const resultsDiv = document.getElementById('test-results');
+        const passCount = results.filter(r => r.status === 'PASS').length;
+        const failCount = results.filter(r => r.status === 'FAIL').length;
+        
+        resultsDiv.innerHTML = `
+            <h2>Results: ${passCount} passed, ${failCount} failed</h2>
+            <ul>
+                ${results.map(r => `
+                    <li style="color: ${r.status === 'PASS' ? 'green' : 'red'}">
+                        ${r.status}: ${r.name}
+                        ${r.error ? `<br><small>${r.error}</small>` : ''}
+                    </li>
+                `).join('')}
+            </ul>
+        `;
+    </script>
+</body>
+</html>

@@ -43,6 +43,10 @@
     "./parseWithAttrs.js": {
       "default": "./parseWithAttrs.js",
       "types": "./parseWithAttrs.ts"
+    },
+    "./buildCSSQuery.js": {
+      "default": "./buildCSSQuery.js",
+      "types": "./buildCSSQuery.ts"
     }
   },
   "main": "index.js",

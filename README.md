@@ -2180,6 +2180,187 @@ assignGingerly(element, attrs);
 
 </details>
 
+## Building CSS Queries with `buildCSSQuery`
+
+The `buildCSSQuery` function generates CSS selector strings that match elements with attributes defined in an enhancement configuration's `withAttrs`. This is particularly useful for libraries like mount-observer that need to find elements that should be enhanced.
+
+### Basic Usage
+
+```TypeScript
+import { buildCSSQuery } from 'assign-gingerly';
+
+const config = {
+  spawn: MyEnhancement,
+  withAttrs: {
+    base: 'my-component',
+    theme: '${base}-theme'
+  }
+};
+
+const query = buildCSSQuery(config, 'div, span');
+console.log(query);
+// 'div[my-component], span[my-component], div[enh-my-component], span[enh-my-component], 
+//  div[my-component-theme], span[my-component-theme], div[enh-my-component-theme], span[enh-my-component-theme]'
+
+// Use with querySelector
+const elements = document.querySelectorAll(query);
+```
+
+### How It Works
+
+`buildCSSQuery` creates a cross-product of:
+1. **Selectors**: The CSS selectors you provide (e.g., `'div, span'`)
+2. **Attributes**: All attribute names from `withAttrs` (resolving template variables)
+3. **Prefixes**: Both unprefixed and `enh-` prefixed versions
+
+This ensures you find all elements that might be enhanced, regardless of whether they use the `enh-` prefix or not.
+
+### Template Variable Resolution
+
+Template variables in `withAttrs` are automatically resolved:
+
+```TypeScript
+const config = {
+  spawn: BeABeacon,
+  withAttrs: {
+    base: 'be-a-beacon',
+    theme: '${base}-theme',
+    size: '${base}-size'
+  }
+};
+
+buildCSSQuery(config, 'template, script');
+// Returns selectors for: be-a-beacon, be-a-beacon-theme, be-a-beacon-size
+// Each with both prefixed and unprefixed versions
+```
+
+### Complex Selectors
+
+The function supports any valid CSS selector:
+
+```TypeScript
+const config = {
+  spawn: MyEnhancement,
+  withAttrs: {
+    base: 'data-enhanced'
+  }
+};
+
+// Classes and IDs
+buildCSSQuery(config, 'div.highlight, span#special');
+// 'div.highlight[data-enhanced], span#special[data-enhanced], ...'
+
+// Combinators
+buildCSSQuery(config, 'div > span, ul li');
+// 'div > span[data-enhanced], ul li[data-enhanced], ...'
+
+// Pseudo-classes
+buildCSSQuery(config, 'div:hover, span:first-child');
+// 'div:hover[data-enhanced], span:first-child[data-enhanced], ...'
+
+// Attribute selectors
+buildCSSQuery(config, 'div[existing-attr]');
+// 'div[existing-attr][data-enhanced], ...'
+```
+
+### Underscore-Prefixed Keys Excluded
+
+Configuration keys starting with `_` are excluded from the query:
+
+```TypeScript
+const config = {
+  spawn: MyEnhancement,
+  withAttrs: {
+    base: 'my-attr',
+    _base: {
+      mapsTo: 'something'  // Config only, not an attribute
+    },
+    theme: '${base}-theme',
+    _theme: {
+      instanceOf: 'String'  // Config only
+    }
+  }
+};
+
+buildCSSQuery(config, 'div');
+// Only includes: my-attr and my-attr-theme
+// Does NOT include: _base or _theme
+```
+
+### Edge Cases
+
+**Empty inputs return empty string:**
+```TypeScript
+buildCSSQuery({ spawn: MyClass }, 'div');  // '' (no withAttrs)
+buildCSSQuery({ spawn: MyClass, withAttrs: {} }, 'div');  // '' (empty withAttrs)
+buildCSSQuery({ spawn: MyClass, withAttrs: { base: 'x' } }, '');  // '' (empty selectors)
+```
+
+**Deduplication:**
+```TypeScript
+buildCSSQuery(config, 'div, div, div');
+// Duplicates are removed automatically
+```
+
+**Whitespace handling:**
+```TypeScript
+buildCSSQuery(config, '  div  ,  span  ,  p  ');
+// Whitespace is trimmed automatically
+```
+
+### Use Cases
+
+1. **Mount Observer Integration**: Find elements that need enhancement
+   ```TypeScript
+   const query = buildCSSQuery(enhancementConfig, '*');
+   const observer = new MutationObserver(() => {
+     const elements = document.querySelectorAll(query);
+     elements.forEach(el => enhance(el));
+   });
+   ```
+
+2. **Batch Enhancement**: Enhance all matching elements at once
+   ```TypeScript
+   const query = buildCSSQuery(config, 'template, script');
+   document.querySelectorAll(query).forEach(el => {
+     const instance = el.enh.get(config);
+   });
+   ```
+
+3. **Conditional Enhancement**: Find elements in specific contexts
+   ```TypeScript
+   const query = buildCSSQuery(config, '.container > div');
+   const elements = document.querySelectorAll(query);
+   ```
+
+### API Reference
+
+```TypeScript
+function buildCSSQuery(
+  config: EnhancementConfig,
+  selectors: string
+): string
+```
+
+**Parameters:**
+- `config`: Enhancement configuration with `withAttrs` property
+- `selectors`: Comma-separated CSS selectors (e.g., `'div, span'`)
+
+**Returns:**
+- CSS query string with cross-product of selectors and attributes
+- Empty string if `withAttrs` is missing or empty
+
+**Throws:**
+- Error if template variables have circular references
+- Error if template variables reference undefined keys
+
+### Performance Notes
+
+- The function is synchronous and fast
+- Resulting queries can be long with many attributes, but CSS engines handle this efficiently
+- Queries are deduplicated automatically
+- Consider caching the result if calling repeatedly with the same config
+
 <!--
 
 ### Complete Example

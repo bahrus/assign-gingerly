@@ -1,0 +1,114 @@
+/**
+ * Resolves template variables in a string recursively
+ * @param template - Template string with ${var} placeholders
+ * @param patterns - The patterns object containing variable values
+ * @param resolvedCache - Cache of already resolved values
+ * @param visitedKeys - Set of keys being resolved (for cycle detection)
+ * @returns Resolved string
+ */
+function resolveTemplate(template, patterns, resolvedCache, visitedKeys = new Set()) {
+    return template.replace(/\$\{(\w+)\}/g, (match, varName) => {
+        // Check if already resolved
+        if (resolvedCache.has(varName)) {
+            return resolvedCache.get(varName);
+        }
+        // Check for circular reference
+        if (visitedKeys.has(varName)) {
+            throw new Error(`Circular reference detected in template variable: ${varName}`);
+        }
+        const value = patterns[varName];
+        if (value === undefined) {
+            throw new Error(`Undefined template variable: ${varName}`);
+        }
+        if (typeof value === 'string') {
+            // Recursively resolve
+            visitedKeys.add(varName);
+            const resolved = resolveTemplate(value, patterns, resolvedCache, visitedKeys);
+            visitedKeys.delete(varName);
+            resolvedCache.set(varName, resolved);
+            return resolved;
+        }
+        // Non-string value, return as-is
+        return String(value);
+    });
+}
+/**
+ * Extracts attribute names from withAttrs configuration
+ * Resolves template variables and excludes underscore-prefixed config keys
+ * @param withAttrs - The attribute patterns configuration
+ * @returns Array of resolved attribute names
+ */
+function extractAttributeNames(withAttrs) {
+    const names = [];
+    const resolvedCache = new Map();
+    // Add base if present
+    if ('base' in withAttrs && typeof withAttrs.base === 'string') {
+        names.push(withAttrs.base);
+    }
+    // Add other attributes (skip underscore-prefixed config keys)
+    for (const key in withAttrs) {
+        if (key === 'base' || key.startsWith('_')) {
+            continue;
+        }
+        const value = withAttrs[key];
+        if (typeof value === 'string') {
+            // Resolve template variables
+            const resolved = resolveTemplate(value, withAttrs, resolvedCache);
+            names.push(resolved);
+        }
+    }
+    return names;
+}
+/**
+ * Builds a CSS query selector that matches elements with attributes from withAttrs
+ * Creates a cross-product of selectors and attribute names (both prefixed and unprefixed)
+ *
+ * @param config - Enhancement configuration with withAttrs
+ * @param selectors - Comma-separated CSS selectors to match (e.g., 'template, script')
+ * @returns CSS query string with cross-product of selectors and attributes
+ *
+ * @example
+ * const config = {
+ *   spawn: MyClass,
+ *   withAttrs: {
+ *     base: 'my-attr',
+ *     theme: '${base}-theme'
+ *   }
+ * };
+ *
+ * buildCSSQuery(config, 'div, span');
+ * // Returns: 'div[my-attr], span[my-attr], div[enh-my-attr], span[enh-my-attr],
+ * //           div[my-attr-theme], span[my-attr-theme], div[enh-my-attr-theme], span[enh-my-attr-theme]'
+ */
+export function buildCSSQuery(config, selectors) {
+    // Validate inputs
+    if (!config.withAttrs || !selectors) {
+        return '';
+    }
+    // Parse and normalize selectors
+    const selectorList = selectors
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+    if (selectorList.length === 0) {
+        return '';
+    }
+    // Extract and resolve attribute names
+    const attrNames = extractAttributeNames(config.withAttrs);
+    if (attrNames.length === 0) {
+        return '';
+    }
+    // Build cross-product of selectors × attributes × prefixes
+    const queries = [];
+    for (const selector of selectorList) {
+        for (const attrName of attrNames) {
+            // Unprefixed version
+            queries.push(`${selector}[${attrName}]`);
+            // enh- prefixed version
+            queries.push(`${selector}[enh-${attrName}]`);
+        }
+    }
+    // Deduplicate and join
+    const uniqueQueries = [...new Set(queries)];
+    return uniqueQueries.join(', ');
+}
