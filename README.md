@@ -525,7 +525,6 @@ When `assignGingerly` or `assignTentatively` is called on an Element instance wi
 
 ```TypeScript
 import 'assign-gingerly/object-extension.js';
-import { BaseRegistry } from 'assign-gingerly';
 
 // Set up a registry on the custom element registry
 const myElement = document.createElement('div');
@@ -659,7 +658,7 @@ This approach is part of a proposal to WHATWG for standardizing element enhancem
 
 ### Constructor Signature
 
-Enhancement classes should follow this constructor signature:
+Element enhancement classes should follow this constructor signature:
 
 ```TypeScript
 interface SpawnContext<T, TMountContext = any> {
@@ -667,7 +666,7 @@ interface SpawnContext<T, TMountContext = any> {
   mountCtx?: TMountContext;  // Optional custom context passed by caller
 }
 
-class Enhancement {
+class Enhancement<T> {
   constructor(
     oElement?: Element,      // The element being enhanced
     ctx?: SpawnContext,      // Context with registry item info and optional mountCtx
@@ -680,6 +679,8 @@ class Enhancement {
 ```
 
 All parameters are optional for backward compatibility with existing code.
+
+Note that the class need not extend any base class or leverage any mixins.  In fact, ES5 prototype functions can be used, and in both cases are instanted using new ....  Arrow functions cannot be used.
 
 <details>
 <summary>Passing Custom Context</summary>
@@ -715,10 +716,10 @@ This is useful for:
 In addition to spawn and symlinks, registry items support optional properties `enhKey`, `withAttrs`, `canSpawn`, and `lifecycleKeys`:
 
 ```TypeScript
-interface IBaseRegistryItem<T> {
+interface IBaseRegistryItem<T, TObj = Element> {
   spawn: { 
-    new (oElement?: Element, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
-    canSpawn?: (obj: any, ctx?: SpawnContext<T>) => boolean;  // Optional spawn guard
+    new (obj?: TObj, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
+    canSpawn?: (obj: TObj, ctx?: SpawnContext<T>) => boolean;  // Optional spawn guard
   };
   symlinks?: { [key: string | symbol]: keyof T };
   enhKey?: string;  // String identifier for set proxy access
