@@ -39,7 +39,7 @@ The two utility functions are:
 
 ## assignGingerly
 
-assignGingerly builds on Object.assign.  Like Object.assign, the object getting assigned can be a JSON stringified object.  Some of the unusual syntax we see with assignGingerly is there to continue to support JSON deserialized objects as a viable argument to be passed.  
+assignGingerly builds on Object.assign.  Like Object.assign, the object getting assigned can often be a JSON stringified object.  Some of the unusual syntax we see with assignGingerly is there to continue to support JSON deserialized objects as a viable argument to be passed.  
 
 assign-gingerly adds support for:
 
@@ -101,6 +101,8 @@ console.log(obj);
 ```
 
 When the right hand side of an expression is an object, assignGingerly is recursively applied (passing the third argument in if applicable, which will be discussed below).
+
+Of course, just as Object.assign led to object spread notation, assignGingerly could lead to some sort of deep structural JavaScript syntax, but that is outside the scope of this polyfill package. 
 
 While we are in the business of passing values of object A into object B, we might as well add some extremely common behavior that allows updating properties of object B based on the current values of object B -- things like incrementing, toggling, and deleting.  Deleting is critical for assignTentatively, but is included with both functions
 
