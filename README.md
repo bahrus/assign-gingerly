@@ -104,7 +104,7 @@ When the right hand side of an expression is an object, assignGingerly is recurs
 
 Of course, just as Object.assign led to object spread notation, assignGingerly could lead to some sort of deep structural JavaScript syntax, but that is outside the scope of this polyfill package. 
 
-While we are in the business of passing values of object A into object B, we might as well add some extremely common behavior that allows updating properties of object B based on the current values of object B -- things like incrementing, toggling, and deleting.  Deleting is critical for assignTentatively, but is included with both functions
+While we are in the business of passing values of object A into object B, we might as well add some extremely common behavior that allows updating properties of object B based on the current values of object B -- things like incrementing, toggling, and deleting.  Deleting is critical for assignTentatively, but is included with both functions.
 
 ## Example 4 - Incrementing values with += command
 
@@ -221,8 +221,7 @@ console.log(obj);
 - Non-existent properties are silently skipped
 - If the parent path doesn't exist, the command is silently skipped
 - For root-level deletion, use ` -=` (space before -=)
-//   }
-// }
+
 
 
 
@@ -293,9 +292,9 @@ This guarantees that applying the reversal object restores the object to its exa
 ## Dependency injection based on a registry object and a Symbolic reference mapping
 
 ```Typescript
-interface IBaseRegistryItem<T = any> {
-    spawn: {new(): T} | Promise<{new(): T}>
-    symlinks: {[key: symbol]: keyof T}
+interface IBaseRegistryItem<T = any, TObjToExtend = any> {
+    spawn: {new(objToExtend: TObjToExtend, ctx: SpawnContext, initVals: Partial<T>): T}
+    symlinks?: {[key: symbol]: keyof T}
     // Optional: for element enhancement access
     enhKey?: string
     // Optional: automatic attribute parsing 
