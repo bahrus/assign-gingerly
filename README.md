@@ -515,6 +515,9 @@ The prototype extensions are non-enumerable and won't appear in `Object.keys()` 
 
 This package includes support for Chrome's scoped custom element registries, which automatically integrates dependency injection in harmony with scoped custom elements DOM sections or ShadowRoots.
 
+> [!NOTE]
+> Safari/WebKit played a critical role in pushing scoped custom element registries forward, and announced with little fanfare or documentation that [Safari 26 supports it](https://developer.apple.com/documentation/safari-release-notes/safari-26-release-notes).  However, the Playwright test machinery's cross platform Safari test browser doesn't yet support it.
+
 <details>
   <summary>Automatic Registry Population</summary>
 
