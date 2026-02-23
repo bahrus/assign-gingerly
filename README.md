@@ -1758,6 +1758,8 @@ const result = parseWithAttrs(element, config);
 
 **Built-in Named Parsers:**
 
+[TODO]: Check if this is all needed
+
 The following parsers are pre-registered in `globalParserRegistry`:
 
 - `'timestamp'` - Parses ISO date string to Unix timestamp (milliseconds)
