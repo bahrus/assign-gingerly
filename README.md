@@ -1362,11 +1362,11 @@ assignGingerly(element, { [enhSymbol]: 'test' }, { registry });
 
 ## Parsing Attributes with `parseWithAttrs`
 
-The `parseWithAttrs` function provides a declarative way to read and parse HTML attributes into structured data objects. It's particularly useful for custom elements and web components that need to extract configuration from attributes.
+The `parseWithAttrs` function provides a declarative way to read and parse HTML attributes and pass the parsed values into the spawned enhancement constructor. 
 
 ### Automatic Integration with Enhancement Spawning
 
-**Important**: When using the `enh.get()`, `enh.set`, or `assignGingerly()` methods with registry items, you typically **do not need to call `parseWithAttrs()` manually**. The attribute parsing happens automatically during enhancement spawning when you include a `withAttrs` property in your registry item.
+**Important**: When using the `enh.get()`, `enh.set`, or `assignGingerly()` methods with registry items, you typically **do not need to call `parseWithAttrs()` manually**. The attribute parsing happens automatically during enhancement spawning when you include a `withAttrs` property in your registry item configuration.
 
 ```html
 <my-element my-enhancement-count="42" my-enhancement-theme="dark"></my-element>
