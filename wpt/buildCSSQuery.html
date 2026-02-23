@@ -190,6 +190,28 @@
             assert.include(result, '[enh-my-component-size]');
         });
 
+        // Test 8c: Omitting selectors parameter (same as empty string)
+        test('Omitting selectors parameter returns attribute selectors', () => {
+            const config = {
+                spawn: class {},
+                withAttrs: {
+                    base: 'data-config',
+                    theme: '${base}-theme'
+                }
+            };
+            
+            const result = buildCSSQuery(config);
+            
+            assert.include(result, '[data-config]');
+            assert.include(result, '[enh-data-config]');
+            assert.include(result, '[data-config-theme]');
+            assert.include(result, '[enh-data-config-theme]');
+            
+            // Should be same as passing empty string
+            const resultWithEmpty = buildCSSQuery(config, '');
+            assert.equal(result, resultWithEmpty);
+        });
+
         // Test 9: No withAttrs returns empty string
         test('No withAttrs returns empty string', () => {
             const config = {

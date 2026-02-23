@@ -82,8 +82,8 @@ function extractAttributeNames(withAttrs: AttrPatterns<any>): string[] {
  * Creates a cross-product of selectors and attribute names (both prefixed and unprefixed)
  * 
  * @param config - Enhancement configuration with withAttrs
- * @param selectors - Comma-separated CSS selectors to match (e.g., 'template, script')
- *                    If empty, returns just the attribute selectors without element prefix
+ * @param selectors - Optional comma-separated CSS selectors to match (e.g., 'template, script')
+ *                    If omitted or empty, returns just the attribute selectors without element prefix
  * @returns CSS query string with cross-product of selectors and attributes
  * 
  * @example
@@ -101,12 +101,14 @@ function extractAttributeNames(withAttrs: AttrPatterns<any>): string[] {
  * //           div[my-attr-theme], span[my-attr-theme], div[enh-my-attr-theme], span[enh-my-attr-theme]'
  * 
  * // Without selectors (matches any element)
+ * buildCSSQuery(config);
+ * // or
  * buildCSSQuery(config, '');
  * // Returns: '[my-attr], [enh-my-attr], [my-attr-theme], [enh-my-attr-theme]'
  */
 export function buildCSSQuery(
     config: EnhancementConfig,
-    selectors: string
+    selectors?: string
 ): string {
     // Validate inputs
     if (!config.withAttrs) {

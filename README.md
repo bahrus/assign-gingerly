@@ -2222,7 +2222,11 @@ const elements = document.querySelectorAll(query);
 **Without selectors (matches any element):**
 
 ```TypeScript
+// Omit the selectors parameter
+const query = buildCSSQuery(config);
+// or explicitly pass empty string
 const query = buildCSSQuery(config, '');
+
 console.log(query);
 // '[my-component], [enh-my-component], [my-component-theme], [enh-my-component-theme]'
 
@@ -2313,7 +2317,7 @@ buildCSSQuery(config, 'div');
 
 ### Edge Cases
 
-**Empty selectors return attribute-only selectors:**
+**Omitting or empty selectors return attribute-only selectors:**
 ```TypeScript
 const config = {
   spawn: MyClass,
@@ -2323,8 +2327,10 @@ const config = {
   }
 };
 
-buildCSSQuery(config, '');
-// '[my-attr], [enh-my-attr], [my-attr-theme], [enh-my-attr-theme]'
+buildCSSQuery(config);  // Omit selectors parameter
+// or
+buildCSSQuery(config, '');  // Empty string
+// Both return: '[my-attr], [enh-my-attr], [my-attr-theme], [enh-my-attr-theme]'
 // Matches any element with these attributes
 ```
 
@@ -2351,7 +2357,7 @@ buildCSSQuery(config, '  div  ,  span  ,  p  ');
 1. **Mount Observer Integration**: Find elements that need enhancement
    ```TypeScript
    // Match any element with the attributes
-   const query = buildCSSQuery(enhancementConfig, '');
+   const query = buildCSSQuery(enhancementConfig);
    const observer = new MutationObserver(() => {
      const elements = document.querySelectorAll(query);
      elements.forEach(el => enhance(el));
@@ -2377,19 +2383,19 @@ buildCSSQuery(config, '  div  ,  span  ,  p  ');
 ```TypeScript
 function buildCSSQuery(
   config: EnhancementConfig,
-  selectors: string
+  selectors?: string
 ): string
 ```
 
 **Parameters:**
 - `config`: Enhancement configuration with `withAttrs` property
-- `selectors`: Comma-separated CSS selectors (e.g., `'div, span'`)
-  - If empty string or whitespace only, returns attribute selectors without element prefix
+- `selectors` (optional): Comma-separated CSS selectors (e.g., `'div, span'`)
+  - If omitted or empty string, returns attribute selectors without element prefix
   - This matches any element with the specified attributes
 
 **Returns:**
 - CSS query string with cross-product of selectors and attributes
-- If selectors is empty: returns attribute-only selectors (e.g., `'[attr], [enh-attr]'`)
+- If selectors is omitted or empty: returns attribute-only selectors (e.g., `'[attr], [enh-attr]'`)
 - If withAttrs is missing or empty: returns empty string
 
 **Throws:**
