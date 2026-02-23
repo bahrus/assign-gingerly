@@ -829,7 +829,7 @@ console.log(item.enhKey); // 'myEnh'
 
 ### Programmatic Instance Spawning with `enh.get()`
 
-The `enh.get(registryItem)` method provides a programmatic way to spawn or retrieve enhancement instances:
+The `enh.get(registryItem)` method provides a programmatic way to spawn or retrieve previously instantiated enhancement instances:
 
 ```TypeScript
 const registryItem = {
@@ -959,9 +959,9 @@ Note: Symbol event names are not yet supported by the platform but have been req
 
 </details>
 
-### Disposing Enhancement Instances with `enh.dispose()`
+### Disposing Enhancement Instances with `enh.dispose(regItem)`
 
-The `enh.dispose()` method provides a way to clean up and remove enhancement instances:
+The `enh.dispose(regItem)` method provides a way to clean up and remove enhancement instances:
 
 ```TypeScript
 class MyEnhancement {
@@ -1002,7 +1002,7 @@ const instance = element.enh.get(registryItem);
 element.enh.dispose(registryItem);
 ```
 
-**How `enh.dispose()` works:**
+**How `enh.dispose(regItem)` works:**
 
 1. **Retrieves instance**: Gets the spawned instance from the global instance map
 2. **Calls lifecycle method**: If `lifecycleKeys.dispose` is specified, calls that method on the instance (passing the registry item)
@@ -1054,9 +1054,9 @@ element.enh.dispose(registryItem); // Stops timer and cleans up
 - Calling `enh.get()` again will create a new instance
 - The enhancement property is removed from the enh container
 
-### Waiting for Async Initialization with `enh.whenResolved()`
+### Waiting for Async Initialization with `enh.whenResolved(regItem)`
 
-The `enh.whenResolved()` method provides a way to wait for asynchronous enhancement initialization:
+The `enh.whenResolved(regItem)` method provides a way to wait for asynchronous enhancement initialization:
 
 ```TypeScript
 class AsyncEnhancement extends EventTarget {
