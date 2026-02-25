@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>resolveTemplate Tests</title>
+    <script src="https://unpkg.com/@esm-bundle/chai@4.3.4-fix.0/esm/chai.js"></script>
+</head>
+<body>
+    <h1>resolveTemplate Tests</h1>
+    <div id="test-results"></div>
+
+    <script type="module">
+        import { resolveTemplate } from '../resolveTemplate.js';
+        const { assert } = chai;
+
+        const results = [];
+        
+        function test(name, fn) {
+            try {
+                fn();
+                results.push({ name, status: 'PASS' });
+                console.log(`✓ ${name}`);
+            } catch (error) {
+                results.push({ name, status: 'FAIL', error: error.message });
+                console.error(`✗ ${name}:`, error.message);
+            }
+        }
+
+        // Test 1: Simple variable resolution
+        test('Simple variable resolution', () => {
+            const patterns = { base: 'my-component' };
+            const cache = new Map();
+            
+            const result = resolveTemplate('${base}', patterns, cache);
+            
+            assert.equal(result, 'my-component');
+        });
+
+        // Test 2: Nested variable resolution
+        test('Nested variable resolution', () => {
+            const patterns = {
+                base: 'my-component',
+                theme: '${base}-theme'
+            };
+            const cache = new Map();
+            
+            const result = resolveTemplate('${theme}', patterns, cache);
+            
+            assert.equal(result, 'my-component-theme');
+        });
+
+        // Test 3: Multiple levels of nesting
+        test('Multiple levels of nesting', () => {
+            const patterns = {
+                base: 'data',
+                prefix: '${base}-prefix',
+                full: '${prefix}-full'
+            };
+            const cache = new Map();
+            
+            const result = resolveTemplate('${full}', patterns, cache);
+            
+            assert.equal(result, 'data-prefix-full');
+        });
+
+        // Test 4: Multiple variables in one template
+        test('Multiple variables in one template', () => {
+            const patterns = {
+                base: 'my',
+                suffix: 'component'
+            };
+            const cache = new Map();
+            
+            const result = resolveTemplate('${base}-${suffix}', patterns, cache);
+            
+            assert.equal(result, 'my-component');
+        });
+
+        // Test 5: Caching works
+        test('Caching works', () => {
+            const patterns = {
+                base: 'cached',
+                theme: '${base}-theme'
+            };
+            const cache = new Map();
+            
+            // First call
+            resolveTemplate('${theme}', patterns, cache);
+            
+            // Cache should have 'theme' and 'base'
+            assert.isTrue(cache.has('theme'));
+            assert.equal(cache.get('theme'), 'cached-theme');
+            
+            // Second call should use cache
+            const result = resolveTemplate('${theme}', patterns, cache);
+            assert.equal(result, 'cached-theme');
+        });
+
+        // Test 6: Non-string values converted to string
+        test('Non-string values converted to string', () => {
+            const patterns = {
+                count: 42,
+                flag: true
+            };
+            const cache = new Map();
+            
+            const result = resolveTemplate('${count}-${flag}', patterns, cache);
+            
+            assert.equal(result, '42-true');
+        });
+
+        // Test 7: Circular reference throws error
+        test('Circular reference throws error', () => {
+            const patterns = {
+                a: '${b}',
+                b: '${a}'
+            };
+            const cache = new Map();
+            
+            try {
+                resolveTemplate('${a}', patterns, cache);
+                assert.fail('Should have thrown error');
+            } catch (error) {
+                assert.include(error.message, 'Circular reference');
+            }
+        });
+
+        // Test 8: Undefined variable throws error
+        test('Undefined variable throws error', () => {
+            const patterns = {
+                base: 'test'
+            };
+            const cache = new Map();
+            
+            try {
+                resolveTemplate('${nonexistent}', patterns, cache);
+                assert.fail('Should have thrown error');
+            } catch (error) {
+                assert.include(error.message, 'Undefined template variable');
+            }
+        });
+
+        // Test 9: No variables returns original string
+        test('No variables returns original string', () => {
+            const patterns = { base: 'test' };
+            const cache = new Map();
+            
+            const result = resolveTemplate('no-variables-here', patterns, cache);
+            
+            assert.equal(result, 'no-variables-here');
+        });
+
+        // Test 10: Empty string
+        test('Empty string', () => {
+            const patterns = { base: 'test' };
+            const cache = new Map();
+            
+            const result = resolveTemplate('', patterns, cache);
+            
+            assert.equal(result, '');
+        });
+
+        // Display results
+        const resultsDiv = document.getElementById('test-results');
+        const passCount = results.filter(r => r.status === 'PASS').length;
+        const failCount = results.filter(r => r.status === 'FAIL').length;
+        
+        resultsDiv.innerHTML = `
+            <h2>Results: ${passCount} passed, ${failCount} failed</h2>
+            <ul>
+                ${results.map(r => `
+                    <li style="color: ${r.status === 'PASS' ? 'green' : 'red'}">
+                        ${r.status}: ${r.name}
+                        ${r.error ? `<br><small>${r.error}</small>` : ''}
+                    </li>
+                `).join('')}
+            </ul>
+        `;
+    </script>
+</body>
+</html>

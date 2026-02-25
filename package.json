@@ -47,6 +47,10 @@
     "./buildCSSQuery.js": {
       "default": "./buildCSSQuery.js",
       "types": "./buildCSSQuery.ts"
+    },
+    "./resolveTemplate.js": {
+      "default": "./resolveTemplate.js",
+      "types": "./resolveTemplate.ts"
     }
   },
   "main": "index.js",
