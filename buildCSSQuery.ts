@@ -7,7 +7,7 @@ import { resolveTemplate } from './resolveTemplate.js';
  * @param withAttrs - The attribute patterns configuration
  * @returns Array of resolved attribute names
  */
-function extractAttributeNames(withAttrs: AttrPatterns<any>): string[] {
+export function extractAttributeNames(withAttrs: AttrPatterns<any>): string[] {
     const names: string[] = [];
     const resolvedCache = new Map<string, string>();
     
