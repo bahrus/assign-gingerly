@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
+import assignGingerly, { EnhancementRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - canSpawn Support', () => {
   test('should respect canSpawn returning false for dependency injection', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('canSpawn-test');
     
     let spawnAttempts = 0;
@@ -42,7 +42,7 @@ test.describe('assignGingerly - canSpawn Support', () => {
   });
 
   test('should respect canSpawn returning true', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('canSpawn-true-test');
     
     class TestClass {
@@ -65,7 +65,7 @@ test.describe('assignGingerly - canSpawn Support', () => {
   });
 
   test('should work without canSpawn method (default behavior)', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('no-canSpawn-test');
     
     class TestClass {
@@ -86,7 +86,7 @@ test.describe('assignGingerly - canSpawn Support', () => {
   });
 
   test('should pass correct context to canSpawn', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('canSpawn-ctx-test');
     
     let receivedObj: any = null;
@@ -118,7 +118,7 @@ test.describe('assignGingerly - canSpawn Support', () => {
   });
 
   test('should respect canSpawn for set proxy', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('canSpawn-set-proxy-test');
     
     let spawnAttempts = 0;
@@ -162,7 +162,7 @@ test.describe('assignGingerly - canSpawn Support', () => {
   });
 
   test('should work with element type checking', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('canSpawn-element-test');
     
     let plainObjSpawnAttempts = 0;
@@ -204,7 +204,7 @@ test.describe('assignGingerly - canSpawn Support', () => {
   });
 
   test('should work with custom object type checking', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('canSpawn-custom-type-test');
     
     let plainObjSpawnAttempts = 0;
@@ -246,7 +246,7 @@ test.describe('assignGingerly - canSpawn Support', () => {
   });
 
   test('should not spawn multiple times if canSpawn blocks it', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('canSpawn-multiple-test');
     
     let spawnCount = 0;
@@ -280,7 +280,7 @@ test.describe('assignGingerly - canSpawn Support', () => {
   });
 
   test('should allow conditional spawning based on object properties', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('canSpawn-conditional-test');
     
     let spawnCount = 0;
@@ -319,3 +319,4 @@ test.describe('assignGingerly - canSpawn Support', () => {
     expect(spawnCount).toBe(2);
   });
 });
+

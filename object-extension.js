@@ -16,7 +16,7 @@ if (typeof WeakMap.prototype.getOrInsert !== 'function') {
   };
 }
 
-import assignGingerly, { BaseRegistry, getInstanceMap } from './assignGingerly.js';
+import assignGingerly, { EnhancementRegistry, getInstanceMap } from './assignGingerly.js';
 import { parseWithAttrs } from './parseWithAttrs.js';
 /**
  * Normalizes lifecycleKeys to always return an object with dispose and resolved keys
@@ -39,7 +39,7 @@ if (typeof CustomElementRegistry !== 'undefined') {
     Object.defineProperty(CustomElementRegistry.prototype, 'enhancementRegistry', {
         get: function () {
             // Create a new BaseRegistry instance on first access and cache it
-            const registry = new BaseRegistry();
+            const registry = new EnhancementRegistry();
             // Replace the getter with the actual value
             Object.defineProperty(this, 'enhancementRegistry', {
                 value: registry,

@@ -11,7 +11,7 @@ export type IBaseRegistryItem<T = any> = EnhancementConfig<T>;
  * Interface for the options passed to assignGingerly
  */
 export interface IAssignGingerlyOptions {
-  registry?: typeof BaseRegistry | BaseRegistry;
+  registry?: typeof EnhancementRegistry | EnhancementRegistry;
 }
 
 /**
@@ -34,7 +34,7 @@ export function getInstanceMap(): WeakMap<object, Map<EnhancementConfig, any>> {
 /**
  * Base registry class for managing enhancement configurations
  */
-export class BaseRegistry {
+export class EnhancementRegistry {
   private items: EnhancementConfig[] = [];
 
   push(items: EnhancementConfig | EnhancementConfig[]): void {
@@ -179,7 +179,7 @@ export function assignGingerly(
     return target;
   }
 
-  const registry = options?.registry instanceof BaseRegistry
+  const registry = options?.registry instanceof EnhancementRegistry
     ? options.registry
     : options?.registry
     ? new options.registry()

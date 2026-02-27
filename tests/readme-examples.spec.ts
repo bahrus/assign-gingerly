@@ -1,5 +1,5 @@
-﻿import { test, expect } from '@playwright/test';
-import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
+import { test, expect } from '@playwright/test';
+import assignGingerly, { EnhancementRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - README Examples', () => {
   test('Example 1: Basic assignment (superset of Object.assign)', () => {
@@ -62,7 +62,7 @@ test.describe('assignGingerly - README Examples', () => {
     }
     
     // Create and configure registry
-    const baseRegistry = new BaseRegistry();
+    const baseRegistry = new EnhancementRegistry();
     baseRegistry.push([
       {
         symlinks: {
@@ -105,7 +105,7 @@ test.describe('assignGingerly - README Examples', () => {
       isMellow = false;
     }
     
-    const baseRegistry = new BaseRegistry();
+    const baseRegistry = new EnhancementRegistry();
     baseRegistry.push({
       symlinks: { [isMellow]: 'isMellow' },
       spawn: YourEnhancement
@@ -127,7 +127,7 @@ test.describe('assignGingerly - README Examples', () => {
       config = {} as any;
     }
     
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     registry.push({
       symlinks: { [enhSym]: 'enabled' },
       spawn: Enhancement
@@ -153,3 +153,4 @@ test.describe('assignGingerly - README Examples', () => {
     expect(target.database?.port).toBe(5432);
   });
 });
+

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
+import assignGingerly, { EnhancementRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - Basic Functionality', () => {
   test('Example 1: Basic object assignment (like Object.assign)', () => {

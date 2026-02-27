@@ -34,7 +34,7 @@ export function getInstanceMap() {
 /**
  * Base registry class for managing enhancement configurations
  */
-export class BaseRegistry {
+export class EnhancementRegistry {
     items = [];
     push(items) {
         if (Array.isArray(items)) {
@@ -160,7 +160,7 @@ export function assignGingerly(target, source, options) {
     if (!target || typeof target !== 'object') {
         return target;
     }
-    const registry = options?.registry instanceof BaseRegistry
+    const registry = options?.registry instanceof EnhancementRegistry
         ? options.registry
         : options?.registry
             ? new options.registry()

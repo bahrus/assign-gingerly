@@ -292,7 +292,7 @@ This guarantees that applying the reversal object restores the object to its exa
 ## Dependency injection based on a registry object and a Symbolic reference mapping
 
 ```Typescript
-interface IBaseRegistryItem<T = any, TObjToExtend = any> {
+interface IEnhancementRegistryItem<T = any, TObjToExtend = any> {
     spawn: {new(objToExtend: TObjToExtend, ctx: SpawnContext, initVals: Partial<T>): T}
     symlinks?: {[key: symbol]: keyof T}
     // Optional: for element enhancement access
@@ -317,15 +317,15 @@ class YourEnhancement{
     set madAboutFourteen(nv){}
 }
 
-class BaseRegistry{
-    push(IBaseRegistryItem | IBaseRegistryItem[]){
+class EnhancementRegistry{
+    push(IEnhancementRegistryItem | IEnhancementRegistryItem[]){
         ...
     }
 }
 
 //Here's where the dependency injection mapping takes place
-const baseRegistry = new BaseRegistry;
-baseRegistry.push([
+const EnhancementRegistry = new EnhancementRegistry;
+EnhancementRegistry.push([
     {
         symlinks: {
             [isHappy]: 'isHappy'
@@ -347,7 +347,7 @@ const result = assignGingerly({}, {
     '?.style?.height': '40px',
     '?.enh?.mellowYellow?.madAboutFourteen': true
 }, {
-    registry: BaseRegistry
+    registry: EnhancementRegistry
 });
 //result.set[isMellow] = false;
 ```
@@ -401,7 +401,7 @@ const registryItem = {
   enhKey: 'myEnh'
 };
 
-const registry = new BaseRegistry();
+const registry = new EnhancementRegistry();
 registry.push(registryItem);
 
 const element = document.createElement('div');
@@ -438,7 +438,7 @@ const registryItem = {
   }
 };
 
-const registry = new BaseRegistry();
+const registry = new EnhancementRegistry();
 registry.push(registryItem);
 
 const target = {};
@@ -465,7 +465,7 @@ const result = assignGingerly({}, {
     '?.style.height': '40px',
     '?.enh?.mellowYellow?.madAboutFourteen': true
 }, {
-    registry: BaseRegistry
+    registry: EnhancementRegistry
 });
 ```
 </details>
@@ -551,7 +551,7 @@ myElement.assignGingerly({
 <details>
 <summary>Lazy Registry Creation</summary>
 
-Each `CustomElementRegistry` instance gets its own `enhancementRegistry` property via a lazy getter. The `BaseRegistry` instance is created on first access and cached for subsequent uses:
+Each `CustomElementRegistry` instance gets its own `enhancementRegistry` property via a lazy getter. The `EnhancementRegistry` instance is created on first access and cached for subsequent uses:
 
 ```TypeScript
 const element1 = document.createElement('div');
@@ -572,7 +572,7 @@ console.log(registry1 === element1.customElementRegistry.enhancementRegistry); /
 You can still provide an explicit `registry` option to override the automatic behavior:
 
 ```TypeScript
-const customRegistry = new BaseRegistry();
+const customRegistry = new EnhancementRegistry();
 // ... configure customRegistry ...
 
 myElement.assignGingerly({
@@ -593,7 +593,7 @@ The `enh.set` proxy allows you to assign properties to enhancements using a clea
 
 ```TypeScript
 import 'assign-gingerly/object-extension.js';
-//import { BaseRegistry } from 'assign-gingerly';
+//import { EnhancementRegistry } from 'assign-gingerly';
 
 // Define an enhancement class
 class MyEnhancement {
@@ -662,7 +662,7 @@ Element enhancement classes should follow this constructor signature:
 
 ```TypeScript
 interface SpawnContext<T, TMountContext = any> {
-  config: IBaseRegistryItem<T>;
+  config: IEnhancementRegistryItem<T>;
   mountCtx?: TMountContext;  // Optional custom context passed by caller
 }
 
@@ -716,7 +716,7 @@ This is useful for:
 In addition to spawn and symlinks, registry items support optional properties `enhKey`, `withAttrs`, `canSpawn`, and `lifecycleKeys`:
 
 ```TypeScript
-interface IBaseRegistryItem<T, TObj = Element> {
+interface IEnhancementRegistryItem<T, TObj = Element> {
   spawn: { 
     new (obj?: TObj, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
     canSpawn?: (obj: TObj, ctx?: SpawnContext<T>) => boolean;  // Optional spawn guard
@@ -813,10 +813,10 @@ console.log(element.enh.plainData); // { prop1: 'value1', prop2: 'value2' }
 <details>
 <summary>Finding Registry Items by enhKey</summary>
 
-The `BaseRegistry` class includes a `findByEnhKey` method:
+The `EnhancementRegistry` class includes a `findByEnhKey` method:
 
 ```TypeScript
-const registry = new BaseRegistry();
+const registry = new EnhancementRegistry();
 registry.push({
   spawn: MyEnhancement,
   enhKey: 'myEnh'
@@ -1228,7 +1228,7 @@ class DivOnlyEnhancement {
   }
 }
 
-const registry = new BaseRegistry();
+const registry = new EnhancementRegistry();
 registry.push({
   spawn: DivOnlyEnhancement,
   enhKey: 'divOnly'
@@ -1262,7 +1262,7 @@ static canSpawn(obj: any, ctx?: SpawnContext<T>): boolean
 ```
 
 - `obj`: The target object being enhanced (element, plain object, etc.)
-- `ctx`: Optional spawn context containing `{ config: IBaseRegistryItem<T> }`
+- `ctx`: Optional spawn context containing `{ config: IEnhancementRegistryItem<T> }`
 - Returns: `true` to allow spawning, `false` to block
 
 ### Use Cases
@@ -1329,7 +1329,7 @@ class ValidatedEnhancement {
 ### Example with Dependency Injection
 
 ```TypeScript
-import assignGingerly, { BaseRegistry } from 'assign-gingerly';
+import assignGingerly, { EnhancementRegistry } from 'assign-gingerly';
 
 class ElementOnlyEnhancement {
   value = null;
@@ -1339,7 +1339,7 @@ class ElementOnlyEnhancement {
   }
 }
 
-const registry = new BaseRegistry();
+const registry = new EnhancementRegistry();
 const enhSymbol = Symbol.for('myEnhancement');
 
 registry.push({

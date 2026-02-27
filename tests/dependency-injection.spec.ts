@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
+import assignGingerly, { EnhancementRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - Dependency Injection', () => {
-  test('should register items in BaseRegistry', () => {
-    const registry = new BaseRegistry();
+  test('should register items in EnhancementRegistry', () => {
+    const registry = new EnhancementRegistry();
     
     class MyEnhancement {
       isHappy = false;
@@ -21,7 +21,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
   });
 
   test('should push multiple registry items at once', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const sym1 = Symbol.for('sym1');
     const sym2 = Symbol.for('sym2');
     
@@ -37,7 +37,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
   });
 
   test('should find registry item by symbol', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('test-symbol');
     
     class TestClass {}
@@ -53,7 +53,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
   });
 
   test('should inject dependency with symbol key', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const isHappy = Symbol.for('isHappy-test');
     
     class MyEnhancement {
@@ -73,7 +73,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
   });
 
   test('should handle synchronous spawn', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const mySymbol = Symbol.for('my-symbol');
     
     class MyClass {
@@ -92,7 +92,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
   });
 
   test('should reuse spawned instances for same symbol', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const mySymbol = Symbol.for('reuse-symbol');
     
     class CounterClass {
@@ -115,7 +115,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
   });
 
   test('should work with multiple symbols', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const sym1 = Symbol.for('sym1');
     const sym2 = Symbol.for('sym2');
     
@@ -142,7 +142,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
   });
 
   test('should combine nested paths with symbol dependencies', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const mySymbol = Symbol.for('combo-symbol');
     
     class MyClass {
@@ -164,7 +164,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
   });
 
   test('should create set property for lazy symbol assignment', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('set-test');
     
     class TestClass {
@@ -183,7 +183,7 @@ test.describe('assignGingerly - Dependency Injection', () => {
   });
 
   test('should handle symbol assignment through set proxy', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('proxy-test');
     
     class TestClass {
@@ -203,3 +203,4 @@ test.describe('assignGingerly - Dependency Injection', () => {
     expect(target).toBeDefined();
   });
 });
+

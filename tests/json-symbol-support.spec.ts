@@ -1,9 +1,9 @@
-﻿import { test, expect } from '@playwright/test';
-import assignGingerly, { BaseRegistry } from '../assignGingerly.js';
+import { test, expect } from '@playwright/test';
+import assignGingerly, { EnhancementRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - JSON Symbol.for Support', () => {
   test('should convert Symbol.for string keys to actual symbols', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('test-json-symbol');
     
     class TestClass {
@@ -24,7 +24,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
   });
 
   test('should handle multiple Symbol.for string keys', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const sym1 = Symbol.for('json-sym1');
     const sym2 = Symbol.for('json-sym2');
     
@@ -62,7 +62,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
       isMellow = false;
     }
     
-    const baseRegistry = new BaseRegistry();
+    const baseRegistry = new EnhancementRegistry();
     baseRegistry.push([
       {
         symlinks: { [isHappy]: 'isHappy' },
@@ -89,7 +89,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
   });
 
   test('should handle both actual symbols and Symbol.for strings together', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const actualSymbol = Symbol.for('actual-symbol');
     const stringSymbol = Symbol.for('string-symbol');
     
@@ -116,7 +116,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
   });
 
   test('should support Symbol.for strings with double quotes', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('double-quote-test');
     
     class TestClass {
@@ -137,7 +137,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
   });
 
   test('should combine Symbol.for strings with nested paths', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('combo-json-symbol');
     
     class TestClass {
@@ -176,7 +176,7 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
   });
 
   test('should work with JSON.parse for true JSON compatibility', () => {
-    const registry = new BaseRegistry();
+    const registry = new EnhancementRegistry();
     const testSymbol = Symbol.for('json-parsed-symbol');
     
     class TestClass {
@@ -203,3 +203,4 @@ test.describe('assignGingerly - JSON Symbol.for Support', () => {
     expect(target.config?.name).toBe('MyApp');
   });
 });
+

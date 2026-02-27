@@ -1,4 +1,4 @@
-import assignGingerly, { BaseRegistry, IAssignGingerlyOptions, getInstanceMap, INSTANCE_MAP_GUID } from './assignGingerly.js';
+import assignGingerly, { EnhancementRegistry, IAssignGingerlyOptions, getInstanceMap, INSTANCE_MAP_GUID } from './assignGingerly.js';
 import { parseWithAttrs } from './parseWithAttrs.js';
 
 /**
@@ -21,7 +21,7 @@ function normalizeLifecycleKeys(lifecycleKeys: true | { dispose?: string | symbo
  */
 declare global {
   interface CustomElementRegistry {
-    enhancementRegistry: typeof BaseRegistry | BaseRegistry;
+    enhancementRegistry: typeof EnhancementRegistry | EnhancementRegistry;
   }
   
   interface Element {
@@ -84,7 +84,7 @@ if (typeof CustomElementRegistry !== 'undefined') {
   Object.defineProperty(CustomElementRegistry.prototype, 'enhancementRegistry', {
     get: function () {
       // Create a new BaseRegistry instance on first access and cache it
-      const registry = new BaseRegistry();
+      const registry = new EnhancementRegistry();
       // Replace the getter with the actual value
       Object.defineProperty(this, 'enhancementRegistry', {
         value: registry,
