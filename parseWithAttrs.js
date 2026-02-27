@@ -1,3 +1,21 @@
+// Polyfill for Map.prototype.getOrInsert and WeakMap.prototype.getOrInsert
+if (typeof Map.prototype.getOrInsert !== 'function') {
+  Map.prototype.getOrInsert = function(key, insert) {
+    if (this.has(key)) return this.get(key);
+    const value = insert();
+    this.set(key, value);
+    return value;
+  };
+}
+if (typeof WeakMap.prototype.getOrInsert !== 'function') {
+  WeakMap.prototype.getOrInsert = function(key, insert) {
+    if (this.has(key)) return this.get(key);
+    const value = insert();
+    this.set(key, value);
+    return value;
+  };
+}
+
 import { globalParserRegistry } from './parserRegistry.js';
 import { resolveTemplate } from './resolveTemplate.js';
 // Module-level cache for parsed attribute values
@@ -90,10 +108,7 @@ function parseWithCache(attrValue, config, parser) {
     }
     // Get or create cache for this config
     const cacheKey = getCacheKey(config);
-    if (!parseCache.has(cacheKey)) {
-        parseCache.set(cacheKey, new Map());
-    }
-    const valueCache = parseCache.get(cacheKey);
+    const valueCache = parseCache.getOrInsert(cacheKey, () => new Map());
     // Use special key for null values
     const valueCacheKey = attrValue === null ? '__NULL__' : attrValue;
     // Check if we have a cached value

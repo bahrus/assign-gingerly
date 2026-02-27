@@ -1,3 +1,21 @@
+// Polyfill for Map.prototype.getOrInsert and WeakMap.prototype.getOrInsert
+if (typeof Map.prototype.getOrInsert !== 'function') {
+  Map.prototype.getOrInsert = function(key, insert) {
+    if (this.has(key)) return this.get(key);
+    const value = insert();
+    this.set(key, value);
+    return value;
+  };
+}
+if (typeof WeakMap.prototype.getOrInsert !== 'function') {
+  WeakMap.prototype.getOrInsert = function(key, insert) {
+    if (this.has(key)) return this.get(key);
+    const value = insert();
+    this.set(key, value);
+    return value;
+  };
+}
+
 /**
  * GUID for global instance map storage to ensure uniqueness across package versions
  */
@@ -305,10 +323,7 @@ export function assignGingerly(target, source, options) {
             if (registryItem) {
                 const instanceMap = getInstanceMap();
                 // Get or initialize the instances map for this target
-                if (!instanceMap.has(target)) {
-                    instanceMap.set(target, new Map());
-                }
-                const instances = instanceMap.get(target);
+                const instances = instanceMap.getOrInsert(target, () => new Map());
                 // Check if instance already exists (keyed by registryItem)
                 let instance = instances.get(registryItem);
                 if (!instance) {
@@ -363,10 +378,7 @@ export function assignGingerly(target, source, options) {
                             const registryItem = registry.findBySymbol(prop);
                             if (registryItem) {
                                 const instanceMap = getInstanceMap();
-                                if (!instanceMap.has(target)) {
-                                    instanceMap.set(target, new Map());
-                                }
-                                const instances = instanceMap.get(target);
+                                const instances = instanceMap.getOrInsert(target, () => new Map());
                                 let instance = instances.get(registryItem);
                                 if (!instance) {
                                     const SpawnClass = registryItem.spawn;

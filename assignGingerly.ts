@@ -350,10 +350,7 @@ export function assignGingerly(
       if (registryItem) {
         const instanceMap = getInstanceMap();
         // Get or initialize the instances map for this target
-        if (!instanceMap.has(target)) {
-          instanceMap.set(target, new Map());
-        }
-        const instances = instanceMap.get(target)!;
+        const instances = instanceMap.getOrInsert(target, () => new Map());
 
         // Check if instance already exists (keyed by registryItem)
         let instance = instances.get(registryItem);
@@ -418,10 +415,7 @@ export function assignGingerly(
                 const registryItem = registry.findBySymbol(prop);
                 if (registryItem) {
                   const instanceMap = getInstanceMap();
-                  if (!instanceMap.has(target)) {
-                    instanceMap.set(target, new Map());
-                  }
-                  const instances = instanceMap.get(target)!;
+                  const instances = instanceMap.getOrInsert(target, () => new Map());
                   let instance = instances.get(registryItem);
 
                   if (!instance) {

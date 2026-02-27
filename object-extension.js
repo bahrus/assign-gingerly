@@ -1,3 +1,21 @@
+// Polyfill for Map.prototype.getOrInsert and WeakMap.prototype.getOrInsert
+if (typeof Map.prototype.getOrInsert !== 'function') {
+  Map.prototype.getOrInsert = function(key, insert) {
+    if (this.has(key)) return this.get(key);
+    const value = insert();
+    this.set(key, value);
+    return value;
+  };
+}
+if (typeof WeakMap.prototype.getOrInsert !== 'function') {
+  WeakMap.prototype.getOrInsert = function(key, insert) {
+    if (this.has(key)) return this.get(key);
+    const value = insert();
+    this.set(key, value);
+    return value;
+  };
+}
+
 import assignGingerly, { BaseRegistry, getInstanceMap } from './assignGingerly.js';
 import { parseWithAttrs } from './parseWithAttrs.js';
 /**
@@ -66,10 +84,7 @@ class ElementEnhancementContainer {
         }
         // Get or create instance using the global instance map
         const instanceMap = getInstanceMap();
-        if (!instanceMap.has(element)) {
-            instanceMap.set(element, new Map());
-        }
-        const instances = instanceMap.get(element);
+        const instances = instanceMap.getOrInsert(element, () => new Map());
         let instance = instances.get(registryItem);
         if (!instance) {
             // Need to spawn
@@ -201,10 +216,7 @@ class ElementEnhancementContainer {
                             const SpawnClass = registryItem.spawn;
                             // Check the global instance map first
                             const instanceMap = getInstanceMap();
-                            if (!instanceMap.has(element)) {
-                                instanceMap.set(element, new Map());
-                            }
-                            const instances = instanceMap.get(element);
+                            const instances = instanceMap.getOrInsert(element, () => new Map());
                             let instance = instances.get(registryItem);
                             if (!instance) {
                                 // Need to spawn
@@ -259,10 +271,7 @@ if (typeof Element !== 'undefined') {
     const enhContainerWeakMap = new WeakMap();
     Object.defineProperty(Element.prototype, 'enh', {
         get: function () {
-            if (!enhContainerWeakMap.has(this)) {
-                enhContainerWeakMap.set(this, new ElementEnhancementContainer(this));
-            }
-            return enhContainerWeakMap.get(this);
+            return enhContainerWeakMap.getOrInsert(this, () => new ElementEnhancementContainer(this));
         },
         enumerable: true,
         configurable: true,
