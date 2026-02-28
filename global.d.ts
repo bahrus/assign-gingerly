@@ -10,7 +10,7 @@ interface Map<K, V> {
    * @param insert A callback that returns the value to insert if the key doesn't exist
    * @returns The existing or newly inserted value
    */
-  getOrInsert(key: K, insert: () => V): V;
+  getOrInsertComputed(key: K, insert: () => V): V;
 }
 
 interface WeakMap<K extends object, V> {
@@ -21,5 +21,5 @@ interface WeakMap<K extends object, V> {
    * @param insert A callback that returns the value to insert if the key doesn't exist
    * @returns The existing or newly inserted value
    */
-  getOrInsert(key: K, insert: () => V): V;
+  getOrInsertComputed(key: K, insert: () => V): V;
 }

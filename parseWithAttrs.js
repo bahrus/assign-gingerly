@@ -90,7 +90,7 @@ function parseWithCache(attrValue, config, parser) {
     }
     // Get or create cache for this config
     const cacheKey = getCacheKey(config);
-    const valueCache = parseCache.getOrInsert(cacheKey, () => new Map());
+    const valueCache = parseCache.getOrInsertComputed(cacheKey, () => new Map());
     // Use special key for null values
     const valueCacheKey = attrValue === null ? '__NULL__' : attrValue;
     // Check if we have a cached value

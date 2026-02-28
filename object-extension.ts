@@ -136,7 +136,7 @@ class ElementEnhancementContainer {
     
     // Get or create instance using the global instance map
     const instanceMap = getInstanceMap();
-    const instances = instanceMap.getOrInsert(element, () => new Map());
+    const instances = instanceMap.getOrInsertComputed(element, () => new Map());
     
     let instance = instances.get(registryItem);
     
@@ -301,7 +301,7 @@ class ElementEnhancementContainer {
               
               // Check the global instance map first
               const instanceMap = getInstanceMap();
-              const instances = instanceMap.getOrInsert(element, () => new Map());
+              const instances = instanceMap.getOrInsertComputed(element, () => new Map());
               
               let instance = instances.get(registryItem);
               
@@ -370,7 +370,7 @@ if (typeof Element !== 'undefined') {
   
   Object.defineProperty(Element.prototype, 'enh', {
     get: function (this: Element) {
-      return enhContainerWeakMap.getOrInsert(this, () => new ElementEnhancementContainer(this));
+      return enhContainerWeakMap.getOrInsertComputed(this, () => new ElementEnhancementContainer(this));
     },
     enumerable: true,
     configurable: true,

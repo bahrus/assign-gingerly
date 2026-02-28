@@ -3,16 +3,16 @@
 import { EnhancementConfig } from "./types/assign-gingerly/types";
 
 // Polyfill for Map.prototype.getOrInsert and WeakMap.prototype.getOrInsert
-if (typeof Map.prototype.getOrInsert !== 'function') {
-  Map.prototype.getOrInsert = function(key, insert) {
+if (typeof Map.prototype.getOrInsertComputed !== 'function') {
+  Map.prototype.getOrInsertComputed = function(key, insert) {
     if (this.has(key)) return this.get(key);
     const value = insert();
     this.set(key, value);
     return value;
   };
 }
-if (typeof WeakMap.prototype.getOrInsert !== 'function') {
-  WeakMap.prototype.getOrInsert = function(key, insert) {
+if (typeof WeakMap.prototype.getOrInsertComputed !== 'function') {
+  WeakMap.prototype.getOrInsertComputed = function(key, insert) {
     if (this.has(key)) return this.get(key);
     const value = insert();
     this.set(key, value);
@@ -368,7 +368,7 @@ export function assignGingerly(
       if (registryItem) {
         const instanceMap = getInstanceMap();
         // Get or initialize the instances map for this target
-        const instances = instanceMap.getOrInsert(target, () => new Map());
+        const instances = instanceMap.getOrInsertComputed(target, () => new Map());
 
         // Check if instance already exists (keyed by registryItem)
         let instance = instances.get(registryItem);
@@ -433,7 +433,7 @@ export function assignGingerly(
                 const registryItem = registry.findBySymbol(prop);
                 if (registryItem) {
                   const instanceMap = getInstanceMap();
-                  const instances = instanceMap.getOrInsert(target, () => new Map());
+                  const instances = instanceMap.getOrInsertComputed(target, () => new Map());
                   let instance = instances.get(registryItem);
 
                   if (!instance) {
