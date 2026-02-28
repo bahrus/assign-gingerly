@@ -20,10 +20,10 @@ if (typeof WeakMap.prototype.getOrInsertComputed !== 'function') {
   };
 }
 
-/**
- * @deprecated Use EnhancementConfig instead
- */
-export type IBaseRegistryItem<T = any> = EnhancementConfig<T>;
+// /**
+//  * @deprecated Use EnhancementConfig instead
+//  */
+// export type IBaseRegistryItem<T = any> = EnhancementConfig<T>;
 
 /**
  * Interface for the options passed to assignGingerly
@@ -53,37 +53,45 @@ export function getInstanceMap(): WeakMap<object, Map<EnhancementConfig, any>> {
  * Base registry class for managing enhancement configurations
  */
 export class EnhancementRegistry {
-  #items: EnhancementConfig[] = [];
+  #items: Set<EnhancementConfig> = new Set();
 
   push(items: EnhancementConfig | EnhancementConfig[]): void {
     if (Array.isArray(items)) {
-      this.#items.push(...items);
+      items.forEach(item => this.#items.add(item));
     } else {
-      this.#items.push(items);
+      this.#items.add(items);
     }
   }
 
   getItems(): EnhancementConfig[] {
-    return this.#items;
+    return Array.from(this.#items);
   }
 
   findBySymbol(symbol: symbol | string): EnhancementConfig | undefined {
-    return this.#items.find(item => {
+    for (const item of this.#items) {
       const symlinks = item.symlinks;
-      if (!symlinks) return false;
-      return Object.keys(symlinks).some(key => {
+      if (!symlinks) continue;
+
+      const hasSymbol = Object.keys(symlinks).some(key => {
         if (typeof key === 'symbol' || (typeof symlinks[key as any] === 'symbol')) {
           return key === symbol || symlinks[key as any] === symbol;
         }
         return false;
       }) || Object.getOwnPropertySymbols(symlinks).some(sym => sym === symbol);
-    });
+
+      if (hasSymbol) return item;
+    }
+    return undefined;
   }
 
   findByEnhKey(enhKey: string | symbol): EnhancementConfig | undefined {
-    return this.#items.find(item => item.enhKey === enhKey);
+    for (const item of this.#items) {
+      if (item.enhKey === enhKey) return item;
+    }
+    return undefined;
   }
 }
+
 
 /**
  * Helper function to check if a string key represents a Symbol.for expression

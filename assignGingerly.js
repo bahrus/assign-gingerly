@@ -36,33 +36,40 @@ export function getInstanceMap() {
  * Base registry class for managing enhancement configurations
  */
 export class EnhancementRegistry {
-    #items = [];
+    #items = new Set();
     push(items) {
         if (Array.isArray(items)) {
-            this.#items.push(...items);
+            items.forEach(item => this.#items.add(item));
         }
         else {
-            this.#items.push(items);
+            this.#items.add(items);
         }
     }
     getItems() {
-        return this.#items;
+        return Array.from(this.#items);
     }
     findBySymbol(symbol) {
-        return this.#items.find(item => {
+        for (const item of this.#items) {
             const symlinks = item.symlinks;
             if (!symlinks)
-                return false;
-            return Object.keys(symlinks).some(key => {
+                continue;
+            const hasSymbol = Object.keys(symlinks).some(key => {
                 if (typeof key === 'symbol' || (typeof symlinks[key] === 'symbol')) {
                     return key === symbol || symlinks[key] === symbol;
                 }
                 return false;
             }) || Object.getOwnPropertySymbols(symlinks).some(sym => sym === symbol);
-        });
+            if (hasSymbol)
+                return item;
+        }
+        return undefined;
     }
     findByEnhKey(enhKey) {
-        return this.#items.find(item => item.enhKey === enhKey);
+        for (const item of this.#items) {
+            if (item.enhKey === enhKey)
+                return item;
+        }
+        return undefined;
     }
 }
 /**
