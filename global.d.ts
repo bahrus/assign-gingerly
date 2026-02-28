@@ -1,4 +1,4 @@
-// Type declarations for Map.prototype.getOrInsert and WeakMap.prototype.getOrInsert
+// Type declarations for Map.prototype.getOrInsertComputed and WeakMap.prototype.getOrInsertComputed
 // Feature is now supported in all modern browsers (Chrome 146+, Firefox 134+, Safari 18.2+)
 // See: https://web-platform-dx.github.io/web-features-explorer/features/getorinsert/
 
