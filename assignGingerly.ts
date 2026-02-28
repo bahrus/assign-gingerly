@@ -2,6 +2,24 @@
 
 import { EnhancementConfig } from "./types/assign-gingerly/types";
 
+// Polyfill for Map.prototype.getOrInsert and WeakMap.prototype.getOrInsert
+if (typeof Map.prototype.getOrInsert !== 'function') {
+  Map.prototype.getOrInsert = function(key, insert) {
+    if (this.has(key)) return this.get(key);
+    const value = insert();
+    this.set(key, value);
+    return value;
+  };
+}
+if (typeof WeakMap.prototype.getOrInsert !== 'function') {
+  WeakMap.prototype.getOrInsert = function(key, insert) {
+    if (this.has(key)) return this.get(key);
+    const value = insert();
+    this.set(key, value);
+    return value;
+  };
+}
+
 /**
  * @deprecated Use EnhancementConfig instead
  */
@@ -35,22 +53,22 @@ export function getInstanceMap(): WeakMap<object, Map<EnhancementConfig, any>> {
  * Base registry class for managing enhancement configurations
  */
 export class EnhancementRegistry {
-  private items: EnhancementConfig[] = [];
+  #items: EnhancementConfig[] = [];
 
   push(items: EnhancementConfig | EnhancementConfig[]): void {
     if (Array.isArray(items)) {
-      this.items.push(...items);
+      this.#items.push(...items);
     } else {
-      this.items.push(items);
+      this.#items.push(items);
     }
   }
 
   getItems(): EnhancementConfig[] {
-    return this.items;
+    return this.#items;
   }
 
   findBySymbol(symbol: symbol | string): EnhancementConfig | undefined {
-    return this.items.find(item => {
+    return this.#items.find(item => {
       const symlinks = item.symlinks;
       if (!symlinks) return false;
       return Object.keys(symlinks).some(key => {
@@ -63,7 +81,7 @@ export class EnhancementRegistry {
   }
 
   findByEnhKey(enhKey: string | symbol): EnhancementConfig | undefined {
-    return this.items.find(item => item.enhKey === enhKey);
+    return this.#items.find(item => item.enhKey === enhKey);
   }
 }
 

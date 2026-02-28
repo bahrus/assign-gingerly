@@ -1,21 +1,22 @@
 // Polyfill for Map.prototype.getOrInsert and WeakMap.prototype.getOrInsert
 if (typeof Map.prototype.getOrInsert !== 'function') {
-  Map.prototype.getOrInsert = function(key, insert) {
-    if (this.has(key)) return this.get(key);
-    const value = insert();
-    this.set(key, value);
-    return value;
-  };
+    Map.prototype.getOrInsert = function (key, insert) {
+        if (this.has(key))
+            return this.get(key);
+        const value = insert();
+        this.set(key, value);
+        return value;
+    };
 }
 if (typeof WeakMap.prototype.getOrInsert !== 'function') {
-  WeakMap.prototype.getOrInsert = function(key, insert) {
-    if (this.has(key)) return this.get(key);
-    const value = insert();
-    this.set(key, value);
-    return value;
-  };
+    WeakMap.prototype.getOrInsert = function (key, insert) {
+        if (this.has(key))
+            return this.get(key);
+        const value = insert();
+        this.set(key, value);
+        return value;
+    };
 }
-
 /**
  * GUID for global instance map storage to ensure uniqueness across package versions
  */
@@ -35,20 +36,20 @@ export function getInstanceMap() {
  * Base registry class for managing enhancement configurations
  */
 export class EnhancementRegistry {
-    items = [];
+    #items = [];
     push(items) {
         if (Array.isArray(items)) {
-            this.items.push(...items);
+            this.#items.push(...items);
         }
         else {
-            this.items.push(items);
+            this.#items.push(items);
         }
     }
     getItems() {
-        return this.items;
+        return this.#items;
     }
     findBySymbol(symbol) {
-        return this.items.find(item => {
+        return this.#items.find(item => {
             const symlinks = item.symlinks;
             if (!symlinks)
                 return false;
@@ -61,7 +62,7 @@ export class EnhancementRegistry {
         });
     }
     findByEnhKey(enhKey) {
-        return this.items.find(item => item.enhKey === enhKey);
+        return this.#items.find(item => item.enhKey === enhKey);
     }
 }
 /**

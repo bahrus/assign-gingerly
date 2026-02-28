@@ -1,21 +1,3 @@
-// Polyfill for Map.prototype.getOrInsert and WeakMap.prototype.getOrInsert
-if (typeof Map.prototype.getOrInsert !== 'function') {
-  Map.prototype.getOrInsert = function(key, insert) {
-    if (this.has(key)) return this.get(key);
-    const value = insert();
-    this.set(key, value);
-    return value;
-  };
-}
-if (typeof WeakMap.prototype.getOrInsert !== 'function') {
-  WeakMap.prototype.getOrInsert = function(key, insert) {
-    if (this.has(key)) return this.get(key);
-    const value = insert();
-    this.set(key, value);
-    return value;
-  };
-}
-
 import assignGingerly, { EnhancementRegistry, getInstanceMap } from './assignGingerly.js';
 import { parseWithAttrs } from './parseWithAttrs.js';
 /**
