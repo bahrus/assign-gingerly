@@ -1,4 +1,4 @@
-// Polyfill for Map.prototype.getOrInsertComputed and WeakMap.prototype.getOrInsertComputed
+// Polyfill for Map.prototype.getOrInsert and WeakMap.prototype.getOrInsert
 if (typeof Map.prototype.getOrInsertComputed !== 'function') {
     Map.prototype.getOrInsertComputed = function (key, insert) {
         if (this.has(key))
