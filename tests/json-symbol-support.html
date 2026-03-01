@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>assignGingerly - JSON Symbol.for Support Tests</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>assignGingerly - JSON Symbol.for Support Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0"></div>
+
+    <script type="module">
+        import assignGingerly, { EnhancementRegistry } from '../assignGingerly.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function test(name, fn) {
+            try {
+                fn();
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+        }
+
+        function expect(actual) {
+            return {
+                toEqual(expected) {
+                    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${expected} but got ${actual}`);
+                    }
+                },
+                toBeDefined() {
+                    if (actual === undefined) {
+                        throw new Error('Expected value to be defined');
+                    }
+                }
+            };
+        }
+
+        // Run all tests
+        test('should convert Symbol.for string keys to actual symbols', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('test-json-symbol');
+            
+            class TestClass {
+                value = 'initial';
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const target = {};
+            assignGingerly(target, {
+                "[Symbol.for('test-json-symbol')]": 'json-value'
+            }, { registry });
+            
+            expect(target).toBeDefined();
+        });
+
+        test('should handle multiple Symbol.for string keys', () => {
+            const registry = new EnhancementRegistry();
+            const sym1 = Symbol.for('json-sym1');
+            const sym2 = Symbol.for('json-sym2');
+            
+            class Class1 {
+                prop1 = 'initial1';
+            }
+            
+            class Class2 {
+                prop2 = 'initial2';
+            }
+            
+            registry.push([
+                { symlinks: { [sym1]: 'prop1' }, spawn: Class1 },
+                { symlinks: { [sym2]: 'prop2' }, spawn: Class2 }
+            ]);
+            
+            const target = {};
+            assignGingerly(target, {
+                "[Symbol.for('json-sym1')]": 'value1',
+                "[Symbol.for('json-sym2')]": 'value2'
+            }, { registry });
+            
+            expect(target).toBeDefined();
+        });
+
+        test('should work with README example using Symbol.for strings', () => {
+            const isHappy = Symbol.for('TFWsx0YH5E6eSfhE7zfLxA');
+            const isMellow = Symbol.for('BqnnTPWRHkWdVGWcGQoAiw');
+            
+            class MyEnhancement {
+                isHappy = false;
+            }
+
+            class YourEnhancement {
+                isMellow = false;
+            }
+            
+            const baseRegistry = new EnhancementRegistry();
+            baseRegistry.push([
+                {
+                    symlinks: { [isHappy]: 'isHappy' },
+                    spawn: MyEnhancement
+                },
+                {
+                    symlinks: { [isMellow]: 'isMellow' },
+                    spawn: YourEnhancement
+                }
+            ]);
+            
+            const result = assignGingerly({}, {
+                "[Symbol.for('TFWsx0YH5E6eSfhE7zfLxA')]": true,
+                "[Symbol.for('BqnnTPWRHkWdVGWcGQoAiw')]": true,
+                '?.style?.height': '40px',
+                '?.enhancements?.mellowYellow?.madAboutFourteen': true
+            }, {
+                registry: baseRegistry
+            });
+            
+            expect(result).toBeDefined();
+            expect(result.style?.height).toBe('40px');
+            expect(result.enhancements?.mellowYellow?.madAboutFourteen).toBe(true);
+        });
+
+        test('should handle both actual symbols and Symbol.for strings together', () => {
+            const registry = new EnhancementRegistry();
+            const actualSymbol = Symbol.for('actual-symbol');
+            const stringSymbol = Symbol.for('string-symbol');
+            
+            class Class1 {
+                value1 = 'initial';
+            }
+            
+            class Class2 {
+                value2 = 'initial';
+            }
+            
+            registry.push([
+                { symlinks: { [actualSymbol]: 'value1' }, spawn: Class1 },
+                { symlinks: { [stringSymbol]: 'value2' }, spawn: Class2 }
+            ]);
+            
+            const target = {};
+            assignGingerly(target, {
+                [actualSymbol]: 'actual-value',
+                "[Symbol.for('string-symbol')]": 'string-value'
+            }, { registry });
+            
+            expect(target).toBeDefined();
+        });
+
+        test('should support Symbol.for strings with double quotes', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('double-quote-test');
+            
+            class TestClass {
+                value = 'initial';
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const target = {};
+            assignGingerly(target, {
+                '[Symbol.for("double-quote-test")]': 'double-quote-value'
+            }, { registry });
+            
+            expect(target).toBeDefined();
+        });
+
+        test('should combine Symbol.for strings with nested paths', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('combo-json-symbol');
+            
+            class TestClass {
+                value = 'initial';
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const target = {};
+            assignGingerly(target, {
+                "[Symbol.for('combo-json-symbol')]": 'symbol-value',
+                '?.config?.setting': 'nested-value',
+                regularKey: 'regular-value'
+            }, { registry });
+            
+            expect(target).toBeDefined();
+            expect(target.config?.setting).toBe('nested-value');
+            expect(target.regularKey).toBe('regular-value');
+        });
+
+        test('should ignore invalid Symbol.for string formats', () => {
+            const target = {};
+            assignGingerly(target, {
+                '[Symbol.for(invalid)]': 'should-be-ignored',
+                '[Symbol.for()]': 'also-ignored',
+                'Symbol.for("test")': 'not-bracket-format',
+                regularKey: 'regular-value'
+            });
+            
+            expect(target.regularKey).toBe('regular-value');
+            expect(target['[Symbol.for(invalid)]']).toBe('should-be-ignored');
+        });
+
+        test('should work with JSON.parse for true JSON compatibility', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('json-parsed-symbol');
+            
+            class TestClass {
+                value = 'initial';
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const jsonString = JSON.stringify({
+                "[Symbol.for('json-parsed-symbol')]": 'parsed-value',
+                '?.config?.name': 'MyApp'
+            });
+            
+            const parsedData = JSON.parse(jsonString);
+            
+            const target = {};
+            assignGingerly(target, parsedData, { registry });
+            
+            expect(target).toBeDefined();
+            expect(target.config?.name).toBe('MyApp');
+        });
+
+        // Display results
+        const total = passed + failed;
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const completeEl = document.getElementById('test-complete');
+
+        statusEl.innerHTML = `<span class="${failed === 0 ? 'pass' : 'fail'}">${passed}/${total} tests passed</span>`;
+
+        results.forEach(result => {
+            const div = document.createElement('div');
+            div.className = `test-item ${result.status}`;
+            div.innerHTML = `<strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}${result.error ? `<div class="error">${result.error}</div>` : ''}`;
+            resultsEl.appendChild(div);
+        });
+
+        completeEl.setAttribute('data-passed', passed.toString());
+        completeEl.setAttribute('data-failed', failed.toString());
+        completeEl.setAttribute('data-total', total.toString());
+
+        console.log(`Tests complete: ${passed}/${total} passed`);
+    </script>
+</body>
+</html>

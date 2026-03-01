@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>assignGingerly - =! Command Tests</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>assignGingerly - =! Command Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0"></div>
+
+    <script type="module">
+        import assignGingerly from '../assignGingerly.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function test(name, fn) {
+            try {
+                fn();
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+        }
+
+        function expect(actual) {
+            return {
+                toEqual(expected) {
+                    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${expected} but got ${actual}`);
+                    }
+                }
+            };
+        }
+
+        // Run all tests
+        test('should toggle self with =! and RHS="."', () => {
+            const obj = { value: true };
+            assignGingerly(obj, { '?.value =!': '.' });
+            expect(obj.value).toBe(false);
+        });
+
+        test('should toggle false to true with self-reference', () => {
+            const obj = { active: false };
+            assignGingerly(obj, { '?.active =!': '.' });
+            expect(obj.active).toBe(true);
+        });
+
+        test('should negate another property', () => {
+            const obj = { 
+                a: { 
+                    b: { 
+                        c: true 
+                    } 
+                } 
+            };
+            assignGingerly(obj, { 
+                '?.a?.d?.e =!': '?.a?.b?.c'
+            });
+            expect(obj.a.d.e).toBe(false);
+        });
+
+        test('should treat non-existent RHS path as truthy', () => {
+            const obj = {};
+            assignGingerly(obj, { 
+                '?.result =!': '?.nonexistent?.path'
+            });
+            expect(obj.result).toBe(false);
+        });
+
+        test('should handle README example', () => {
+            const obj = {
+                a: {
+                    b: {
+                        c: true
+                    }
+                }
+            };
+            
+            assignGingerly(obj, {
+                '?.a?.b?.c =!': '.',
+                '?.a?.d?.e =!': '?.a?.d?.e'
+            });
+            
+            expect(obj).toEqual({
+                a: {
+                    b: { c: false },
+                    d: { e: false }
+                }
+            });
+        });
+
+        test('should create intermediate nested structures', () => {
+            const obj = {};
+            assignGingerly(obj, { '?.x?.y?.z =!': '.' });
+            expect(obj).toEqual({
+                x: {
+                    y: {
+                        z: true
+                    }
+                }
+            });
+        });
+
+        test('should handle multiple =! commands', () => {
+            const obj = { a: true, b: false, c: true };
+            assignGingerly(obj, {
+                '?.a =!': '.',
+                '?.b =!': '.',
+                '?.c =!': '.'
+            });
+            expect(obj).toEqual({
+                a: false,
+                b: true,
+                c: false
+            });
+        });
+
+        test('should mix =! with regular assignments', () => {
+            const obj = { flag: true };
+            assignGingerly(obj, {
+                '?.flag =!': '.',
+                'name': 'test'
+            });
+            expect(obj).toEqual({
+                flag: false,
+                name: 'test'
+            });
+        });
+
+        test('should mix =! with += commands', () => {
+            const obj = { count: 5, enabled: true };
+            assignGingerly(obj, {
+                '?.count +=': 3,
+                '?.enabled =!': '.'
+            });
+            expect(obj.count).toBe(8);
+            expect(obj.enabled).toBe(false);
+        });
+
+        test('should negate non-boolean values', () => {
+            const obj = { value: 0 };
+            assignGingerly(obj, { '?.result =!': '?.value' });
+            expect(obj.result).toBe(true);
+        });
+
+        test('should negate truthy non-boolean values', () => {
+            const obj = { value: 'hello' };
+            assignGingerly(obj, { '?.result =!': '?.value' });
+            expect(obj.result).toBe(false);
+        });
+
+        test('should handle very deep nested paths', () => {
+            const obj = { a: { b: { c: { d: { e: true } } } } };
+            assignGingerly(obj, { '?.a?.b?.c?.d?.e =!': '.' });
+            expect(obj.a.b.c.d.e).toBe(false);
+        });
+
+        test('should handle special characters in property names', () => {
+            const obj = { 'my-prop': true };
+            assignGingerly(obj, { '?.my-prop =!': '.' });
+            expect(obj['my-prop']).toBe(false);
+        });
+
+        test('should preserve other properties when toggling', () => {
+            const obj = { toggleMe: true, keepMe: 'unchanged', nested: { value: 42 } };
+            assignGingerly(obj, { '?.toggleMe =!': '.' });
+            expect(obj).toEqual({
+                toggleMe: false,
+                keepMe: 'unchanged',
+                nested: { value: 42 }
+            });
+        });
+
+        test('should negate value from different branch', () => {
+            const obj = { 
+                source: { value: false },
+                target: {}
+            };
+            assignGingerly(obj, { 
+                '?.target?.result =!': '?.source?.value'
+            });
+            expect(obj.target.result).toBe(true);
+        });
+
+        test('should handle self-negation on non-existent property', () => {
+            const obj = {};
+            assignGingerly(obj, { '?.newProp =!': '.' });
+            expect(obj.newProp).toBe(true);
+        });
+
+        test('should chain negations', () => {
+            const obj = { a: true };
+            assignGingerly(obj, { 
+                '?.b =!': '?.a',
+                '?.c =!': '?.b'
+            });
+            expect(obj.a).toBe(true);
+            expect(obj.b).toBe(false);
+            expect(obj.c).toBe(true);
+        });
+
+        test('should handle null values', () => {
+            const obj = { value: null };
+            assignGingerly(obj, { '?.result =!': '?.value' });
+            expect(obj.result).toBe(true);
+        });
+
+        test('should handle undefined values', () => {
+            const obj = { value: undefined };
+            assignGingerly(obj, { '?.result =!': '?.value' });
+            expect(obj.result).toBe(true);
+        });
+
+        test('should handle numeric values', () => {
+            const obj = { zero: 0, one: 1, negative: -5 };
+            assignGingerly(obj, { 
+                '?.notZero =!': '?.zero',
+                '?.notOne =!': '?.one',
+                '?.notNegative =!': '?.negative'
+            });
+            expect(obj.notZero).toBe(true);
+            expect(obj.notOne).toBe(false);
+            expect(obj.notNegative).toBe(false);
+        });
+
+        test('should handle array values', () => {
+            const obj = { emptyArray: [], fullArray: [1, 2, 3] };
+            assignGingerly(obj, { 
+                '?.notEmpty =!': '?.emptyArray',
+                '?.notFull =!': '?.fullArray'
+            });
+            expect(obj.notEmpty).toBe(false);
+            expect(obj.notFull).toBe(false);
+        });
+
+        test('should handle object values', () => {
+            const obj = { emptyObj: {}, fullObj: { a: 1 } };
+            assignGingerly(obj, { 
+                '?.notEmptyObj =!': '?.emptyObj',
+                '?.notFullObj =!': '?.fullObj'
+            });
+            expect(obj.notEmptyObj).toBe(false);
+            expect(obj.notFullObj).toBe(false);
+        });
+
+        // Display results
+        const total = passed + failed;
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const completeEl = document.getElementById('test-complete');
+
+        statusEl.innerHTML = `<span class="${failed === 0 ? 'pass' : 'fail'}">${passed}/${total} tests passed</span>`;
+
+        results.forEach(result => {
+            const div = document.createElement('div');
+            div.className = `test-item ${result.status}`;
+            div.innerHTML = `<strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}${result.error ? `<div class="error">${result.error}</div>` : ''}`;
+            resultsEl.appendChild(div);
+        });
+
+        completeEl.setAttribute('data-passed', passed.toString());
+        completeEl.setAttribute('data-failed', failed.toString());
+        completeEl.setAttribute('data-total', total.toString());
+
+        console.log(`Tests complete: ${passed}/${total} passed`);
+    </script>
+</body>
+</html>

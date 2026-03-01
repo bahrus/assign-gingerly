@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>assignTentatively Tests</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>assignTentatively Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0"></div>
+
+    <script type="module">
+        import assignTentatively from '../assignTentatively.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function test(name, fn) {
+            try {
+                fn();
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+        }
+
+        function expect(actual) {
+            return {
+                toEqual(expected) {
+                    // Sort keys for consistent comparison
+                    const sortKeys = (obj) => {
+                        if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+                        return Object.keys(obj).sort().reduce((result, key) => {
+                            result[key] = sortKeys(obj[key]);
+                            return result;
+                        }, {});
+                    };
+                    const actualSorted = JSON.stringify(sortKeys(actual));
+                    const expectedSorted = JSON.stringify(sortKeys(expected));
+                    if (actualSorted !== expectedSorted) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${expected} but got ${actual}`);
+                    }
+                }
+            };
+        }
+
+        // Run all tests
+        test('should perform basic assignment without reversal', () => {
+            const obj = { a: 1 };
+            assignTentatively(obj, { b: 2 });
+            expect(obj).toEqual({ a: 1, b: 2 });
+        });
+
+        test('should create nested paths and track them for reversal', () => {
+            const obj = {};
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.a?.b?.c': 'hello'
+            }, { reversal });
+            expect(obj).toEqual({ a: { b: { c: 'hello' } } });
+            expect(reversal).toEqual({ ' -=': ['a'] });
+        });
+
+        test('should preserve existing properties and not create delete for them', () => {
+            const obj = { f: { g: 'hello' } };
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.f?.g': 'bye'
+            }, { reversal });
+            expect(obj).toEqual({ f: { g: 'bye' } });
+            expect(reversal).toEqual({ '?.f?.g': 'hello' });
+        });
+
+        test('should handle README example correctly', () => {
+            const obj = { f: { g: 'hello' } };
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.style?.height': '15px',
+                '?.a?.b?.c': {
+                    d: 'hello',
+                    e: 'world'
+                },
+                '?.f?.g': 'bye'
+            }, { reversal });
+
+            expect(obj).toEqual({
+                f: { g: 'bye' },
+                style: { height: '15px' },
+                a: { b: { c: { d: 'hello', e: 'world' } } }
+            });
+
+            expect(reversal).toEqual({
+                ' -=': ['style', 'a'],
+                '?.f?.g': 'hello'
+            });
+        });
+
+        test('should support += command immediately', () => {
+            const obj = { a: { b: { c: 5 } } };
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.a?.b?.c +=': 3
+            }, { reversal });
+            expect(obj).toEqual({ a: { b: { c: 8 } } });
+            expect(reversal).toEqual({ '?.a?.b?.c': 5 });
+        });
+
+        test('should support += command on non-existent path', () => {
+            const obj = {};
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.x?.y?.z +=': 10
+            }, { reversal });
+            expect(obj).toEqual({ x: { y: { z: 10 } } });
+            expect(reversal).toEqual({ ' -=': ['x'] });
+        });
+
+        test('should support =! command immediately on existing value', () => {
+            const obj = { a: { b: { c: true } } };
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.a?.b?.c =!': '.'
+            }, { reversal });
+            expect(obj).toEqual({ a: { b: { c: false } } });
+            expect(reversal).toEqual({ '?.a?.b?.c': true });
+        });
+
+        test('should support =! command on non-existent path', () => {
+            const obj = {};
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.x?.y?.z =!': '.'
+            }, { reversal });
+            expect(obj).toEqual({ x: { y: { z: true } } });
+            expect(reversal).toEqual({ ' -=': ['x'] });
+        });
+
+        test('should support -= command', () => {
+            const obj = { a: { b: { c: 'value', d: 'keep' } } };
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.a?.b -=': 'c'
+            }, { reversal });
+            expect(obj).toEqual({ a: { b: { d: 'keep' } } });
+            expect(reversal).toEqual({ '?.a?.b.c': 'value' });
+        });
+
+        test('should guarantee reversal restores original state', () => {
+            const originalObj = { f: { g: 'hello' }, x: 100 };
+            const obj = JSON.parse(JSON.stringify(originalObj));
+            const string1 = JSON.stringify(obj);
+
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.style?.height': '15px',
+                '?.a?.b?.c': {
+                    d: 'hello',
+                    e: 'world'
+                },
+                '?.f?.g': 'bye',
+                '?.x +=': 50
+            }, { reversal });
+
+            assignTentatively(obj, reversal);
+            const string2 = JSON.stringify(obj);
+
+            expect(string1).toEqual(string2);
+        });
+
+        test('should handle multiple created top-level paths', () => {
+            const obj = {};
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.a?.b': 1,
+                '?.c?.d': 2,
+                '?.e': 3
+            }, { reversal });
+
+            expect(obj).toEqual({
+                a: { b: 1 },
+                c: { d: 2 },
+                e: 3
+            });
+
+            expect(reversal).toEqual({
+                ' -=': ['a', 'c', 'e']
+            });
+        });
+
+        test('should only track top-level path once even with multiple properties', () => {
+            const obj = {};
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.a?.b': 1,
+                '?.a?.c': 2
+            }, { reversal });
+
+            expect(obj).toEqual({
+                a: { b: 1, c: 2 }
+            });
+
+            expect(reversal).toEqual({
+                ' -=': ['a']
+            });
+        });
+
+        test('should not create delete for partially created paths', () => {
+            const obj = { a: { existing: 'value' } };
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.a?.b?.c': 'new'
+            }, { reversal });
+
+            expect(obj).toEqual({
+                a: {
+                    existing: 'value',
+                    b: { c: 'new' }
+                }
+            });
+
+            expect(reversal).toEqual({});
+        });
+
+        test('should preserve nested object modifications', () => {
+            const obj = { data: { items: [1, 2, 3], name: 'test' } };
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.data?.count': 5
+            }, { reversal });
+
+            expect(obj).toEqual({
+                data: {
+                    items: [1, 2, 3],
+                    name: 'test',
+                    count: 5
+                }
+            });
+
+            expect(reversal).toEqual({});
+        });
+
+        test('should support nested object assignment with reversal', () => {
+            const obj = { x: { y: 1 } };
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.a': {
+                    b: {
+                        c: 'nested'
+                    }
+                }
+            }, { reversal });
+
+            expect(obj).toEqual({
+                x: { y: 1 },
+                a: { b: { c: 'nested' } }
+            });
+
+            expect(reversal).toEqual({
+                ' -=': ['a']
+            });
+        });
+
+        test('should handle mixed nested and non-nested keys', () => {
+            const obj = { existing: 'value' };
+            const reversal = {};
+            assignTentatively(obj, {
+                simple: 'new',
+                '?.nested?.path': 'created'
+            }, { reversal });
+
+            expect(obj).toEqual({
+                existing: 'value',
+                simple: 'new',
+                nested: { path: 'created' }
+            });
+
+            expect(reversal).toEqual({
+                ' -=': ['nested']
+            });
+        });
+
+        test('should track property modifications separately from path creation', () => {
+            const obj = { a: { b: 'original' } };
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.a?.b': 'modified',
+                '?.a?.c': 'new'
+            }, { reversal });
+
+            expect(obj).toEqual({
+                a: { b: 'modified', c: 'new' }
+            });
+
+            expect(reversal).toEqual({
+                '?.a?.b': 'original'
+            });
+        });
+
+        test('should handle boolean values correctly', () => {
+            const obj = { flag: true };
+            const reversal = {};
+            assignTentatively(obj, {
+                flag: false
+            }, { reversal });
+
+            expect(obj).toEqual({ flag: false });
+            expect(reversal).toEqual({ flag: true });
+        });
+
+        test('should handle null and undefined values', () => {
+            const obj = { a: null };
+            const reversal = {};
+            assignTentatively(obj, {
+                a: undefined
+            }, { reversal });
+
+            expect(obj).toEqual({ a: undefined });
+            expect(reversal).toEqual({ a: null });
+        });
+
+        test('should ignore registry parameter silently', () => {
+            const obj = {};
+            const reversal = {};
+            const fakeRegistry = { someProperty: 'value' };
+
+            assignTentatively(obj, {
+                '?.a': 1
+            }, { reversal: reversal, registry: fakeRegistry });
+
+            expect(obj).toEqual({ a: 1 });
+            expect(reversal).toEqual({ ' -=': ['a'] });
+        });
+
+        test('should support sequential assignments with proper reversal', () => {
+            const obj = {};
+            const reversal1 = {};
+            assignTentatively(obj, { '?.a?.b': 1 }, { reversal: reversal1 });
+
+            const reversal2 = {};
+            assignTentatively(obj, { '?.c?.d': 2 }, { reversal: reversal2 });
+
+            expect(obj).toEqual({
+                a: { b: 1 },
+                c: { d: 2 }
+            });
+
+            expect(reversal1).toEqual({ ' -=': ['a'] });
+            expect(reversal2).toEqual({ ' -=': ['c'] });
+        });
+
+        test('should support numeric property names', () => {
+            const obj = { items: {} };
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.items?.0': 'first',
+                '?.items?.1': 'second'
+            }, { reversal });
+
+            expect(obj).toEqual({
+                items: {
+                    '0': 'first',
+                    '1': 'second'
+                }
+            });
+
+            expect(reversal).toEqual({});
+        });
+
+        test('should handle arrays as leaf values without recursion', () => {
+            const arr = [1, 2, 3];
+            const obj = {};
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.data': arr
+            }, { reversal });
+
+            expect(obj).toEqual({ data: [1, 2, 3] });
+            expect(reversal).toEqual({ ' -=': ['data'] });
+        });
+
+        test('should combine += with nested path creation', () => {
+            const obj = { base: 10 };
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.counters?.total +=': 5
+            }, { reversal });
+
+            expect(obj).toEqual({
+                base: 10,
+                counters: { total: 5 }
+            });
+
+            expect(reversal).toEqual({
+                ' -=': ['counters']
+            });
+        });
+
+        test('should handle deeply nested structures', () => {
+            const obj = {};
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.l1?.l2?.l3?.l4?.l5': 'deep'
+            }, { reversal });
+
+            expect(obj.l1.l2.l3.l4.l5).toEqual('deep');
+            expect(reversal).toEqual({ ' -=': ['l1'] });
+        });
+
+        test('should preserve object identity for modified existing objects', () => {
+            const nested = { x: 1 };
+            const obj = { data: nested };
+            const reversal = {};
+
+            assignTentatively(obj, {
+                '?.data?.y': 2
+            }, { reversal });
+
+            if (obj.data !== nested) throw new Error('Object identity not preserved');
+            expect(obj.data).toEqual({ x: 1, y: 2 });
+        });
+
+        test('should support -= on created nested paths', () => {
+            const obj = { keep: true };
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.temp?.data': 'value'
+            }, { reversal });
+
+            const reversal2 = {};
+            assignTentatively(obj, {
+                '?.temp -=': 'data'
+            }, { reversal: reversal2 });
+
+            expect(obj).toEqual({
+                keep: true,
+                temp: {}
+            });
+
+            expect(reversal2).toEqual({
+                '?.temp.data': 'value'
+            });
+        });
+
+        test('should handle overwriting existing value with nested path', () => {
+            const obj = { a: 'simple' };
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.a': { nested: 'object' }
+            }, { reversal });
+
+            expect(obj).toEqual({
+                a: { nested: 'object' }
+            });
+
+            expect(reversal).toEqual({
+                '?.a': 'simple'
+            });
+        });
+
+        test('should not create extra keys in reversal for unchanged values', () => {
+            const obj = { a: { b: 1 } };
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.a?.b': 1
+            }, { reversal });
+
+            expect(obj).toEqual({ a: { b: 1 } });
+            expect(reversal).toEqual({ '?.a?.b': 1 });
+        });
+
+        test('should apply reversal via assignTentatively itself', () => {
+            const original = { x: 100, keep: 'me' };
+            const obj = JSON.parse(JSON.stringify(original));
+            const string1 = JSON.stringify(obj);
+
+            const reversal = {};
+            assignTentatively(obj, {
+                '?.new?.path': 'created',
+                '?.x': 200
+            }, { reversal });
+
+            assignTentatively(obj, reversal);
+
+            const string2 = JSON.stringify(obj);
+            expect(string1).toEqual(string2);
+        });
+
+        // Display results
+        const total = passed + failed;
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const completeEl = document.getElementById('test-complete');
+
+        statusEl.innerHTML = `<span class="${failed === 0 ? 'pass' : 'fail'}">${passed}/${total} tests passed</span>`;
+
+        results.forEach(result => {
+            const div = document.createElement('div');
+            div.className = `test-item ${result.status}`;
+            div.innerHTML = `<strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}${result.error ? `<div class="error">${result.error}</div>` : ''}`;
+            resultsEl.appendChild(div);
+        });
+
+        completeEl.setAttribute('data-passed', passed.toString());
+        completeEl.setAttribute('data-failed', failed.toString());
+        completeEl.setAttribute('data-total', total.toString());
+
+        console.log(`Tests complete: ${passed}/${total} passed`);
+    </script>
+</body>
+</html>

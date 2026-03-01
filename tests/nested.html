@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>assignGingerly - Nested Path Assignment Tests</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>assignGingerly - Nested Path Assignment Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0"></div>
+
+    <script type="module">
+        import assignGingerly from '../assignGingerly.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function test(name, fn) {
+            try {
+                fn();
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+        }
+
+        function expect(actual) {
+            return {
+                toEqual(expected) {
+                    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${expected} but got ${actual}`);
+                    }
+                }
+            };
+        }
+
+        // Run all tests
+        test('Example 2: Merging into an existing sub object using ?. notation', () => {
+            const oInput = {
+                style: {
+                    height: undefined
+                }
+            };
+            
+            assignGingerly(oInput, { '?.style?.height': '15px' });
+            
+            expect(oInput.style.height).toBe('15px');
+        });
+
+        test('Example 3: Deeply nested object creation', () => {
+            const obj = {};
+            assignGingerly(obj, {
+                '?.style?.height': '15px',
+                '?.a?.b?.c': {
+                    d: 'hello',
+                    e: 'world'
+                }
+            });
+            
+            expect(obj).toEqual({
+                style: { height: '15px' },
+                a: {
+                    b: {
+                        c: {
+                            d: 'hello',
+                            e: 'world'
+                        }
+                    }
+                }
+            });
+        });
+
+        test('should create intermediate objects for nested paths', () => {
+            const obj = {};
+            assignGingerly(obj, {
+                '?.level1?.level2?.level3': 'value'
+            });
+            
+            expect(obj.level1.level2.level3).toBe('value');
+        });
+
+        test('should handle multiple nested paths simultaneously', () => {
+            const obj = {};
+            assignGingerly(obj, {
+                '?.path1?.a': 'value1',
+                '?.path2?.b': 'value2',
+                '?.path3?.c?.d': 'value3'
+            });
+            
+            expect(obj.path1.a).toBe('value1');
+            expect(obj.path2.b).toBe('value2');
+            expect(obj.path3.c.d).toBe('value3');
+        });
+
+        test('should preserve existing nested structures', () => {
+            const obj = {
+                existing: {
+                    nested: 'value'
+                }
+            };
+            
+            assignGingerly(obj, {
+                '?.existing?.new': 'added'
+            });
+            
+            expect(obj.existing.nested).toBe('value');
+            expect(obj.existing.new).toBe('added');
+        });
+
+        test('should handle mixed nested and non-nested keys', () => {
+            const obj = {};
+            assignGingerly(obj, {
+                simple: 'value',
+                '?.nested?.key': 'nested value',
+                another: 'simple value'
+            });
+            
+            expect(obj.simple).toBe('value');
+            expect(obj.another).toBe('simple value');
+            expect(obj.nested.key).toBe('nested value');
+        });
+
+        test('should recursively merge nested objects', () => {
+            const obj = {};
+            assignGingerly(obj, {
+                '?.config': {
+                    setting1: 'value1',
+                    setting2: 'value2'
+                }
+            });
+            
+            expect(obj.config.setting1).toBe('value1');
+            expect(obj.config.setting2).toBe('value2');
+        });
+
+        test('should handle deeply nested object values', () => {
+            const obj = {};
+            assignGingerly(obj, {
+                '?.data?.users': {
+                    user1: { name: 'Alice', age: 30 },
+                    user2: { name: 'Bob', age: 25 }
+                }
+            });
+            
+            expect(obj.data.users.user1.name).toBe('Alice');
+            expect(obj.data.users.user2.age).toBe(25);
+        });
+
+        test('should handle overwriting nested values', () => {
+            const obj = {
+                config: {
+                    setting: 'old value'
+                }
+            };
+            
+            assignGingerly(obj, {
+                '?.config?.setting': 'new value'
+            });
+            
+            expect(obj.config.setting).toBe('new value');
+        });
+
+        // Display results
+        const total = passed + failed;
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const completeEl = document.getElementById('test-complete');
+
+        statusEl.innerHTML = `<span class="${failed === 0 ? 'pass' : 'fail'}">${passed}/${total} tests passed</span>`;
+
+        results.forEach(result => {
+            const div = document.createElement('div');
+            div.className = `test-item ${result.status}`;
+            div.innerHTML = `<strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}${result.error ? `<div class="error">${result.error}</div>` : ''}`;
+            resultsEl.appendChild(div);
+        });
+
+        completeEl.setAttribute('data-passed', passed.toString());
+        completeEl.setAttribute('data-failed', failed.toString());
+        completeEl.setAttribute('data-total', total.toString());
+
+        console.log(`Tests complete: ${passed}/${total} passed`);
+    </script>
+</body>
+</html>
