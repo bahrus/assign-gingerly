@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>assignGingerly - Basic Functionality</title>
+    <link rel="help" href="https://github.com/bahrus/assign-gingerly">
+    <script src="/resources/testharness.js"></script>
+    <script src="/resources/testharnessreport.js"></script>
+</head>
+<body>
+<script type="module">
+    import assignGingerly, { EnhancementRegistry } from '../assignGingerly.js';
+
+    test(() => {
+        const sourceObj = { hello: 'world' };
+        assignGingerly(sourceObj, { hello: 'Venus', foo: 'bar' });
+        
+        assert_equals(sourceObj.hello, 'Venus');
+        assert_equals(sourceObj.foo, 'bar');
+    }, 'Example 1: Basic object assignment (like Object.assign)');
+
+    test(() => {
+        const target = { existing: 'value' };
+        assignGingerly(target, {});
+        
+        assert_equals(target.existing, 'value');
+    }, 'should handle empty source object');
+
+    test(() => {
+        const target = {};
+        assignGingerly(target, {
+            name: 'John',
+            age: 30,
+            email: 'john@example.com'
+        });
+        
+        assert_equals(target.name, 'John');
+        assert_equals(target.age, 30);
+        assert_equals(target.email, 'john@example.com');
+    }, 'should handle multiple key-value pairs');
+
+    test(() => {
+        const target = { existing: 'value' };
+        assignGingerly(target, { new: 'property' });
+        
+        assert_equals(target.existing, 'value');
+        assert_equals(target.new, 'property');
+    }, 'should preserve existing properties when adding new ones');
+
+    test(() => {
+        const target = { value: 'old' };
+        assignGingerly(target, { value: 'new' });
+        
+        assert_equals(target.value, 'new');
+    }, 'should overwrite existing properties');
+
+    test(() => {
+        const target = {};
+        const result = assignGingerly(target, { hello: 'world' });
+        
+        assert_equals(result, target);
+    }, 'should return the target object');
+
+    test(() => {
+        assignGingerly(null, { hello: 'world' });
+        assignGingerly(undefined, { hello: 'world' });
+        // Should not throw
+        assert_true(true);
+    }, 'should handle non-object values gracefully');
+
+    test(() => {
+        const target = {};
+        assignGingerly(target, 'not an object');
+        
+        assert_equals(Object.keys(target).length, 0);
+    }, 'should handle non-object source');
+</script>
+</body>
+</html>

@@ -1,130 +1,26 @@
 import { test, expect } from '@playwright/test';
-import assignGingerly from '../assignGingerly.js';
 
 test.describe('assignGingerly - Nested Path Assignment', () => {
-  test('Example 2: Merging into an existing sub object using ?. notation', () => {
-    // Simulate DOM element
-    const oInput = {
-      style: {
-        height: undefined as any
-      }
-    };
+  test('should run all nested path tests in browser', async ({ page }) => {
+    await page.goto('/tests/nested.html');
     
-    assignGingerly(oInput, { '?.style?.height': '15px' });
+    await page.waitForFunction(() => {
+      const el = document.getElementById('test-complete');
+      return el && el.hasAttribute('data-total');
+    }, { timeout: 10000 });
     
-    expect(oInput.style.height).toBe('15px');
-  });
-
-  test('Example 3: Deeply nested object creation', () => {
-    const obj = {};
-    assignGingerly(obj, {
-      '?.style?.height': '15px',
-      '?.a?.b?.c': {
-        d: 'hello',
-        e: 'world'
-      }
+    const results = await page.evaluate(() => {
+      const el = document.getElementById('test-complete');
+      return {
+        passed: parseInt(el.getAttribute('data-passed') || '0'),
+        failed: parseInt(el.getAttribute('data-failed') || '0'),
+        total: parseInt(el.getAttribute('data-total') || '0')
+      };
     });
     
-    expect(obj).toEqual({
-      style: { height: '15px' },
-      a: {
-        b: {
-          c: {
-            d: 'hello',
-            e: 'world'
-          }
-        }
-      }
-    });
-  });
-
-  test('should create intermediate objects for nested paths', () => {
-    const obj = {};
-    assignGingerly(obj, {
-      '?.level1?.level2?.level3': 'value'
-    });
+    console.log(`Nested path tests: ${results.passed}/${results.total} passed`);
     
-    expect(obj.level1.level2.level3).toBe('value');
-  });
-
-  test('should handle multiple nested paths simultaneously', () => {
-    const obj = {};
-    assignGingerly(obj, {
-      '?.path1?.a': 'value1',
-      '?.path2?.b': 'value2',
-      '?.path3?.c?.d': 'value3'
-    });
-    
-    expect(obj.path1.a).toBe('value1');
-    expect(obj.path2.b).toBe('value2');
-    expect(obj.path3.c.d).toBe('value3');
-  });
-
-  test('should preserve existing nested structures', () => {
-    const obj = {
-      existing: {
-        nested: 'value'
-      }
-    };
-    
-    assignGingerly(obj, {
-      '?.existing?.new': 'added'
-    });
-    
-    expect(obj.existing.nested).toBe('value');
-    expect(obj.existing.new).toBe('added');
-  });
-
-  test('should handle mixed nested and non-nested keys', () => {
-    const obj = {};
-    assignGingerly(obj, {
-      simple: 'value',
-      '?.nested?.key': 'nested value',
-      another: 'simple value'
-    });
-    
-    expect(obj.simple).toBe('value');
-    expect(obj.another).toBe('simple value');
-    expect(obj.nested.key).toBe('nested value');
-  });
-
-  test('should recursively merge nested objects', () => {
-    const obj = {};
-    assignGingerly(obj, {
-      '?.config': {
-        setting1: 'value1',
-        setting2: 'value2'
-      }
-    });
-    
-    expect(obj.config.setting1).toBe('value1');
-    expect(obj.config.setting2).toBe('value2');
-  });
-
-  test('should handle deeply nested object values', () => {
-    const obj = {};
-    assignGingerly(obj, {
-      '?.data?.users': {
-        user1: { name: 'Alice', age: 30 },
-        user2: { name: 'Bob', age: 25 }
-      }
-    });
-    
-    expect(obj.data.users.user1.name).toBe('Alice');
-    expect(obj.data.users.user2.age).toBe(25);
-  });
-
-  test('should handle overwriting nested values', () => {
-    const obj = {
-      config: {
-        setting: 'old value'
-      }
-    };
-    
-    assignGingerly(obj, {
-      '?.config?.setting': 'new value'
-    });
-    
-    expect(obj.config.setting).toBe('new value');
+    expect(results.failed, `${results.failed} test(s) failed`).toBe(0);
+    expect(results.total).toBeGreaterThan(0);
   });
 });

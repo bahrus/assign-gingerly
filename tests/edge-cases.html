@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>assignGingerly - Edge Cases Tests</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>assignGingerly - Edge Cases Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0"></div>
+
+    <script type="module">
+        import assignGingerly from '../assignGingerly.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function test(name, fn) {
+            try {
+                fn();
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+        }
+
+        function expect(actual) {
+            return {
+                toEqual(expected) {
+                    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${expected} but got ${actual}`);
+                    }
+                },
+                toBeNull() {
+                    if (actual !== null) {
+                        throw new Error(`Expected null but got ${actual}`);
+                    }
+                },
+                toBeUndefined() {
+                    if (actual !== undefined) {
+                        throw new Error(`Expected undefined but got ${actual}`);
+                    }
+                }
+            };
+        }
+
+        // Run all tests
+        test('should handle arrays as values', () => {
+            const target = {};
+            assignGingerly(target, {
+                items: [1, 2, 3],
+                names: ['Alice', 'Bob']
+            });
+            
+            expect(target).toEqual({
+                items: [1, 2, 3],
+                names: ['Alice', 'Bob']
+            });
+        });
+
+        test('should not treat arrays as objects to recurse into', () => {
+            const target = {};
+            assignGingerly(target, {
+                data: [1, 2, { nested: 'value' }]
+            });
+            
+            if (!Array.isArray(target.data)) throw new Error('Expected array');
+            expect(target.data).toEqual([1, 2, { nested: 'value' }]);
+        });
+
+        test('should handle numeric values', () => {
+            const target = {};
+            assignGingerly(target, {
+                count: 42,
+                price: 19.99,
+                zero: 0
+            });
+            
+            expect(target.count).toBe(42);
+            expect(target.price).toBe(19.99);
+            expect(target.zero).toBe(0);
+        });
+
+        test('should handle boolean values', () => {
+            const target = {};
+            assignGingerly(target, {
+                active: true,
+                disabled: false
+            });
+            
+            expect(target.active).toBe(true);
+            expect(target.disabled).toBe(false);
+        });
+
+        test('should handle null and undefined', () => {
+            const target = {};
+            assignGingerly(target, {
+                nullValue: null,
+                undefinedValue: undefined
+            });
+            
+            expect(target.nullValue).toBeNull();
+            expect(target.undefinedValue).toBeUndefined();
+        });
+
+        test('should handle string values', () => {
+            const target = {};
+            assignGingerly(target, {
+                text: 'hello',
+                emoji: '🚀',
+                empty: ''
+            });
+            
+            expect(target.text).toBe('hello');
+            expect(target.emoji).toBe('🚀');
+            expect(target.empty).toBe('');
+        });
+
+        test('should ignore null as target', () => {
+            const result = assignGingerly(null, { test: 'value' });
+            expect(result).toBeNull();
+        });
+
+        test('should ignore undefined as target', () => {
+            const result = assignGingerly(undefined, { test: 'value' });
+            expect(result).toBeUndefined();
+        });
+
+        test('should handle complex nested structures', () => {
+            const target = {};
+            assignGingerly(target, {
+                app: {
+                    settings: {
+                        theme: 'dark',
+                        language: 'en'
+                    },
+                    users: [
+                        { id: 1, name: 'Alice' },
+                        { id: 2, name: 'Bob' }
+                    ]
+                }
+            });
+            
+            expect(target.app.settings.theme).toBe('dark');
+            expect(target.app.users[0].name).toBe('Alice');
+        });
+
+        test('should handle very deeply nested paths', () => {
+            const target = {};
+            assignGingerly(target, {
+                '?.a?.b?.c?.d?.e?.f?.g?.h': 'deep-value'
+            });
+            
+            expect(target.a.b.c.d.e.f.g.h).toBe('deep-value');
+        });
+
+        test('should handle special characters in nested paths', () => {
+            const target = {};
+            assignGingerly(target, {
+                '?.style?.background-color': '#ff0000'
+            });
+            
+            expect(target.style['background-color']).toBe('#ff0000');
+        });
+
+        test('should maintain object prototype chain for primitives', () => {
+            const target = {};
+            const source = {
+                str: 'text',
+                num: 123
+            };
+            
+            assignGingerly(target, source);
+            
+            if (typeof target.str !== 'string') throw new Error('Expected string');
+            if (typeof target.num !== 'number') throw new Error('Expected number');
+        });
+
+        test('should handle reassignment of values', () => {
+            const target = { value: 'initial' };
+            
+            assignGingerly(target, { value: 'first' });
+            expect(target.value).toBe('first');
+            
+            assignGingerly(target, { value: 'second' });
+            expect(target.value).toBe('second');
+        });
+
+        test('should handle empty nested paths', () => {
+            const target = { existing: 'value' };
+            assignGingerly(target, {});
+            
+            expect(target).toEqual({ existing: 'value' });
+        });
+
+        test('should handle sequential calls', () => {
+            const target = {};
+            
+            assignGingerly(target, { a: 1 });
+            assignGingerly(target, { b: 2 });
+            assignGingerly(target, { '?.c?.d': 3 });
+            
+            expect(target).toEqual({
+                a: 1,
+                b: 2,
+                c: { d: 3 }
+            });
+        });
+
+        // Display results
+        const total = passed + failed;
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const completeEl = document.getElementById('test-complete');
+
+        statusEl.innerHTML = `<span class="${failed === 0 ? 'pass' : 'fail'}">${passed}/${total} tests passed</span>`;
+
+        results.forEach(result => {
+            const div = document.createElement('div');
+            div.className = `test-item ${result.status}`;
+            div.innerHTML = `<strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}${result.error ? `<div class="error">${result.error}</div>` : ''}`;
+            resultsEl.appendChild(div);
+        });
+
+        completeEl.setAttribute('data-passed', passed.toString());
+        completeEl.setAttribute('data-failed', failed.toString());
+        completeEl.setAttribute('data-total', total.toString());
+
+        console.log(`Tests complete: ${passed}/${total} passed`);
+    </script>
+</body>
+</html>

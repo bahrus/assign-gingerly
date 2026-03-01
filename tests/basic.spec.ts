@@ -1,65 +1,31 @@
 import { test, expect } from '@playwright/test';
-import assignGingerly, { EnhancementRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - Basic Functionality', () => {
-  test('Example 1: Basic object assignment (like Object.assign)', () => {
-    const sourceObj = { hello: 'world' };
-    assignGingerly(sourceObj, { hello: 'Venus', foo: 'bar' });
+  test('Run tests in browser', async ({ page }) => {
+    // Navigate to the HTML test page
+    await page.goto('/tests/basic.html');
     
-    expect(sourceObj).toEqual({
-      hello: 'Venus',
-      foo: 'bar'
-    });
-  });
-
-  test('should handle empty source object', () => {
-    const target = { existing: 'value' };
-    assignGingerly(target, {});
+    // Wait for tests to complete (element exists with data-total attribute)
+    await page.waitForFunction(() => {
+      const el = document.getElementById('test-complete');
+      return el && el.hasAttribute('data-total');
+    }, { timeout: 10000 });
     
-    expect(target).toEqual({ existing: 'value' });
-  });
-
-  test('should handle multiple key-value pairs', () => {
-    const target = {};
-    assignGingerly(target, {
-      name: 'John',
-      age: 30,
-      email: 'john@example.com'
+    // Get test results
+    const results = await page.evaluate(() => {
+      const el = document.getElementById('test-complete');
+      return {
+        passed: parseInt(el.getAttribute('data-passed') || '0'),
+        failed: parseInt(el.getAttribute('data-failed') || '0'),
+        total: parseInt(el.getAttribute('data-total') || '0')
+      };
     });
     
-    expect(target).toEqual({
-      name: 'John',
-      age: 30,
-      email: 'john@example.com'
-    });
-  });
-
-  test('should preserve existing properties when adding new ones', () => {
-    const target = { existing: 'value' };
-    assignGingerly(target, { new: 'property' });
+    // Log results
+    console.log(`Basic tests: ${results.passed}/${results.total} passed`);
     
-    expect(target).toEqual({
-      existing: 'value',
-      new: 'property'
-    });
-  });
-
-  test('should overwrite existing properties', () => {
-    const target = { prop: 'old' };
-    assignGingerly(target, { prop: 'new' });
-    
-    expect(target.prop).toBe('new');
-  });
-
-  test('should handle non-object values gracefully', () => {
-    const result = assignGingerly(null, { test: 'value' });
-    expect(result).toBeNull();
-  });
-
-  test('should handle non-object source', () => {
-    const target = { existing: 'value' };
-    assignGingerly(target, {} as any);
-    
-    expect(target).toEqual({ existing: 'value' });
+    // Assert all tests passed
+    expect(results.failed, `${results.failed} test(s) failed`).toBe(0);
+    expect(results.total).toBeGreaterThan(0);
   });
 });

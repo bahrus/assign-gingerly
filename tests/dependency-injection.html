@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>assignGingerly - Dependency Injection Tests</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>assignGingerly - Dependency Injection Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0"></div>
+
+    <script type="module">
+        import assignGingerly, { EnhancementRegistry } from '../assignGingerly.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function test(name, fn) {
+            try {
+                fn();
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+        }
+
+        function expect(actual) {
+            return {
+                toEqual(expected) {
+                    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${expected} but got ${actual}`);
+                    }
+                },
+                toBeDefined() {
+                    if (actual === undefined) {
+                        throw new Error('Expected value to be defined');
+                    }
+                }
+            };
+        }
+
+        // Run all tests
+        test('should register items in EnhancementRegistry', () => {
+            const registry = new EnhancementRegistry();
+            
+            class MyEnhancement {
+                isHappy = false;
+            }
+
+            const isHappy = Symbol.for('test-isHappy');
+            
+            registry.push({
+                symlinks: { [isHappy]: 'isHappy' },
+                spawn: MyEnhancement
+            });
+            
+            const items = registry.getItems();
+            expect(items.length).toBe(1);
+        });
+
+        test('should push multiple registry items at once', () => {
+            const registry = new EnhancementRegistry();
+            const sym1 = Symbol.for('sym1');
+            const sym2 = Symbol.for('sym2');
+            
+            class Class1 {}
+            class Class2 {}
+            
+            registry.push([
+                { symlinks: { [sym1]: 'prop1' }, spawn: Class1 },
+                { symlinks: { [sym2]: 'prop2' }, spawn: Class2 }
+            ]);
+            
+            expect(registry.getItems().length).toBe(2);
+        });
+
+        test('should find registry item by symbol', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('test-symbol');
+            
+            class TestClass {}
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'testProp' },
+                spawn: TestClass
+            });
+            
+            const item = registry.findBySymbol(testSymbol);
+            expect(item).toBeDefined();
+            expect(item?.symlinks[testSymbol]).toBe('testProp');
+        });
+
+        test('should inject dependency with symbol key', () => {
+            const registry = new EnhancementRegistry();
+            const isHappy = Symbol.for('isHappy-test');
+            
+            class MyEnhancement {
+                isHappy = false;
+            }
+            
+            registry.push({
+                symlinks: { [isHappy]: 'isHappy' },
+                spawn: MyEnhancement
+            });
+            
+            const result = assignGingerly({}, {
+                [isHappy]: true
+            }, { registry });
+            
+            expect(result).toBeDefined();
+        });
+
+        test('should handle synchronous spawn', () => {
+            const registry = new EnhancementRegistry();
+            const mySymbol = Symbol.for('my-symbol');
+            
+            class MyClass {
+                value = 'initial';
+            }
+            
+            registry.push({
+                symlinks: { [mySymbol]: 'value' },
+                spawn: MyClass
+            });
+            
+            const target = {};
+            assignGingerly(target, { [mySymbol]: 'updated' }, { registry });
+            
+            expect(target).toBeDefined();
+        });
+
+        test('should reuse spawned instances for same symbol', () => {
+            const registry = new EnhancementRegistry();
+            const mySymbol = Symbol.for('reuse-symbol');
+            
+            class CounterClass {
+                count = 0;
+                increment() {
+                    this.count++;
+                }
+            }
+            
+            registry.push({
+                symlinks: { [mySymbol]: 'count' },
+                spawn: CounterClass
+            });
+            
+            const target = {};
+            assignGingerly(target, { [mySymbol]: 5 }, { registry });
+            assignGingerly(target, { [mySymbol]: 10 }, { registry });
+            
+            expect(target).toBeDefined();
+        });
+
+        test('should work with multiple symbols', () => {
+            const registry = new EnhancementRegistry();
+            const sym1 = Symbol.for('sym1');
+            const sym2 = Symbol.for('sym2');
+            
+            class Class1 {
+                prop1 = 'initial1';
+            }
+            
+            class Class2 {
+                prop2 = 'initial2';
+            }
+            
+            registry.push([
+                { symlinks: { [sym1]: 'prop1' }, spawn: Class1 },
+                { symlinks: { [sym2]: 'prop2' }, spawn: Class2 }
+            ]);
+            
+            const target = {};
+            assignGingerly(target, {
+                [sym1]: 'value1',
+                [sym2]: 'value2'
+            }, { registry });
+            
+            expect(target).toBeDefined();
+        });
+
+        test('should combine nested paths with symbol dependencies', () => {
+            const registry = new EnhancementRegistry();
+            const mySymbol = Symbol.for('combo-symbol');
+            
+            class MyClass {
+                value = 'initial';
+            }
+            
+            registry.push({
+                symlinks: { [mySymbol]: 'value' },
+                spawn: MyClass
+            });
+            
+            const target = {};
+            assignGingerly(target, {
+                [mySymbol]: 'symbol-value',
+                '?.config?.setting': 'nested-value'
+            }, { registry });
+            
+            expect(target).toBeDefined();
+        });
+
+        test('should create set property for lazy symbol assignment', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('set-test');
+            
+            class TestClass {
+                value = 'initial';
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const target = assignGingerly({}, {}, { registry });
+            
+            expect('set' in target).toBe(true);
+        });
+
+        test('should handle symbol assignment through set proxy', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('proxy-test');
+            
+            class TestClass {
+                value = 'initial';
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const target = assignGingerly({}, {}, { registry });
+            
+            target.set[testSymbol] = 'proxy-value';
+            
+            expect(target).toBeDefined();
+        });
+
+        // Display results
+        const total = passed + failed;
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const completeEl = document.getElementById('test-complete');
+
+        statusEl.innerHTML = `<span class="${failed === 0 ? 'pass' : 'fail'}">${passed}/${total} tests passed</span>`;
+
+        results.forEach(result => {
+            const div = document.createElement('div');
+            div.className = `test-item ${result.status}`;
+            div.innerHTML = `<strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}${result.error ? `<div class="error">${result.error}</div>` : ''}`;
+            resultsEl.appendChild(div);
+        });
+
+        completeEl.setAttribute('data-passed', passed.toString());
+        completeEl.setAttribute('data-failed', failed.toString());
+        completeEl.setAttribute('data-total', total.toString());
+
+        console.log(`Tests complete: ${passed}/${total} passed`);
+    </script>
+</body>
+</html>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>assign-gingerly Test Suite</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-list {
+            list-style: none;
+            padding: 0;
+        }
+        .test-list li {
+            margin: 10px 0;
+            padding: 12px;
+            background: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+            border-radius: 4px;
+        }
+        .test-list a {
+            color: #2196F3;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .test-list a:hover {
+            text-decoration: underline;
+        }
+        .description {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        .info-box {
+            background: #E3F2FD;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .warning-box {
+            background: #FFF3E0;
+            border-left: 4px solid #FF9800;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            background: #4CAF50;
+            color: white;
+            border-radius: 12px;
+            font-size: 0.8em;
+            margin-left: 10px;
+        }
+        .badge.new {
+            background: #FF9800;
+        }
+    </style>
+</head>
+<body>
+    <h1>assign-gingerly Test Suite</h1>
+    
+    <div class="info-box">
+        <strong>📋 About this test suite:</strong>
+        <p>This directory contains Web Platform Tests (WPT) for the assign-gingerly library. All tests can be opened directly in your browser for debugging.</p>
+        <p><strong>Browser Support Check:</strong> <span id="support-check"></span></p>
+    </div>
+
+    <div class="warning-box">
+        <strong>⚠️ Important:</strong> These tests require a local web server to run properly. The test harness uses <code>/resources/testharness.js</code> which needs to be served via HTTP.
+        <br><br>
+        <strong>Quick start:</strong>
+        <ul>
+            <li>Python 3: <code>python -m http.server 8000</code></li>
+            <li>Node.js: <code>npx http-server</code></li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🚀 Quick Test (Recommended) <span class="badge new">NEW</span></h2>
+        <ul class="test-list">
+            <li>
+                <a href="assignGingerly-all-tests.html">assignGingerly-all-tests.html</a>
+                <div class="description">
+                    Comprehensive test suite covering all assignGingerly functionality in one page.
+                    Includes: basic operations, nested paths, dependency injection, edge cases, commands (+=, =!, -=), 
+                    assignTentatively, and JSON Symbol.for support.
+                    <br><strong>Perfect for debugging - all tests in one place!</strong>
+                </div>
+            </li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>📦 Core assignGingerly Tests</h2>
+        <ul class="test-list">
+            <li>
+                <a href="assignGingerly-basic.html">assignGingerly-basic.html</a>
+                <div class="description">Basic functionality tests for the assignGingerly function</div>
+            </li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🔧 Object.prototype Extension Tests</h2>
+        <ul class="test-list">
+            <li>
+                <a href="object-extension-basic.html">object-extension-basic.html</a>
+                <div class="description">Basic functionality of Object.prototype.assignGingerly</div>
+            </li>
+            <li>
+                <a href="object-extension-nested.html">object-extension-nested.html</a>
+                <div class="description">Nested path assignment with ?. notation</div>
+            </li>
+            <li>
+                <a href="object-extension-di.html">object-extension-di.html</a>
+                <div class="description">Dependency injection functionality</div>
+            </li>
+            <li>
+                <a href="object-extension-edge-cases.html">object-extension-edge-cases.html</a>
+                <div class="description">Edge cases and special scenarios</div>
+            </li>
+            <li>
+                <a href="object-extension-can-spawn.html">object-extension-can-spawn.html</a>
+                <div class="description">canSpawn method support</div>
+            </li>
+            <li>
+                <a href="object-extension-custom-registry.html">object-extension-custom-registry.html</a>
+                <div class="description">Custom registry functionality</div>
+            </li>
+            <li>
+                <a href="object-extension-tentatively.html">object-extension-tentatively.html</a>
+                <div class="description">assignTentatively with reversal support</div>
+            </li>
+            <li>
+                <a href="object-extension-enh-dispose.html">object-extension-enh-dispose.html</a>
+                <div class="description">Enhancement disposal lifecycle</div>
+            </li>
+            <li>
+                <a href="object-extension-enh-get.html">object-extension-enh-get.html</a>
+                <div class="description">Enhancement getter functionality</div>
+            </li>
+            <li>
+                <a href="object-extension-enh-set-proxy.html">object-extension-enh-set-proxy.html</a>
+                <div class="description">Enhancement setter proxy</div>
+            </li>
+            <li>
+                <a href="object-extension-enh-when-resolved.html">object-extension-enh-when-resolved.html</a>
+                <div class="description">Enhancement resolution lifecycle</div>
+            </li>
+            <li>
+                <a href="object-extension-get-method.html">object-extension-get-method.html</a>
+                <div class="description">Get method functionality</div>
+            </li>
+            <li>
+                <a href="object-extension-global-instance-map.html">object-extension-global-instance-map.html</a>
+                <div class="description">Global instance map behavior</div>
+            </li>
+            <li>
+                <a href="object-extension-registry-item-key.html">object-extension-registry-item-key.html</a>
+                <div class="description">Registry item key handling</div>
+            </li>
+            <li>
+                <a href="object-extension-set-proxy.html">object-extension-set-proxy.html</a>
+                <div class="description">Set proxy functionality</div>
+            </li>
+            <li>
+                <a href="object-extension-shared-instances.html">object-extension-shared-instances.html</a>
+                <div class="description">Shared instance management</div>
+            </li>
+            <li>
+                <a href="object-extension-withattrs-no-enhkey.html">object-extension-withattrs-no-enhkey.html</a>
+                <div class="description">withAttrs without enhKey</div>
+            </li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>🎨 Utility Function Tests</h2>
+        <ul class="test-list">
+            <li>
+                <a href="parseWithAttrs-caching.html">parseWithAttrs-caching.html</a>
+                <div class="description">Attribute parsing with caching</div>
+            </li>
+            <li>
+                <a href="parseWithAttrs-enh-prefix.html">parseWithAttrs-enh-prefix.html</a>
+                <div class="description">Enhancement prefix handling</div>
+            </li>
+            <li>
+                <a href="parseWithAttrs-named-parsers.html">parseWithAttrs-named-parsers.html</a>
+                <div class="description">Named parser registry</div>
+            </li>
+            <li>
+                <a href="parseWithAttrs-valIfNull.html">parseWithAttrs-valIfNull.html</a>
+                <div class="description">Default values for null attributes</div>
+            </li>
+            <li>
+                <a href="buildCSSQuery.html">buildCSSQuery.html</a>
+                <div class="description">CSS query builder</div>
+            </li>
+            <li>
+                <a href="resolveTemplate.html">resolveTemplate.html</a>
+                <div class="description">Template variable resolution</div>
+            </li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>📚 Documentation</h2>
+        <ul class="test-list">
+            <li>
+                <a href="README.md">README.md</a>
+                <div class="description">Detailed documentation about the test suite</div>
+            </li>
+        </ul>
+    </div>
+
+    <script>
+        // Check for getOrInsertComputed support
+        const hasNativeSupport = typeof WeakMap.prototype.getOrInsertComputed === 'function';
+        const supportCheck = document.getElementById('support-check');
+        
+        if (hasNativeSupport) {
+            supportCheck.innerHTML = '<span style="color: green;">✓ Native getOrInsertComputed support detected</span>';
+        } else {
+            supportCheck.innerHTML = '<span style="color: orange;">⚠ No native getOrInsertComputed support - polyfill will be used</span>';
+        }
+
+        // Display browser info
+        console.log('Browser:', navigator.userAgent);
+        console.log('getOrInsertComputed support:', hasNativeSupport ? 'Native' : 'Polyfill needed');
+    </script>
+</body>
+</html>

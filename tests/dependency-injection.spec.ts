@@ -1,206 +1,26 @@
 import { test, expect } from '@playwright/test';
-import assignGingerly, { EnhancementRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - Dependency Injection', () => {
-  test('should register items in EnhancementRegistry', () => {
-    const registry = new EnhancementRegistry();
+  test('should run all dependency injection tests in browser', async ({ page }) => {
+    await page.goto('/tests/dependency-injection.html');
     
-    class MyEnhancement {
-      isHappy = false;
-    }
-
-    const isHappy = Symbol.for('test-isHappy');
+    await page.waitForFunction(() => {
+      const el = document.getElementById('test-complete');
+      return el && el.hasAttribute('data-total');
+    }, { timeout: 10000 });
     
-    registry.push({
-      symlinks: { [isHappy]: 'isHappy' },
-      spawn: MyEnhancement
+    const results = await page.evaluate(() => {
+      const el = document.getElementById('test-complete');
+      return {
+        passed: parseInt(el.getAttribute('data-passed') || '0'),
+        failed: parseInt(el.getAttribute('data-failed') || '0'),
+        total: parseInt(el.getAttribute('data-total') || '0')
+      };
     });
     
-    const items = registry.getItems();
-    expect(items.length).toBe(1);
-  });
-
-  test('should push multiple registry items at once', () => {
-    const registry = new EnhancementRegistry();
-    const sym1 = Symbol.for('sym1');
-    const sym2 = Symbol.for('sym2');
+    console.log(`Dependency injection tests: ${results.passed}/${results.total} passed`);
     
-    class Class1 {}
-    class Class2 {}
-    
-    registry.push([
-      { symlinks: { [sym1]: 'prop1' }, spawn: Class1 },
-      { symlinks: { [sym2]: 'prop2' }, spawn: Class2 }
-    ]);
-    
-    expect(registry.getItems().length).toBe(2);
-  });
-
-  test('should find registry item by symbol', () => {
-    const registry = new EnhancementRegistry();
-    const testSymbol = Symbol.for('test-symbol');
-    
-    class TestClass {}
-    
-    registry.push({
-      symlinks: { [testSymbol]: 'testProp' },
-      spawn: TestClass
-    });
-    
-    const item = registry.findBySymbol(testSymbol);
-    expect(item).toBeDefined();
-    expect(item?.symlinks[testSymbol]).toBe('testProp');
-  });
-
-  test('should inject dependency with symbol key', () => {
-    const registry = new EnhancementRegistry();
-    const isHappy = Symbol.for('isHappy-test');
-    
-    class MyEnhancement {
-      isHappy = false;
-    }
-    
-    registry.push({
-      symlinks: { [isHappy]: 'isHappy' },
-      spawn: MyEnhancement
-    });
-    
-    const result = assignGingerly({}, {
-      [isHappy]: true
-    }, { registry });
-    
-    expect(result).toBeDefined();
-  });
-
-  test('should handle synchronous spawn', () => {
-    const registry = new EnhancementRegistry();
-    const mySymbol = Symbol.for('my-symbol');
-    
-    class MyClass {
-      value = 'initial';
-    }
-    
-    registry.push({
-      symlinks: { [mySymbol]: 'value' },
-      spawn: MyClass
-    });
-    
-    const target = {};
-    assignGingerly(target, { [mySymbol]: 'updated' }, { registry });
-    
-    expect(target).toBeDefined();
-  });
-
-  test('should reuse spawned instances for same symbol', () => {
-    const registry = new EnhancementRegistry();
-    const mySymbol = Symbol.for('reuse-symbol');
-    
-    class CounterClass {
-      count = 0;
-      increment() {
-        this.count++;
-      }
-    }
-    
-    registry.push({
-      symlinks: { [mySymbol]: 'count' },
-      spawn: CounterClass
-    });
-    
-    const target = {};
-    assignGingerly(target, { [mySymbol]: 5 }, { registry });
-    assignGingerly(target, { [mySymbol]: 10 }, { registry });
-    
-    expect(target).toBeDefined();
-  });
-
-  test('should work with multiple symbols', () => {
-    const registry = new EnhancementRegistry();
-    const sym1 = Symbol.for('sym1');
-    const sym2 = Symbol.for('sym2');
-    
-    class Class1 {
-      prop1 = 'initial1';
-    }
-    
-    class Class2 {
-      prop2 = 'initial2';
-    }
-    
-    registry.push([
-      { symlinks: { [sym1]: 'prop1' }, spawn: Class1 },
-      { symlinks: { [sym2]: 'prop2' }, spawn: Class2 }
-    ]);
-    
-    const target = {};
-    assignGingerly(target, {
-      [sym1]: 'value1',
-      [sym2]: 'value2'
-    }, { registry });
-    
-    expect(target).toBeDefined();
-  });
-
-  test('should combine nested paths with symbol dependencies', () => {
-    const registry = new EnhancementRegistry();
-    const mySymbol = Symbol.for('combo-symbol');
-    
-    class MyClass {
-      value = 'initial';
-    }
-    
-    registry.push({
-      symlinks: { [mySymbol]: 'value' },
-      spawn: MyClass
-    });
-    
-    const target = {};
-    assignGingerly(target, {
-      [mySymbol]: 'symbol-value',
-      '?.config?.setting': 'nested-value'
-    }, { registry });
-    
-    expect(target).toBeDefined();
-  });
-
-  test('should create set property for lazy symbol assignment', () => {
-    const registry = new EnhancementRegistry();
-    const testSymbol = Symbol.for('set-test');
-    
-    class TestClass {
-      value = 'initial';
-    }
-    
-    registry.push({
-      symlinks: { [testSymbol]: 'value' },
-      spawn: TestClass
-    });
-    
-    const target = assignGingerly({}, {}, { registry });
-    
-    // The set property should exist
-    expect('set' in target).toBe(true);
-  });
-
-  test('should handle symbol assignment through set proxy', () => {
-    const registry = new EnhancementRegistry();
-    const testSymbol = Symbol.for('proxy-test');
-    
-    class TestClass {
-      value = 'initial';
-    }
-    
-    registry.push({
-      symlinks: { [testSymbol]: 'value' },
-      spawn: TestClass
-    });
-    
-    const target = assignGingerly({}, {}, { registry });
-    
-    // Assignment through proxy should work
-    target.set[testSymbol] = 'proxy-value';
-    
-    expect(target).toBeDefined();
+    expect(results.failed, `${results.failed} test(s) failed`).toBe(0);
+    expect(results.total).toBeGreaterThan(0);
   });
 });
-

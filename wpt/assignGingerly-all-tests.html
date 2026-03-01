@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>assignGingerly - All Tests</title>
+    <link rel="help" href="https://github.com/bahrus/assign-gingerly">
+    <script src="/resources/testharness.js"></script>
+    <script src="/resources/testharnessreport.js"></script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .info {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+<h1>assignGingerly - All Tests</h1>
+<div class="info">
+    <p><strong>Note:</strong> This page runs all assignGingerly tests directly in the browser.</p>
+    <p>Open the browser console to see detailed test output and debug any failures.</p>
+    <p><strong>Browser:</strong> <span id="browser-info"></span></p>
+    <p><strong>getOrInsertComputed support:</strong> <span id="polyfill-info"></span></p>
+</div>
+
+<div id="log"></div>
+
+<script type="module">
+    import assignGingerly, { EnhancementRegistry } from '../assignGingerly.js';
+    import { assignTentatively } from '../assignTentatively.js';
+
+    // Display browser info
+    document.getElementById('browser-info').textContent = navigator.userAgent;
+    document.getElementById('polyfill-info').textContent = 
+        typeof WeakMap.prototype.getOrInsertComputed === 'function' ? 
+        'Native support ✓' : 'Polyfill needed ✗';
+
+    // ===== BASIC FUNCTIONALITY =====
+    test(() => {
+        const sourceObj = { hello: 'world' };
+        assignGingerly(sourceObj, { hello: 'Venus', foo: 'bar' });
+        assert_equals(sourceObj.hello, 'Venus');
+        assert_equals(sourceObj.foo, 'bar');
+    }, 'Basic: Example 1 - Basic object assignment');
+
+    test(() => {
+        const target = { existing: 'value' };
+        assignGingerly(target, {});
+        assert_equals(target.existing, 'value');
+    }, 'Basic: should handle empty source object');
+
+    test(() => {
+        const target = {};
+        assignGingerly(target, { name: 'John', age: 30, email: 'john@example.com' });
+        assert_equals(target.name, 'John');
+        assert_equals(target.age, 30);
+        assert_equals(target.email, 'john@example.com');
+    }, 'Basic: should handle multiple key-value pairs');
+
+    test(() => {
+        const target = { existing: 'value' };
+        assignGingerly(target, { new: 'property' });
+        assert_equals(target.existing, 'value');
+        assert_equals(target.new, 'property');
+    }, 'Basic: should preserve existing properties');
+
+    test(() => {
+        const target = { value: 'old' };
+        assignGingerly(target, { value: 'new' });
+        assert_equals(target.value, 'new');
+    }, 'Basic: should overwrite existing properties');
+
+    test(() => {
+        assignGingerly(null, { hello: 'world' });
+        assignGingerly(undefined, { hello: 'world' });
+        assert_true(true);
+    }, 'Basic: should handle non-object values gracefully');
+
+    test(() => {
+        const target = {};
+        assignGingerly(target, 'not an object');
+        assert_equals(Object.keys(target).length, 0);
+    }, 'Basic: should handle non-object source');
+
+    // ===== NESTED PATH ASSIGNMENT =====
+    test(() => {
+        const target = {};
+        assignGingerly(target, { '?.level1?.level2': 'value' });
+        assert_equals(target.level1.level2, 'value');
+    }, 'Nested: should create intermediate objects');
+
+    test(() => {
+        const target = {};
+        assignGingerly(target, { '?.a?.b?.c?.d?.e': 'deep' });
+        assert_equals(target.a.b.c.d.e, 'deep');
+    }, 'Nested: should handle deeply nested paths');
+
+    test(() => {
+        const target = {};
+        assignGingerly(target, {
+            '?.user?.name': 'John',
+            '?.user?.age': 30,
+            '?.settings?.theme': 'dark'
+        });
+        assert_equals(target.user.name, 'John');
+        assert_equals(target.user.age, 30);
+        assert_equals(target.settings.theme, 'dark');
+    }, 'Nested: should handle multiple nested paths');
+
+    test(() => {
+        const target = { existing: { value: 'old' } };
+        assignGingerly(target, { '?.existing?.value': 'new' });
+        assert_equals(target.existing.value, 'new');
+    }, 'Nested: should preserve existing nested structures');
+
+    // ===== DEPENDENCY INJECTION =====
+    test(() => {
+        const registry = new EnhancementRegistry();
+        assert_true(registry instanceof EnhancementRegistry);
+    }, 'DI: should register items in EnhancementRegistry');
+
+    test(() => {
+        const registry = new EnhancementRegistry();
+        const sym1 = Symbol.for('sym1');
+        const sym2 = Symbol.for('sym2');
+        
+        class Class1 { value = 1; }
+        class Class2 { value = 2; }
+        
+        registry.push([
+            { symlinks: { [sym1]: 'val1' }, spawn: Class1 },
+            { symlinks: { [sym2]: 'val2' }, spawn: Class2 }
+        ]);
+        
+        assert_equals(registry.getItems().length, 2);
+    }, 'DI: should push multiple registry items at once');
+
+    test(() => {
+        const registry = new EnhancementRegistry();
+        const testSymbol = Symbol.for('test-symbol');
+        
+        class TestClass { value = 'test'; }
+        
+        registry.push({ symlinks: { [testSymbol]: 'value' }, spawn: TestClass });
+        
+        const found = registry.findBySymbol(testSymbol);
+        assert_true(found !== undefined);
+        assert_equals(found.spawn, TestClass);
+    }, 'DI: should find registry item by symbol');
+
+    test(() => {
+        const registry = new EnhancementRegistry();
+        const isHappy = Symbol.for('isHappy-test');
+        
+        class HappyClass { constructor(public value: any) {} }
+        
+        registry.push({ symlinks: { [isHappy]: 'isHappy' }, spawn: HappyClass });
+        
+        const target = {};
+        assignGingerly(target, { [isHappy]: true }, { registry });
+        
+        assert_true(target[isHappy] instanceof HappyClass);
+        assert_equals(target[isHappy].value, true);
+    }, 'DI: should inject dependency with symbol key');
+
+    // ===== EDGE CASES =====
+    test(() => {
+        const target = {};
+        assignGingerly(target, { arr: [1, 2, 3] });
+        assert_array_equals(target.arr, [1, 2, 3]);
+    }, 'Edge: should handle arrays as values');
+
+    test(() => {
+        const target = {};
+        assignGingerly(target, { str: 'hello', num: 42, bool: true });
+        assert_equals(target.str, 'hello');
+        assert_equals(target.num, 42);
+        assert_equals(target.bool, true);
+    }, 'Edge: should handle various data types');
+
+    test(() => {
+        const target = {};
+        assignGingerly(target, { nullVal: null, undefinedVal: undefined });
+        assert_equals(target.nullVal, null);
+        assert_equals(target.undefinedVal, undefined);
+    }, 'Edge: should handle null and undefined');
+
+    test(() => {
+        const target = {};
+        assignGingerly(target, { '?.a?.b?.c?.d?.e?.f?.g?.h': 'very deep' });
+        assert_equals(target.a.b.c.d.e.f.g.h, 'very deep');
+    }, 'Edge: should handle very deeply nested paths');
+
+    // ===== += COMMAND =====
+    test(() => {
+        const target = { count: 5 };
+        assignGingerly(target, { 'count+=': 3 });
+        assert_equals(target.count, 8);
+    }, '+= Command: should increment existing numeric value');
+
+    test(() => {
+        const target = {};
+        assignGingerly(target, { 'count+=': 10 });
+        assert_equals(target.count, 10);
+    }, '+= Command: should handle non-existent path');
+
+    test(() => {
+        const target = { count: -5 };
+        assignGingerly(target, { 'count+=': 3 });
+        assert_equals(target.count, -2);
+    }, '+= Command: should increment negative values');
+
+    test(() => {
+        const target = { str: 'Hello' };
+        assignGingerly(target, { 'str+=': ' World' });
+        assert_equals(target.str, 'Hello World');
+    }, '+= Command: should allow string concatenation');
+
+    test(() => {
+        const target = {};
+        assignGingerly(target, { '?.counter?.value+=': 5 });
+        assert_equals(target.counter.value, 5);
+    }, '+= Command: should create intermediate nested structures');
+
+    // ===== =! COMMAND =====
+    test(() => {
+        const target = { flag: false };
+        assignGingerly(target, { 'flag=!': '.' });
+        assert_equals(target.flag, true);
+    }, '=! Command: should toggle false to true');
+
+    test(() => {
+        const target = { flag: true };
+        assignGingerly(target, { 'flag=!': '.' });
+        assert_equals(target.flag, false);
+    }, '=! Command: should toggle true to false');
+
+    test(() => {
+        const target = { a: true, b: false };
+        assignGingerly(target, { 'b=!': 'a' });
+        assert_equals(target.b, false);
+    }, '=! Command: should negate another property');
+
+    test(() => {
+        const target = {};
+        assignGingerly(target, { 'flag=!': 'nonExistent' });
+        assert_equals(target.flag, false);
+    }, '=! Command: should treat non-existent RHS path as truthy');
+
+    test(() => {
+        const target = {};
+        assignGingerly(target, { '?.nested?.flag=!': '.' });
+        assert_equals(target.nested.flag, true);
+    }, '=! Command: should create intermediate nested structures');
+
+    // ===== -= DELETE COMMAND =====
+    test(() => {
+        const target = { a: 1, b: 2, c: 3 };
+        assignGingerly(target, { '-=': 'b' });
+        assert_equals(target.a, 1);
+        assert_equals(target.b, undefined);
+        assert_equals(target.c, 3);
+    }, '-= Command: should delete a single property');
+
+    test(() => {
+        const target = { a: 1, b: 2, c: 3 };
+        assignGingerly(target, { '-=': ['a', 'c'] });
+        assert_equals(target.a, undefined);
+        assert_equals(target.b, 2);
+        assert_equals(target.c, undefined);
+    }, '-= Command: should delete multiple properties');
+
+    test(() => {
+        const target = { nested: { a: 1, b: 2 } };
+        assignGingerly(target, { '?.nested.-=': 'a' });
+        assert_equals(target.nested.a, undefined);
+        assert_equals(target.nested.b, 2);
+    }, '-= Command: should delete property from nested path');
+
+    test(() => {
+        const target = { a: 1 };
+        assignGingerly(target, { '-=': 'nonExistent' });
+        assert_equals(target.a, 1);
+    }, '-= Command: should not throw if property does not exist');
+
+    // ===== ASSIGN TENTATIVELY =====
+    test(() => {
+        const target = {};
+        const reversal = assignTentatively(target, { a: 1, b: 2 });
+        
+        assert_equals(target.a, 1);
+        assert_equals(target.b, 2);
+        assert_true(reversal !== undefined);
+    }, 'Tentatively: should perform basic assignment');
+
+    test(() => {
+        const target = {};
+        const reversal = assignTentatively(target, { '?.nested?.value': 'test' });
+        
+        assert_equals(target.nested.value, 'test');
+        assert_true(reversal['-='] !== undefined);
+    }, 'Tentatively: should create nested paths and track for reversal');
+
+    test(() => {
+        const target = {};
+        const reversal = assignTentatively(target, { 'count+=': 5 });
+        
+        assert_equals(target.count, 5);
+        assert_true(reversal['-='] !== undefined);
+    }, 'Tentatively: should support += command');
+
+    test(() => {
+        const target = { existing: 'value' };
+        const reversal = assignTentatively(target, { new: 'property' });
+        
+        assert_equals(target.existing, 'value');
+        assert_equals(target.new, 'property');
+        assert_true(reversal['-='] !== undefined);
+    }, 'Tentatively: should preserve existing properties');
+
+    test(() => {
+        const target = {};
+        const reversal = assignTentatively(target, { a: 1, b: 2 });
+        
+        assignGingerly(target, reversal);
+        
+        assert_equals(target.a, undefined);
+        assert_equals(target.b, undefined);
+    }, 'Tentatively: should guarantee reversal restores original state');
+
+    // ===== JSON SYMBOL.FOR SUPPORT =====
+    test(() => {
+        const registry = new EnhancementRegistry();
+        const testSymbol = Symbol.for('test-json-symbol');
+        
+        class TestClass { value = 'test'; }
+        
+        registry.push({ symlinks: { [testSymbol]: 'value' }, spawn: TestClass });
+        
+        const target = {};
+        assignGingerly(target, { 'Symbol.for("test-json-symbol")': 'data' }, { registry });
+        
+        assert_true(target[testSymbol] instanceof TestClass);
+    }, 'JSON Symbol: should convert Symbol.for string keys to actual symbols');
+
+    test(() => {
+        const registry = new EnhancementRegistry();
+        const sym1 = Symbol.for('json-sym1');
+        const sym2 = Symbol.for('json-sym2');
+        
+        class Class1 { value = 1; }
+        class Class2 { value = 2; }
+        
+        registry.push([
+            { symlinks: { [sym1]: 'val1' }, spawn: Class1 },
+            { symlinks: { [sym2]: 'val2' }, spawn: Class2 }
+        ]);
+        
+        const target = {};
+        assignGingerly(target, {
+            'Symbol.for("json-sym1")': 'data1',
+            'Symbol.for("json-sym2")': 'data2'
+        }, { registry });
+        
+        assert_true(target[sym1] instanceof Class1);
+        assert_true(target[sym2] instanceof Class2);
+    }, 'JSON Symbol: should handle multiple Symbol.for string keys');
+
+    console.log('All tests loaded and running...');
+</script>
+</body>
+</html>

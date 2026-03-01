@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>assignGingerly - canSpawn Support Tests</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>assignGingerly - canSpawn Support Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0" style="display:none;"></div>
+
+    <script type="module">
+        import assignGingerly, { EnhancementRegistry } from '../assignGingerly.js';
+
+        const results = [];
+        let passed = 0, failed = 0;
+
+        function test(name, fn) {
+            try {
+                fn();
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+        }
+
+        function expect(actual) {
+            return {
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${expected} but got ${actual}`);
+                    }
+                },
+                toEqual(expected) {
+                    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                }
+            };
+        }
+
+        // Tests
+        test('should respect canSpawn returning false for dependency injection', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('canSpawn-test');
+            
+            let spawnAttempts = 0;
+            
+            class TestClass {
+                value = 'initial';
+                
+                constructor() {
+                    spawnAttempts++;
+                }
+                
+                static canSpawn(obj, ctx) {
+                    return obj.allowSpawn === true;
+                }
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const target1 = {};
+            assignGingerly(target1, { [testSymbol]: 'test-value' }, { registry });
+            expect(spawnAttempts).toBe(0);
+            
+            const target2 = { allowSpawn: true };
+            assignGingerly(target2, { [testSymbol]: 'test-value' }, { registry });
+            expect(spawnAttempts).toBe(1);
+        });
+
+        test('should respect canSpawn returning true', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('canSpawn-true-test');
+            
+            class TestClass {
+                value = 'initial';
+                static canSpawn(obj, ctx) { return true; }
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const target = {};
+            assignGingerly(target, { [testSymbol]: 'test-value' }, { registry });
+            expect('set' in target).toBe(true);
+        });
+
+        test('should work without canSpawn method (default behavior)', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('no-canSpawn-test');
+            
+            class TestClass {
+                value = 'initial';
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const target = {};
+            assignGingerly(target, { [testSymbol]: 'test-value' }, { registry });
+            expect('set' in target).toBe(true);
+        });
+
+        test('should pass correct context to canSpawn', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('canSpawn-ctx-test');
+            
+            let receivedObj = null;
+            let receivedCtx = null;
+            
+            class TestClass {
+                value = 'initial';
+                static canSpawn(obj, ctx) {
+                    receivedObj = obj;
+                    receivedCtx = ctx;
+                    return true;
+                }
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const target = { testProp: 'test' };
+            assignGingerly(target, { [testSymbol]: 'test-value' }, { registry });
+            
+            expect(receivedObj).toEqual(target);
+            expect(receivedCtx.registry).toEqual(registry);
+        });
+
+        test('should respect canSpawn for set proxy', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('canSpawn-set-proxy-test');
+            
+            let spawnAttempts = 0;
+            
+            class TestClass {
+                value = 'initial';
+                constructor() { spawnAttempts++; }
+                static canSpawn(obj, ctx) {
+                    return obj.allowSpawn === true;
+                }
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const target1 = {};
+            const result1 = assignGingerly(target1, {}, { registry });
+            result1.set[testSymbol] = 'test-value';
+            expect(spawnAttempts).toBe(0);
+            
+            const target2 = { allowSpawn: true };
+            const result2 = assignGingerly(target2, {}, { registry });
+            result2.set[testSymbol] = 'test-value';
+            expect(spawnAttempts).toBe(1);
+        });
+
+        test('should work with element type checking', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('canSpawn-element-test');
+            
+            class TestClass {
+                value = 'initial';
+                static canSpawn(obj, ctx) {
+                    return obj instanceof Element;
+                }
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const plainObj = {};
+            assignGingerly(plainObj, { [testSymbol]: 'test' }, { registry });
+            expect(testSymbol in plainObj).toBe(false);
+            
+            const element = document.createElement('div');
+            assignGingerly(element, { [testSymbol]: 'test' }, { registry });
+            expect('set' in element).toBe(true);
+        });
+
+        test('should work with custom object type checking', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('canSpawn-custom-type-test');
+            
+            class TestClass {
+                value = 'initial';
+                static canSpawn(obj, ctx) {
+                    return obj.type === 'special';
+                }
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const normalObj = { type: 'normal' };
+            assignGingerly(normalObj, { [testSymbol]: 'test' }, { registry });
+            expect(testSymbol in normalObj).toBe(false);
+            
+            const specialObj = { type: 'special' };
+            assignGingerly(specialObj, { [testSymbol]: 'test' }, { registry });
+            expect('set' in specialObj).toBe(true);
+        });
+
+        test('should not spawn multiple times if canSpawn blocks it', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('canSpawn-multiple-test');
+            
+            let spawnAttempts = 0;
+            
+            class TestClass {
+                value = 'initial';
+                constructor() { spawnAttempts++; }
+                static canSpawn(obj, ctx) { return false; }
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const target = {};
+            assignGingerly(target, { [testSymbol]: 'test1' }, { registry });
+            assignGingerly(target, { [testSymbol]: 'test2' }, { registry });
+            assignGingerly(target, { [testSymbol]: 'test3' }, { registry });
+            
+            expect(spawnAttempts).toBe(0);
+        });
+
+        test('should allow conditional spawning based on object properties', () => {
+            const registry = new EnhancementRegistry();
+            const testSymbol = Symbol.for('canSpawn-conditional-test');
+            
+            class TestClass {
+                value = 'initial';
+                static canSpawn(obj, ctx) {
+                    return obj.enabled === true && obj.ready === true;
+                }
+            }
+            
+            registry.push({
+                symlinks: { [testSymbol]: 'value' },
+                spawn: TestClass
+            });
+            
+            const target1 = { enabled: true, ready: false };
+            assignGingerly(target1, { [testSymbol]: 'test' }, { registry });
+            expect(testSymbol in target1).toBe(false);
+            
+            const target2 = { enabled: true, ready: true };
+            assignGingerly(target2, { [testSymbol]: 'test' }, { registry });
+            expect('set' in target2).toBe(true);
+        });
+
+        // Display results
+        const total = passed + failed;
+        document.getElementById('status').innerHTML = `<span class="${failed === 0 ? 'pass' : 'fail'}">${passed}/${total} tests passed</span>`;
+        
+        const resultsEl = document.getElementById('results');
+        results.forEach(result => {
+            const div = document.createElement('div');
+            div.className = `test-item ${result.status}`;
+            div.innerHTML = `<strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}${result.error ? `<div class="error">${result.error}</div>` : ''}`;
+            resultsEl.appendChild(div);
+        });
+
+        const completeEl = document.getElementById('test-complete');
+        completeEl.setAttribute('data-passed', passed.toString());
+        completeEl.setAttribute('data-failed', failed.toString());
+        completeEl.setAttribute('data-total', total.toString());
+        completeEl.style.display = 'block';
+    </script>
+</body>
+</html>

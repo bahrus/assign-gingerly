@@ -1,206 +1,26 @@
 import { test, expect } from '@playwright/test';
-import assignGingerly, { EnhancementRegistry } from '../assignGingerly.js';
 
 test.describe('assignGingerly - JSON Symbol.for Support', () => {
-  test('should convert Symbol.for string keys to actual symbols', () => {
-    const registry = new EnhancementRegistry();
-    const testSymbol = Symbol.for('test-json-symbol');
+  test('should run all JSON symbol support tests in browser', async ({ page }) => {
+    await page.goto('/tests/json-symbol-support.html');
     
-    class TestClass {
-      value = 'initial';
-    }
+    await page.waitForFunction(() => {
+      const el = document.getElementById('test-complete');
+      return el && el.hasAttribute('data-total');
+    }, { timeout: 10000 });
     
-    registry.push({
-      symlinks: { [testSymbol]: 'value' },
-      spawn: TestClass
+    const results = await page.evaluate(() => {
+      const el = document.getElementById('test-complete');
+      return {
+        passed: parseInt(el.getAttribute('data-passed') || '0'),
+        failed: parseInt(el.getAttribute('data-failed') || '0'),
+        total: parseInt(el.getAttribute('data-total') || '0')
+      };
     });
     
-    const target = {};
-    assignGingerly(target, {
-      "[Symbol.for('test-json-symbol')]": 'json-value'
-    }, { registry });
+    console.log(`JSON symbol support tests: ${results.passed}/${results.total} passed`);
     
-    expect(target).toBeDefined();
-  });
-
-  test('should handle multiple Symbol.for string keys', () => {
-    const registry = new EnhancementRegistry();
-    const sym1 = Symbol.for('json-sym1');
-    const sym2 = Symbol.for('json-sym2');
-    
-    class Class1 {
-      prop1 = 'initial1';
-    }
-    
-    class Class2 {
-      prop2 = 'initial2';
-    }
-    
-    registry.push([
-      { symlinks: { [sym1]: 'prop1' }, spawn: Class1 },
-      { symlinks: { [sym2]: 'prop2' }, spawn: Class2 }
-    ]);
-    
-    const target = {};
-    assignGingerly(target, {
-      "[Symbol.for('json-sym1')]": 'value1',
-      "[Symbol.for('json-sym2')]": 'value2'
-    }, { registry });
-    
-    expect(target).toBeDefined();
-  });
-
-  test('should work with README example using Symbol.for strings', () => {
-    const isHappy = Symbol.for('TFWsx0YH5E6eSfhE7zfLxA');
-    const isMellow = Symbol.for('BqnnTPWRHkWdVGWcGQoAiw');
-    
-    class MyEnhancement {
-      isHappy = false;
-    }
-
-    class YourEnhancement {
-      isMellow = false;
-    }
-    
-    const baseRegistry = new EnhancementRegistry();
-    baseRegistry.push([
-      {
-        symlinks: { [isHappy]: 'isHappy' },
-        spawn: MyEnhancement
-      },
-      {
-        symlinks: { [isMellow]: 'isMellow' },
-        spawn: YourEnhancement
-      }
-    ]);
-    
-    const result = assignGingerly({}, {
-      "[Symbol.for('TFWsx0YH5E6eSfhE7zfLxA')]": true,
-      "[Symbol.for('BqnnTPWRHkWdVGWcGQoAiw')]": true,
-      '?.style?.height': '40px',
-      '?.enhancements?.mellowYellow?.madAboutFourteen': true
-    }, {
-      registry: baseRegistry
-    });
-    
-    expect(result).toBeDefined();
-    expect(result.style?.height).toBe('40px');
-    expect(result.enhancements?.mellowYellow?.madAboutFourteen).toBe(true);
-  });
-
-  test('should handle both actual symbols and Symbol.for strings together', () => {
-    const registry = new EnhancementRegistry();
-    const actualSymbol = Symbol.for('actual-symbol');
-    const stringSymbol = Symbol.for('string-symbol');
-    
-    class Class1 {
-      value1 = 'initial';
-    }
-    
-    class Class2 {
-      value2 = 'initial';
-    }
-    
-    registry.push([
-      { symlinks: { [actualSymbol]: 'value1' }, spawn: Class1 },
-      { symlinks: { [stringSymbol]: 'value2' }, spawn: Class2 }
-    ]);
-    
-    const target = {};
-    assignGingerly(target, {
-      [actualSymbol]: 'actual-value',
-      "[Symbol.for('string-symbol')]": 'string-value'
-    }, { registry });
-    
-    expect(target).toBeDefined();
-  });
-
-  test('should support Symbol.for strings with double quotes', () => {
-    const registry = new EnhancementRegistry();
-    const testSymbol = Symbol.for('double-quote-test');
-    
-    class TestClass {
-      value = 'initial';
-    }
-    
-    registry.push({
-      symlinks: { [testSymbol]: 'value' },
-      spawn: TestClass
-    });
-    
-    const target = {};
-    assignGingerly(target, {
-      '[Symbol.for("double-quote-test")]': 'double-quote-value'
-    }, { registry });
-    
-    expect(target).toBeDefined();
-  });
-
-  test('should combine Symbol.for strings with nested paths', () => {
-    const registry = new EnhancementRegistry();
-    const testSymbol = Symbol.for('combo-json-symbol');
-    
-    class TestClass {
-      value = 'initial';
-    }
-    
-    registry.push({
-      symlinks: { [testSymbol]: 'value' },
-      spawn: TestClass
-    });
-    
-    const target = {};
-    assignGingerly(target, {
-      "[Symbol.for('combo-json-symbol')]": 'symbol-value',
-      '?.config?.setting': 'nested-value',
-      regularKey: 'regular-value'
-    }, { registry });
-    
-    expect(target).toBeDefined();
-    expect(target.config?.setting).toBe('nested-value');
-    expect(target.regularKey).toBe('regular-value');
-  });
-
-  test('should ignore invalid Symbol.for string formats', () => {
-    const target = {};
-    assignGingerly(target, {
-      '[Symbol.for(invalid)]': 'should-be-ignored',
-      '[Symbol.for()]': 'also-ignored',
-      'Symbol.for("test")': 'not-bracket-format',
-      regularKey: 'regular-value'
-    });
-    
-    // Invalid formats should be treated as regular string keys
-    expect(target.regularKey).toBe('regular-value');
-    expect(target['[Symbol.for(invalid)]']).toBe('should-be-ignored');
-  });
-
-  test('should work with JSON.parse for true JSON compatibility', () => {
-    const registry = new EnhancementRegistry();
-    const testSymbol = Symbol.for('json-parsed-symbol');
-    
-    class TestClass {
-      value = 'initial';
-    }
-    
-    registry.push({
-      symlinks: { [testSymbol]: 'value' },
-      spawn: TestClass
-    });
-    
-    // Simulate JSON coming from an API or file
-    const jsonString = JSON.stringify({
-      "[Symbol.for('json-parsed-symbol')]": 'parsed-value',
-      '?.config?.name': 'MyApp'
-    });
-    
-    const parsedData = JSON.parse(jsonString);
-    
-    const target = {};
-    assignGingerly(target, parsedData, { registry });
-    
-    expect(target).toBeDefined();
-    expect(target.config?.name).toBe('MyApp');
+    expect(results.failed, `${results.failed} test(s) failed`).toBe(0);
+    expect(results.total).toBeGreaterThan(0);
   });
 });
-
