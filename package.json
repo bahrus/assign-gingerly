@@ -58,7 +58,9 @@
   "scripts": {
     "serve": "node ./node_modules/spa-ssi/serve.js",
     "test": "playwright test",
-    "update": "ncu -u && npm install"
+    "update": "ncu -u && npm install",
+    "safari": "npx playwright wk http://localhost:8000",
+    "chrome": "npx playwright cr http://localhost:8000"
   },
   "devDependencies": {
     "@playwright/test": "1.59.0-alpha-2026-02-28",
