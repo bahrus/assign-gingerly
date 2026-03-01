@@ -4,14 +4,14 @@ import { EnhancementConfig } from "./types/assign-gingerly/types";
 
 // Polyfill for WeakMap.prototype.getOrInsert
 
-if (typeof WeakMap.prototype.getOrInsertComputed !== 'function') {
-  WeakMap.prototype.getOrInsertComputed = function(key, insert) {
-    if (this.has(key)) return this.get(key);
-    const value = insert();
-    this.set(key, value);
-    return value;
-  };
-}
+// if (typeof WeakMap.prototype.getOrInsertComputed !== 'function') {
+//   WeakMap.prototype.getOrInsertComputed = function(key, insert) {
+//     if (this.has(key)) return this.get(key);
+//     const value = insert();
+//     this.set(key, value);
+//     return value;
+//   };
+// }
 
 // /**
 //  * @deprecated Use EnhancementConfig instead
