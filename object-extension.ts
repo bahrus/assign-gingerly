@@ -41,22 +41,22 @@ declare global {
      * 
      * @param source - The source object to merge
      * @param options - Optional configuration with registry for dependency injection
-     * @returns Promise that resolves to this object after merging
+     * @returns This object after merging
      * 
      * @example
      * const target = {};
-     * await target.assignGingerly({ '?.style?.height': '15px' });
+     * target.assignGingerly({ '?.style?.height': '15px' });
      * console.log(target); // { style: { height: '15px' } }
      * 
      * @example
      * const obj = { a: 1 };
-     * await obj.assignGingerly({ b: 2, '?.nested?.key': 'value' });
+     * obj.assignGingerly({ b: 2, '?.nested?.key': 'value' });
      * console.log(obj); // { a: 1, b: 2, nested: { key: 'value' } }
      */
     assignGingerly(
       source: Record<string | symbol, any>,
       options?: IAssignGingerlyOptions
-    ): Promise<this>;
+    ): this;
 
     /**
      * Alias for assignGingerly. Carefully merge properties from a source object into this object.
@@ -64,17 +64,17 @@ declare global {
      * 
      * @param source - The source object to merge
      * @param options - Optional configuration with registry for dependency injection
-     * @returns Promise that resolves to this object after merging
+     * @returns This object after merging
      * 
      * @example
      * const target = {};
-     * await target.assignTentatively({ '?.style?.height': '15px' });
+     * target.assignTentatively({ '?.style?.height': '15px' });
      * console.log(target); // { style: { height: '15px' } }
      */
     assignTentatively(
       source: Record<string | symbol, any>,
       options?: IAssignGingerlyOptions
-    ): Promise<this>;
+    ): this;
   }
 }
 
@@ -402,17 +402,17 @@ if (typeof Element !== 'undefined') {
  * Adds assignGingerly method to all objects via the Object prototype
  */
 Object.defineProperty(Object.prototype, 'assignGingerly', {
-  value: async function <T extends object>(
+  value: function <T extends object>(
     this: T,
     source: Record<string | symbol, any>,
     options?: IAssignGingerlyOptions
-  ): Promise<T> {
+  ): T {
     // Auto-populate registry from customElementRegistry if this is an Element
     if (this instanceof Element && (!options || !options.registry)) {
       if (!options) options = {};
       options.registry = (this as any).customElementRegistry?.enhancementRegistry;
     }
-    await assignGingerly(this, source, options);
+    assignGingerly(this, source, options);
     return this;
   },
   writable: true,
@@ -425,17 +425,17 @@ Object.defineProperty(Object.prototype, 'assignGingerly', {
  * This is an alias for assignGingerly
  */
 Object.defineProperty(Object.prototype, 'assignTentatively', {
-  value: async function <T extends object>(
+  value: function <T extends object>(
     this: T,
     source: Record<string | symbol, any>,
     options?: IAssignGingerlyOptions
-  ): Promise<T> {
+  ): T {
     // Auto-populate registry from customElementRegistry if this is an Element
     if (this instanceof Element && (!options || !options.registry)) {
       if (!options) options = {};
       options.registry = (this as any).customElementRegistry?.enhancementRegistry;
     }
-    await assignGingerly(this, source, options);
+    assignGingerly(this, source, options);
     return this;
   },
   writable: true,

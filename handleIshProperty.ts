@@ -100,11 +100,13 @@ async function defineIshProperty(
         managerInstance = new config!.manager(element, initVals);
         valueQueue.length = 0; // Clear queue
       } else {
-        // Process queue
-        while (valueQueue.length > 0) {
-          const queuedValue = valueQueue.shift();
-          assignGingerlyFn(managerInstance, queuedValue, options);
-        }
+        // Process queue asynchronously
+        (async () => {
+          while (valueQueue.length > 0) {
+            const queuedValue = valueQueue.shift();
+            await assignGingerlyFn(managerInstance, queuedValue, options);
+          }
+        })();
       }
     },
     enumerable: true,

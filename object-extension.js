@@ -1,4 +1,4 @@
-import assignGingerly, { EnhancementRegistry, getInstanceMap } from './assignGingerly.js';
+import assignGingerly, { EnhancementRegistry, ItemscopeRegistry, getInstanceMap } from './assignGingerly.js';
 import { parseWithAttrs } from './parseWithAttrs.js';
 /**
  * Normalizes lifecycleKeys to always return an object with dispose and resolved keys
@@ -24,6 +24,25 @@ if (typeof CustomElementRegistry !== 'undefined') {
             const registry = new EnhancementRegistry();
             // Replace the getter with the actual value
             Object.defineProperty(this, 'enhancementRegistry', {
+                value: registry,
+                writable: true,
+                enumerable: false,
+                configurable: true,
+            });
+            return registry;
+        },
+        enumerable: false,
+        configurable: true,
+    });
+    /**
+     * Adds itemscopeRegistry to CustomElementRegistry prototype as a lazy getter
+     */
+    Object.defineProperty(CustomElementRegistry.prototype, 'itemscopeRegistry', {
+        get: function () {
+            // Create a new ItemscopeRegistry instance on first access and cache it
+            const registry = new ItemscopeRegistry();
+            // Replace the getter with the actual value
+            Object.defineProperty(this, 'itemscopeRegistry', {
                 value: registry,
                 writable: true,
                 enumerable: false,

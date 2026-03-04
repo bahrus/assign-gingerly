@@ -248,11 +248,11 @@ function ensureNestedPath(obj: any, pathParts: string[]): any {
 /**
  * Main assignGingerly function
  */
-export async function assignGingerly(
+export function assignGingerly(
   target: any,
   source: Record<string | symbol, any>,
   options?: IAssignGingerlyOptions
-): Promise<any> {
+): any {
   if (!target || typeof target !== 'object') {
     return target;
   }
@@ -283,14 +283,25 @@ export async function assignGingerly(
     processedSource[sym] = source[sym];
   }
 
-  // Process 'ish' property for HTMLElements with itemscope
+  // Process 'ish' property for HTMLElements with itemscope (async, non-blocking)
   if ('ish' in processedSource) {
     if (typeof HTMLElement !== 'undefined' && target instanceof HTMLElement) {
-      // Load handler on demand to keep assignGingerly.ts size minimal
-      const { handleIshProperty } = await import('./handleIshProperty.js');
-      await handleIshProperty(target, processedSource['ish'], options, assignGingerly);
+      // Capture the value before deleting
+      const ishValue = processedSource['ish'];
       // Remove 'ish' from processedSource to prevent normal assignment
       delete processedSource['ish'];
+      
+      // Load handler on demand and process asynchronously
+      (async () => {
+        try {
+          const { handleIshProperty } = await import('./handleIshProperty.js');
+          await handleIshProperty(target, ishValue, options, assignGingerly);
+        } catch (err) {
+          console.error('Error in handleIshProperty:', err);
+          // Re-throw errors asynchronously so they're visible
+          setTimeout(() => { throw err; }, 0);
+        }
+      })();
     }
     // For non-HTMLElement targets, 'ish' is processed as a normal property
   }
