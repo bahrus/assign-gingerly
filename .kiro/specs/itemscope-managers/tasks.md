@@ -55,6 +55,8 @@ This implementation adds ItemScope Manager support to the assign-gingerly librar
     - Check for 'ish' key in source object during first pass
     - Implement HTMLElement type check
     - Implement dual behavior: special handling for HTMLElements, normal assignment for others
+    - Dynamically import handleIshProperty module on demand
+    - Pass assignGingerly function reference to handler
     - Remove 'ish' from processedSource after handling to prevent double-processing
     - _Requirements: 4.1, 4.2_
   
@@ -82,14 +84,21 @@ This implementation adds ItemScope Manager support to the assign-gingerly librar
     - **Validates: Requirements 4.5, 11.3**
 
 - [ ] 5. Implement ISH property initialization and definition
-  - [ ] 5.1 Create handleIshProperty function in assignGingerly.ts
+  - [ ] 5.1 Create handleIshProperty.ts file with handler functions
+    - Create new file handleIshProperty.ts
+    - Export handleIshProperty function
+    - Implement defineIshProperty as private function
+    - Accept assignGingerlyFn parameter to avoid circular dependencies
+    - _Requirements: Architecture decision for code organization_
+  
+  - [ ] 5.2 Implement handleIshProperty function in handleIshProperty.ts
     - Implement validation for itemscope attribute
     - Implement validation for value type
     - Call defineIshProperty if 'ish' property doesn't exist on element
     - Queue value for assignment using property descriptor
     - _Requirements: 4.3, 4.4, 4.5_
   
-  - [ ] 5.2 Create defineIshProperty function in assignGingerly.ts
+  - [ ] 5.3 Implement defineIshProperty function in handleIshProperty.ts
     - Determine which registry to use (element's or global)
     - Check if manager is registered
     - Handle lazy registration using waitForEvent
@@ -97,18 +106,18 @@ This implementation adds ItemScope Manager support to the assign-gingerly librar
     - Define 'ish' property with getter and setter
     - _Requirements: 5.1, 6.1, 6.2, 6.3, 6.4, 6.5_
   
-  - [ ] 5.3 Implement 'ish' property getter
+  - [ ] 5.4 Implement 'ish' property getter
     - Return cached manager instance from closure
     - _Requirements: 5.2_
   
-  - [ ] 5.4 Implement 'ish' property setter
+  - [ ] 5.5 Implement 'ish' property setter
     - Check if value is same instance (idempotence)
     - Queue new values
     - Instantiate manager if not yet created
     - Process queued values through assignGingerly
     - _Requirements: 5.3, 5.4, 5.6, 9.1, 9.2, 9.3, 9.4, 9.5_
   
-  - [ ]* 5.5 Write property tests for ISH property behavior
+  - [ ]* 5.6 Write property tests for ISH property behavior
     - **Property 10: ISH Property Definition**
     - **Validates: Requirements 5.1, 5.5**
     - **Property 11: ISH Property Getter Returns Manager**

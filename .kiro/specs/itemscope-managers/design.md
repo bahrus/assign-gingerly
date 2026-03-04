@@ -56,7 +56,8 @@ graph TD
 ### Integration Points
 
 - **object-extension.ts**: Defines CustomElementRegistry.prototype.itemscopeRegistry
-- **assignGingerly.ts**: Core logic for detecting and processing 'ish' properties
+- **assignGingerly.ts**: Core logic for detecting 'ish' properties and loading handler on demand
+- **handleIshProperty.ts**: ISH property handler functions (loaded on demand)
 - **types/assign-gingerly/types.d.ts**: Type definitions for ItemscopeRegistry and manager configurations
 
 ## Components and Interfaces
@@ -192,7 +193,9 @@ export function assignGingerly(
   // Process 'ish' property for HTMLElements with itemscope
   if ('ish' in processedSource) {
     if (typeof HTMLElement !== 'undefined' && target instanceof HTMLElement) {
-      await handleIshProperty(target, processedSource['ish'], options);
+      // Load handler on demand to keep assignGingerly.ts size minimal
+      const { handleIshProperty } = await import('./handleIshProperty.js');
+      await handleIshProperty(target, processedSource['ish'], options, assignGingerly);
       // Remove 'ish' from processedSource to prevent normal assignment
       delete processedSource['ish'];
     }
@@ -208,16 +211,19 @@ export function assignGingerly(
 - Non-HTMLElement objects treat 'ish' as a normal property
 - Remove 'ish' from processedSource after handling to prevent double-processing
 - Async handling to support lazy registration with waitForEvent
+- Dynamic import of handleIshProperty module keeps assignGingerly.ts size minimal
+- Pass assignGingerly function reference to avoid circular dependencies
 
 ### ISH Property Handler
 
-**Location**: `assignGingerly.ts` (new function)
+**Location**: `handleIshProperty.ts` (new file, loaded on demand)
 
 ```typescript
-async function handleIshProperty(
+export async function handleIshProperty(
   element: HTMLElement,
   value: any,
-  options?: IAssignGingerlyOptions
+  options: IAssignGingerlyOptions | undefined,
+  assignGingerlyFn: (target: any, source: any, options?: IAssignGingerlyOptions) => any
 ): Promise<void> {
   // Validate itemscope attribute
   const itemscopeValue = element.getAttribute('itemscope');
@@ -232,7 +238,7 @@ async function handleIshProperty(
 
   // Get or create the 'ish' property on the element
   if (!('ish' in element)) {
-    await defineIshProperty(element, itemscopeValue, options);
+    await defineIshProperty(element, itemscopeValue, options, assignGingerlyFn);
   }
 
   // Queue the value for assignment
@@ -244,6 +250,8 @@ async function handleIshProperty(
 ```
 
 **Key Design Decisions**:
+- Exported function in separate file for on-demand loading
+- Accepts assignGingerlyFn parameter to avoid circular dependencies
 - Validates itemscope attribute before processing
 - Validates value is an object (not primitive or null)
 - Lazy property definition (only creates 'ish' property when needed)
@@ -251,13 +259,14 @@ async function handleIshProperty(
 
 ### ISH Property Definition
 
-**Location**: `assignGingerly.ts` (new function)
+**Location**: `handleIshProperty.ts` (private function)
 
 ```typescript
 async function defineIshProperty(
   element: HTMLElement,
   managerName: string,
-  options?: IAssignGingerlyOptions
+  options: IAssignGingerlyOptions | undefined,
+  assignGingerlyFn: (target: any, source: any, options?: IAssignGingerlyOptions) => any
 ): Promise<void> {
   // Determine which registry to use
   const registry = (element as any).customElementRegistry?.itemscopeRegistry
@@ -309,7 +318,7 @@ async function defineIshProperty(
         // Process queue
         while (valueQueue.length > 0) {
           const queuedValue = valueQueue.shift();
-          assignGingerly(managerInstance, queuedValue, options);
+          assignGingerlyFn(managerInstance, queuedValue, options);
         }
       }
     },
@@ -320,6 +329,8 @@ async function defineIshProperty(
 ```
 
 **Key Design Decisions**:
+- Private function within handleIshProperty.ts module
+- Accepts assignGingerlyFn parameter to avoid circular dependencies
 - Prefers element's customElementRegistry over global customElements
 - Uses waitForEvent for lazy registration support
 - Queues values before manager instantiation
