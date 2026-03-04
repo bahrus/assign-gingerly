@@ -56,15 +56,15 @@ The implementation follows the existing EnhancementRegistry pattern, adding a pa
 
 ### Requirement 4: ISH Property Detection
 
-**User Story:** As a developer, I want assignGingerly to detect when I assign an 'ish' property to an HTMLElement, so that the appropriate manager can be instantiated.
+**User Story:** As a developer, I want assignGingerly to detect when I assign an 'ish' property to an HTMLElement, so that the appropriate manager can be instantiated, while allowing 'ish' as a normal property on non-HTMLElement objects.
 
 #### Acceptance Criteria
 
 1. WHEN assignGingerly processes a source object with an 'ish' key, THE AssignGingerly SHALL check if the target is an HTMLElement
-2. IF the target is not an HTMLElement, THEN THE AssignGingerly SHALL throw an error
+2. IF the target is not an HTMLElement, THEN THE AssignGingerly SHALL treat 'ish' as a normal property and assign it using standard assignment rules
 3. WHEN the target is an HTMLElement with an 'ish' property assignment, THE AssignGingerly SHALL verify the element has an itemscope attribute
-4. IF the itemscope attribute is not set to a string value, THEN THE AssignGingerly SHALL throw an error with a descriptive message
-5. WHEN the 'ish' property value is not an object, THE AssignGingerly SHALL throw an error
+4. IF the target is an HTMLElement and the itemscope attribute is not set to a string value, THEN THE AssignGingerly SHALL throw an error with a descriptive message
+5. WHEN the target is an HTMLElement with an itemscope attribute and the 'ish' property value is not an object, THE AssignGingerly SHALL throw an error
 
 ### Requirement 5: ISH Property Initialization
 
@@ -146,11 +146,11 @@ The implementation follows the existing EnhancementRegistry pattern, adding a pa
 
 #### Acceptance Criteria
 
-1. WHEN an 'ish' property is assigned to a non-HTMLElement, THE AssignGingerly SHALL throw an error with message "ish property can only be assigned to HTMLElement"
-2. WHEN an HTMLElement does not have an itemscope attribute, THE AssignGingerly SHALL throw an error with message "Element must have itemscope attribute set to a string value"
-3. WHEN the itemscope attribute is an empty string, THE AssignGingerly SHALL throw an error with message "itemscope attribute must be a non-empty string"
-4. WHEN the 'ish' property value is not an object, THE AssignGingerly SHALL throw an error with message "ish property value must be an object"
-5. WHEN a manager name is already registered, THE ItemscopeRegistry SHALL throw an error with message "Already registered"
+1. WHEN an HTMLElement with an 'ish' property does not have an itemscope attribute, THE AssignGingerly SHALL throw an error with message "Element must have itemscope attribute set to a string value"
+2. WHEN an HTMLElement has an itemscope attribute that is an empty string, THE AssignGingerly SHALL throw an error with message "itemscope attribute must be a non-empty string"
+3. WHEN an HTMLElement with an itemscope attribute has an 'ish' property value that is not an object, THE AssignGingerly SHALL throw an error with message "ish property value must be an object"
+4. WHEN a manager name is already registered in ItemscopeRegistry, THE ItemscopeRegistry SHALL throw an error with message "Already registered"
+5. THE error messages SHALL clearly indicate which element or configuration caused the error
 
 ### Requirement 12: Integration with Existing assignGingerly Features
 
