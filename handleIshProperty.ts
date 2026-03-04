@@ -1,5 +1,4 @@
-import type { IAssignGingerlyOptions } from './types/assign-gingerly/types.js';
-import type { ItemscopeRegistry, ItemscopeManagerConfig } from './assignGingerly.js';
+import type { IAssignGingerlyOptions, ItemscopeManagerConfig } from './assignGingerly.js';
 
 /**
  * Handle the 'ish' property assignment for HTMLElements with itemscope attributes.

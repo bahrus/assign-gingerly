@@ -2,6 +2,33 @@
 
 import { EnhancementConfig } from "./types/assign-gingerly/types";
 
+/**
+ * Constructor signature for ItemScope Manager classes
+ */
+export type ItemscopeManager<T = any> = {
+  new (element: HTMLElement, initVals?: Partial<T>): T;
+}
+
+/**
+ * Configuration for ItemScope Manager registration
+ */
+export interface ItemscopeManagerConfig<T = any> {
+  /**
+   * Manager class constructor
+   */
+  manager: ItemscopeManager<T>;
+  
+  /**
+   * Optional lifecycle method keys
+   * - dispose: Method name to call when manager is disposed
+   * - resolved: Property/event name indicating manager is ready
+   */
+  lifecycleKeys?: {
+    dispose?: string | symbol;
+    resolved?: string | symbol;
+  };
+}
+
 // Polyfill for WeakMap.prototype.getOrInsert
 
 // if (typeof WeakMap.prototype.getOrInsertComputed !== 'function') {
@@ -23,6 +50,7 @@ import { EnhancementConfig } from "./types/assign-gingerly/types";
  */
 export interface IAssignGingerlyOptions {
   registry?: typeof EnhancementRegistry | EnhancementRegistry;
+  bypassChecks?: boolean;
 }
 
 /**
@@ -82,6 +110,37 @@ export class EnhancementRegistry {
       if (item.enhKey === enhKey) return item;
     }
     return undefined;
+  }
+}
+
+/**
+ * Registry for ItemScope Manager configurations
+ * Extends EventTarget to support lazy registration via events
+ */
+export class ItemscopeRegistry extends EventTarget {
+  #configs: Map<string, ItemscopeManagerConfig> = new Map();
+
+  /**
+   * Define a new manager configuration
+   * @param name - Manager name (matches itemscope attribute value)
+   * @param config - Manager configuration object
+   * @throws Error if name is already registered
+   */
+  define(name: string, config: ItemscopeManagerConfig): void {
+    if (this.#configs.has(name)) {
+      throw new Error('Already registered');
+    }
+    this.#configs.set(name, config);
+    this.dispatchEvent(new Event(name));
+  }
+
+  /**
+   * Get a manager configuration by name
+   * @param name - Manager name
+   * @returns Manager configuration or undefined
+   */
+  get(name: string): ItemscopeManagerConfig | undefined {
+    return this.#configs.get(name);
   }
 }
 
@@ -189,11 +248,11 @@ function ensureNestedPath(obj: any, pathParts: string[]): any {
 /**
  * Main assignGingerly function
  */
-export function assignGingerly(
+export async function assignGingerly(
   target: any,
   source: Record<string | symbol, any>,
   options?: IAssignGingerlyOptions
-): any {
+): Promise<any> {
   if (!target || typeof target !== 'object') {
     return target;
   }
@@ -222,6 +281,18 @@ export function assignGingerly(
   // Copy over actual symbol keys
   for (const sym of Object.getOwnPropertySymbols(source)) {
     processedSource[sym] = source[sym];
+  }
+
+  // Process 'ish' property for HTMLElements with itemscope
+  if ('ish' in processedSource) {
+    if (typeof HTMLElement !== 'undefined' && target instanceof HTMLElement) {
+      // Load handler on demand to keep assignGingerly.ts size minimal
+      const { handleIshProperty } = await import('./handleIshProperty.js');
+      await handleIshProperty(target, processedSource['ish'], options, assignGingerly);
+      // Remove 'ish' from processedSource to prevent normal assignment
+      delete processedSource['ish'];
+    }
+    // For non-HTMLElement targets, 'ish' is processed as a normal property
   }
 
   // First pass: handle all non-symbol keys and sync operations
