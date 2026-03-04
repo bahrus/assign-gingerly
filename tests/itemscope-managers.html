@@ -170,16 +170,8 @@
       div5.setAttribute('itemscope', 'instant-manager');
       assignGingerly(div5, { ish: { prop: 'value' } });
       
-      console.log('Waiting for ish property to be defined...');
-      
-      // Wait for async 'ish' property setup (poll until defined)
-      let attempts = 0;
-      while (!('ish' in div5) && attempts < 200) {
-        await new Promise(resolve => setTimeout(resolve, 10));
-        attempts++;
-      }
-      
-      console.log(`ish property defined after ${attempts} attempts, ish =`, div5.ish);
+      // Wait for setup to complete
+      await customElements.itemscopeRegistry.whenDefined('instant-manager');
       
       assert('ish' in div5, 'should define ish property on element');
       assert(div5.ish && div5.ish.initialized, 'should instantiate manager immediately');
@@ -190,12 +182,8 @@
       const firstInstance = div5.ish;
       assignGingerly(div5, { ish: { prop2: 'value2' } });
       
-      // Wait for property update
-      attempts = 0;
-      while (!div5.ish.prop2 && attempts < 100) {
-        await new Promise(resolve => setTimeout(resolve, 10));
-        attempts++;
-      }
+      // Wait for setup to complete
+      await customElements.itemscopeRegistry.whenDefined('instant-manager');
       
       assertEquals(div5.ish, firstInstance, 'should reuse same manager instance');
       assert(div5.ish.prop2 === 'value2', 'should merge new values into existing instance');
@@ -210,7 +198,7 @@
       div6.setAttribute('itemscope', 'lazy-manager');
       
       // Start assignment (will wait for registration)
-      const assignPromise = assignGingerly(div6, { ish: { lazyProp: 'lazyValue' } });
+      assignGingerly(div6, { ish: { lazyProp: 'lazyValue' } });
       
       // Register manager after a delay
       setTimeout(() => {
@@ -225,8 +213,8 @@
         });
       }, 50);
       
-      // Wait for assignment to complete
-      await assignPromise;
+      // Wait for manager to be defined and setup to complete
+      await customElements.itemscopeRegistry.whenDefined('lazy-manager');
       
       assert('ish' in div6, 'should define ish property after lazy registration');
       assert(div6.ish && div6.ish.lazyInit, 'should instantiate manager after lazy registration');
@@ -236,8 +224,8 @@
       const div7 = document.createElement('div');
       div7.setAttribute('itemscope', 'queue-manager');
       
-      const promise1 = assignGingerly(div7, { ish: { prop1: 'val1' } });
-      const promise2 = assignGingerly(div7, { ish: { prop2: 'val2' } });
+      assignGingerly(div7, { ish: { prop1: 'val1' } });
+      assignGingerly(div7, { ish: { prop2: 'val2' } });
       
       setTimeout(() => {
         customElements.itemscopeRegistry.define('queue-manager', {
@@ -250,7 +238,7 @@
         });
       }, 50);
       
-      await Promise.all([promise1, promise2]);
+      await customElements.itemscopeRegistry.whenDefined('queue-manager');
       
       assert(div7.ish.prop1 === 'val1', 'should merge first queued value');
       assert(div7.ish.prop2 === 'val2', 'should merge second queued value');

@@ -119,6 +119,7 @@ export class EnhancementRegistry {
  */
 export class ItemscopeRegistry extends EventTarget {
   #configs: Map<string, ItemscopeManagerConfig> = new Map();
+  #pendingSetups: Map<string, Promise<void>[]> = new Map();
 
   /**
    * Define a new manager configuration
@@ -141,6 +142,49 @@ export class ItemscopeRegistry extends EventTarget {
    */
   get(name: string): ItemscopeManagerConfig | undefined {
     return this.#configs.get(name);
+  }
+
+  /**
+   * Wait for a manager to be defined and all pending setups to complete
+   * @param name - Manager name to wait for
+   * @returns Promise that resolves when manager is defined and all setups are complete
+   */
+  async whenDefined(name: string): Promise<void> {
+    // If not yet defined, wait for definition
+    if (!this.#configs.has(name)) {
+      await new Promise<void>((resolve) => {
+        this.addEventListener(name, () => resolve(), { once: true });
+      });
+    }
+
+    // Wait for all pending setups for this manager
+    const pending = this.#pendingSetups.get(name);
+    if (pending && pending.length > 0) {
+      await Promise.all(pending);
+    }
+  }
+
+  /**
+   * Internal method to track a pending setup
+   * @param name - Manager name
+   * @param promise - Promise representing the setup operation
+   */
+  _trackSetup(name: string, promise: Promise<void>): void {
+    if (!this.#pendingSetups.has(name)) {
+      this.#pendingSetups.set(name, []);
+    }
+    this.#pendingSetups.get(name)!.push(promise);
+
+    // Clean up after completion
+    promise.finally(() => {
+      const pending = this.#pendingSetups.get(name);
+      if (pending) {
+        const index = pending.indexOf(promise);
+        if (index > -1) {
+          pending.splice(index, 1);
+        }
+      }
+    });
   }
 }
 
@@ -291,8 +335,11 @@ export function assignGingerly(
       // Remove 'ish' from processedSource to prevent normal assignment
       delete processedSource['ish'];
       
+      // Get the itemscope attribute to track the setup
+      const itemscopeValue = target.getAttribute('itemscope');
+      
       // Load handler on demand and process asynchronously
-      (async () => {
+      const setupPromise = (async () => {
         try {
           const { handleIshProperty } = await import('./handleIshProperty.js');
           await handleIshProperty(target, ishValue, options, assignGingerly);
@@ -302,6 +349,16 @@ export function assignGingerly(
           setTimeout(() => { throw err; }, 0);
         }
       })();
+      
+      // Track the setup promise with the registry if we have an itemscope value
+      if (itemscopeValue && typeof itemscopeValue === 'string' && itemscopeValue.length > 0) {
+        const registry = (target as any).customElementRegistry?.itemscopeRegistry
+          ?? (typeof customElements !== 'undefined' ? customElements.itemscopeRegistry : undefined);
+        
+        if (registry && typeof registry._trackSetup === 'function') {
+          registry._trackSetup(itemscopeValue, setupPromise);
+        }
+      }
     }
     // For non-HTMLElement targets, 'ish' is processed as a normal property
   }
