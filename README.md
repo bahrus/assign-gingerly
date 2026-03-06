@@ -29,7 +29,7 @@ So we are providing a form of the ["Decorator Pattern"](https://en.wikipedia.org
 
 On top of that, this polyfill package builds on the newly minted Custom Element Registry, adding additional sub-registries:
 
-1.  [enhancementRegistry](#registry-item-with-enhkey) object on top of the customElementRegistry object associated with all elements, to be able to lazy load object extensions on demand while avoiding namespace conflicts, and, importantly, as a basis for defining custom attributes associated with the enhancements.
+1.  [enhancementRegistry](#enhancement-registry-in-the-custom-element-registry-integration-chrome-146) object on top of the customElementRegistry object associated with all elements, to be able to lazy load object extensions on demand while avoiding namespace conflicts, and, importantly, as a basis for defining custom attributes associated with the enhancements.
 
 2.  [itemscopeRegistry for Itemscope Managers](#itemscoperegistry) to automatically associate a function prototype or class instance with the itemscope attribute of an HTMLElement.
 
@@ -515,9 +515,11 @@ The prototype extensions are non-enumerable and won't appear in `Object.keys()` 
 
 -->
 
-## Custom Element Registry Integration (Chrome 146+)
+## Enhancement Registry in the Custom Element Registry Integration (Chrome 146+)
 
-This package includes support for Chrome's scoped custom element registries, which automatically integrates dependency injection in harmony with scoped custom elements DOM sections or ShadowRoots.
+This package polyfill adds an "enhancementRegistry" registry on the CustomElementRegistry prototype.
+
+In this way, we achieve dependency injection in harmony with scoped custom elements DOM registry scope islands.
 
 > [!NOTE]
 > Safari/WebKit played a critical role in pushing scoped custom element registries forward, and announced with little fanfare or documentation that [Safari 26 supports it](https://developer.apple.com/documentation/safari-release-notes/safari-26-release-notes).  However, the Playwright test machinery's cross platform Safari test browser doesn't yet support it.
