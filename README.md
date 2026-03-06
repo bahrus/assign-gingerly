@@ -686,7 +686,7 @@ class Enhancement<T> {
 
 All parameters are optional for backward compatibility with existing code.
 
-Note that the class need not extend any base class or leverage any mixins.  In fact, ES5 prototype functions can be used, and in both cases are instanted using new ....  Arrow functions cannot be used.
+Note that the class need not extend any base class or leverage any mixins.  In fact, ES5 prototype functions can be used, and in both cases are instantiated using new ....  Arrow functions cannot be used.
 
 <details>
 <summary>Passing Custom Context</summary>
