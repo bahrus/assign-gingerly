@@ -31,7 +31,7 @@ On top of that, this polyfill package builds on the newly minted Custom Element 
 
 1.  [enhancementRegistry](#registry-item-with-enhkey) object on top of the customElementRegistry object associated with all elements, to be able to lazy load object extensions on demand while avoiding namespace conflicts, and, importantly, as a basis for defining custom attributes associated with the enhancements.
 
-2.  [itemscopeManagerRegistry](#itemscoperegistry) to automatically associate a function prototype or class instance with the itemscope attribute of an HTMLElement.
+2.  [itemscopeRegistry for Itemscope Managers](#itemscoperegistry) to automatically associate a function prototype or class instance with the itemscope attribute of an HTMLElement.
 
 3.  CustomElementFeatureRegistry [TODO]
 
@@ -2456,14 +2456,14 @@ console.log(result);
 
 -->
 
-## ItemScope Managers (Chrome 146+)
+## Itemscope Managers (Chrome 146+)
 
-ItemScope Managers provide a way to manage DOM fragments and their associated data/view models for elements with the `itemscope` attribute. This feature enables frameworks and libraries to manage light children of web components, DOM fragments from looping constructs, and scenarios where custom element wrapping is not feasible.
+Itemscope Managers provide a way to manage DOM fragments and their associated data/view models for elements with the `itemscope` attribute. This feature enables frameworks and libraries to manage light children of web components, DOM fragments from looping constructs, and scenarios where custom element wrapping is not feasible.
 
 > [!NOTE]
 > This feature requires Chrome 146+ with scoped custom element registry support. It follows the same browser support requirements as the Custom Element Registry Integration.
 
-### Why ItemScope Managers?
+### Why Itemscope Managers?
 
 The `itemscope` attribute (from the Microdata specification) provides a semantic way to mark elements that represent distinct data items. ItemScope Managers build on this by allowing us to:
 
@@ -2477,8 +2477,8 @@ The `itemscope` attribute (from the Microdata specification) provides a semantic
 ```html
 <div itemscope="user-card">
   <h2>User Profile</h2>
-  <p class="name"></p>
-  <p class="email"></p>
+  <p itemprop="name"></p>
+  <p itemprop="email"></p>
 </div>
 ```
 
@@ -2500,8 +2500,8 @@ class UserCardManager {
   }
   
   render() {
-    this.element.querySelector('.name').textContent = this.name;
-    this.element.querySelector('.email').textContent = this.email;
+    this.element.querySelector('[itemprop="name"]').textContent = this.name;
+    this.element.querySelector('[itemprop="email"]').textContent = this.email;
   }
 }
 
