@@ -23,13 +23,17 @@ One can achieve the same functionality with a little more work, and "playing nic
 
 Not only does this polyfill package allow merging data properties onto objects that are expecting them, this polyfill also provides the ability to merge *augmented behavior* onto run-time objects without sub classing all such objects of the same type. This includes the ability to spawn an instance of a class and "merge" it into the API of the original object in an elegant way that is easy to wrap one's brain around, without ever blocking access to the original object or breaking it.
 
-
-
 So we are providing a form of the ["Decorator Pattern"](https://en.wikipedia.org/wiki/Decorator_pattern) or perhaps more accurately the [Extension Object Pattern](https://swiftorial.com/swiftlessons/design-patterns/structural-patterns/extension-object-pattern) as tailored for the quirks of the web.  
 
-## Custom Enhancement Registry
+## Custom Registries
 
-On top of that, this polyfill package builds on the newly minted Custom Element Registry, adding an additional EnhancementRegistry object on top of the customElementRegistry object associated with all elements, to be able to manage namespace conflicts, and, importantly, as a basis for defining custom attributes associated with the enhancements.
+On top of that, this polyfill package builds on the newly minted Custom Element Registry, adding additional sub-registries:
+
+1.  [enhancementRegistry](#registry-item-with-enhkey) object on top of the customElementRegistry object associated with all elements, to be able to lazy load object extensions on demand while avoiding namespace conflicts, and, importantly, as a basis for defining custom attributes associated with the enhancements.
+
+2.  [itemscopeManagerRegistry](#itemscoperegistry) to automatically associate a function prototype or class instance with the itemscope attribute of an HTMLElement.
+
+3.  CustomElementFeatureRegistry [TODO]
 
 So in our view this package helps fill the void left by not supporting the "is" attribute for built-in elements (but is not a complete solution, just a critical building block).  Mount-observer, mount-observer-script-element, and custom enhancements builds on top of the critical role that assign-gingerly plays.
 
