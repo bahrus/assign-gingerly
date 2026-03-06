@@ -336,7 +336,7 @@ EnhancementRegistry.push([
         },
         spawn: MyEnhancement,
     },{
-       
+       enhKey: 'mellowYellow',
        symlinks: {
            [isMellow]: 'isMellow'
        },
