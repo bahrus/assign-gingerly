@@ -300,7 +300,7 @@ interface IEnhancementRegistryItem<T = any, TObjToExtend = any> {
     spawn: {new(objToExtend: TObjToExtend, ctx: SpawnContext, initVals: Partial<T>): T}
     symlinks?: {[key: symbol]: keyof T}
     // Optional: for element enhancement access
-    enhKey?: string
+    enhKey?: string | symbol
     // Optional: automatic attribute parsing 
     withAttrs?: AttrPatterns<T>  
 }
