@@ -4,6 +4,8 @@
 
 This design extends the assign-gingerly library to support ItemScope Managers - classes that manage DOM fragments and their associated data/view models for elements with the itemscope attribute. The implementation follows the existing EnhancementRegistry pattern, adding a parallel ItemscopeRegistry system and extending assignGingerly to handle the 'ish' (itemscope host) property.
 
+> **Note**: This feature requires Chrome 146+ with scoped custom element registry support. For more information about scoped custom element registries, see [Chrome's announcement and guide](https://developer.chrome.com/blog/scoped-registries).
+
 ### Key Concepts
 
 - **ItemscopeRegistry**: A registry class extending EventTarget that stores manager configurations, parallel to EnhancementRegistry

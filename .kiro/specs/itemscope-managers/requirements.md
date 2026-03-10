@@ -6,6 +6,8 @@ This document specifies requirements for adding ItemScope Manager support to the
 
 The implementation follows the existing EnhancementRegistry pattern, adding a parallel ItemscopeRegistry system to CustomElementRegistry.prototype and extending assignGingerly to handle the 'ish' (itemscope host) property.
 
+> **Note**: This feature requires Chrome 146+ with scoped custom element registry support. For more information about scoped custom element registries, see [Chrome's announcement and guide](https://developer.chrome.com/blog/scoped-registries).
+
 ## Glossary
 
 - **ItemScope_Manager**: A class that manages data, view models, bindings, and event handling for a DOM element and its children

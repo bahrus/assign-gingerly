@@ -523,6 +523,8 @@ In this way, we achieve dependency injection in harmony with scoped custom eleme
 
 > [!NOTE]
 > Safari/WebKit played a critical role in pushing scoped custom element registries forward, and announced with little fanfare or documentation that [Safari 26 supports it](https://developer.apple.com/documentation/safari-release-notes/safari-26-release-notes).  However, the Playwright test machinery's cross platform Safari test browser doesn't yet support it.  For now, only Chrome 146+ has been tested / vetted for this functionality.
+>
+> For more information about scoped custom element registries, see [Chrome's announcement and guide](https://developer.chrome.com/blog/scoped-registries).
 
 <details>
   <summary>Automatic Registry Population</summary>
@@ -2463,7 +2465,9 @@ console.log(result);
 Itemscope Managers provide a way to manage DOM fragments and their associated data/view models for elements with the `itemscope` attribute. This feature enables frameworks and libraries to manage light children of web components, DOM fragments from looping constructs, and scenarios where custom element wrapping is not feasible.
 
 > [!NOTE]
-> This feature requires Chrome 146+ with scoped custom element registry support. It follows the same browser support requirements as the Custom Element Registry Integration.
+> This feature requires Chrome 146+ with scoped custom element registry support. It follows the same browser support requirements as the Enhancement Registry integration.
+>
+> For more information about scoped custom element registries, see [Chrome's announcement and guide](https://developer.chrome.com/blog/scoped-registries).
 
 ### Why Itemscope Managers?
 
