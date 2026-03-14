@@ -73,7 +73,24 @@ export function getInstanceMap(): WeakMap<object, Map<EnhancementConfig, any>> {
 /**
  * Base registry class for managing enhancement configurations
  */
-export class EnhancementRegistry {
+/**
+ * Event dispatched when enhancement configs are registered
+ */
+export class EnhancementRegisteredEvent extends Event {
+  static eventName = 'register';
+  
+  constructor(
+    public config: EnhancementConfig | EnhancementConfig[]
+  ) {
+    super(EnhancementRegisteredEvent.eventName);
+  }
+}
+
+/**
+ * Registry for enhancement configurations
+ * Extends EventTarget to dispatch events when configs are registered
+ */
+export class EnhancementRegistry extends EventTarget {
   #items: Set<EnhancementConfig> = new Set();
 
   push(items: EnhancementConfig | EnhancementConfig[]): void {
@@ -82,6 +99,9 @@ export class EnhancementRegistry {
     } else {
       this.#items.add(items);
     }
+    
+    // Dispatch event after adding items
+    this.dispatchEvent(new EnhancementRegisteredEvent(items));
   }
 
   getItems(): EnhancementConfig[] {

@@ -16,7 +16,22 @@ export function getInstanceMap() {
 /**
  * Base registry class for managing enhancement configurations
  */
-export class EnhancementRegistry {
+/**
+ * Event dispatched when enhancement configs are registered
+ */
+export class EnhancementRegisteredEvent extends Event {
+    config;
+    static eventName = 'register';
+    constructor(config) {
+        super(EnhancementRegisteredEvent.eventName);
+        this.config = config;
+    }
+}
+/**
+ * Registry for enhancement configurations
+ * Extends EventTarget to dispatch events when configs are registered
+ */
+export class EnhancementRegistry extends EventTarget {
     #items = new Set();
     push(items) {
         if (Array.isArray(items)) {
@@ -25,6 +40,8 @@ export class EnhancementRegistry {
         else {
             this.#items.add(items);
         }
+        // Dispatch event after adding items
+        this.dispatchEvent(new EnhancementRegisteredEvent(items));
     }
     getItems() {
         return Array.from(this.#items);
