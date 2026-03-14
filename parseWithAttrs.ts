@@ -17,7 +17,9 @@ const parseCache = new Map<string, Map<string, any>>();
  * @returns The resolved parser function
  * @throws Error if parser cannot be resolved
  */
-function resolveParser(parserSpec: ((v: string | null) => any) | string | undefined): ((v: string | null) => any) | undefined {
+function resolveParser(
+  parserSpec: ((v: string | null) => any) | string | [string, string] | undefined
+): ((v: string | null) => any) | undefined {
   // Undefined - no parser specified
   if (parserSpec === undefined) {
     return undefined;
@@ -28,39 +30,52 @@ function resolveParser(parserSpec: ((v: string | null) => any) | string | undefi
     return parserSpec;
   }
   
-  // String reference - resolve it
-  if (typeof parserSpec === 'string') {
-    // Check if it's a custom element reference (contains dot)
-    if (parserSpec.includes('.')) {
-      const dotIndex = parserSpec.indexOf('.');
-      const elementName = parserSpec.substring(0, dotIndex);
-      const methodName = parserSpec.substring(dotIndex + 1);
-      
-      // Try custom element lookup
-      if (typeof customElements !== 'undefined') {
-        try {
-          const ctr = customElements.get(elementName);
-          if (ctr && typeof (ctr as any)[methodName] === 'function') {
-            return (ctr as any)[methodName];
-          }
-        } catch (e) {
-          // customElements.get might throw, fall through to registry
-        }
-      }
-      
-      // Fall through to global registry (allows dot notation in registry too)
+  // Tuple [CustomElementName, StaticMethodName] - resolve custom element static method
+  if (Array.isArray(parserSpec)) {
+    const [elementName, methodName] = parserSpec;
+    
+    if (typeof customElements === 'undefined') {
+      throw new Error(
+        `Cannot resolve parser [${elementName}, ${methodName}]: customElements is not available`
+      );
     }
     
-    // Try global registry
+    try {
+      const ctr = customElements.get(elementName);
+      if (!ctr) {
+        throw new Error(
+          `Cannot resolve parser [${elementName}, ${methodName}]: custom element "${elementName}" not found`
+        );
+      }
+      
+      if (typeof (ctr as any)[methodName] !== 'function') {
+        throw new Error(
+          `Cannot resolve parser [${elementName}, ${methodName}]: static method "${methodName}" not found on custom element "${elementName}"`
+        );
+      }
+      
+      return (ctr as any)[methodName];
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith('Cannot resolve parser')) {
+        throw e;
+      }
+      throw new Error(
+        `Cannot resolve parser [${elementName}, ${methodName}]: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+  }
+  
+  // String reference - resolve from global registry
+  if (typeof parserSpec === 'string') {
     const parser = globalParserRegistry.get(parserSpec);
     if (parser) {
       return parser;
     }
     
-    // Not found anywhere
+    // Not found in registry
     throw new Error(
-      `Parser "${parserSpec}" not found. ` +
-      `Check that it's registered in globalParserRegistry or exists as a static method on the custom element.`
+      `Parser "${parserSpec}" not found in globalParserRegistry. ` +
+      `If you want to reference a custom element static method, use tuple syntax: ["element-name", "methodName"]`
     );
   }
   
@@ -82,6 +97,8 @@ function getCacheKey(config: AttrConfig<any>): string {
     parserStr = 'builtin';
   } else if (typeof config.parser === 'string') {
     parserStr = `named:${config.parser}`;
+  } else if (Array.isArray(config.parser)) {
+    parserStr = `tuple:${config.parser[0]}.${config.parser[1]}`;
   } else {
     parserStr = 'custom';
   }

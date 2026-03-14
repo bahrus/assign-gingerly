@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tuple Parser Demo</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+    pre { background: #f5f5f5; padding: 10px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Tuple Parser Demo</h1>
+  <p>This demo shows the new tuple syntax for referencing custom element static methods as parsers.</p>
+
+  <!-- Test element with custom attributes -->
+  <my-widget 
+    id="test-widget"
+    data-timestamp="2024-01-15T10:30:00Z"
+    data-tags="tag1,tag2,tag3"
+  ></my-widget>
+
+  <h2>Results:</h2>
+  <div id="results"></div>
+
+  <script type="module">
+    import { parseWithAttrs } from '../parseWithAttrs.js';
+
+    // Define a custom element with static parser methods
+    class MyWidget extends HTMLElement {
+      // Static method to parse ISO timestamps
+      static parseTimestamp(value) {
+        if (!value) return null;
+        return new Date(value);
+      }
+
+      // Static method to parse comma-separated tags
+      static parseTags(value) {
+        if (!value) return [];
+        return value.split(',').map(tag => tag.trim());
+      }
+
+      connectedCallback() {
+        this.textContent = 'Custom Widget Element';
+      }
+    }
+
+    // Register the custom element
+    customElements.define('my-widget', MyWidget);
+
+    // Wait for custom element to be defined
+    await customElements.whenDefined('my-widget');
+
+    const results = [];
+
+    try {
+      // Test 1: Using tuple syntax for custom element static method
+      const element = document.getElementById('test-widget');
+      
+      const parsed = parseWithAttrs(element, {
+        base: 'data-',
+        timestamp: '${base}timestamp',
+        _timestamp: {
+          parser: ['my-widget', 'parseTimestamp']  // Tuple syntax!
+        },
+        tags: '${base}tags',
+        _tags: {
+          parser: ['my-widget', 'parseTags']  // Tuple syntax!
+        }
+      });
+
+      results.push('<h3 class="pass">✓ Test 1: Tuple parser syntax works</h3>');
+      results.push('<pre>' + JSON.stringify(parsed, null, 2) + '</pre>');
+      
+      // Verify the parsed values
+      if (parsed.timestamp instanceof Date) {
+        results.push('<p class="pass">✓ timestamp is a Date object</p>');
+      } else {
+        results.push('<p class="fail">✗ timestamp is not a Date object</p>');
+      }
+
+      if (Array.isArray(parsed.tags) && parsed.tags.length === 3) {
+        results.push('<p class="pass">✓ tags is an array with 3 elements</p>');
+      } else {
+        results.push('<p class="fail">✗ tags is not an array with 3 elements</p>');
+      }
+
+      // Test 2: Error handling - non-existent custom element
+      try {
+        parseWithAttrs(element, {
+          base: 'data-',
+          test: '${base}timestamp',
+          _test: {
+            parser: ['non-existent-element', 'parseMethod']
+          }
+        });
+        results.push('<p class="fail">✗ Test 2: Should have thrown error for non-existent element</p>');
+      } catch (e) {
+        if (e.message.includes('not found')) {
+          results.push('<h3 class="pass">✓ Test 2: Correctly throws error for non-existent element</h3>');
+          results.push('<pre>' + e.message + '</pre>');
+        } else {
+          results.push('<p class="fail">✗ Test 2: Wrong error message</p>');
+        }
+      }
+
+      // Test 3: Error handling - non-existent method
+      try {
+        parseWithAttrs(element, {
+          base: 'data-',
+          test: '${base}timestamp',
+          _test: {
+            parser: ['my-widget', 'nonExistentMethod']
+          }
+        });
+        results.push('<p class="fail">✗ Test 3: Should have thrown error for non-existent method</p>');
+      } catch (e) {
+        if (e.message.includes('not found')) {
+          results.push('<h3 class="pass">✓ Test 3: Correctly throws error for non-existent method</h3>');
+          results.push('<pre>' + e.message + '</pre>');
+        } else {
+          results.push('<p class="fail">✗ Test 3: Wrong error message</p>');
+        }
+      }
+
+    } catch (e) {
+      results.push('<h3 class="fail">✗ Unexpected error</h3>');
+      results.push('<pre>' + e.message + '</pre>');
+      console.error(e);
+    }
+
+    document.getElementById('results').innerHTML = results.join('');
+  </script>
+</body>
+</html>

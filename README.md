@@ -1660,7 +1660,10 @@ interface AttrPatterns<T> {
 interface AttrConfig<T> {
   mapsTo?: keyof T | '.';           // Target property name (or '.' to spread)
   instanceOf?: string | Function;   // Type for default parser
-  parser?: (v: string | null) => any;  // Custom parser function
+  parser?: 
+    | ((v: string | null) => any)   // Inline parser function
+    | string                         // Named parser from globalParserRegistry
+    | [string, string];              // [CustomElementName, StaticMethodName]
 }
 ```
 
@@ -1780,7 +1783,7 @@ The following parsers are pre-registered in `globalParserRegistry`:
 
 **Custom Element Static Method Parsers:**
 
-You can also reference static methods on custom elements using dot notation:
+You can reference static methods on custom elements using tuple syntax `[elementName, methodName]`:
 
 ```TypeScript
 class MyWidget extends HTMLElement {
@@ -1794,29 +1797,47 @@ class MyWidget extends HTMLElement {
 }
 customElements.define('my-widget', MyWidget);
 
-// Reference custom element parsers
+// Reference custom element parsers using tuple syntax
 const config = {
   base: 'data-',
   value: '${base}value',
   _value: {
-    parser: 'my-widget.parseSpecialFormat'  // element-name.methodName
+    parser: ['my-widget', 'parseSpecialFormat']  // [element-name, methodName]
+  },
+  title: '${base}title',
+  _title: {
+    parser: ['my-widget', 'parseWithPrefix']
   }
 };
+
+const result = parseWithAttrs(element, config);
 ```
 
-**Parser Resolution Order:**
+**Parser Resolution:**
 
-When a string parser is specified:
+When a parser is specified, it can be:
 
-1. **Check for dot notation** - If parser contains `.`, try to resolve as `element-name.methodName`
-2. **Try custom element** - Look up element in `customElements` registry and check for static method
-3. **Fall back to global registry** - If custom element not found, check `globalParserRegistry`
-4. **Throw error** - If not found anywhere, throw descriptive error
+1. **Inline function** - `parser: (v) => v.toUpperCase()` - Used directly
+2. **String reference** - `parser: 'timestamp'` - Looks up in `globalParserRegistry`
+3. **Tuple reference** - `parser: ['my-widget', 'parseMethod']` - Looks up static method on custom element constructor
 
-This allows:
-- Element-specific parsers to be scoped to their custom elements
-- Fallback to global registry for shared parsers
-- Dot notation in global registry names (e.g., `'utils.parseDate'`)
+**Error Handling:**
+
+The tuple syntax provides clear error messages:
+
+```TypeScript
+// Element not found
+parser: ['non-existent', 'method']
+// Error: Cannot resolve parser [non-existent, method]: custom element "non-existent" not found
+
+// Method not found
+parser: ['my-widget', 'nonExistent']
+// Error: Cannot resolve parser [my-widget, nonExistent]: static method "nonExistent" not found on custom element "my-widget"
+
+// String not found in registry
+parser: 'unknown'
+// Error: Parser "unknown" not found in globalParserRegistry. If you want to reference a custom element static method, use tuple syntax: ["element-name", "methodName"]
+```
 
 **Example: Organizing Parsers**
 
