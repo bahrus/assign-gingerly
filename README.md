@@ -37,6 +37,8 @@ On top of that, this polyfill package builds on the newly minted Custom Element 
 
 So in our view this package helps fill the void left by not supporting the "is" attribute for built-in elements (but is not a complete solution, just a critical building block).  Mount-observer, mount-observer-script-element, and custom enhancements builds on top of the critical role that assign-gingerly plays.
 
+4.  Iterator upgrade support [TODO] -- limited to ish?
+
 Anyway, let's start out detailing the more innocent features of this package / polyfill.
 
 The two utility functions are:
