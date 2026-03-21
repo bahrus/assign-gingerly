@@ -519,7 +519,7 @@ The prototype extensions are non-enumerable and won't appear in `Object.keys()` 
 
 This package polyfill adds an "enhancementRegistry" registry on the CustomElementRegistry prototype.
 
-In this way, we achieve dependency injection in harmony with scoped custom elements DOM registry scope islands.
+In this way, we achieve dependency injection in harmony with scoped custom elements DOM registry scopes.
 
 > [!NOTE]
 > Safari/WebKit played a critical role in pushing scoped custom element registries forward, and announced with little fanfare or documentation that [Safari 26 supports it](https://developer.apple.com/documentation/safari-release-notes/safari-26-release-notes).  However, the Playwright test machinery's cross platform Safari test browser doesn't yet support it.  For now, only Chrome 146+ has been tested / vetted for this functionality.
@@ -597,7 +597,7 @@ Building on the Custom Element Registry integration, this package provides a pow
 
 ### Basic Usage
 
-The `enh.set` proxy allows you to assign properties to enhancements using a clean, chainable syntax:
+The `enh.set` proxy allows us to assign properties to enhancements using a clean, chainable syntax:
 
 ```TypeScript
 import 'assign-gingerly/object-extension.js';
@@ -693,7 +693,7 @@ Note that the class need not extend any base class or leverage any mixins.  In f
 <details>
 <summary>Passing Custom Context</summary>
 
-You can pass custom context when calling `enh.get()` or `enh.whenResolved()`:
+You can pass custom context when calling `enh.get()` or `enh.whenResolved()` (discussed in detail below):
 
 ```TypeScript
 // Pass custom context to the spawned instance
