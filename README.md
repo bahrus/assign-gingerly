@@ -435,8 +435,13 @@ EnhancementRegistry.push([
 const result = assignGingerly({}, {
     [isHappy]: true,
     [isMellow]: true,
-    '?.style?.height': '40px',
-    '?.enh?.mellowYellow?.madAboutFourteen': true
+    style:{
+      height: '40px',
+    }, 
+    enh: {
+      '?.mellowYellow?.madAboutFourteen': true
+    }
+    
 }, {
     registry: EnhancementRegistry
 });
