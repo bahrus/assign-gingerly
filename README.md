@@ -1419,7 +1419,8 @@ console.log(instance.count);  // 42 (parsed from attribute)
 console.log(instance.theme);  // 'dark' (parsed from attribute)
 ```
 
-**Example without enhKey:**
+<details>
+  <summary>Example without enhKey</summary>
 
 ```TypeScript
 // withAttrs works even without enhKey
@@ -1453,16 +1454,21 @@ const instance = element.enh.get(config);
 console.log(instance.value);  // 'test123' (parsed from attribute)
 ```
 
-**How it works:**
+</details>
+
+<details>
+  <summary>How it works</summary>
+
 1. When an enhancement is spawned via `enh.get()`, `enh.set`, or `assignGingerly()`
 2. If the registry item has a `withAttrs` property defined
 3. `parseWithAttrs(element, registryItem.withAttrs)` is automatically called
 4. The parsed attributes are passed to the enhancement constructor as `initVals`
 5. If the registry item also has an `enhKey`, the parsed attributes are merged with any existing values from `element.enh[enhKey]` (existing values take precedence)
 
-**Note**: `withAttrs` works with or without `enhKey`. When there's no `enhKey`, the parsed attributes are passed directly to the constructor. When there is an `enhKey`, they're merged with any pre-existing values on the enh container.
+</details>
 
-
+> ![NOTE]
+> `withAttrs` works with or without `enhKey`. When there's no `enhKey`, the parsed attributes are passed directly to the constructor. When there is an `enhKey`, they're merged with any pre-existing values on the enh container.
 
 ### The `enh-` Prefix for Attribute Isolation
 
