@@ -171,7 +171,7 @@ For existing values, the toggle is performed using JavaScript's logical NOT oper
 
 ## Example 6 - Deleting properties with -= command
 
-The `-=` command allows you to delete properties from objects:
+The `-=` command allows us to delete properties from objects:
 
 ```TypeScript
 const obj = {
@@ -1925,7 +1925,7 @@ const result = parseWithAttrs(element, {
 
 ### Default Values with valIfNull
 
-The `valIfNull` property allows you to specify default values when attributes are missing:
+The `valIfNull` property allows us to specify default values when attributes are missing:
 
 ```TypeScript
 // HTML: <div></div>  (no attributes)
