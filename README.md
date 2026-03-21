@@ -2392,12 +2392,16 @@ buildCSSQuery(config, '  div  ,  span  ,  p  ');
 1. **Mount Observer Integration**: Find elements that need enhancement
    ```TypeScript
    // Match any element with the attributes
-   const query = buildCSSQuery(enhancementConfig);
-   const observer = new MutationObserver(() => {
-     const elements = document.querySelectorAll(query);
-     elements.forEach(el => enhance(el));
+   const matching = buildCSSQuery(enhancementConfig);
+   const observer = new MountObserver({
+      matching,
+      do: (mountedElement) => {
+        enhance(mountedElement);
+      }
    });
    ```
+
+   See [Mount-Observer](https://github.com/bahrus/mount-observer).
 
 2. **Specific Element Types**: Enhance only certain element types
    ```TypeScript
