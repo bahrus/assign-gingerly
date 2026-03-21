@@ -110,7 +110,90 @@ console.log(obj);
 
 When the right hand side of an expression is an object, assignGingerly is recursively applied (passing the third argument in if applicable, which will be discussed below).
 
-Of course, just as Object.assign led to object spread notation, assignGingerly could lead to some sort of deep structural JavaScript syntax, but that is outside the scope of this polyfill package. 
+Of course, just as Object.assign led to object spread notation, assignGingerly could lead to some sort of deep structural JavaScript syntax, but that is outside the scope of this polyfill package.
+
+## Example 3a - Automatic Readonly Property Detection
+
+assignGingerly automatically detects readonly properties and merges into them instead of attempting to replace them. This makes working with DOM properties like `style` and `dataset` much more ergonomic:
+
+```TypeScript
+// Instead of this verbose syntax:
+const div = document.createElement('div');
+assignGingerly(div, {
+    '?.style?.height': '15px',
+    '?.style?.width': '20px'
+});
+
+// You can now use this cleaner syntax:
+assignGingerly(div, {
+    style: {
+        height: '15px',
+        width: '20px'
+    }
+});
+console.log(div.style.height); // '15px'
+console.log(div.style.width);  // '20px'
+```
+
+**How it works:**
+
+When assignGingerly encounters an object value being assigned to an existing property, it checks if that property is readonly:
+- **Data properties** with `writable: false`
+- **Accessor properties** with a getter but no setter
+
+If the property is readonly and its current value is an object, assignGingerly automatically merges into it recursively.
+
+**Examples of readonly properties:**
+- `HTMLElement.style` - The CSSStyleDeclaration object
+- `HTMLElement.dataset` - The DOMStringMap object  
+- Custom objects with `Object.defineProperty(obj, 'prop', { value: {}, writable: false })`
+- Accessor properties with getter only: `Object.defineProperty(obj, 'prop', { get() { return {}; } })`
+
+**Error handling:**
+
+If you try to merge an object into a readonly property whose current value is a primitive, assignGingerly throws a descriptive error:
+
+```TypeScript
+const obj = {};
+Object.defineProperty(obj, 'readonlyString', {
+    value: 'immutable',
+    writable: false
+});
+
+assignGingerly(obj, {
+    readonlyString: { nested: 'value' }
+});
+// Error: Cannot merge object into readonly primitive property 'readonlyString'
+```
+
+**Additional examples:**
+
+```TypeScript
+// Dataset property
+const div = document.createElement('div');
+assignGingerly(div, {
+    dataset: {
+        userId: '123',
+        userName: 'Alice'
+    }
+});
+console.log(div.dataset.userId);   // '123'
+console.log(div.dataset.userName); // 'Alice'
+
+// Custom readonly property
+const config = {};
+Object.defineProperty(config, 'settings', {
+    value: {},
+    writable: false
+});
+assignGingerly(config, {
+    settings: {
+        theme: 'dark',
+        lang: 'en'
+    }
+});
+console.log(config.settings.theme); // 'dark'
+```
 
 While we are in the business of passing values of object A into object B, we might as well add some extremely common behavior that allows updating properties of object B based on the current values of object B -- things like incrementing, toggling, and deleting.  Deleting is critical for assignTentatively, but is included with both functions.
 

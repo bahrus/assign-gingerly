@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Readonly Properties Tests</title>
+</head>
+<body>
+    <h1>Readonly Properties Tests</h1>
+    <div id="results"></div>
+
+    <script type="module">
+        import assignGingerly from '../assignGingerly.js';
+
+        const results = [];
+        let testCount = 0;
+        let passCount = 0;
+
+        function test(name, fn) {
+            testCount++;
+            try {
+                fn();
+                passCount++;
+                results.push(`✓ ${name}`);
+                console.log(`✓ ${name}`);
+            } catch (error) {
+                results.push(`✗ ${name}: ${error.message}`);
+                console.error(`✗ ${name}:`, error);
+            }
+        }
+
+        // Test 1: Basic style property assignment
+        test('should merge into readonly style property', () => {
+            const div = document.createElement('div');
+            assignGingerly(div, {
+                style: {
+                    height: '15px',
+                    width: '20px'
+                }
+            });
+            
+            if (div.style.height !== '15px') {
+                throw new Error(`Expected height to be '15px', got '${div.style.height}'`);
+            }
+            if (div.style.width !== '20px') {
+                throw new Error(`Expected width to be '20px', got '${div.style.width}'`);
+            }
+        });
+
+        // Test 2: Multiple style assignments
+        test('should handle multiple style assignments', () => {
+            const div = document.createElement('div');
+            assignGingerly(div, {
+                style: { height: '10px' }
+            });
+            assignGingerly(div, {
+                style: { width: '20px' }
+            });
+            
+            if (div.style.height !== '10px') {
+                throw new Error(`Expected height to be '10px', got '${div.style.height}'`);
+            }
+            if (div.style.width !== '20px') {
+                throw new Error(`Expected width to be '20px', got '${div.style.width}'`);
+            }
+        });
+
+        // Test 3: Dataset property (also readonly)
+        test('should merge into readonly dataset property', () => {
+            const div = document.createElement('div');
+            assignGingerly(div, {
+                dataset: {
+                    userId: '123',
+                    userName: 'Alice'
+                }
+            });
+            
+            if (div.dataset.userId !== '123') {
+                throw new Error(`Expected userId to be '123', got '${div.dataset.userId}'`);
+            }
+            if (div.dataset.userName !== 'Alice') {
+                throw new Error(`Expected userName to be 'Alice', got '${div.dataset.userName}'`);
+            }
+        });
+
+        // Test 4: Custom readonly property with Object.defineProperty
+        test('should merge into custom readonly property', () => {
+            const obj = {};
+            Object.defineProperty(obj, 'config', {
+                value: {},
+                writable: false,
+                enumerable: true,
+                configurable: true
+            });
+            
+            assignGingerly(obj, {
+                config: {
+                    theme: 'dark',
+                    lang: 'en'
+                }
+            });
+            
+            if (obj.config.theme !== 'dark') {
+                throw new Error(`Expected theme to be 'dark', got '${obj.config.theme}'`);
+            }
+            if (obj.config.lang !== 'en') {
+                throw new Error(`Expected lang to be 'en', got '${obj.config.lang}'`);
+            }
+        });
+
+        // Test 5: Readonly property with getter only
+        test('should merge into readonly accessor property', () => {
+            const obj = {};
+            const internalValue = {};
+            Object.defineProperty(obj, 'settings', {
+                get() { return internalValue; },
+                enumerable: true,
+                configurable: true
+            });
+            
+            assignGingerly(obj, {
+                settings: {
+                    option1: 'value1',
+                    option2: 'value2'
+                }
+            });
+            
+            if (obj.settings.option1 !== 'value1') {
+                throw new Error(`Expected option1 to be 'value1', got '${obj.settings.option1}'`);
+            }
+            if (obj.settings.option2 !== 'value2') {
+                throw new Error(`Expected option2 to be 'value2', got '${obj.settings.option2}'`);
+            }
+        });
+
+        // Test 6: Error when trying to merge into readonly primitive
+        test('should throw error when merging object into readonly primitive', () => {
+            const obj = {};
+            Object.defineProperty(obj, 'readonlyString', {
+                value: 'immutable',
+                writable: false,
+                enumerable: true,
+                configurable: true
+            });
+            
+            let errorThrown = false;
+            try {
+                assignGingerly(obj, {
+                    readonlyString: {
+                        nested: 'value'
+                    }
+                });
+            } catch (error) {
+                errorThrown = true;
+                if (!error.message.includes('Cannot merge object into readonly primitive property')) {
+                    throw new Error(`Wrong error message: ${error.message}`);
+                }
+            }
+            
+            if (!errorThrown) {
+                throw new Error('Expected error to be thrown');
+            }
+        });
+
+        // Test 7: Normal writable properties are merged (not replaced)
+        test('should merge into writable object properties', () => {
+            const obj = {
+                config: { old: 'value' }
+            };
+            
+            assignGingerly(obj, {
+                config: { new: 'value' }
+            });
+            
+            // assignGingerly always merges objects, even writable ones
+            if (obj.config.old !== 'value') {
+                throw new Error(`Expected old to still be 'value', got '${obj.config.old}'`);
+            }
+            if (obj.config.new !== 'value') {
+                throw new Error(`Expected new to be 'value', got '${obj.config.new}'`);
+            }
+        });
+
+        // Test 8: Nested path with readonly property
+        test('should handle nested path with readonly property', () => {
+            const div = document.createElement('div');
+            assignGingerly(div, {
+                '?.style?.color': 'red'
+            });
+            
+            if (div.style.color !== 'red') {
+                throw new Error(`Expected color to be 'red', got '${div.style.color}'`);
+            }
+        });
+
+        // Test 9: Mix of readonly and writable properties
+        test('should handle mix of readonly and writable properties', () => {
+            const div = document.createElement('div');
+            assignGingerly(div, {
+                id: 'test-id',
+                style: {
+                    height: '100px'
+                },
+                className: 'test-class'
+            });
+            
+            if (div.id !== 'test-id') {
+                throw new Error(`Expected id to be 'test-id', got '${div.id}'`);
+            }
+            if (div.style.height !== '100px') {
+                throw new Error(`Expected height to be '100px', got '${div.style.height}'`);
+            }
+            if (div.className !== 'test-class') {
+                throw new Error(`Expected className to be 'test-class', got '${div.className}'`);
+            }
+        });
+
+        // Test 10: Deep merge into readonly property
+        test('should deep merge into readonly property', () => {
+            const obj = {};
+            const internalValue = { level1: {} };
+            Object.defineProperty(obj, 'data', {
+                get() { return internalValue; },
+                enumerable: true,
+                configurable: true
+            });
+            
+            assignGingerly(obj, {
+                data: {
+                    level1: {
+                        level2: {
+                            value: 'deep'
+                        }
+                    }
+                }
+            });
+            
+            if (obj.data.level1.level2.value !== 'deep') {
+                throw new Error(`Expected deep value, got '${obj.data.level1.level2.value}'`);
+            }
+        });
+
+        // Display results
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = `
+            <h2>Results: ${passCount}/${testCount} tests passed</h2>
+            <pre>${results.join('\n')}</pre>
+        `;
+
+        // Report to parent (for Playwright)
+        if (window.testResults) {
+            window.testResults = { passed: passCount, total: testCount, results };
+        } else {
+            window.testResults = { passed: passCount, total: testCount, results };
+        }
+    </script>
+</body>
+</html>

@@ -228,6 +228,36 @@ function ensureNestedPath(obj, pathParts) {
     return current;
 }
 /**
+ * Helper function to check if a property is readonly
+ * A property is readonly if:
+ * - It's a data property with writable: false, OR
+ * - It's an accessor property with a getter but no setter
+ */
+function isReadonlyProperty(obj, propName) {
+    let descriptor = Object.getOwnPropertyDescriptor(obj, propName);
+    if (!descriptor) {
+        // Check prototype chain
+        let proto = Object.getPrototypeOf(obj);
+        while (proto) {
+            descriptor = Object.getOwnPropertyDescriptor(proto, propName);
+            if (descriptor)
+                break;
+            proto = Object.getPrototypeOf(proto);
+        }
+    }
+    if (!descriptor)
+        return false;
+    // If it's a data property, check writable flag
+    if ('value' in descriptor) {
+        return descriptor.writable === false;
+    }
+    // If it's an accessor property, check if it has only a getter (no setter)
+    if ('get' in descriptor) {
+        return descriptor.set === undefined;
+    }
+    return false;
+}
+/**
  * Main assignGingerly function
  */
 export function assignGingerly(target, source, options) {
@@ -397,11 +427,23 @@ export function assignGingerly(target, source, options) {
             const lastKey = pathParts[pathParts.length - 1];
             const parent = ensureNestedPath(target, pathParts);
             if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-                // Recursively apply assignGingerly for nested objects
-                if (!(lastKey in parent) || typeof parent[lastKey] !== 'object') {
-                    parent[lastKey] = {};
+                // Check if property exists and is readonly
+                if (lastKey in parent && isReadonlyProperty(parent, lastKey)) {
+                    // Property is readonly - check if current value is an object
+                    const currentValue = parent[lastKey];
+                    if (typeof currentValue !== 'object' || currentValue === null) {
+                        throw new Error(`Cannot merge object into readonly primitive property '${String(lastKey)}'`);
+                    }
+                    // Recursively apply assignGingerly to the readonly object
+                    assignGingerly(currentValue, value, options);
                 }
-                assignGingerly(parent[lastKey], value, options);
+                else {
+                    // Property is writable or doesn't exist - normal recursive merge
+                    if (!(lastKey in parent) || typeof parent[lastKey] !== 'object') {
+                        parent[lastKey] = {};
+                    }
+                    assignGingerly(parent[lastKey], value, options);
+                }
             }
             else {
                 parent[lastKey] = value;
@@ -409,11 +451,23 @@ export function assignGingerly(target, source, options) {
         }
         else {
             if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-                // Recursively apply assignGingerly for nested objects
-                if (!(key in target) || typeof target[key] !== 'object') {
-                    target[key] = {};
+                // Check if property exists and is readonly
+                if (key in target && isReadonlyProperty(target, key)) {
+                    // Property is readonly - check if current value is an object
+                    const currentValue = target[key];
+                    if (typeof currentValue !== 'object' || currentValue === null) {
+                        throw new Error(`Cannot merge object into readonly primitive property '${String(key)}'`);
+                    }
+                    // Recursively apply assignGingerly to the readonly object
+                    assignGingerly(currentValue, value, options);
                 }
-                assignGingerly(target[key], value, options);
+                else {
+                    // Property is writable or doesn't exist - normal recursive merge
+                    if (!(key in target) || typeof target[key] !== 'object') {
+                        target[key] = {};
+                    }
+                    assignGingerly(target[key], value, options);
+                }
             }
             else {
                 target[key] = value;
