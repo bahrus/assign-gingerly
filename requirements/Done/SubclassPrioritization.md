@@ -52,7 +52,206 @@ without replacing the mellowYellow enhancement instance with the passed in objec
 
 ?
 
-## Kiro's suggestions:
+This would allow your desired syntax to work naturally without any special cases or new syntax.
+
+---
+
+### Approach 5: Configurable Merge Strategy
+
+**Rule**: Add an option to `IAssignGingerlyOptions` that lets developers choose their preferred merge strategy.
+
+**Interface addition**:
+```typescript
+export interface IAssignGingerlyOptions {
+  registry?: typeof EnhancementRegistry | EnhancementRegistry;
+  bypassChecks?: boolean;
+  
+  /**
+   * Strategy for handling object property assignment
+   * - 'default': Replace writable object properties (current behavior before readonly detection)
+   * - 'instance': Merge into class instances, replace plain objects (Approach 1)
+   * - 'prototype': Merge when prototype relationship exists (Approach 3)
+   * - 'always': Always merge into existing objects (most aggressive)
+   * 
+   * Default: 'instance'
+   * 
+   * Note: Readonly properties are always merged regardless of this setting
+   */
+  mergeStrategy?: 'default' | 'instance' | 'prototype' | 'always';
+}
+```
+
+**Implementation logic**:
+```javascript
+function shouldMergeIntoExisting(target, key, value, options) {
+  const currentValue = target[key];
+  
+  // Always merge into readonly properties (regardless of strategy)
+  if (isReadonlyProperty(target, key)) {
+    if (typeof currentValue !== 'object' || currentValue === null) {
+      throw new Error(`Cannot merge object into readonly primitive property '${String(key)}'`);
+    }
+    return true;
+  }
+  
+  // Check merge strategy
+  const strategy = options?.mergeStrategy ?? 'instance';
+  
+  switch (strategy) {
+    case 'default':
+      // Original behavior: always create new object
+      return false;
+      
+    case 'instance':
+      // Approach 1: Merge into class instances
+      return isClassInstance(currentValue);
+      
+    case 'prototype':
+      // Approach 3: Merge when prototype relationship exists
+      return hasPrototypeRelationship(currentValue, value);
+      
+    case 'always':
+      // Merge into any existing object
+      return typeof currentValue === 'object' && currentValue !== null;
+      
+    default:
+      return false;
+  }
+}
+
+// In the property assignment section
+if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+  if (key in target && shouldMergeIntoExisting(target, key, value, options)) {
+    const currentValue = target[key];
+    if (typeof currentValue !== 'object' || currentValue === null) {
+      throw new Error(`Cannot merge object into primitive property '${String(key)}'`);
+    }
+    // Recursively merge into existing object
+    assignGingerly(currentValue, value, options);
+  } else {
+    // Create new object and merge
+    if (!(key in target) || typeof target[key] !== 'object') {
+      target[key] = {};
+    }
+    assignGingerly(target[key], value, options);
+  }
+}
+```
+
+**Helper function for Approach 3**:
+```javascript
+function hasPrototypeRelationship(existingValue, newValue) {
+  if (!isClassInstance(existingValue)) return false;
+  if (!newValue || typeof newValue !== 'object') return false;
+  
+  const existingProto = Object.getPrototypeOf(existingValue);
+  const newProto = Object.getPrototypeOf(newValue);
+  
+  // If new value is a plain object, check if existing is a class instance
+  if (newProto === Object.prototype || newProto === null) {
+    // New value is plain object, existing is class instance
+    // Merge to preserve the class instance
+    return true;
+  }
+  
+  // Check if they share the same prototype (same class)
+  if (existingProto === newProto) {
+    return true;
+  }
+  
+  // Check if one is a subclass of the other
+  let proto = existingProto;
+  while (proto) {
+    if (proto === newProto) return true;
+    proto = Object.getPrototypeOf(proto);
+  }
+  
+  proto = newProto;
+  while (proto) {
+    if (proto === existingProto) return true;
+    proto = Object.getPrototypeOf(proto);
+  }
+  
+  return false;
+}
+```
+
+**Usage examples**:
+
+```typescript
+// Default behavior (Approach 1 - instance detection)
+assignGingerly(element, {
+  enh: {
+    mellowYellow: { madAboutFourteen: true }
+  }
+});
+// Merges into mellowYellow if it's a class instance
+
+// Explicit instance strategy
+assignGingerly(element, {
+  enh: {
+    mellowYellow: { madAboutFourteen: true }
+  }
+}, { mergeStrategy: 'instance' });
+
+// Prototype relationship strategy (Approach 3)
+assignGingerly(element, {
+  enh: {
+    mellowYellow: { madAboutFourteen: true }
+  }
+}, { mergeStrategy: 'prototype' });
+
+// Always merge (most aggressive)
+assignGingerly(element, {
+  config: { theme: 'dark' }
+}, { mergeStrategy: 'always' });
+
+// Opt-out to original behavior
+assignGingerly(element, {
+  config: { theme: 'dark' }
+}, { mergeStrategy: 'default' });
+```
+
+**Pros**:
+- **Flexible**: Developers can choose the behavior that fits their use case
+- **Backward compatible**: Can opt-in to new behavior or keep old behavior
+- **Clear intent**: The option name makes the behavior explicit
+- **Combines best of both**: Can use Approach 1 by default, Approach 3 when needed
+- **Escape hatch**: Can disable with 'default' if the magic behavior causes issues
+
+**Cons**:
+- More complex API surface
+- Developers need to understand the different strategies
+- Could lead to inconsistent usage across a codebase
+
+**Recommendation**:
+- Default to `'instance'` (Approach 1) as it's the most intuitive
+- Document when to use `'prototype'` (when you care about type relationships)
+- Provide `'always'` for deep-merge-everything scenarios
+- Keep `'default'` as an escape hatch
+
+**Additional consideration**: You could also make this a per-registry-item setting:
+
+```typescript
+interface EnhancementConfig<T = any, Obj = Element> {
+  spawn: Spawner<T, Obj>;
+  symlinks?: { [key: symbol]: keyof T };
+  enhKey?: EnhKey;
+  withAttrs?: AttrPatterns<T>;
+  lifecycleKeys?: ...;
+  
+  /**
+   * How to handle property assignment when this enhancement already exists
+   * - 'merge': Always merge new values into existing instance
+   * - 'replace': Replace the instance (requires re-spawning)
+   * 
+   * Default: 'merge'
+   */
+  assignmentStrategy?: 'merge' | 'replace';
+}
+```
+
+This would give even finer control - some enhancements might want merge behavior while others want replace behavior.
 
 ### Approach 1: Instance Type Detection
 

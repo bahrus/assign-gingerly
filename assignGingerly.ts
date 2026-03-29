@@ -344,6 +344,19 @@ function isReadonlyProperty(obj: any, propName: string | symbol): boolean {
 }
 
 /**
+ * Helper function to check if a value is a class instance (not a plain object)
+ * Returns true for instances of classes, false for plain objects, arrays, and primitives
+ */
+function isClassInstance(value: any): boolean {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return false;
+  
+  const proto = Object.getPrototypeOf(value);
+  // Plain objects have Object.prototype or null as prototype
+  return proto !== Object.prototype && proto !== null;
+}
+
+/**
  * Main assignGingerly function
  */
 export function assignGingerly(
@@ -531,17 +544,17 @@ export function assignGingerly(
       const parent = ensureNestedPath(target, pathParts);
 
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        // Check if property exists and is readonly
-        if (lastKey in parent && isReadonlyProperty(parent, lastKey)) {
-          // Property is readonly - check if current value is an object
+        // Check if property exists and is readonly OR is a class instance
+        if (lastKey in parent && (isReadonlyProperty(parent, lastKey) || isClassInstance(parent[lastKey]))) {
+          // Property is readonly or a class instance - check if current value is an object
           const currentValue = parent[lastKey];
           if (typeof currentValue !== 'object' || currentValue === null) {
-            throw new Error(`Cannot merge object into readonly primitive property '${String(lastKey)}'`);
+            throw new Error(`Cannot merge object into ${isReadonlyProperty(parent, lastKey) ? 'readonly ' : ''}primitive property '${String(lastKey)}'`);
           }
-          // Recursively apply assignGingerly to the readonly object
+          // Recursively apply assignGingerly to the readonly object or class instance
           assignGingerly(currentValue, value, options);
         } else {
-          // Property is writable or doesn't exist - normal recursive merge
+          // Property is writable and not a class instance - normal recursive merge
           if (!(lastKey in parent) || typeof parent[lastKey] !== 'object') {
             parent[lastKey] = {};
           }
@@ -552,17 +565,17 @@ export function assignGingerly(
       }
     } else {
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        // Check if property exists and is readonly
-        if (key in target && isReadonlyProperty(target, key)) {
-          // Property is readonly - check if current value is an object
+        // Check if property exists and is readonly OR is a class instance
+        if (key in target && (isReadonlyProperty(target, key) || isClassInstance(target[key]))) {
+          // Property is readonly or a class instance - check if current value is an object
           const currentValue = target[key];
           if (typeof currentValue !== 'object' || currentValue === null) {
-            throw new Error(`Cannot merge object into readonly primitive property '${String(key)}'`);
+            throw new Error(`Cannot merge object into ${isReadonlyProperty(target, key) ? 'readonly ' : ''}primitive property '${String(key)}'`);
           }
-          // Recursively apply assignGingerly to the readonly object
+          // Recursively apply assignGingerly to the readonly object or class instance
           assignGingerly(currentValue, value, options);
         } else {
-          // Property is writable or doesn't exist - normal recursive merge
+          // Property is writable and not a class instance - normal recursive merge
           if (!(key in target) || typeof target[key] !== 'object') {
             target[key] = {};
           }

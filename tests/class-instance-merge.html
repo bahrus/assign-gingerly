@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Class Instance Merge Tests</title>
+</head>
+<body>
+    <h1>Class Instance Merge Tests</h1>
+    <div id="results"></div>
+
+    <script type="module">
+        import assignGingerly from '../assignGingerly.js';
+
+        const results = [];
+        let testCount = 0;
+        let passCount = 0;
+
+        function test(name, fn) {
+            testCount++;
+            try {
+                fn();
+                passCount++;
+                results.push(`✓ ${name}`);
+                console.log(`✓ ${name}`);
+            } catch (error) {
+                results.push(`✗ ${name}: ${error.message}`);
+                console.error(`✗ ${name}:`, error);
+            }
+        }
+
+        // Define test classes
+        class MyEnhancement {
+            constructor(element, ctx, initVals) {
+                this.element = element;
+                this.ctx = ctx;
+                this.instanceId = Math.random();
+                if (initVals) {
+                    Object.assign(this, initVals);
+                }
+            }
+            prop1 = null;
+            prop2 = null;
+        }
+
+        class AnotherEnhancement {
+            constructor() {
+                this.instanceId = Math.random();
+            }
+            value = null;
+        }
+
+        // Test 1: Merge into class instance on enh property
+        test('should merge into class instance on enh property', () => {
+            const element = document.createElement('div');
+            element.enh = {
+                myEnh: new MyEnhancement(element, {}, {})
+            };
+            
+            const originalId = element.enh.myEnh.instanceId;
+            
+            assignGingerly(element, {
+                enh: {
+                    myEnh: {
+                        prop1: 'value1',
+                        prop2: 'value2'
+                    }
+                }
+            });
+            
+            // Should preserve the instance
+            if (element.enh.myEnh.instanceId !== originalId) {
+                throw new Error('Instance was replaced instead of merged');
+            }
+            if (element.enh.myEnh.prop1 !== 'value1') {
+                throw new Error(`Expected prop1 to be 'value1', got '${element.enh.myEnh.prop1}'`);
+            }
+            if (element.enh.myEnh.prop2 !== 'value2') {
+                throw new Error(`Expected prop2 to be 'value2', got '${element.enh.myEnh.prop2}'`);
+            }
+        });
+
+        // Test 2: Multiple assignments preserve instance
+        test('should preserve instance across multiple assignments', () => {
+            const element = document.createElement('div');
+            element.enh = {
+                myEnh: new MyEnhancement(element, {}, {})
+            };
+            
+            const originalId = element.enh.myEnh.instanceId;
+            
+            assignGingerly(element, {
+                enh: { myEnh: { prop1: 'first' } }
+            });
+            
+            assignGingerly(element, {
+                enh: { myEnh: { prop2: 'second' } }
+            });
+            
+            if (element.enh.myEnh.instanceId !== originalId) {
+                throw new Error('Instance was replaced');
+            }
+            if (element.enh.myEnh.prop1 !== 'first') {
+                throw new Error(`Expected prop1 to be 'first', got '${element.enh.myEnh.prop1}'`);
+            }
+            if (element.enh.myEnh.prop2 !== 'second') {
+                throw new Error(`Expected prop2 to be 'second', got '${element.enh.myEnh.prop2}'`);
+            }
+        });
+
+        // Test 3: Plain objects are still replaced
+        test('should replace plain objects (not class instances)', () => {
+            const obj = {
+                config: { old: 'value' }
+            };
+            
+            assignGingerly(obj, {
+                config: { new: 'value' }
+            });
+            
+            // Plain objects are merged, not replaced (this is existing behavior)
+            if (obj.config.old !== 'value') {
+                throw new Error(`Expected old to still be 'value', got '${obj.config.old}'`);
+            }
+            if (obj.config.new !== 'value') {
+                throw new Error(`Expected new to be 'value', got '${obj.config.new}'`);
+            }
+        });
+
+        // Test 4: Class instance at root level
+        test('should merge into class instance at root level', () => {
+            const obj = {
+                enhancement: new AnotherEnhancement()
+            };
+            
+            const originalId = obj.enhancement.instanceId;
+            
+            assignGingerly(obj, {
+                enhancement: {
+                    value: 'test'
+                }
+            });
+            
+            if (obj.enhancement.instanceId !== originalId) {
+                throw new Error('Instance was replaced');
+            }
+            if (obj.enhancement.value !== 'test') {
+                throw new Error(`Expected value to be 'test', got '${obj.enhancement.value}'`);
+            }
+        });
+
+        // Test 5: Nested class instance
+        test('should merge into nested class instance', () => {
+            const obj = {
+                data: {
+                    enhancement: new AnotherEnhancement()
+                }
+            };
+            
+            const originalId = obj.data.enhancement.instanceId;
+            
+            assignGingerly(obj, {
+                '?.data?.enhancement': {
+                    value: 'nested'
+                }
+            });
+            
+            if (obj.data.enhancement.instanceId !== originalId) {
+                throw new Error('Instance was replaced');
+            }
+            if (obj.data.enhancement.value !== 'nested') {
+                throw new Error(`Expected value to be 'nested', got '${obj.data.enhancement.value}'`);
+            }
+        });
+
+        // Test 6: Mix of class instances and plain objects
+        test('should handle mix of class instances and plain objects', () => {
+            const obj = {
+                enhancement: new AnotherEnhancement(),
+                config: { old: 'value' }
+            };
+            
+            const originalId = obj.enhancement.instanceId;
+            
+            assignGingerly(obj, {
+                enhancement: { value: 'test' },
+                config: { new: 'value' }
+            });
+            
+            // Class instance preserved
+            if (obj.enhancement.instanceId !== originalId) {
+                throw new Error('Enhancement instance was replaced');
+            }
+            if (obj.enhancement.value !== 'test') {
+                throw new Error(`Expected enhancement.value to be 'test'`);
+            }
+            
+            // Plain object merged
+            if (obj.config.old !== 'value') {
+                throw new Error('Plain object old property should be preserved');
+            }
+            if (obj.config.new !== 'value') {
+                throw new Error('Plain object new property should be added');
+            }
+        });
+
+        // Test 7: Deep merge into class instance
+        test('should deep merge into class instance', () => {
+            class ComplexEnhancement {
+                constructor() {
+                    this.instanceId = Math.random();
+                    this.nested = { level1: {} };
+                }
+            }
+            
+            const obj = {
+                complex: new ComplexEnhancement()
+            };
+            
+            const originalId = obj.complex.instanceId;
+            
+            assignGingerly(obj, {
+                complex: {
+                    nested: {
+                        level1: {
+                            level2: 'deep'
+                        }
+                    }
+                }
+            });
+            
+            if (obj.complex.instanceId !== originalId) {
+                throw new Error('Instance was replaced');
+            }
+            if (obj.complex.nested.level1.level2 !== 'deep') {
+                throw new Error(`Expected deep value, got '${obj.complex.nested.level1.level2}'`);
+            }
+        });
+
+        // Test 8: Array values are not treated as class instances
+        test('should not treat arrays as class instances', () => {
+            const obj = {
+                items: [1, 2, 3]
+            };
+            
+            assignGingerly(obj, {
+                items: [4, 5, 6]
+            });
+            
+            // Arrays should be replaced, not merged
+            if (obj.items.length !== 3) {
+                throw new Error(`Expected 3 items, got ${obj.items.length}`);
+            }
+            if (obj.items[0] !== 4) {
+                throw new Error(`Expected first item to be 4, got ${obj.items[0]}`);
+            }
+        });
+
+        // Test 9: Built-in class instances (Date, Map, Set)
+        test('should merge into built-in class instances', () => {
+            const obj = {
+                timestamp: new Date('2024-01-01')
+            };
+            
+            const originalTime = obj.timestamp.getTime();
+            
+            assignGingerly(obj, {
+                timestamp: {
+                    customProp: 'added'
+                }
+            });
+            
+            // Should preserve the Date instance
+            if (obj.timestamp.getTime() !== originalTime) {
+                throw new Error('Date instance was replaced');
+            }
+            if (obj.timestamp.customProp !== 'added') {
+                throw new Error('Custom property was not added');
+            }
+        });
+
+        // Test 10: Class instance with no existing properties
+        test('should merge into empty class instance', () => {
+            class EmptyClass {
+                constructor() {
+                    this.instanceId = Math.random();
+                }
+            }
+            
+            const obj = {
+                empty: new EmptyClass()
+            };
+            
+            const originalId = obj.empty.instanceId;
+            
+            assignGingerly(obj, {
+                empty: {
+                    newProp: 'added'
+                }
+            });
+            
+            if (obj.empty.instanceId !== originalId) {
+                throw new Error('Instance was replaced');
+            }
+            if (obj.empty.newProp !== 'added') {
+                throw new Error(`Expected newProp to be 'added', got '${obj.empty.newProp}'`);
+            }
+        });
+
+        // Display results
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = `
+            <h2>Results: ${passCount}/${testCount} tests passed</h2>
+            <pre>${results.join('\n')}</pre>
+        `;
+
+        // Report to parent (for Playwright)
+        if (window.testResults) {
+            window.testResults = { passed: passCount, total: testCount, results };
+        } else {
+            window.testResults = { passed: passCount, total: testCount, results };
+        }
+    </script>
+</body>
+</html>
