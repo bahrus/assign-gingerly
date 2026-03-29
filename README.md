@@ -558,8 +558,12 @@ console.log(target.set[symbol1].prop2); // 'value2'
 const result = assignGingerly({}, {
     "[Symbol.for('TFWsx0YH5E6eSfhE7zfLxA')]": true,
     "[Symbol.for('BqnnTPWRHkWdVGWcGQoAiw')]": true,
-    '?.style.height': '40px',
-    '?.enh?.mellowYellow?.madAboutFourteen': true
+    style: {
+      height: '40px'
+    }
+    enh: {
+      mellowYellow?.madAboutFourteen': true
+    }
 }, {
     registry: EnhancementRegistry
 });

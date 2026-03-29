@@ -54,18 +54,21 @@ assignGingerly(div.style, {height: '15px'}, options /* pass through if provided 
 
 I don't see the benefits of being able to opt out of this feature, as the old behavior would just throw an error, and the usage is quite limited for now, so no concerns about breaking backwards compatibility.
 
-## Part II Subclass Prioritization
+The right protocol becomes a little more questionable when it comes to enhancements.  Assign-gingerly of course supports delicate property setting, as shown in the README.md:
 
-```TypeScript
-/**
- * Interface for the options passed to assignGingerly
- */
-export interface IAssignGingerlyOptions {
-  ...
-  NoSupportForSubClassPrioritization
-}
+<details>
+  <summary>Support for JSON assignment with Symbol.for symbols</summary>
+
+```JavaScript
+const result = assignGingerly({}, {
+    "[Symbol.for('TFWsx0YH5E6eSfhE7zfLxA')]": true,
+    "[Symbol.for('BqnnTPWRHkWdVGWcGQoAiw')]": true,
+    '?.style.height': '40px',
+    '?.enh?.mellowYellow?.madAboutFourteen': true
+}, {
+    registry: EnhancementRegistry
+});
+```
+</details>
 ```
 
-When assigning a property of an object with a new value, there are a number of scenarios:
-
-1.  The existing property value is an object, and the new value is an object, and the prototype of the object is neither a subclass nor a superclass of the new value
