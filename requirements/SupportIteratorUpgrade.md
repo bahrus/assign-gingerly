@@ -20,7 +20,10 @@ we should reorganize this a it add another condition:
 ```TypeScript
 if (typeof value === 'object' && value !== null){
     if(Array.isArray(value)){
-        //new stuff goes here
+        isClassInstance(target){
+            //new stuff goes here
+        }
+        
     }else{
         //do what it is currently doing
     }
@@ -32,7 +35,7 @@ if (typeof value === 'object' && value !== null){
 }
 ```
 
-What should happen is this:
+What should happen is this.  The code should check if the prototype of the class has the iterator, and if not add it:
 
 ```TypeScript
 ctr.prototype[Symbol.iterator] = function () {
@@ -48,3 +51,5 @@ ctr.prototype[Symbol.iterator] = function () {
     };
 };
 ```
+
+and then set the passed in array so that it can be iterated.
