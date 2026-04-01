@@ -63,7 +63,7 @@
     "chrome": "npx playwright cr http://localhost:8000"
   },
   "devDependencies": {
-    "@playwright/test": "1.59.0-alpha-2026-02-28",
+    "@playwright/test": "1.59.0",
     "spa-ssi": "0.0.27",
     "@types/node": "25.5.0",
     "typescript": "6.0.2"
