@@ -29,22 +29,6 @@ export interface ItemscopeManagerConfig<T = any> {
   };
 }
 
-// Polyfill for WeakMap.prototype.getOrInsert
-
-// if (typeof WeakMap.prototype.getOrInsertComputed !== 'function') {
-//   WeakMap.prototype.getOrInsertComputed = function(key, insert) {
-//     if (this.has(key)) return this.get(key);
-//     const value = insert();
-//     this.set(key, value);
-//     return value;
-//   };
-// }
-
-// /**
-//  * @deprecated Use EnhancementConfig instead
-//  */
-// export type IBaseRegistryItem<T = any> = EnhancementConfig<T>;
-
 /**
  * Interface for the options passed to assignGingerly
  */
