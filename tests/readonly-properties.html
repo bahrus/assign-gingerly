@@ -162,8 +162,8 @@
             }
         });
 
-        // Test 7: Normal writable properties are merged (not replaced)
-        test('should merge into writable object properties', () => {
+        // Test 7: Normal writable properties are replaced (simple assignment)
+        test('should replace writable object properties', () => {
             const obj = {
                 config: { old: 'value' }
             };
@@ -172,9 +172,9 @@
                 config: { new: 'value' }
             });
             
-            // assignGingerly always merges objects, even writable ones
-            if (obj.config.old !== 'value') {
-                throw new Error(`Expected old to still be 'value', got '${obj.config.old}'`);
+            // Writable properties are replaced via simple assignment (not merged)
+            if (obj.config.old !== undefined) {
+                throw new Error(`Expected old to be undefined (replaced), got '${obj.config.old}'`);
             }
             if (obj.config.new !== 'value') {
                 throw new Error(`Expected new to be 'value', got '${obj.config.new}'`);

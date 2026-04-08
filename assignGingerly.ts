@@ -559,11 +559,8 @@ export function assignGingerly(
           // Recursively apply assignGingerly to the readonly object or class instance
           assignGingerly(currentValue, value, options);
         } else {
-          // Property is writable and not a class instance - normal recursive merge
-          if (!(key in target) || typeof target[key] !== 'object') {
-            target[key] = {};
-          }
-          assignGingerly(target[key], value, options);
+          // Property is writable and not a class instance - simple assignment
+          target[key] = value;
         }
       } else {
         target[key] = value;

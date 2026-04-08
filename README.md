@@ -108,9 +108,39 @@ console.log(obj);
 // }
 ```
 
-When the right hand side of an expression is an object, assignGingerly is recursively applied (passing the third argument in if applicable, which will be discussed below).
+When the right hand side of an expression is an object, assignGingerly behavior depends on the context:
+- For **nested paths** (starting with `?.`): recursively merges into nested objects, creating them if needed
+- For **plain keys**: performs simple assignment (like `Object.assign`), unless the target property is readonly or a class instance (see Examples 3a and 3b below)
 
 Of course, just as Object.assign led to object spread notation, assignGingerly could lead to some sort of deep structural JavaScript syntax, but that is outside the scope of this polyfill package.
+
+## Example 3-plain - Plain Key Object Assignment
+
+For plain keys (without `?.` prefix), assignGingerly performs simple assignment, just like `Object.assign`:
+
+```TypeScript
+const obj = {};
+const template = document.createElement('template');
+template.innerHTML = '<div>Hello</div>';
+
+assignGingerly(obj, {
+    template: template,
+    config: { theme: 'dark', lang: 'en' }
+});
+
+console.log(obj.template === template); // true - direct assignment
+console.log(obj.config); // { theme: 'dark', lang: 'en' } - direct assignment
+```
+
+This is different from nested paths, which create intermediate objects:
+
+```TypeScript
+const obj = {};
+assignGingerly(obj, {
+    '?.config?.theme': 'dark'
+});
+console.log(obj.config); // { theme: 'dark' } - intermediate object created
+```
 
 ## Example 3a - Automatic Readonly Property Detection
 
