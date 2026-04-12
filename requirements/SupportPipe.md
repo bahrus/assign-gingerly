@@ -649,6 +649,85 @@ assignGingerly(element, {
 
 The only remaining question is how to handle method chaining (Example 2). I'd recommend keeping it simple and requiring separate calls for chained methods, or clarifying exactly how path segments should be consumed as arguments.
 
+---
+
+## Human Response to clarification requests
+
+I think we are fully on the same page as far as when the lastKey is a method:
+
+
+```JavaScript
+// In the nested path handling:
+if (isNestedPath(key)) {
+  const pathParts = parsePath(key);
+  const lastKey = pathParts[pathParts.length - 1];
+  const parent = ensureNestedPath(target, pathParts);
+  
+  // Check if lastKey is a method to call
+  if (options?.withMethods?.includes(lastKey)) {
+    const method = parent[lastKey];
+    if (typeof method === 'function') {
+      // Call the method with value as argument(s)
+      if (Array.isArray(value)) {
+        method.apply(parent, value);
+      } else {
+        method.call(parent, value);
+      }
+    }
+    // Silently skip if not a function (as requested)
+    continue;
+  }
+  
+  // ... rest of existing logic for normal assignment
+}
+```
+
+I think maybe the withMethods can accept either an array of strings, or a Set of strings.  If an array is passed in, it is converted internally to a set for the performance optimization.
+
+This should allow the rhs (value) to be things other than strings, including arrays and numbers.
+
+As far as the ambiguity of chained methods within the lhs that isn't the last token of the lhs:
+
+We should only support passing in at most one string parameter into the method.  If two consecutive "properties" are both listed as methods, then the first "property" is evaluated with no parameters.  If only the first is listed as a method, then the second property is passed into the first.  So this is out of scope (permanently):
+
+```JavaScript
+assignGingerly(obj, {
+  '?.setAttribute?.data-id?.123': 0  // setAttribute needs 2 args
+}, { withMethods: ['setAttribute'] });
+```
+
+This is supported:
+
+```JavaScript
+assignGingerly(oElementRef, {
+    '?.deref?.getRootNode?.querySelector?.myElement?.classList?.add': 'myClass'
+}, {withMethods: ['deref', 'getRootNode', 'querySelector', 'add']})
+
+```
+
+would do:
+
+```JavaScript
+oElementRef?.deref()?.getRootNode()?.querySelectory('myElement')?.classList?.add('myClass');
+```
+
+If the developer forgets to add one of the methods, for example:
+
+```JavaScript
+assignGingerly(oElementRef, {
+    '?.deref?.getRootNode?.querySelector?.myElement?.classList?.add': 'myClass'
+}, {withMethods: ['deref', 'getRootNode', 'add']})
+
+```
+
+then the code would fail silently:
+
+```JavaScript
+oElementRef?.deref()?.getRootNode('querySelector')?.myElement?.classList?.add('myClass');
+```
+
+
+
 
 
 
