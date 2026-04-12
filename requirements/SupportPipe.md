@@ -720,7 +720,7 @@ assignGingerly(oElementRef, {
 
 ```
 
-then the code would fail silently:
+then the code would fail silently (garbage in, garbage out):
 
 ```JavaScript
 oElementRef?.deref()?.getRootNode('querySelector')?.myElement?.classList?.add('myClass');
