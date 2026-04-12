@@ -271,12 +271,67 @@ function isClassInstance(value) {
     return proto !== Object.prototype && proto !== null;
 }
 /**
+ * Helper function to evaluate a nested path with method calls
+ * Handles chained method calls where path segments can be methods
+ */
+function evaluatePathWithMethods(target, pathParts, value, withMethods) {
+    let current = target;
+    let i = 0;
+    // Process all segments except the last one
+    while (i < pathParts.length - 1) {
+        const part = pathParts[i];
+        const nextPart = pathParts[i + 1];
+        if (withMethods.has(part)) {
+            const method = current[part];
+            if (typeof method === 'function') {
+                // Check if next part is also a method
+                if (withMethods.has(nextPart)) {
+                    // Both are methods - call first with no args
+                    current = method.call(current);
+                }
+                else {
+                    // Only current is method - call with next part as string arg
+                    current = method.call(current, nextPart);
+                    i++; // Skip next part since we consumed it as argument
+                }
+            }
+            else {
+                // Not a function - just access property (create if needed)
+                if (!(part in current) || typeof current[part] !== 'object' || current[part] === null) {
+                    current[part] = {};
+                }
+                current = current[part];
+            }
+        }
+        else {
+            // Not a method - normal property access (create if needed)
+            if (!(part in current) || typeof current[part] !== 'object' || current[part] === null) {
+                current[part] = {};
+            }
+            current = current[part];
+        }
+        i++;
+    }
+    const lastKey = pathParts[pathParts.length - 1];
+    return {
+        target: current,
+        lastKey,
+        isMethod: withMethods.has(lastKey)
+    };
+}
+/**
  * Main assignGingerly function
  */
 export function assignGingerly(target, source, options) {
     if (!target || typeof target !== 'object') {
         return target;
     }
+    // Convert withMethods array to Set for O(1) lookup
+    const withMethodsSet = options?.withMethods
+        ? options.withMethods instanceof Set
+            ? options.withMethods
+            : new Set(options.withMethods)
+        : undefined;
     const registry = options?.registry instanceof EnhancementRegistry
         ? options.registry
         : options?.registry
@@ -437,32 +492,86 @@ export function assignGingerly(target, source, options) {
         }
         if (isNestedPath(key)) {
             const pathParts = parsePath(key);
-            const lastKey = pathParts[pathParts.length - 1];
-            const parent = ensureNestedPath(target, pathParts);
-            if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-                // Check if property exists and is readonly OR is a class instance
-                if (lastKey in parent && (isReadonlyProperty(parent, lastKey) || isClassInstance(parent[lastKey]))) {
-                    // Property is readonly or a class instance - check if current value is an object
-                    const currentValue = parent[lastKey];
-                    if (typeof currentValue !== 'object' || currentValue === null) {
-                        throw new Error(`Cannot merge object into ${isReadonlyProperty(parent, lastKey) ? 'readonly ' : ''}primitive property '${String(lastKey)}'`);
+            // Check if we need to handle methods
+            if (withMethodsSet) {
+                const result = evaluatePathWithMethods(target, pathParts, value, withMethodsSet);
+                if (result.isMethod) {
+                    // Last segment is a method - call it
+                    const method = result.target[result.lastKey];
+                    if (typeof method === 'function') {
+                        if (Array.isArray(value)) {
+                            method.apply(result.target, value);
+                        }
+                        else {
+                            method.call(result.target, value);
+                        }
                     }
-                    // Recursively apply assignGingerly to the readonly object or class instance
-                    assignGingerly(currentValue, value, options);
+                    // Silently skip if not a function
+                    continue;
+                }
+                // Not a method - proceed with normal assignment using evaluated target
+                const lastKey = result.lastKey;
+                const parent = result.target;
+                if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    // Check if property exists and is readonly OR is a class instance
+                    if (lastKey in parent && (isReadonlyProperty(parent, lastKey) || isClassInstance(parent[lastKey]))) {
+                        const currentValue = parent[lastKey];
+                        if (typeof currentValue !== 'object' || currentValue === null) {
+                            throw new Error(`Cannot merge object into ${isReadonlyProperty(parent, lastKey) ? 'readonly ' : ''}primitive property '${String(lastKey)}'`);
+                        }
+                        assignGingerly(currentValue, value, options);
+                    }
+                    else {
+                        // Property is writable and not a class instance - replace it
+                        parent[lastKey] = value;
+                    }
                 }
                 else {
-                    // Property is writable and not a class instance - normal recursive merge
-                    if (!(lastKey in parent) || typeof parent[lastKey] !== 'object') {
-                        parent[lastKey] = {};
-                    }
-                    assignGingerly(parent[lastKey], value, options);
+                    parent[lastKey] = value;
                 }
             }
             else {
-                parent[lastKey] = value;
+                // No withMethods - use original logic
+                const lastKey = pathParts[pathParts.length - 1];
+                const parent = ensureNestedPath(target, pathParts);
+                if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    // Check if property exists and is readonly OR is a class instance
+                    if (lastKey in parent && (isReadonlyProperty(parent, lastKey) || isClassInstance(parent[lastKey]))) {
+                        // Property is readonly or a class instance - check if current value is an object
+                        const currentValue = parent[lastKey];
+                        if (typeof currentValue !== 'object' || currentValue === null) {
+                            throw new Error(`Cannot merge object into ${isReadonlyProperty(parent, lastKey) ? 'readonly ' : ''}primitive property '${String(lastKey)}'`);
+                        }
+                        // Recursively apply assignGingerly to the readonly object or class instance
+                        assignGingerly(currentValue, value, options);
+                    }
+                    else {
+                        // Property is writable and not a class instance - replace it
+                        parent[lastKey] = value;
+                    }
+                }
+                else {
+                    parent[lastKey] = value;
+                }
             }
         }
         else {
+            // Non-nested path
+            // Check if this is a method call
+            if (withMethodsSet && withMethodsSet.has(key)) {
+                const method = target[key];
+                if (typeof method === 'function') {
+                    if (Array.isArray(value)) {
+                        method.apply(target, value);
+                    }
+                    else {
+                        method.call(target, value);
+                    }
+                }
+                // Silently skip if not a function
+                continue;
+            }
+            // Normal assignment
             if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                 // Check if property exists and is readonly OR is a class instance
                 if (key in target && (isReadonlyProperty(target, key) || isClassInstance(target[key]))) {
@@ -475,7 +584,7 @@ export function assignGingerly(target, source, options) {
                     assignGingerly(currentValue, value, options);
                 }
                 else {
-                    // Property is writable and not a class instance - simple assignment
+                    // Property is writable and not a class instance - replace it
                     target[key] = value;
                 }
             }

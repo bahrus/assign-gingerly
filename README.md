@@ -355,6 +355,115 @@ assignGingerly(div, {
 // All instances and readonly objects preserved
 ```
 
+## Example 3c - Method Calls with withMethods
+
+The `withMethods` option allows you to call methods as part of property assignment, which is particularly useful for DOM APIs like `classList` and `part`:
+
+```TypeScript
+import assignGingerly from 'assign-gingerly';
+
+const element = document.createElement('div');
+
+// Simple method calls
+assignGingerly(element, {
+  '?.classList?.add': 'myClass',
+  '?.part?.add': 'myPart'
+}, { withMethods: ['add'] });
+
+console.log(element.classList.contains('myClass')); // true
+console.log(element.part.contains('myPart'));       // true
+```
+
+**How it works:**
+
+When a path segment matches a name in the `withMethods` array/set:
+- If it's the **last segment**: the method is called with the RHS value as an argument
+- If it's a **middle segment** and the next segment is also a method: called with no arguments
+- If it's a **middle segment** and the next segment is NOT a method: called with the next segment as a string argument
+- If the property is not a function: silently skipped
+
+**Array arguments:**
+
+Arrays are spread as multiple arguments:
+
+```TypeScript
+assignGingerly(element, {
+  '?.setAttribute': ['data-id', '123']
+}, { withMethods: ['setAttribute'] });
+
+// Equivalent to: element.setAttribute('data-id', '123')
+```
+
+**Chained method calls:**
+
+Methods can be chained to navigate through object hierarchies:
+
+```TypeScript
+const elementRef = {
+  deref() { return this.element; },
+  element: document.createElement('div')
+};
+
+assignGingerly(elementRef, {
+  '?.deref?.classList?.add': 'active'
+}, { withMethods: ['deref', 'add'] });
+
+// Equivalent to: elementRef.deref().classList.add('active')
+```
+
+**Complex chaining:**
+
+```TypeScript
+const shadowRoot = {
+  querySelector(selector) {
+    return this.elements[selector];
+  },
+  elements: {
+    'my-element': document.createElement('div')
+  }
+};
+
+assignGingerly(shadowRoot, {
+  '?.querySelector?.my-element?.classList?.add': 'highlighted'
+}, { withMethods: ['querySelector', 'add'] });
+
+// Equivalent to: shadowRoot.querySelector('my-element').classList.add('highlighted')
+```
+
+**Using Set for withMethods:**
+
+For better performance with many methods, use a Set:
+
+```TypeScript
+const methods = new Set(['add', 'remove', 'toggle', 'setAttribute']);
+
+assignGingerly(element, {
+  '?.classList?.add': 'class1',
+  '?.classList?.remove': 'class2',
+  '?.setAttribute': ['data-value', '42']
+}, { withMethods: methods });
+```
+
+**Mixing methods and normal assignments:**
+
+```TypeScript
+assignGingerly(element, {
+  '?.classList?.add': 'active',
+  '?.dataset?.userId': '123',
+  '?.style?.height': '100px'
+}, { withMethods: ['add'] });
+
+// classList.add() is called
+// dataset.userId and style.height are assigned normally
+```
+
+**Benefits:**
+
+- Cleaner syntax for DOM manipulation
+- Works with any object methods, not just DOM APIs
+- Silent failure for non-existent methods (garbage in, garbage out)
+- Supports method chaining and complex navigation patterns
+
 While we are in the business of passing values of object A into object B, we might as well add some extremely common behavior that allows updating properties of object B based on the current values of object B -- things like incrementing, toggling, and deleting.  Deleting is critical for assignTentatively, but is included with both functions.
 
 ## Example 4 - Incrementing values with += command

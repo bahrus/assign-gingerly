@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WithMethods Tests</title>
+</head>
+<body>
+    <h1>WithMethods Tests</h1>
+    <div id="results"></div>
+
+    <script type="module">
+        import assignGingerly from '../assignGingerly.js';
+
+        const results = [];
+        let testCount = 0;
+        let passCount = 0;
+
+        function test(name, fn) {
+            testCount++;
+            try {
+                fn();
+                passCount++;
+                results.push(`✓ ${name}`);
+                console.log(`✓ ${name}`);
+            } catch (error) {
+                results.push(`✗ ${name}: ${error.message}`);
+                console.error(`✗ ${name}:`, error);
+            }
+        }
+
+        // Test 1: Simple method call with string argument
+        test('should call method with string argument', () => {
+            const element = document.createElement('div');
+            
+            assignGingerly(element, {
+                '?.classList?.add': 'myClass'
+            }, { withMethods: ['add'] });
+            
+            if (!element.classList.contains('myClass')) {
+                throw new Error('Class was not added');
+            }
+        });
+
+        // Test 2: Method call with array arguments
+        test('should call method with array arguments (spread)', () => {
+            const element = document.createElement('div');
+            
+            assignGingerly(element, {
+                '?.setAttribute': ['data-id', '123']
+            }, { withMethods: ['setAttribute'] });
+            
+            if (element.getAttribute('data-id') !== '123') {
+                throw new Error('Attribute was not set correctly');
+            }
+        });
+
+        // Test 3: Multiple method calls
+        test('should handle multiple method calls', () => {
+            const element = document.createElement('div');
+            
+            assignGingerly(element, {
+                '?.classList?.add': 'class1',
+                '?.classList?.remove': 'class2'
+            }, { withMethods: ['add', 'remove'] });
+            
+            if (!element.classList.contains('class1')) {
+                throw new Error('class1 was not added');
+            }
+        });
+
+        // Test 4: Chained methods - consecutive methods
+        test('should handle chained methods (consecutive)', () => {
+            const obj = {
+                deref() { return this.inner; },
+                inner: {
+                    getRootNode() { return this.root; },
+                    root: {
+                        value: null
+                    }
+                }
+            };
+            
+            assignGingerly(obj, {
+                '?.deref?.getRootNode?.value': 42
+            }, { withMethods: ['deref', 'getRootNode'] });
+            
+            if (obj.inner.root.value !== 42) {
+                throw new Error(`Expected value to be 42, got ${obj.inner.root.value}`);
+            }
+        });
+
+        // Test 5: Chained methods - method with argument
+        test('should handle method with next segment as argument', () => {
+            const obj = {
+                querySelector(selector) {
+                    return this.elements[selector];
+                },
+                elements: {
+                    'myElement': {
+                        value: null
+                    }
+                }
+            };
+            
+            assignGingerly(obj, {
+                '?.querySelector?.myElement?.value': 'test'
+            }, { withMethods: ['querySelector'] });
+            
+            if (obj.elements.myElement.value !== 'test') {
+                throw new Error(`Expected value to be 'test', got ${obj.elements.myElement.value}`);
+            }
+        });
+
+        // Test 6: Complex chained methods
+        test('should handle complex chained methods', () => {
+            const elementRef = {
+                deref() { return this.element; },
+                element: {
+                    getRootNode() { return this.root; },
+                    root: {
+                        querySelector(selector) {
+                            return this.elements[selector];
+                        },
+                        elements: {
+                            'myElement': {
+                                classList: {
+                                    add(className) {
+                                        this.classes = this.classes || [];
+                                        this.classes.push(className);
+                                    },
+                                    classes: []
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            
+            assignGingerly(elementRef, {
+                '?.deref?.getRootNode?.querySelector?.myElement?.classList?.add': 'myClass'
+            }, { withMethods: ['deref', 'getRootNode', 'querySelector', 'add'] });
+            
+            const classList = elementRef.element.root.elements.myElement.classList;
+            if (!classList.classes || !classList.classes.includes('myClass')) {
+                throw new Error('Class was not added to chained result');
+            }
+        });
+
+        // Test 7: Method not in withMethods list (silent failure)
+        test('should handle when intermediate segment not in withMethods', () => {
+            const obj = {
+                method1(arg) { 
+                    // Method uses the argument to return the right object
+                    return this[arg]; 
+                },
+                querySelector: {
+                    value: null
+                }
+            };
+            
+            // method1 is in withMethods, querySelector is not
+            // So method1() is called with 'querySelector' as argument
+            // method1 uses the argument to return obj.querySelector
+            assignGingerly(obj, {
+                '?.method1?.querySelector?.value': 'test'
+            }, { withMethods: ['method1'] });
+            
+            // method1 was called with 'querySelector' as arg, returned obj.querySelector
+            // Then value was set on that return value
+            if (obj.querySelector.value !== 'test') {
+                throw new Error('Property was not created correctly');
+            }
+        });
+
+        // Test 8: Mix methods and normal assignments
+        test('should mix method calls and normal assignments', () => {
+            const element = document.createElement('div');
+            
+            assignGingerly(element, {
+                '?.classList?.add': 'active',
+                '?.dataset?.userId': '123',
+                '?.style?.height': '100px'
+            }, { withMethods: ['add'] });
+            
+            if (!element.classList.contains('active')) {
+                throw new Error('Class was not added');
+            }
+            if (element.dataset.userId !== '123') {
+                throw new Error('Dataset was not set');
+            }
+            if (element.style.height !== '100px') {
+                throw new Error('Style was not set');
+            }
+        });
+
+        // Test 9: Method with no arguments (undefined value)
+        test('should call method with undefined when value is undefined', () => {
+            let called = false;
+            const obj = {
+                method(arg) {
+                    called = true;
+                    if (arg !== undefined) {
+                        throw new Error(`Expected undefined, got ${arg}`);
+                    }
+                }
+            };
+            
+            assignGingerly(obj, {
+                '?.method': undefined
+            }, { withMethods: ['method'] });
+            
+            if (!called) {
+                throw new Error('Method was not called');
+            }
+        });
+
+        // Test 10: Non-nested method call
+        test('should handle non-nested method calls', () => {
+            const obj = {
+                items: [],
+                push(item) {
+                    this.items.push(item);
+                }
+            };
+            
+            assignGingerly(obj, {
+                'push': 'newItem'
+            }, { withMethods: ['push'] });
+            
+            if (!obj.items.includes('newItem')) {
+                throw new Error('Item was not pushed');
+            }
+        });
+
+        // Test 11: withMethods as Set
+        test('should accept withMethods as Set', () => {
+            const element = document.createElement('div');
+            
+            assignGingerly(element, {
+                '?.classList?.add': 'myClass'
+            }, { withMethods: new Set(['add']) });
+            
+            if (!element.classList.contains('myClass')) {
+                throw new Error('Class was not added');
+            }
+        });
+
+        // Test 12: Property is not a function (silent skip)
+        test('should silently skip when property is not a function', () => {
+            const obj = {
+                notAFunction: 'value'
+            };
+            
+            // Should not throw error
+            assignGingerly(obj, {
+                '?.notAFunction': 'newValue'
+            }, { withMethods: ['notAFunction'] });
+            
+            // Property should remain unchanged
+            if (obj.notAFunction !== 'value') {
+                throw new Error('Property was modified when it should have been skipped');
+            }
+        });
+
+        // Test 13: Method returns value for further chaining
+        test('should use return value for further property access', () => {
+            const childObj = { value: null };
+            const obj = {
+                getChild() {
+                    return childObj;
+                }
+            };
+            
+            assignGingerly(obj, {
+                '?.getChild?.value': 42
+            }, { withMethods: ['getChild'] });
+            
+            // getChild() was called, returned childObj, then value was set on it
+            if (childObj.value !== 42) {
+                throw new Error(`Expected value to be 42, got ${childObj.value}`);
+            }
+        });
+
+        // Test 14: Real DOM example with part
+        test('should work with DOM part attribute', () => {
+            const element = document.createElement('div');
+            
+            assignGingerly(element, {
+                '?.part?.add': 'custom-part'
+            }, { withMethods: ['add'] });
+            
+            if (!element.part.contains('custom-part')) {
+                throw new Error('Part was not added');
+            }
+        });
+
+        // Test 15: Method with number argument
+        test('should call method with number argument', () => {
+            const obj = {
+                result: null,
+                setNumber(num) {
+                    this.result = num * 2;
+                }
+            };
+            
+            assignGingerly(obj, {
+                '?.setNumber': 21
+            }, { withMethods: ['setNumber'] });
+            
+            if (obj.result !== 42) {
+                throw new Error(`Expected result to be 42, got ${obj.result}`);
+            }
+        });
+
+        // Display results
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = `
+            <h2>Results: ${passCount}/${testCount} tests passed</h2>
+            <pre>${results.join('\n')}</pre>
+        `;
+
+        // Report to parent (for Playwright)
+        window.testResults = { passed: passCount, total: testCount, results };
+    </script>
+</body>
+</html>

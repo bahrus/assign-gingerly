@@ -726,6 +726,168 @@ then the code would fail silently (garbage in, garbage out):
 oElementRef?.deref()?.getRootNode('querySelector')?.myElement?.classList?.add('myClass');
 ```
 
+---
+
+## Kiro's Final Analysis - No Remaining Ambiguities!
+
+Perfect! The specification is now crystal clear. Here's my understanding:
+
+### Confirmed Behavior
+
+**1. Method Detection:**
+- Check if `lastKey` is in `withMethods` (converted to Set for O(1) lookup)
+- If yes and it's a function, call it with the RHS value
+- If yes but not a function, silently skip
+- If no, proceed with normal assignment
+
+**2. Chained Methods (non-last segments):**
+- If consecutive properties are both in `withMethods`: first is called with no args
+- If only first is in `withMethods`: second property name is passed as string argument
+- Maximum one string parameter per method call
+
+**3. Value Types:**
+- Strings: passed as-is
+- Arrays: spread as multiple arguments via `apply()`
+- Numbers/other types: passed as-is
+- This allows flexibility for different method signatures
+
+**4. Error Handling:**
+- Silent failure if method not in `withMethods` (garbage in, garbage out)
+- This is acceptable - developer responsibility to list all methods
+
+### Implementation Clarity
+
+The chained method logic is now clear:
+
+```typescript
+function evaluateNestedPathWithMethods(
+  target: any,
+  pathParts: string[],
+  value: any,
+  withMethods: Set<string>
+): any {
+  let current = target;
+  
+  for (let i = 0; i < pathParts.length - 1; i++) {
+    const part = pathParts[i];
+    const nextPart = pathParts[i + 1];
+    
+    if (withMethods.has(part)) {
+      const method = current[part];
+      if (typeof method === 'function') {
+        // Check if next part is also a method
+        if (withMethods.has(nextPart)) {
+          // Both are methods - call first with no args
+          current = method.call(current);
+        } else {
+          // Only current is method - call with next part as arg
+          current = method.call(current, nextPart);
+          i++; // Skip next part since we consumed it
+        }
+      } else {
+        // Not a function - just access property
+        current = current[part];
+      }
+    } else {
+      // Not a method - normal property access
+      current = current[part];
+    }
+  }
+  
+  // Handle last segment
+  const lastKey = pathParts[pathParts.length - 1];
+  if (withMethods.has(lastKey)) {
+    const method = current[lastKey];
+    if (typeof method === 'function') {
+      if (Array.isArray(value)) {
+        method.apply(current, value);
+      } else {
+        method.call(current, value);
+      }
+    }
+    // Silently skip if not a function
+  } else {
+    // Normal assignment
+    current[lastKey] = value;
+  }
+  
+  return current;
+}
+```
+
+### Examples Validated
+
+**Example 1 - Simple method call:**
+```javascript
+assignGingerly(element, {
+  '?.classList?.add': 'myClass'
+}, { withMethods: ['add'] });
+// ✓ element.classList.add('myClass')
+```
+
+**Example 2 - Chained methods:**
+```javascript
+assignGingerly(elementRef, {
+  '?.deref?.getRootNode?.querySelector?.myElement?.classList?.add': 'myClass'
+}, { withMethods: ['deref', 'getRootNode', 'querySelector', 'add'] });
+// ✓ elementRef.deref().getRootNode().querySelector('myElement').classList.add('myClass')
+```
+
+**Example 3 - Missing method in list:**
+```javascript
+assignGingerly(elementRef, {
+  '?.deref?.getRootNode?.querySelector?.myElement?.classList?.add': 'myClass'
+}, { withMethods: ['deref', 'getRootNode', 'add'] });
+// ✓ elementRef.deref().getRootNode('querySelector').myElement.classList.add('myClass')
+// Silent failure - developer's responsibility
+```
+
+**Example 4 - Array arguments:**
+```javascript
+assignGingerly(element, {
+  '?.setAttribute': ['data-id', '123']
+}, { withMethods: ['setAttribute'] });
+// ✓ element.setAttribute('data-id', '123')
+```
+
+**Example 5 - Mix methods and assignments:**
+```javascript
+assignGingerly(element, {
+  '?.classList?.add': 'active',
+  '?.dataset?.userId': '123'
+}, { withMethods: ['add'] });
+// ✓ element.classList.add('active')
+// ✓ element.dataset.userId = '123'
+```
+
+### No Remaining Ambiguities!
+
+All questions have been answered:
+- ✅ How to handle non-string values: Pass as-is, spread arrays
+- ✅ Multiple arguments: Use arrays with `apply()`
+- ✅ Method chaining: Consecutive methods = no args, otherwise consume next segment
+- ✅ Missing methods: Silent failure (garbage in, garbage out)
+- ✅ Performance: Convert array to Set internally
+- ✅ Scope: Single string parameter max, no complex multi-arg support
+
+### Implementation Estimate
+
+- **Code addition**: ~40-50 lines (slightly more than initial estimate due to chaining logic)
+- **Complexity**: Medium (chaining logic requires careful index management)
+- **Performance**: O(1) method lookup with Set
+- **Breaking changes**: None (purely additive)
+
+### Ready to Implement!
+
+The specification is complete and unambiguous. This feature:
+- Solves real use cases (classList, querySelector chains)
+- Has acceptable complexity
+- Maintains backward compatibility
+- Provides clear, predictable behavior
+- Has reasonable footprint
+
+**Recommendation: Proceed with implementation!**
+
 
 
 
