@@ -353,6 +353,302 @@ const lhs = oElement?.deref()?.querySelector('my-custom-element')?.myProp = 14;
 
 Could this be done with a small enough footprint that it wouldn't enlarge assignGingerly very much?
 
+---
+
+## Kiro's Response to Alternative Proposal
+
+### Excellent Simplification!
+
+This alternative is **much better** than the pipe syntax. It's cleaner, more explicit, and significantly simpler to implement. Here's my analysis:
+
+### Advantages of the `withMethods` Approach
+
+1. **Explicit opt-in**: The `withMethods` array makes it clear which properties should be treated as methods
+2. **No parsing complexity**: No need to parse pipe characters or handle escaping
+3. **Smaller footprint**: Can be implemented with minimal code addition
+4. **Better error messages**: Easy to provide clear errors when methods don't exist
+5. **Type-safe potential**: TypeScript could potentially type-check the method names
+6. **Predictable behavior**: No ambiguity about what gets called vs what gets assigned
+
+### Implementation Feasibility
+
+**Yes, this can be done with a very small footprint!** Here's why:
+
+```typescript
+// Add to IAssignGingerlyOptions
+interface IAssignGingerlyOptions {
+  registry?: typeof EnhancementRegistry | EnhancementRegistry;
+  bypassChecks?: boolean;
+  withMethods?: string[];  // <-- Just add this!
+}
+
+// In the nested path handling, add a check:
+if (isNestedPath(key)) {
+  const pathParts = parsePath(key);
+  const lastKey = pathParts[pathParts.length - 1];
+  const parent = ensureNestedPath(target, pathParts);
+  
+  // NEW: Check if lastKey is in withMethods
+  if (options?.withMethods?.includes(lastKey)) {
+    const method = parent[lastKey];
+    if (typeof method === 'function') {
+      // Call the method with value as argument
+      method.call(parent, value);
+      continue; // Skip normal assignment
+    }
+    // If not a function, silently skip (as requested)
+    continue;
+  }
+  
+  // ... rest of existing logic
+}
+```
+
+**Estimated code addition**: ~15-20 lines of code. Very minimal!
+
+### Clarifications Needed
+
+**Question 1: What about non-string values?**
+
+```javascript
+assignGingerly(obj, {
+  '?.classList?.add': ['class1', 'class2'],  // Array?
+  '?.setAttribute': { name: 'data-id', value: '123' },  // Object?
+  '?.scrollTo': 100,  // Number?
+}, { withMethods: ['add', 'setAttribute', 'scrollTo'] });
+```
+
+**Recommendation**: 
+- Support any value type, pass it directly to the method
+- For arrays, pass the array as a single argument (not spread)
+- Document that it's the developer's responsibility to match method signatures
+
+**Question 2: Multiple arguments?**
+
+Your Example 2 shows `querySelector('my-custom-element')` where `'my-custom-element'` is the next path segment. This is clever! But what about methods that need multiple arguments?
+
+```javascript
+assignGingerly(obj, {
+  '?.setAttribute?.data-id?.123': 0  // setAttribute needs 2 args
+}, { withMethods: ['setAttribute'] });
+```
+
+**Options:**
+
+A. **Use the value as arguments** (if it's an array):
+```javascript
+assignGingerly(obj, {
+  '?.setAttribute': ['data-id', '123']
+}, { withMethods: ['setAttribute'] });
+// Calls: obj.setAttribute('data-id', '123')
+```
+
+B. **Use next path segment as first arg, value as second**:
+```javascript
+assignGingerly(obj, {
+  '?.setAttribute?.data-id': '123'
+}, { withMethods: ['setAttribute'] });
+// Calls: obj.setAttribute('data-id', '123')
+```
+
+C. **Only support single-argument methods**:
+```javascript
+// Just don't support multi-arg methods
+```
+
+**Recommendation**: Start with Option A (array spreading) as it's most flexible:
+```javascript
+if (Array.isArray(value)) {
+  method.apply(parent, value);  // Spread array as arguments
+} else {
+  method.call(parent, value);   // Single argument
+}
+```
+
+**Question 3: Method chaining?**
+
+In Example 2, you have two methods in sequence: `deref` then `querySelector`. How does this work exactly?
+
+```javascript
+'?.deref?.querySelector?.my-custom-element?.myProp': 14
+```
+
+Should this:
+1. Call `deref()` with no arguments
+2. Call `querySelector('my-custom-element')` on the result
+3. Assign `14` to `myProp` on that result
+
+**Clarification needed**: 
+- If a method is in `withMethods` and has no value to pass, call it with no arguments?
+- The next path segment becomes the argument?
+- How do we know when to stop consuming path segments as arguments?
+
+**Suggested behavior**:
+```javascript
+// Each method in withMethods consumes the NEXT path segment as its argument
+'?.deref?.querySelector?.my-custom-element?.myProp': 14
+
+// Evaluates as:
+obj.deref()  // No next segment, called with no args
+   .querySelector('my-custom-element')  // Next segment is the arg
+   .myProp = 14  // Final assignment
+```
+
+But this creates ambiguity:
+```javascript
+'?.querySelector?.myElement?.classList?.add?.myClass': 0
+
+// Is this:
+// A) querySelector('myElement').classList.add('myClass')
+// B) querySelector('myElement.classList.add.myClass')
+```
+
+**Recommendation**: Keep it simple - methods only use the RHS value, not path segments:
+
+```javascript
+assignGingerly(obj, {
+  '?.deref': undefined,  // Call with no args
+  '?.querySelector': 'my-custom-element',  // Call with this arg
+  '?.myProp': 14  // Normal assignment
+}, { withMethods: ['deref', 'querySelector'] });
+
+// Or chain them:
+assignGingerly(
+  assignGingerly(obj, {
+    '?.deref': undefined
+  }, { withMethods: ['deref'] }),
+  {
+    '?.querySelector': 'my-custom-element',
+    '?.myProp': 14
+  },
+  { withMethods: ['querySelector'] }
+);
+```
+
+This is more verbose but much clearer and easier to implement.
+
+### Proposed Implementation
+
+```typescript
+interface IAssignGingerlyOptions {
+  registry?: typeof EnhancementRegistry | EnhancementRegistry;
+  bypassChecks?: boolean;
+  /**
+   * List of property names that should be treated as methods to call
+   * rather than properties to assign.
+   * 
+   * When a path segment matches a name in this array:
+   * - If the property is a function, call it with the RHS value as argument
+   * - If the RHS value is an array, spread it as multiple arguments
+   * - If the property is not a function, silently skip
+   * 
+   * Example:
+   * assignGingerly(element, {
+   *   '?.classList?.add': 'myClass'
+   * }, { withMethods: ['add'] });
+   * // Calls: element.classList.add('myClass')
+   */
+  withMethods?: string[];
+}
+
+// In the nested path handling:
+if (isNestedPath(key)) {
+  const pathParts = parsePath(key);
+  const lastKey = pathParts[pathParts.length - 1];
+  const parent = ensureNestedPath(target, pathParts);
+  
+  // Check if lastKey is a method to call
+  if (options?.withMethods?.includes(lastKey)) {
+    const method = parent[lastKey];
+    if (typeof method === 'function') {
+      // Call the method with value as argument(s)
+      if (Array.isArray(value)) {
+        method.apply(parent, value);
+      } else {
+        method.call(parent, value);
+      }
+    }
+    // Silently skip if not a function (as requested)
+    continue;
+  }
+  
+  // ... rest of existing logic for normal assignment
+}
+
+// Also handle non-nested paths:
+if (options?.withMethods?.includes(key)) {
+  const method = target[key];
+  if (typeof method === 'function') {
+    if (Array.isArray(value)) {
+      method.apply(target, value);
+    } else {
+      method.call(target, value);
+    }
+  }
+  continue;
+}
+```
+
+### Footprint Estimate
+
+- **Code addition**: ~25-30 lines
+- **Type definition**: 1 line
+- **No new dependencies**: Uses existing parsing logic
+- **No performance impact**: Simple array lookup
+
+**Verdict: Very small footprint!**
+
+### Recommendations for This Approach
+
+1. **Keep it simple**: Methods only use RHS value, not path segments
+2. **Support array spreading**: If value is array, spread as arguments
+3. **Silent skip**: If property isn't a function, skip silently (as you suggested)
+4. **Document clearly**: Explain that this is for side-effect-free methods
+5. **Add to both nested and non-nested paths**: Consistency
+6. **Consider caching**: Convert `withMethods` array to Set for O(1) lookup
+
+### Example Usage Patterns
+
+```javascript
+// Simple method call
+assignGingerly(element, {
+  '?.classList?.add': 'active'
+}, { withMethods: ['add'] });
+
+// Multiple arguments via array
+assignGingerly(element, {
+  '?.setAttribute': ['data-id', '123']
+}, { withMethods: ['setAttribute'] });
+
+// Multiple method calls
+assignGingerly(element, {
+  '?.classList?.add': 'active',
+  '?.classList?.remove': 'inactive',
+  '?.part?.add': 'custom-part'
+}, { withMethods: ['add', 'remove'] });
+
+// Mix methods and assignments
+assignGingerly(element, {
+  '?.classList?.add': 'active',
+  '?.dataset?.userId': '123',
+  '?.style?.height': '100px'
+}, { withMethods: ['add'] });
+```
+
+### Final Verdict
+
+**This alternative is excellent!** It:
+- Solves the use cases you identified
+- Has minimal implementation complexity
+- Adds very little code (~25-30 lines)
+- Is explicit and predictable
+- Avoids the parsing complexity of pipes
+- Maintains the declarative feel
+
+**Recommendation: Implement this approach directly in assignGingerly, not as a separate module.** The footprint is small enough that it doesn't warrant a separate module, and having it built-in makes it more discoverable and easier to use.
+
+The only remaining question is how to handle method chaining (Example 2). I'd recommend keeping it simple and requiring separate calls for chained methods, or clarifying exactly how path segments should be consumed as arguments.
+
 
 
 
