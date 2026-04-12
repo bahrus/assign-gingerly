@@ -315,3 +315,44 @@ assignGingerly(element, { /* other properties */ });
 ```
 
 Is the syntactic sugar worth the added complexity?
+
+---
+
+## Human's Response
+
+Good points have been raised.  Due to the added complexity and relatively limited use cases, and the fact that we've gone out of our way to avoid asynchronous operations in assign-gingerly, which would block the ability to load such complexity on demand without enlarging the footprint, I'm very open to the idea of creating  separate module, assignGingerlyExt that adds in support for pipes.  Maybe it could separate the expressions that contain a | from those that don't, and reuse assignGingerly for those expressions that don't contain |'s?
+
+I don't like the idea of using the name "assignImperatively", because the expectation of use is that this is only used for basic assignment type situations, it's just that the assigning requires called some side-effect free methods to do the job.  Yes, it opens a potential can of worms, but I think limiting to a single string argument (at most) would greatly reduce the risk.
+
+## Alternative proposal:
+
+## Example 1 Adding to the classlist and the part token lists
+
+```JavaScript
+oElement.assignGingerly({
+    '?.classList?.add': 'myClass',
+    '?.part?.add': 'myPart',
+}, {withMethods: ['add']});
+```
+
+Anywhere a "property" matches one of the methods, instead of doing ?.add?.myClass it would do ?.add('myClass'), ?.add('myPart').  If add doesn't exist as a method, it should just skip silently.
+
+## Example 2 Relevant rhs
+
+```JavaScript
+oElement.assignGingerly({
+    '?.deref?.querySelector?.my-custom-element?.myProp': 14 
+}, {withMethods: ['deref', 'querySelector']})
+```
+
+does the equivalent of:
+
+```JavaScript
+const lhs = oElement?.deref()?.querySelector('my-custom-element')?.myProp = 14;
+```
+
+Could this be done with a small enough footprint that it wouldn't enlarge assignGingerly very much?
+
+
+
+
