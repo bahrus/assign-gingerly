@@ -708,7 +708,7 @@ assignGingerly(oElementRef, {
 would do:
 
 ```JavaScript
-oElementRef?.deref()?.getRootNode()?.querySelectory('myElement')?.classList?.add('myClass');
+oElementRef?.deref()?.getRootNode()?.querySelector('myElement')?.classList?.add('myClass');
 ```
 
 If the developer forgets to add one of the methods, for example:
