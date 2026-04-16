@@ -1,5 +1,5 @@
 import { AttrPatterns, AttrConfig } from './types/assign-gingerly/types';
-import { globalParserRegistry } from './parserRegistry.js';
+import { globalParserRegistry, getParserRegistry } from './parserRegistry.js';
 import { resolveTemplate } from './resolveTemplate.js';
 
 // Module-level cache for parsed attribute values
@@ -10,15 +10,17 @@ const parseCache = new Map<string, Map<string, any>>();
  * Resolves a parser specification to an actual parser function
  * Supports:
  * - Inline functions (direct use)
- * - Named parsers from global registry
- * - Custom element static methods (element-name.methodName)
+ * - Named parsers from scoped registry (if synthesizerElement provided)
+ * - Named parsers from global registry (fallback)
  * 
  * @param parserSpec - Parser function or string reference
+ * @param synthesizerElement - Optional synthesizer element for scoped parser lookup
  * @returns The resolved parser function
  * @throws Error if parser cannot be resolved
  */
 function resolveParser(
-  parserSpec: ((v: string | null) => any) | string | [string, string] | undefined
+  parserSpec: ((v: string | null) => any) | string | undefined,
+  synthesizerElement?: Element
 ): ((v: string | null) => any) | undefined {
   // Undefined - no parser specified
   if (parserSpec === undefined) {
@@ -30,52 +32,31 @@ function resolveParser(
     return parserSpec;
   }
   
-  // Tuple [CustomElementName, StaticMethodName] - resolve custom element static method
-  if (Array.isArray(parserSpec)) {
-    const [elementName, methodName] = parserSpec;
-    
-    if (typeof customElements === 'undefined') {
-      throw new Error(
-        `Cannot resolve parser [${elementName}, ${methodName}]: customElements is not available`
-      );
-    }
-    
-    try {
-      const ctr = customElements.get(elementName);
-      if (!ctr) {
-        throw new Error(
-          `Cannot resolve parser [${elementName}, ${methodName}]: custom element "${elementName}" not found`
-        );
-      }
-      
-      if (typeof (ctr as any)[methodName] !== 'function') {
-        throw new Error(
-          `Cannot resolve parser [${elementName}, ${methodName}]: static method "${methodName}" not found on custom element "${elementName}"`
-        );
-      }
-      
-      return (ctr as any)[methodName];
-    } catch (e) {
-      if (e instanceof Error && e.message.startsWith('Cannot resolve parser')) {
-        throw e;
-      }
-      throw new Error(
-        `Cannot resolve parser [${elementName}, ${methodName}]: ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  }
-  
-  // String reference - resolve from global registry
+  // String reference - resolve from scoped or global registry
   if (typeof parserSpec === 'string') {
-    const parser = globalParserRegistry.get(parserSpec);
-    if (parser) {
-      return parser;
+    // Check scoped registry first (if synthesizerElement provided)
+    if (synthesizerElement) {
+      const scopedRegistry = getParserRegistry(synthesizerElement);
+      const scopedParser = scopedRegistry.get(parserSpec);
+      if (scopedParser) {
+        return scopedParser;
+      }
     }
     
-    // Not found in registry
+    // Fallback to global registry
+    const globalParser = globalParserRegistry.get(parserSpec);
+    if (globalParser) {
+      return globalParser;
+    }
+    
+    // Not found in either registry
     throw new Error(
-      `Parser "${parserSpec}" not found in globalParserRegistry. ` +
-      `If you want to reference a custom element static method, use tuple syntax: ["element-name", "methodName"]`
+      `Parser "${parserSpec}" not found. ` +
+      `Checked ${synthesizerElement ? 'scoped registry and ' : ''}global registry.\n` +
+      `Ensure the parser is registered via:\n` +
+      `- <script type="emc-parser" src="..." parser-name="${parserSpec}">\n` +
+      `- registerParser(synthesizerElement, "${parserSpec}", parserFn)\n` +
+      `- globalParserRegistry.register("${parserSpec}", parserFn)`
     );
   }
   
@@ -97,8 +78,6 @@ function getCacheKey(config: AttrConfig<any>): string {
     parserStr = 'builtin';
   } else if (typeof config.parser === 'string') {
     parserStr = `named:${config.parser}`;
-  } else if (Array.isArray(config.parser)) {
-    parserStr = `tuple:${config.parser[0]}.${config.parser[1]}`;
   } else {
     parserStr = 'custom';
   }
@@ -258,12 +237,14 @@ function getDefaultParser(instanceOf?: string | Function): (v: string | null) =>
  * @param element - The DOM element to read attributes from
  * @param attrPatterns - The attribute patterns configuration
  * @param allowUnprefixed - Pattern (string or RegExp) that element tag name must match to allow unprefixed attributes
+ * @param synthesizerElement - Optional synthesizer element for scoped parser resolution
  * @returns Object with parsed attribute values ready for initVals
  */
 export function parseWithAttrs<T = any>(
     element: Element,
     attrPatterns: AttrPatterns<T>,
-    allowUnprefixed?: string | RegExp
+    allowUnprefixed?: string | RegExp,
+    synthesizerElement?: Element
 ): Partial<T> {
     // Validate base attribute if present
     if ('base' in attrPatterns) {
@@ -355,7 +336,7 @@ export function parseWithAttrs<T = any>(
             }
             // For Boolean without valIfNull, fall through to parser
             else {
-                const parser = resolveParser(config.parser) || getDefaultParser(config.instanceOf);
+                const parser = resolveParser(config.parser, synthesizerElement) || getDefaultParser(config.instanceOf);
                 const parsedValue = parser(attrValue);
                 const mapsTo = config.mapsTo ?? (key === 'base' ? '.' : key);
                 result[mapsTo as string] = parsedValue;
@@ -364,7 +345,7 @@ export function parseWithAttrs<T = any>(
         }
         
         // Attribute exists - parse normally
-        const parser = resolveParser(config.parser) || getDefaultParser(config.instanceOf);
+        const parser = resolveParser(config.parser, synthesizerElement) || getDefaultParser(config.instanceOf);
         
         // Use cache if parseCache is specified
         const parsedValue = config.parseCache 
