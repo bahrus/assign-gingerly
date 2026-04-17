@@ -55,7 +55,7 @@ export const globalParserRegistry = new ParserRegistry();
 // Register common built-in parsers
 globalParserRegistry.register('timestamp', (v) => v ? new Date(v).getTime() : null);
 globalParserRegistry.register('date', (v) => v ? new Date(v) : null);
-globalParserRegistry.register('csv', (v) => v ? v.split(',').map(s => s.trim()) : []);
+globalParserRegistry.register('csv', (v) => v ? v.split(',').map((s) => s.trim()) : []);
 globalParserRegistry.register('int', (v) => v ? parseInt(v, 10) : null);
 globalParserRegistry.register('float', (v) => v ? parseFloat(v) : null);
 globalParserRegistry.register('boolean', (v) => v !== null);
@@ -69,3 +69,33 @@ globalParserRegistry.register('json', (v) => {
         throw new Error(`Failed to parse JSON: "${v}". Error: ${e}`);
     }
 });
+import { ScopedParserRegistry } from './ScopedParserRegistry.js';
+/**
+ * Symbol for storing scoped parser registry on synthesizer elements
+ * Using Symbol.for ensures the same symbol is used across different versions of the package
+ */
+const SCOPED_REGISTRY_SYMBOL = Symbol.for('assign-gingerly.scopedParserRegistry');
+/**
+ * Get the scoped parser registry for a synthesizer element
+ * Creates a new registry if one doesn't exist
+ * @param synthesizerElement - The synthesizer element (be-hive, htmx-container, alpine-scope, etc.)
+ * @returns The scoped parser registry for this element
+ */
+export function getParserRegistry(synthesizerElement) {
+    let registry = synthesizerElement[SCOPED_REGISTRY_SYMBOL];
+    if (!registry) {
+        registry = new ScopedParserRegistry();
+        synthesizerElement[SCOPED_REGISTRY_SYMBOL] = registry;
+    }
+    return registry;
+}
+/**
+ * Register a parser in a synthesizer element's scoped registry
+ * @param synthesizerElement - The synthesizer element to register the parser with
+ * @param name - Parser name
+ * @param parser - Parser function
+ */
+export function registerParser(synthesizerElement, name, parser) {
+    const registry = getParserRegistry(synthesizerElement);
+    registry.register(name, parser);
+}

@@ -1,16 +1,18 @@
+import { ParserFunction } from './types/assign-gingerly/types';
+
 /**
  * Registry for named parsers that can be referenced by string name
  * Enables JSON serialization of configs with custom parsers
  */
 export class ParserRegistry {
-  private parsers = new Map<string, (v: string | null) => any>();
+  private parsers = new Map<string, ParserFunction>();
   
   /**
    * Register a parser with a given name
    * @param name - The name to register the parser under
    * @param parser - The parser function
    */
-  register(name: string, parser: (v: string | null) => any): void {
+  register(name: string, parser: ParserFunction): void {
     if (this.parsers.has(name)) {
       console.warn(`Parser "${name}" already registered, overwriting`);
     }
@@ -22,7 +24,7 @@ export class ParserRegistry {
    * @param name - The name of the parser
    * @returns The parser function or undefined if not found
    */
-  get(name: string): ((v: string | null) => any) | undefined {
+  get(name: string): ParserFunction | undefined {
     return this.parsers.get(name);
   }
   
@@ -60,31 +62,31 @@ export class ParserRegistry {
 export const globalParserRegistry = new ParserRegistry();
 
 // Register common built-in parsers
-globalParserRegistry.register('timestamp', (v) => 
+globalParserRegistry.register('timestamp', (v: string | null) => 
   v ? new Date(v).getTime() : null
 );
 
-globalParserRegistry.register('date', (v) => 
+globalParserRegistry.register('date', (v: string | null) => 
   v ? new Date(v) : null
 );
 
-globalParserRegistry.register('csv', (v) => 
-  v ? v.split(',').map(s => s.trim()) : []
+globalParserRegistry.register('csv', (v: string | null) => 
+  v ? v.split(',').map((s: string) => s.trim()) : []
 );
 
-globalParserRegistry.register('int', (v) => 
+globalParserRegistry.register('int', (v: string | null) => 
   v ? parseInt(v, 10) : null
 );
 
-globalParserRegistry.register('float', (v) => 
+globalParserRegistry.register('float', (v: string | null) => 
   v ? parseFloat(v) : null
 );
 
-globalParserRegistry.register('boolean', (v) => 
+globalParserRegistry.register('boolean', (v: string | null) => 
   v !== null
 );
 
-globalParserRegistry.register('json', (v) => {
+globalParserRegistry.register('json', (v: string | null) => {
   if (v === null || v === '') return null;
   try {
     return JSON.parse(v);
@@ -127,7 +129,7 @@ export function getParserRegistry(synthesizerElement: Element): ScopedParserRegi
 export function registerParser(
   synthesizerElement: Element,
   name: string,
-  parser: (v: string | null) => any
+  parser: ParserFunction
 ): void {
   const registry = getParserRegistry(synthesizerElement);
   registry.register(name, parser);

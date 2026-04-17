@@ -1,4 +1,4 @@
-import { AttrPatterns, AttrConfig } from './types/assign-gingerly/types';
+import { AttrPatterns, AttrConfig, ParserFunction, ParserContext, SpawnContext } from './types/assign-gingerly/types';
 import { globalParserRegistry, getParserRegistry } from './parserRegistry.js';
 import { resolveTemplate } from './resolveTemplate.js';
 
@@ -19,9 +19,9 @@ const parseCache = new Map<string, Map<string, any>>();
  * @throws Error if parser cannot be resolved
  */
 function resolveParser(
-  parserSpec: ((v: string | null) => any) | string | undefined,
+  parserSpec: ParserFunction | string | undefined,
   synthesizerElement?: Element
-): ((v: string | null) => any) | undefined {
+): ParserFunction | undefined {
   // Undefined - no parser specified
   if (parserSpec === undefined) {
     return undefined;
@@ -90,16 +90,18 @@ function getCacheKey(config: AttrConfig<any>): string {
  * @param attrValue - The attribute value to parse (or null)
  * @param config - The attribute configuration
  * @param parser - The parser function to use
+ * @param context - The parser context to pass to the parser
  * @returns The parsed value
  */
 function parseWithCache(
   attrValue: string | null,
   config: AttrConfig<any>,
-  parser: (v: string | null) => any
+  parser: ParserFunction,
+  context: ParserContext
 ): any {
   // Skip caching for Boolean (presence check doesn't benefit from caching)
   if (config.instanceOf === 'Boolean') {
-    return parser(attrValue);
+    return callParser(parser, attrValue, context);
   }
   
   // Get or create cache for this config
@@ -124,7 +126,7 @@ function parseWithCache(
   }
   
   // Parse the value
-  const parsedValue = parser(attrValue);
+  const parsedValue = callParser(parser, attrValue, context);
   
   // Store in cache
   valueCache.set(valueCacheKey, parsedValue);
@@ -135,6 +137,29 @@ function parseWithCache(
   }
   
   return parsedValue;
+}
+
+/**
+ * Calls a parser function with the appropriate signature
+ * Handles both simple (value-only) and advanced (value + context) parser signatures
+ * @param parser - The parser function
+ * @param attrValue - The attribute value
+ * @param context - The parser context
+ * @returns The parsed value
+ */
+function callParser(
+  parser: ParserFunction,
+  attrValue: string | null,
+  context: ParserContext
+): any {
+  // Check parser arity (number of parameters)
+  // If parser accepts 2+ parameters, pass context
+  if (parser.length >= 2) {
+    return parser(attrValue, context);
+  }
+  
+  // Otherwise, call with just the value (simple form)
+  return parser(attrValue);
 }
 
 /**
@@ -189,16 +214,16 @@ function getAttributeValue(
 /**
  * Gets the default parser for a given instanceOf type
  */
-function getDefaultParser(instanceOf?: string | Function): (v: string | null) => any {
+function getDefaultParser(instanceOf?: string | Function): ParserFunction {
     if (!instanceOf) {
-        return (v) => v; // Default to identity
+        return (v: string | null) => v; // Default to identity
     }
     
     const typeStr = typeof instanceOf === 'string' ? instanceOf : instanceOf.name;
     
     switch (typeStr) {
         case 'Object':
-            return (v) => {
+            return (v: string | null) => {
                 if (v === null || v === '') return null;
                 try {
                     return JSON.parse(v);
@@ -207,7 +232,7 @@ function getDefaultParser(instanceOf?: string | Function): (v: string | null) =>
                 }
             };
         case 'Array':
-            return (v) => {
+            return (v: string | null) => {
                 if (v === null || v === '') return null;
                 try {
                     return JSON.parse(v);
@@ -216,7 +241,7 @@ function getDefaultParser(instanceOf?: string | Function): (v: string | null) =>
                 }
             };
         case 'Number':
-            return (v) => {
+            return (v: string | null) => {
                 if (v === null || v === '') return null;
                 const num = Number(v);
                 if (isNaN(num)) {
@@ -225,10 +250,10 @@ function getDefaultParser(instanceOf?: string | Function): (v: string | null) =>
                 return num;
             };
         case 'Boolean':
-            return (v) => v !== null; // Presence check
+            return (v: string | null) => v !== null; // Presence check
         case 'String':
         default:
-            return (v) => v; // Identity
+            return (v: string | null) => v; // Identity
     }
 }
 
@@ -237,15 +262,18 @@ function getDefaultParser(instanceOf?: string | Function): (v: string | null) =>
  * @param element - The DOM element to read attributes from
  * @param attrPatterns - The attribute patterns configuration
  * @param allowUnprefixed - Pattern (string or RegExp) that element tag name must match to allow unprefixed attributes
- * @param synthesizerElement - Optional synthesizer element for scoped parser resolution
+ * @param spawnContext - Optional spawn context containing enhancement config and synthesizer element
  * @returns Object with parsed attribute values ready for initVals
  */
 export function parseWithAttrs<T = any>(
     element: Element,
     attrPatterns: AttrPatterns<T>,
     allowUnprefixed?: string | RegExp,
-    synthesizerElement?: Element
+    spawnContext?: SpawnContext<T>
 ): Partial<T> {
+    // Extract synthesizerElement from spawnContext for backward compatibility
+    const synthesizerElement = spawnContext?.synthesizerElement;
+    
     // Validate base attribute if present
     if ('base' in attrPatterns) {
         const baseValue = attrPatterns.base as string;
@@ -315,6 +343,14 @@ export function parseWithAttrs<T = any>(
     for (const [key, { attrName, config }] of resolvedAttrs) {
         const attrValue = getAttributeValue(element, attrName, allowUnprefixed);
         
+        // Create parser context
+        const parserContext: ParserContext<T> = {
+            attrConfig: config,
+            spawnContext,
+            element,
+            attrName
+        };
+        
         // Handle missing attribute
         if (attrValue === null) {
             // Use valIfNull if defined
@@ -337,7 +373,7 @@ export function parseWithAttrs<T = any>(
             // For Boolean without valIfNull, fall through to parser
             else {
                 const parser = resolveParser(config.parser, synthesizerElement) || getDefaultParser(config.instanceOf);
-                const parsedValue = parser(attrValue);
+                const parsedValue = callParser(parser, attrValue, parserContext);
                 const mapsTo = config.mapsTo ?? (key === 'base' ? '.' : key);
                 result[mapsTo as string] = parsedValue;
             }
@@ -349,8 +385,8 @@ export function parseWithAttrs<T = any>(
         
         // Use cache if parseCache is specified
         const parsedValue = config.parseCache 
-          ? parseWithCache(attrValue, config, parser)
-          : parser(attrValue);
+          ? parseWithCache(attrValue, config, parser, parserContext)
+          : callParser(parser, attrValue, parserContext);
         
         // Determine target property
         const mapsTo = config.mapsTo ?? (key === 'base' ? '.' : key);

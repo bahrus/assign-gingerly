@@ -1,9 +1,11 @@
+import { ParserFunction } from './types/assign-gingerly/types';
+
 /**
  * Registry for parsers scoped to a synthesizer element (be-hive, htmx-container, etc.)
  * Enables lazy-loading of complex parsers with Promise-based waiting
  */
 export class ScopedParserRegistry {
-  private parsers = new Map<string, (v: string | null) => any>();
+  private parsers = new Map<string, ParserFunction>();
   private pendingWaits = new Map<string, Array<{
     resolve: () => void;
     reject: (error: Error) => void;
@@ -15,7 +17,7 @@ export class ScopedParserRegistry {
    * @param name - The name to register the parser under
    * @param parser - The parser function
    */
-  register(name: string, parser: (v: string | null) => any): void {
+  register(name: string, parser: ParserFunction): void {
     if (this.parsers.has(name)) {
       console.warn(`Parser "${name}" already registered in scoped registry, overwriting`);
     }
@@ -35,7 +37,7 @@ export class ScopedParserRegistry {
    * @param name - The name of the parser
    * @returns The parser function or undefined if not found
    */
-  get(name: string): ((v: string | null) => any) | undefined {
+  get(name: string): ParserFunction | undefined {
     return this.parsers.get(name);
   }
   
