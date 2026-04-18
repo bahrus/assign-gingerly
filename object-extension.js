@@ -102,7 +102,14 @@ class ElementEnhancementContainer {
             let attrInitVals = undefined;
             if (registryItem.withAttrs && element) {
                 try {
-                    attrInitVals = parseWithAttrs(element, registryItem.withAttrs, registryItem.allowUnprefixed || false);
+                    // Create SpawnContext to pass to parseWithAttrs
+                    // If mountCtx already has synthesizerElement, use it directly in the SpawnContext
+                    const spawnContext = {
+                        config: registryItem,
+                        mountCtx,
+                        synthesizerElement: mountCtx?.synthesizerElement
+                    };
+                    attrInitVals = parseWithAttrs(element, registryItem.withAttrs, registryItem.allowUnprefixed || false, spawnContext);
                 }
                 catch (e) {
                     console.error('Error parsing attributes:', e);
