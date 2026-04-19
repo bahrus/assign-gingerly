@@ -112,3 +112,61 @@ The current implementation is safe, but memory leaks COULD occur if:
 
 The real concern should be **what enhancement instances do internally** - if they register global event listeners, create timers, or hold references in external systems, those need manual cleanup via the `dispose()` method.
 
+---
+
+## Response to "Although we have a documented api for disposing..."
+
+**Yes, I agree with this paragraph.** The API is well-documented and implemented:
+
+### The Disposal API Exists and Works
+
+1. **API Method:** `element.enh.dispose(registryItem)` is fully implemented in `object-extension.ts` (lines 237-268)
+
+2. **What it does:**
+   - Retrieves the instance from the WeakMap
+   - Calls the lifecycle dispose method if configured (e.g., `instance.dispose()` or custom method)
+   - Removes the instance from the WeakMap
+   - Removes the property from `element.enh[enhKey]` if enhKey exists
+
+3. **Documentation:** Thoroughly documented in README.md (lines 1335-1430+) with examples
+
+### The Problem: When to Call It?
+
+You're absolutely right that **knowing WHEN to call dispose is the hard part:**
+
+**Why it's difficult:**
+- ❌ **Can't detect GC:** JavaScript provides no way to know when an object is about to be garbage collected
+- ❌ **Disconnection ≠ Disposal:** An element being disconnected from DOM doesn't mean it should be disposed:
+  - It might be moved to another location (should keep enhancement)
+  - It might be temporarily removed and re-added (should keep enhancement)
+  - It might be cached in memory for reuse (should keep enhancement)
+  - It might truly be done and ready for GC (should dispose)
+- ❌ **No reliable heuristic:** There's no way to distinguish "temporarily disconnected" from "permanently done"
+
+### Current State
+
+**The disposal mechanism works perfectly when called.** The challenge is that:
+
+1. **Manual disposal works:** If you know when an element is done, calling `element.enh.dispose(registryItem)` works correctly
+2. **Automatic disposal is impossible:** There's no reliable way to automatically detect when disposal should happen
+3. **Memory leaks from WeakMap: NO** - The WeakMap prevents leaks even without disposal
+4. **Memory leaks from enhancement internals: MAYBE** - If enhancements don't clean up their own resources (event listeners, timers, external references)
+
+### The Real Issue
+
+The paragraph is correct: **We have the API, but not the trigger.** The problem isn't the disposal mechanism - it's knowing when to invoke it. This is a fundamental limitation of JavaScript's memory model and the DOM's lifecycle.
+
+**Practical implications:**
+- For short-lived elements: Don't worry about it - WeakMap handles cleanup
+- For long-lived apps: Need manual disposal strategy (e.g., dispose on route change, dispose on explicit user action)
+- For enhancement authors: Must implement proper cleanup in their dispose methods
+- For framework integration: Framework lifecycle hooks could trigger disposal (e.g., React useEffect cleanup, Vue onUnmounted)
+
+**Possible approaches:**
+1. **MutationObserver:** Watch for disconnection + timeout (heuristic: if still disconnected after N seconds, probably done)
+2. **Manual lifecycle:** Require explicit disposal in application code
+3. **Framework integration:** Let frameworks handle disposal via their lifecycle hooks
+4. **Reference counting:** Track external references and dispose when count reaches zero (complex, error-prone)
+
+None of these are perfect, which is why the paragraph correctly identifies this as an unsolved problem.
+
