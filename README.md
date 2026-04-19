@@ -1427,6 +1427,150 @@ element.enh.dispose(registryItem); // Stops timer and cleans up
 - Calling `enh.get()` again will create a new instance
 - The enhancement property is removed from the enh container
 
+#### Memory Management and When to Call Dispose
+
+**Important: Understanding automatic vs manual cleanup**
+
+The enhancement storage system uses a **WeakMap** to prevent memory leaks:
+
+```TypeScript
+// Global storage: WeakMap<Element, Map<EnhancementConfig, Instance>>
+```
+
+**What this means for memory:**
+
+✅ **Automatic cleanup when elements are garbage collected:**
+- When an element is GC'd, the WeakMap entry is automatically removed
+- Both `enhKey` references (`element.enh[enhKey]`) and WeakMap entries are cleaned up
+- **No memory leak from the storage mechanism itself**
+
+⚠️ **Manual cleanup needed for enhancement internals:**
+- Event listeners on global objects (window, document)
+- Timers (setInterval, setTimeout)
+- External registries or caches
+- Network connections or subscriptions
+
+**The challenge: Knowing WHEN to dispose**
+
+JavaScript provides no way to detect when an element is about to be garbage collected. Additionally, DOM disconnection doesn't reliably indicate disposal:
+
+```TypeScript
+// Element disconnected - but should we dispose?
+element.remove();
+
+// Case 1: Temporarily removed, will be re-added
+setTimeout(() => document.body.append(element), 1000);
+// ❌ Don't dispose - enhancement should persist
+
+// Case 2: Moved to another location
+otherContainer.append(element);
+// ❌ Don't dispose - enhancement should persist
+
+// Case 3: Cached for reuse
+elementCache.set('myElement', element);
+// ❌ Don't dispose - enhancement should persist
+
+// Case 4: Truly done, ready for GC
+element = null;
+// ✅ Should dispose, but no way to detect this automatically
+```
+
+**Practical disposal strategies:**
+
+1. **Short-lived elements:** Don't worry about disposal - WeakMap handles cleanup automatically when elements are GC'd
+
+2. **Long-lived applications:** Implement manual disposal at logical boundaries:
+   ```TypeScript
+   // On route change
+   router.beforeLeave(() => {
+     oldRouteElements.forEach(el => el.enh.dispose(registryItem));
+   });
+   
+   // On explicit user action
+   closeButton.onclick = () => {
+     dialog.enh.dispose(registryItem);
+     dialog.remove();
+   };
+   ```
+
+3. **Framework integration:** Use framework lifecycle hooks:
+   ```TypeScript
+   // React
+   useEffect(() => {
+     return () => elementRef.current?.enh.dispose(registryItem);
+   }, []);
+   
+   // Vue
+   onUnmounted(() => {
+     element.value?.enh.dispose(registryItem);
+   });
+   ```
+
+4. **MutationObserver heuristic:** Watch for disconnection + timeout (imperfect but practical):
+   ```TypeScript
+   const observer = new MutationObserver(() => {
+     if (!element.isConnected) {
+       setTimeout(() => {
+         if (!element.isConnected) {
+           element.enh.dispose(registryItem);
+         }
+       }, 5000); // If still disconnected after 5s, probably done
+     }
+   });
+   ```
+
+**Best practices for enhancement authors:**
+
+Always implement proper cleanup in your dispose method:
+
+```TypeScript
+class MyEnhancement {
+  element;
+  timerId = null;
+  boundHandler = null;
+  
+  constructor(element, ctx) {
+    this.element = element;
+    this.boundHandler = this.handleClick.bind(this);
+    
+    // Local listener - OK, will be GC'd with element
+    element.addEventListener('click', this.boundHandler);
+    
+    // Global listener - MUST clean up manually
+    window.addEventListener('resize', this.boundHandler);
+    
+    // Timer - MUST clean up manually
+    this.timerId = setInterval(() => this.update(), 1000);
+  }
+  
+  dispose() {
+    // Clean up global listener
+    if (this.boundHandler) {
+      window.removeEventListener('resize', this.boundHandler);
+    }
+    
+    // Clean up timer
+    if (this.timerId) {
+      clearInterval(this.timerId);
+      this.timerId = null;
+    }
+    
+    // Clear references
+    this.element = null;
+    this.boundHandler = null;
+  }
+  
+  handleClick() { /* ... */ }
+  update() { /* ... */ }
+}
+```
+
+**Summary:**
+- ✅ Storage mechanism prevents memory leaks via WeakMap
+- ⚠️ Enhancement internals need manual cleanup via dispose()
+- ❌ No automatic way to detect when disposal should happen
+- 👍 Choose disposal strategy based on your application's lifecycle
+
 ### Waiting for Async Initialization with `enh.whenResolved(regItem)`
 
 The `enh.whenResolved(regItem)` method provides a way to wait for asynchronous enhancement initialization:
