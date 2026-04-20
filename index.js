@@ -6,4 +6,5 @@ export { ParserRegistry, globalParserRegistry } from './parserRegistry.js';
 export { parseWithAttrs } from './parseWithAttrs.js';
 export { buildCSSQuery } from './buildCSSQuery.js';
 export { resolveTemplate } from './resolveTemplate.js';
+export { getHost } from './getHost.js';
 import './object-extension.js';
