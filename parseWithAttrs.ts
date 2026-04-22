@@ -186,7 +186,8 @@ function getAttributeValue(
   attrName: string,
   allowUnprefixed?: string | RegExp
 ): string | null {
-  const isCustomElement = element.tagName.includes('-');
+  const { localName } = element;
+  const isCustomElement = localName.includes('-');
   const isSVGElement = typeof SVGElement !== 'undefined' && element instanceof SVGElement;
   
   // For custom elements and SVG - strict enh- requirement
@@ -197,8 +198,7 @@ function getAttributeValue(
     // Only fallback if tag name matches the allowUnprefixed pattern
     if (allowUnprefixed) {
       const pattern = typeof allowUnprefixed === 'string' ? new RegExp(allowUnprefixed) : allowUnprefixed;
-      const tagName = element.tagName.toLowerCase();
-      if (pattern.test(tagName)) {
+      if (pattern.test(localName)) {
         return element.getAttribute(attrName);
       }
     }
