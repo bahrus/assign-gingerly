@@ -404,6 +404,84 @@ if (typeof Element !== 'undefined') {
     enumerable: true,
     configurable: true,
   });
+  
+  /**
+   * Adds 'set' property to Element prototype for symbol-based dependency injection
+   * Returns a proxy that intercepts symbol property assignments
+   */
+  Object.defineProperty(Element.prototype, 'set', {
+    get: function (this: Element) {
+      const element = this;
+      return new Proxy(
+        {},
+        {
+          set: (_: any, prop: string | symbol, value: any) => {
+            if (typeof prop === 'symbol') {
+              // Get the registry from customElementRegistry (scoped or global)
+              const registry = (element as any).customElementRegistry?.enhancementRegistry
+                ?? (typeof customElements !== 'undefined' ? customElements.enhancementRegistry : undefined);
+              
+              if (registry) {
+                const registryItem = registry.findBySymbol(prop);
+                if (registryItem) {
+                  const instanceMap = getInstanceMap();
+                  const instances = instanceMap.getOrInsertComputed(element, () => new Map());
+                  let instance = instances.get(registryItem);
+
+                  if (!instance) {
+                    const SpawnClass = registryItem.spawn;
+                    
+                    // Check canSpawn if it exists
+                    if (typeof SpawnClass.canSpawn === 'function') {
+                      const ctx = { config: registryItem };
+                      if (!SpawnClass.canSpawn(element, ctx)) {
+                        // canSpawn returned false, skip spawning
+                        return true;
+                      }
+                    }
+                    
+                    // If target is an Element and registryItem has enhKey, pass element to constructor
+                    if (registryItem.enhKey) {
+                      const ctx = { config: registryItem };
+                      const initVals = (element as any).enh?.[registryItem.enhKey] && 
+                                      !((element as any).enh[registryItem.enhKey] instanceof SpawnClass)
+                                      ? (element as any).enh[registryItem.enhKey]
+                                      : undefined;
+                      instance = new SpawnClass(element, ctx, initVals);
+                    } else {
+                      const ctx = { config: registryItem };
+                      instance = new SpawnClass(element, ctx);
+                    }
+                    
+                    instances.set(registryItem, instance);
+                    
+                    // If registryItem has enhKey, store on enh
+                    if (registryItem.enhKey) {
+                      if (!(element as any).enh) {
+                        // This shouldn't happen since enh is a getter, but be safe
+                        (element as any).enh = {};
+                      }
+                      (element as any).enh[registryItem.enhKey] = instance;
+                    }
+                  }
+                  
+                  if(registryItem.symlinks){
+                    const mappedKey = registryItem.symlinks[prop];
+                    if (mappedKey && instance && typeof instance === 'object') {
+                      (instance as any)[mappedKey] = value;
+                    }
+                  }
+                }
+              }
+            }
+            return true;
+          },
+        }
+      );
+    },
+    enumerable: false,
+    configurable: true,
+  });
 }
 
 /**

@@ -562,3 +562,7 @@ assign-gingerly/
 - Optional type coercion for advanced use cases
 
 **Ready to implement?** This should be straightforward - about 150-200 lines including the inference functions and proper error handling.
+
+## Human Response
+
+I think the added lines of code needed to handle deref() being undefined aren't worth it, because the call will be directly directly from the enhanced element, so it is hard to see how there would be a scenario where deref() would have been garbage collected.  I like the enhKey: infer idea.

@@ -10,6 +10,7 @@
 	},
 	"include": [
 		"index.ts",
+		"Infer.ts",
 		"types/global.d.ts"
 	],
 	"exclude":[

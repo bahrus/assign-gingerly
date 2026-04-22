@@ -55,6 +55,10 @@
     "./getHost.js": {
       "default": "./getHost.js",
       "types": "./getHost.ts"
+    },
+    "./Infer.js": {
+      "default": "./Infer.js",
+      "types": "./Infer.ts"
     }
   },
   "main": "index.js",
