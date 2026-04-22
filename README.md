@@ -3411,3 +3411,279 @@ This design ensures backward compatibility while providing powerful new capabili
 
 
 
+## Smart Value Assignment with Infer Enhancement
+
+The Infer enhancement provides a symbol-based API for smart value and display property assignment. Instead of manually determining which property to set on different element types (e.g., `value` for inputs, `checked` for checkboxes, `textContent` for divs), the Infer enhancement automatically infers the correct property based on the element type.
+
+### Why Infer?
+
+Different HTML elements use different properties to represent their value:
+- Input text fields use `value`
+- Checkboxes and radio buttons use `checked`
+- Time elements use `dateTime`
+- Divs and spans use `textContent`
+- Progress and meter elements use `value` but display with `ariaValueText`
+
+The Infer enhancement eliminates the need to remember these differences by providing two symbols that automatically map to the correct property:
+
+- `value` symbol - Sets the element's data value
+- `display` symbol - Sets the element's display/presentation value
+
+### Basic Usage
+
+```TypeScript
+import { value, display, registryItem } from 'assign-gingerly/Infer.js';
+import 'assign-gingerly/object-extension.js';
+
+// Register the Infer enhancement
+customElements.enhancementRegistry.push(registryItem);
+
+// Use the value symbol - automatically sets the right property
+const input = document.createElement('input');
+input.type = 'text';
+input.set[value] = 'hello';
+console.log(input.value); // 'hello'
+
+const checkbox = document.createElement('input');
+checkbox.type = 'checkbox';
+checkbox.set[value] = true;
+console.log(checkbox.checked); // true
+
+const div = document.createElement('div');
+div.set[value] = 'content';
+console.log(div.textContent); // 'content'
+
+const time = document.createElement('time');
+time.set[value] = '2024-01-01T00:00:00Z';
+console.log(time.dateTime); // '2024-01-01T00:00:00Z'
+```
+
+### Value Property Inference
+
+The `value` symbol automatically maps to the most appropriate property for each element type:
+
+| Element Type | Property Set | Example |
+|-------------|-------------|---------|
+| `<input type="text">` | `value` | Text input value |
+| `<input type="checkbox">` | `checked` | Checkbox state |
+| `<input type="radio">` | `checked` | Radio button state |
+| `<textarea>` | `value` | Textarea content |
+| `<select>` | `value` | Selected option |
+| `<time>` | `dateTime` | ISO datetime string |
+| `<data>` | `value` | Machine-readable value |
+| `<meter>` | `value` | Numeric value |
+| `<progress>` | `value` | Progress value |
+| `<output>` | `value` | Output value |
+| Elements with `itemprop` | `itemprop` value | Custom property name |
+| Other elements | `textContent` | Text content |
+
+### Display Property Inference
+
+The `display` symbol sets the human-readable display value:
+
+```TypeScript
+// Time element - display formatted time
+const time = document.createElement('time');
+time.set[value] = '2024-01-01T00:00:00Z';  // Machine-readable
+time.set[display] = 'January 1, 2024';      // Human-readable
+console.log(time.dateTime);    // '2024-01-01T00:00:00Z'
+console.log(time.textContent); // 'January 1, 2024'
+
+// Meter element - display with ARIA
+const meter = document.createElement('meter');
+meter.min = 0;
+meter.max = 100;
+meter.set[value] = 75;                    // Numeric value
+meter.set[display] = '75 percent';        // Screen reader text
+console.log(meter.value);          // 75
+console.log(meter.ariaValueText);  // '75 percent'
+```
+
+| Element Type | Property Set | Example |
+|-------------|-------------|---------|
+| `<input>`, `<textarea>`, `<select>` | `value` | Form control value |
+| `<time>` | `textContent` | Formatted time string |
+| `<data>` | `textContent` | Human-readable content |
+| `<meter>`, `<progress>` | `ariaValueText` | Screen reader text |
+| Other elements | `textContent` | Text content |
+
+### Accessing the Enhancement Instance
+
+The Infer enhancement is accessible via `element.enh.infer`:
+
+```TypeScript
+const input = document.createElement('input');
+input.set[value] = 'test';
+
+// Access the enhancement instance
+console.log(input.enh.infer.value); // 'test' (cached value)
+
+// The instance maintains references to both value and display
+input.set[display] = 'Test Display';
+console.log(input.enh.infer.value);   // 'test'
+console.log(input.enh.infer.display); // 'Test Display'
+```
+
+### Using with assignGingerly
+
+The Infer enhancement integrates seamlessly with `assignGingerly`:
+
+```TypeScript
+import { value, display } from 'assign-gingerly/Infer.js';
+
+const element = document.createElement('input');
+element.type = 'text';
+
+// Use symbols in assignGingerly
+element.assignGingerly({
+  [value]: 'hello world',
+  style: {
+    color: 'blue'
+  }
+});
+
+console.log(element.value);       // 'hello world'
+console.log(element.style.color); // 'blue'
+```
+
+### Itemprop Support
+
+Elements with an `itemprop` attribute use that attribute's value as the property name:
+
+```html
+<span itemprop="title"></span>
+```
+
+```TypeScript
+const span = document.querySelector('[itemprop="title"]');
+span.set[value] = 'My Title';
+console.log(span.title); // 'My Title'
+```
+
+### Implementation Details
+
+The Infer enhancement is implemented as a standard enhancement class:
+
+```TypeScript
+class Infer<TValue = any, TDisplay = any> {
+  #weakRef: WeakRef<Element>;
+  
+  constructor(enhancedElement?: Element) {
+    this.#weakRef = new WeakRef(enhancedElement!);
+  }
+  
+  get value(): TValue | undefined { /* ... */ }
+  set value(nv: TValue) {
+    const element = this.#weakRef.deref()!;
+    element[inferValueProperty(element)] = nv;
+  }
+  
+  get display(): TDisplay | undefined { /* ... */ }
+  set display(nv: TDisplay) {
+    const element = this.#weakRef.deref()!;
+    element[inferDisplayProperty(element)] = nv;
+  }
+}
+```
+
+**Registry Configuration:**
+
+```TypeScript
+export const registryItem: EnhancementConfig = {
+  spawn: Infer,
+  enhKey: 'infer',
+  symlinks: {
+    [value]: 'value',
+    [display]: 'display'
+  }
+};
+```
+
+The `symlinks` mapping connects the symbols to the enhancement's properties, enabling the `element.set[symbol]` syntax.
+
+### Helper Functions
+
+The Infer module exports helper functions for manual property inference:
+
+```TypeScript
+import { inferValueProperty, inferDisplayProperty } from 'assign-gingerly/Infer.js';
+
+const input = document.createElement('input');
+input.type = 'checkbox';
+
+const valueProp = inferValueProperty(input);
+console.log(valueProp); // 'checked'
+
+const displayProp = inferDisplayProperty(input);
+console.log(displayProp); // 'value'
+```
+
+These functions can be useful when you need to determine the property name without actually setting a value.
+
+### Benefits
+
+1. **Type-agnostic code**: Write code that works with any element type without conditionals
+2. **Cleaner syntax**: No need to remember which property each element type uses
+3. **Accessibility**: Separate value and display properties support screen readers
+4. **Framework-friendly**: Symbols work well with reactive frameworks and data binding
+5. **Extensible**: Based on the enhancement registry system, can be customized or extended
+
+### Complete Example
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <script type="module">
+    import { value, display, registryItem } from './Infer.js';
+    import './object-extension.js';
+    
+    // Register the enhancement
+    customElements.enhancementRegistry.push(registryItem);
+    
+    // Create various elements
+    const input = document.createElement('input');
+    input.type = 'text';
+    
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    
+    const time = document.createElement('time');
+    
+    const meter = document.createElement('meter');
+    meter.min = 0;
+    meter.max = 100;
+    
+    // Set values using the same symbol - each element handles it correctly
+    input.set[value] = 'Hello World';
+    checkbox.set[value] = true;
+    time.set[value] = '2024-01-01T00:00:00Z';
+    time.set[display] = 'January 1, 2024';
+    meter.set[value] = 75;
+    meter.set[display] = '75 percent';
+    
+    // Add to document
+    document.body.append(input, checkbox, time, meter);
+    
+    console.log('Input value:', input.value);           // 'Hello World'
+    console.log('Checkbox checked:', checkbox.checked); // true
+    console.log('Time dateTime:', time.dateTime);       // '2024-01-01T00:00:00Z'
+    console.log('Time display:', time.textContent);     // 'January 1, 2024'
+    console.log('Meter value:', meter.value);           // 75
+    console.log('Meter display:', meter.ariaValueText); // '75 percent'
+  </script>
+</head>
+<body>
+  <h1>Infer Enhancement Demo</h1>
+</body>
+</html>
+```
+
+### Browser Support
+
+The Infer enhancement requires:
+- Chrome 146+ (for scoped custom element registries)
+- Modern browsers with Symbol support
+- WeakRef support (all modern browsers)
+
+For browsers without scoped registry support, the enhancement falls back to the global `customElements.enhancementRegistry`.
