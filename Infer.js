@@ -57,7 +57,7 @@ export const registryItem = {
  * @returns The property name to use for value assignment
  */
 export function inferValueProperty(element) {
-    const tagName = element.tagName.toLowerCase();
+    const tagName = element.localName;
     // Input elements - check type attribute
     if (tagName === 'input') {
         const type = element.getAttribute('type')?.toLowerCase();
@@ -97,7 +97,7 @@ export function inferValueProperty(element) {
  * @returns The property name to use for display assignment
  */
 export function inferDisplayProperty(element) {
-    const tagName = element.tagName.toLowerCase();
+    const tagName = element.localName;
     // Form controls display their value
     if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
         return 'value';
