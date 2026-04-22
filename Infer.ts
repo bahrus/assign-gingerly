@@ -50,6 +50,14 @@ export class Infer<TValue = any, TDisplay = any> {
         const {enhancedElement} = this;
         (enhancedElement as any)[inferDisplayProperty(enhancedElement)] = nv;
     }
+
+    /**
+     * Get the inferred event type for the element
+     * @returns The most appropriate event type for this element
+     */
+    get eventType(): string {
+        return inferEventType(this.enhancedElement);
+    }
 }
 
 /**
@@ -144,6 +152,39 @@ export function inferDisplayProperty(element: Element): string {
     
     // Default fallback
     return 'textContent';
+}
+
+/**
+ * Infer the most appropriate event type for an element
+ * Used when no explicit event type is provided
+ * @param element - The element to infer the event type for
+ * @returns The event type name like 'input', 'change', 'click', 'submit'
+ */
+export function inferEventType(element: Element): string {
+    const tagName = element.localName;
+    
+    // Form controls that support input event
+    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+        return 'input';
+    }
+    
+    // Form submission
+    if (tagName === 'form') {
+        return 'submit';
+    }
+    
+    // Details element
+    if (tagName === 'details') {
+        return 'toggle';
+    }
+    
+    // Dialog element
+    if (tagName === 'dialog') {
+        return 'close';
+    }
+    
+    // Default fallback for interactive elements
+    return 'click';
 }
 
 export default registryItem;

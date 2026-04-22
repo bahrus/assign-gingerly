@@ -10,7 +10,7 @@
     <div id="results"></div>
 
     <script type="module">
-        import { value, display, registryItem } from '../Infer.js';
+        import { value, display, registryItem, inferEventType } from '../Infer.js';
         import '../object-extension.js';
 
         const results = [];
@@ -230,6 +230,113 @@
             }
             if (time.textContent !== 'January 1, 2024') {
                 throw new Error(`Expected textContent 'January 1, 2024', got '${time.textContent}'`);
+            }
+        });
+
+        // Test 19: inferEventType for input element
+        test('should infer "input" event for input element', () => {
+            const input = document.createElement('input');
+            const eventType = inferEventType(input);
+            
+            if (eventType !== 'input') {
+                throw new Error(`Expected 'input', got '${eventType}'`);
+            }
+        });
+
+        // Test 20: inferEventType for textarea element
+        test('should infer "input" event for textarea element', () => {
+            const textarea = document.createElement('textarea');
+            const eventType = inferEventType(textarea);
+            
+            if (eventType !== 'input') {
+                throw new Error(`Expected 'input', got '${eventType}'`);
+            }
+        });
+
+        // Test 21: inferEventType for select element
+        test('should infer "input" event for select element', () => {
+            const select = document.createElement('select');
+            const eventType = inferEventType(select);
+            
+            if (eventType !== 'input') {
+                throw new Error(`Expected 'input', got '${eventType}'`);
+            }
+        });
+
+        // Test 22: inferEventType for form element
+        test('should infer "submit" event for form element', () => {
+            const form = document.createElement('form');
+            const eventType = inferEventType(form);
+            
+            if (eventType !== 'submit') {
+                throw new Error(`Expected 'submit', got '${eventType}'`);
+            }
+        });
+
+        // Test 23: inferEventType for details element
+        test('should infer "toggle" event for details element', () => {
+            const details = document.createElement('details');
+            const eventType = inferEventType(details);
+            
+            if (eventType !== 'toggle') {
+                throw new Error(`Expected 'toggle', got '${eventType}'`);
+            }
+        });
+
+        // Test 24: inferEventType for dialog element
+        test('should infer "close" event for dialog element', () => {
+            const dialog = document.createElement('dialog');
+            const eventType = inferEventType(dialog);
+            
+            if (eventType !== 'close') {
+                throw new Error(`Expected 'close', got '${eventType}'`);
+            }
+        });
+
+        // Test 25: inferEventType for button element (default to click)
+        test('should infer "click" event for button element', () => {
+            const button = document.createElement('button');
+            const eventType = inferEventType(button);
+            
+            if (eventType !== 'click') {
+                throw new Error(`Expected 'click', got '${eventType}'`);
+            }
+        });
+
+        // Test 26: inferEventType for div element (default to click)
+        test('should infer "click" event for div element', () => {
+            const div = document.createElement('div');
+            const eventType = inferEventType(div);
+            
+            if (eventType !== 'click') {
+                throw new Error(`Expected 'click', got '${eventType}'`);
+            }
+        });
+
+        // Test 27: eventType getter via enh.infer
+        test('should access eventType via enh.infer.eventType', () => {
+            const input = document.createElement('input');
+            input.set[value] = 'test';
+            
+            if (input.enh.infer.eventType !== 'input') {
+                throw new Error(`Expected 'input', got '${input.enh.infer.eventType}'`);
+            }
+        });
+
+        // Test 28: eventType getter for different element types
+        test('should return correct eventType for different elements via getter', () => {
+            const form = document.createElement('form');
+            form.set[value] = 'test';
+            
+            if (form.enh.infer.eventType !== 'submit') {
+                throw new Error(`Expected 'submit', got '${form.enh.infer.eventType}'`);
+            }
+            
+            const button = document.createElement('button');
+            button.set[value] = 'test';
+            
+            if (button.enh.infer.eventType !== 'click') {
+                throw new Error(`Expected 'click', got '${button.enh.infer.eventType}'`);
             }
         });
 

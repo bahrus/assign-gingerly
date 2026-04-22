@@ -3603,10 +3603,10 @@ The `symlinks` mapping connects the symbols to the enhancement's properties, ena
 
 ### Helper Functions
 
-The Infer module exports helper functions for manual property inference:
+The Infer module exports helper functions for manual property and event type inference:
 
 ```TypeScript
-import { inferValueProperty, inferDisplayProperty } from 'assign-gingerly/Infer.js';
+import { inferValueProperty, inferDisplayProperty, inferEventType } from 'assign-gingerly/Infer.js';
 
 const input = document.createElement('input');
 input.type = 'checkbox';
@@ -3616,9 +3616,42 @@ console.log(valueProp); // 'checked'
 
 const displayProp = inferDisplayProperty(input);
 console.log(displayProp); // 'value'
+
+const eventType = inferEventType(input);
+console.log(eventType); // 'input'
 ```
 
-These functions can be useful when you need to determine the property name without actually setting a value.
+These functions can be useful when you need to determine the property or event type name without actually setting a value or attaching a listener.
+
+**Event Type Inference:**
+
+The `inferEventType` function returns the most appropriate event type for different element types:
+
+| Element Type | Event Type | Use Case |
+|-------------|-----------|----------|
+| `<input>`, `<textarea>`, `<select>` | `input` | Form control value changes |
+| `<form>` | `submit` | Form submission |
+| `<details>` | `toggle` | Details element open/close |
+| `<dialog>` | `close` | Dialog dismissal |
+| Other elements | `click` | Default interactive event |
+
+**Accessing via Enhancement Instance:**
+
+The inferred event type is also available as a getter on the enhancement instance:
+
+```TypeScript
+const input = document.createElement('input');
+input.set[value] = 'test';
+
+console.log(input.enh.infer.eventType); // 'input'
+
+const form = document.createElement('form');
+form.set[value] = 'test';
+
+console.log(form.enh.infer.eventType); // 'submit'
+```
+
+This is particularly useful when building enhancements that need to attach event listeners but don't know the element type in advance.
 
 ### Benefits
 
