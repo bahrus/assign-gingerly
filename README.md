@@ -2198,6 +2198,33 @@ const result = parseWithAttrs(element, {
 // Result: { name: 'Alice', age: '30' }
 ```
 
+**Deep Nesting:**
+
+Template variables can reference other template variables to any depth, creating hierarchical attribute naming patterns:
+
+```TypeScript
+// HTML: <div data-app-user-profile-name="Alice" data-app-user-profile-email="alice@example.com"></div>
+
+const result = parseWithAttrs(element, {
+  base: 'data-',
+  app: '${base}app',
+  user: '${app}-user',
+  profile: '${user}-profile',
+  name: '${profile}-name',
+  email: '${profile}-email'
+});
+// Result: { name: 'Alice', email: 'alice@example.com' }
+
+// The resolution chain: base → app → user → profile → name/email
+// Resolves to: data-app-user-profile-name and data-app-user-profile-email
+```
+
+**Benefits of hierarchical variables:**
+- Build complex attribute names from simple parts
+- Maintain consistency across related attributes
+- Easy to refactor by changing a single variable
+- Self-documenting attribute structure
+
 Template variables are resolved recursively and cached for performance. Circular references are detected and throw an error.
 
 ### Type Parsing with instanceOf
