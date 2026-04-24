@@ -1976,7 +1976,7 @@ console.log(instance.value);  // 'test123' (parsed from attribute)
 
 </details>
 
-> ![NOTE]
+> [!NOTE]
 > `withAttrs` works with or without `enhKey`. When there's no `enhKey`, the parsed attributes are passed directly to the constructor. When there is an `enhKey`, they're merged with any pre-existing values on the enh container.
 
 ### The `enh-` Prefix for Attribute Isolation
