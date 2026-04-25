@@ -649,6 +649,8 @@ console.log(string1 === string2); // true
 
 This guarantees that applying the reversal object restores the object to its exact original state.
 
+# Object and Element Enhancements via assign-gingerly
+
 ## Dependency injection based on a registry object and a Symbolic reference mapping
 
 ```Typescript
