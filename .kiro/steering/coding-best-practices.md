@@ -36,24 +36,19 @@ if (tagName === 'input') { /* ... */ }
 
 ## Implementation Examples
 
-The Infer enhancement demonstrates this pattern:
+From `parseWithAttrs.ts`:
 
 ```typescript
-export function inferValueProperty(element: Element): string {
-    const tagName = element.localName;
-    
-    if (tagName === 'input') {
-        const type = element.getAttribute('type')?.toLowerCase();
-        if (type === 'checkbox' || type === 'radio') {
-            return 'checked';
-        }
-        return 'value';
-    }
-    
-    if (tagName === 'textarea' || tagName === 'select') {
-        return 'value';
-    }
-    
-    // ... more comparisons
+const { localName } = element;
+const isCustomElement = localName.includes('-');
+
+switch (localName) {
+    case 'input':
+        // Handle input elements
+        break;
+    case 'textarea':
+        // Handle textarea elements
+        break;
+    // ... more cases
 }
 ```
