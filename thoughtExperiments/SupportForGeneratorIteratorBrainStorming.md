@@ -446,3 +446,43 @@ if (forEachIndex !== -1 && isReactiveForEachSymbol(pathParts[forEachIndex], alia
 This is definitely implementable and would be a powerful feature! The key is getting the cleanup/disposal right to avoid memory leaks.
 
 What are your thoughts on this approach?
+
+---
+
+## Human Response I
+
+Let's support EventTargets only for now, I agree, and @eachTime
+
+This package is part of a larger set of standards proposals that includes mount-observer, linked to above.  There could have been a danger that these two packages / polyfill packages / proposal now start to have circular references -- As it is, mount-observer depends on this package, and I don't want to cause npm to explode by making the dependency mutual.
+
+Fortunately, these packages a sharing a common types submodule, "types", inside of which you will find these types:
+
+```TypeScript
+export interface IMountObserver extends EventTarget {
+    observe(observedNode: Node): Promise<void>;
+    disconnect(): void;
+    disconnectedSignal: AbortSignal;
+    assignGingerly(config: Record<string, any> | undefined): Promise<void>;
+    getNotifier(element: Element): EventTarget;
+    readonly options: MountObserverOptions;
+}
+
+export interface IMountEvent extends Event {
+    mountedElement: Element;
+    modules: any[];
+    mountConfig: MountConfig;
+    mountContext: MountContext;
+}
+```
+
+The name of the eventType corresponding to IMountEvent is "mount" so I think we should assume that.
+
+I think the only method to assume from IMountObserver is "disconnect()", because the rest gets taken care of elsewhere.
+
+The challenge will be how to test it.  I think to avoid circular dependencies, let's not add tests for this feature in this package.  I will add tests in the mount-observer package.
+
+I think maybe as far as cleanup, @eachTime should only be usable if an abort controller's signal is passed in to the third parameter, similar to addEventListener.
+
+Because assignGingerly is fundamentally synchronous, if we add it to assignGingerly, it necessarily  needs to add to the weight of the package.  How many lines of code would this requirement take, based on the understanding above?
+
+
