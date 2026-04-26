@@ -320,6 +320,27 @@ function evaluatePathWithMethods(target, pathParts, value, withMethods) {
     };
 }
 /**
+ * Apply alias substitutions to a key string.
+ * Replaces complete tokens between `?.` delimiters with their aliased values.
+ *
+ * @param key - The key string (e.g., '?.$?.my-element?.c?.+')
+ * @param aliasMap - Map of alias -> target name
+ * @returns The key with aliases substituted (e.g., '?.querySelector?.my-element?.classList?.add')
+ */
+function applyAliases(key, aliasMap) {
+    if (aliasMap.size === 0)
+        return key;
+    // Split by ?. to get tokens
+    const parts = key.split('?.');
+    // Apply aliases to each part
+    const substituted = parts.map(part => {
+        // Check if this exact part is an alias
+        return aliasMap.get(part) ?? part;
+    });
+    // Rejoin with ?.
+    return substituted.join('?.');
+}
+/**
  * Main assignGingerly function
  */
 export function assignGingerly(target, source, options) {
@@ -332,12 +353,23 @@ export function assignGingerly(target, source, options) {
             ? options.withMethods
             : new Set(options.withMethods)
         : undefined;
+    // Convert aka object to Map for O(1) lookup and validate aliases
+    const aliasMap = new Map();
+    if (options?.aka) {
+        for (const [alias, target] of Object.entries(options.aka)) {
+            // Validate: disallow space and backtick in aliases
+            if (alias.includes(' ') || alias.includes('`')) {
+                throw new Error(`Invalid alias '${alias}': aliases cannot contain space or backtick characters`);
+            }
+            aliasMap.set(alias, target);
+        }
+    }
     const registry = options?.registry instanceof EnhancementRegistry
         ? options.registry
         : options?.registry
             ? new options.registry()
             : undefined;
-    // Convert Symbol.for string keys to actual symbols
+    // Convert Symbol.for string keys to actual symbols and apply aliases
     const processedSource = {};
     for (const key of Object.keys(source)) {
         if (isSymbolForKey(key)) {
@@ -351,7 +383,9 @@ export function assignGingerly(target, source, options) {
             }
         }
         else {
-            processedSource[key] = source[key];
+            // Apply aliases to string keys
+            const substitutedKey = applyAliases(key, aliasMap);
+            processedSource[substitutedKey] = source[key];
         }
     }
     // Copy over actual symbol keys

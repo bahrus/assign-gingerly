@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aliasing Tests</title>
+</head>
+<body>
+    <h1>Aliasing Tests</h1>
+    <div id="results"></div>
+
+    <script type="module">
+        import assignGingerly from '../assignGingerly.js';
+
+        const results = [];
+        let testCount = 0;
+        let passCount = 0;
+
+        function test(name, fn) {
+            testCount++;
+            try {
+                fn();
+                passCount++;
+                results.push(`✓ ${name}`);
+                console.log(`✓ ${name}`);
+            } catch (error) {
+                results.push(`✗ ${name}: ${error.message}`);
+                console.error(`✗ ${name}:`, error);
+            }
+        }
+
+        // Test 1: Single character alias for property
+        test('should substitute single character alias for property', () => {
+            const obj = { classList: { value: null } };
+            
+            assignGingerly(obj, {
+                '?.c?.value': 'test'
+            }, { aka: { 'c': 'classList' } });
+            
+            if (obj.classList.value !== 'test') {
+                throw new Error(`Expected 'test', got ${obj.classList.value}`);
+            }
+        });
+
+        // Test 2: Multi-character alias for property
+        test('should substitute multi-character alias for property', () => {
+            const obj = { classList: { value: null } };
+            
+            assignGingerly(obj, {
+                '?.cl?.value': 'test'
+            }, { aka: { 'cl': 'classList' } });
+            
+            if (obj.classList.value !== 'test') {
+                throw new Error(`Expected 'test', got ${obj.classList.value}`);
+            }
+        });
+
+        // Test 3: Single character alias for method
+        test('should substitute single character alias for method', () => {
+            const element = document.createElement('div');
+            
+            assignGingerly(element, {
+                '?.c?.+': 'myClass'
+            }, { 
+                withMethods: ['add'],
+                aka: { 'c': 'classList', '+': 'add' }
+            });
+            
+            if (!element.classList.contains('myClass')) {
+                throw new Error('Class was not added');
+            }
+        });
+
+        // Test 4: Multiple aliases in same path
+        test('should handle multiple aliases in same path', () => {
+            const div = document.createElement('div');
+            div.innerHTML = '<my-element></my-element>';
+            
+            assignGingerly(div, {
+                '?.$?.my-element?.c?.+': 'highlighted'
+            }, { 
+                withMethods: ['querySelector', 'add'],
+                aka: { '$': 'querySelector', 'c': 'classList', '+': 'add' }
+            });
+            
+            const myElement = div.querySelector('my-element');
+            if (!myElement?.classList.contains('highlighted')) {
+                throw new Error('Class was not added to queried element');
+            }
+        });
+
+        // Test 5: Alias with chained querySelector
+        test('should work with chained querySelector using aliases', () => {
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <my-element>
+                    <your-element></your-element>
+                </my-element>
+            `;
+            
+            assignGingerly(div, {
+                '?.$?.my-element?.$?.your-element?.c?.+': 'highlighted'
+            }, { 
+                withMethods: ['querySelector', 'add'],
+                aka: { '$': 'querySelector', 'c': 'classList', '+': 'add' }
+            });
+            
+            const yourElement = div.querySelector('my-element')?.querySelector('your-element');
+            if (!yourElement?.classList.contains('highlighted')) {
+                throw new Error('Class was not added to chained element');
+            }
+        });
+
+        // Test 6: Alias doesn't affect non-aliased properties
+        test('should not affect non-aliased properties', () => {
+            const obj = { 
+                classList: { value: null },
+                dataset: { id: null }
+            };
+            
+            assignGingerly(obj, {
+                '?.c?.value': 'test1',
+                '?.dataset?.id': 'test2'
+            }, { aka: { 'c': 'classList' } });
+            
+            if (obj.classList.value !== 'test1') {
+                throw new Error(`Expected classList.value to be 'test1', got ${obj.classList.value}`);
+            }
+            if (obj.dataset.id !== 'test2') {
+                throw new Error(`Expected dataset.id to be 'test2', got ${obj.dataset.id}`);
+            }
+        });
+
+        // Test 7: Multiple different aliases
+        test('should handle multiple different aliases', () => {
+            const element = document.createElement('div');
+            
+            assignGingerly(element, {
+                '?.c?.+': 'class1',
+                '?.p?.+': 'part1',
+                '?.ds?.userId': '123'
+            }, { 
+                withMethods: ['add'],
+                aka: { 
+                    'c': 'classList', 
+                    'p': 'part',
+                    'ds': 'dataset',
+                    '+': 'add'
+                }
+            });
+            
+            if (!element.classList.contains('class1')) {
+                throw new Error('Class was not added');
+            }
+            if (!element.part.contains('part1')) {
+                throw new Error('Part was not added');
+            }
+            if (element.dataset.userId !== '123') {
+                throw new Error('Dataset was not set');
+            }
+        });
+
+        // Test 8: Alias with array arguments
+        test('should work with array arguments', () => {
+            const element = document.createElement('div');
+            
+            assignGingerly(element, {
+                '?.@': ['data-id', '123']
+            }, { 
+                withMethods: ['setAttribute'],
+                aka: { '@': 'setAttribute' }
+            });
+            
+            if (element.getAttribute('data-id') !== '123') {
+                throw new Error('Attribute was not set correctly');
+            }
+        });
+
+        // Test 9: Alias doesn't match substring
+        test('should not match alias as substring', () => {
+            const obj = { 
+                classList: { value: null },
+                myClassList: { value: null }
+            };
+            
+            assignGingerly(obj, {
+                '?.c?.value': 'test1',
+                '?.myClassList?.value': 'test2'
+            }, { aka: { 'c': 'classList' } });
+            
+            if (obj.classList.value !== 'test1') {
+                throw new Error(`Expected classList.value to be 'test1', got ${obj.classList.value}`);
+            }
+            if (obj.myClassList.value !== 'test2') {
+                throw new Error(`Expected myClassList.value to be 'test2', got ${obj.myClassList.value}`);
+            }
+        });
+
+        // Test 10: Empty aka object
+        test('should handle empty aka object', () => {
+            const obj = { classList: { value: null } };
+            
+            assignGingerly(obj, {
+                '?.classList?.value': 'test'
+            }, { aka: {} });
+            
+            if (obj.classList.value !== 'test') {
+                throw new Error(`Expected 'test', got ${obj.classList.value}`);
+            }
+        });
+
+        // Test 11: No aka option
+        test('should work without aka option', () => {
+            const obj = { classList: { value: null } };
+            
+            assignGingerly(obj, {
+                '?.classList?.value': 'test'
+            });
+            
+            if (obj.classList.value !== 'test') {
+                throw new Error(`Expected 'test', got ${obj.classList.value}`);
+            }
+        });
+
+        // Test 12: Reserved character validation - space
+        test('should throw error for space in alias', () => {
+            const obj = {};
+            let errorThrown = false;
+            
+            try {
+                assignGingerly(obj, {
+                    '?.test': 'value'
+                }, { aka: { 'my alias': 'test' } });
+            } catch (error) {
+                if (error.message.includes('cannot contain space')) {
+                    errorThrown = true;
+                }
+            }
+            
+            if (!errorThrown) {
+                throw new Error('Expected error for space in alias');
+            }
+        });
+
+        // Test 13: Reserved character validation - backtick
+        test('should throw error for backtick in alias', () => {
+            const obj = {};
+            let errorThrown = false;
+            
+            try {
+                assignGingerly(obj, {
+                    '?.test': 'value'
+                }, { aka: { '`': 'test' } });
+            } catch (error) {
+                if (error.message.includes('cannot contain') && error.message.includes('backtick')) {
+                    errorThrown = true;
+                }
+            }
+            
+            if (!errorThrown) {
+                throw new Error('Expected error for backtick in alias');
+            }
+        });
+
+        // Test 14: Alias with special characters (allowed)
+        test('should allow special characters like $ - = +', () => {
+            const obj = { 
+                query: { value: null },
+                minus: { value: null },
+                equals: { value: null },
+                plus: { value: null }
+            };
+            
+            assignGingerly(obj, {
+                '?.$?.value': 'test1',
+                '?.m?.value': 'test2',
+                '?.e?.value': 'test3',
+                '?.p?.value': 'test4'
+            }, { 
+                aka: { 
+                    '$': 'query',
+                    'm': 'minus',
+                    'e': 'equals',
+                    'p': 'plus'
+                }
+            });
+            
+            if (obj.query.value !== 'test1') {
+                throw new Error('$ alias failed');
+            }
+            if (obj.minus.value !== 'test2') {
+                throw new Error('- alias failed');
+            }
+            if (obj.equals.value !== 'test3') {
+                throw new Error('= alias failed');
+            }
+            if (obj.plus.value !== 'test4') {
+                throw new Error('+ alias failed');
+            }
+        });
+
+        // Test 15: Alias with non-nested path
+        test('should work with non-nested paths', () => {
+            const obj = {
+                push(item) {
+                    this.items = this.items || [];
+                    this.items.push(item);
+                }
+            };
+            
+            assignGingerly(obj, {
+                'p': 'newItem'
+            }, { 
+                withMethods: ['push'],
+                aka: { 'p': 'push' }
+            });
+            
+            if (!obj.items || !obj.items.includes('newItem')) {
+                throw new Error('Method was not called with alias');
+            }
+        });
+
+        // Display results
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = `
+            <h2>Results: ${passCount}/${testCount} tests passed</h2>
+            <pre>${results.join('\n')}</pre>
+        `;
+
+        // Report to parent (for Playwright)
+        window.testResults = { passed: passCount, total: testCount, results };
+    </script>
+</body>
+</html>

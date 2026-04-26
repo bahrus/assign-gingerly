@@ -470,6 +470,88 @@ assignGingerly(element, {
 - Silent failure for non-existent methods (garbage in, garbage out)
 - Supports method chaining and complex navigation patterns
 
+## Example 3d - Aliasing with aka
+
+The `aka` option allows you to define custom shortcuts (aliases) for property and method names, reducing verbosity in repetitive patterns. This is inspired by jQuery's `$` shortcut for `querySelectorAll`, but fully customizable.
+
+```TypeScript
+import assignGingerly from 'assign-gingerly';
+
+const div = document.createElement('div');
+div.innerHTML = `
+  <my-element>
+    <your-element></your-element>
+  </my-element>
+`;
+
+// Without aliases (verbose)
+assignGingerly(div, {
+  '?.querySelector?.my-element?.classList?.add': 'highlighted',
+  '?.querySelector?.your-element?.classList?.add': 'active'
+}, { withMethods: ['querySelector', 'add'] });
+
+// With aliases (concise)
+assignGingerly(div, {
+  '?.$?.my-element?.c?.+': 'highlighted',
+  '?.$?.your-element?.c?.+': 'active'
+}, { 
+  withMethods: ['querySelector', 'add'],
+  aka: { '$': 'querySelector', 'c': 'classList', '+': 'add' }
+});
+```
+
+**How it works:**
+
+- Aliases are substituted **before** path evaluation
+- Matches complete tokens between `?.` delimiters (not substrings)
+- Works for both properties and methods
+- Single or multi-character aliases supported
+
+**Reserved characters:**
+
+Cannot be used in aliases: space (` `), backtick (`` ` ``)
+
+**Multi-character aliases:**
+
+```TypeScript
+assignGingerly(element, {
+  '?.qs?.my-element?.cl?.add': 'highlighted'
+}, { 
+  withMethods: ['querySelector', 'add'],
+  aka: { 'qs': 'querySelector', 'cl': 'classList' }
+});
+```
+
+**Multiple aliases in one path:**
+
+```TypeScript
+assignGingerly(element, {
+  '?.c?.+': 'class1',
+  '?.p?.+': 'part1',
+  '?.ds?.userId': '123'
+}, { 
+  withMethods: ['add'],
+  aka: { 
+    'c': 'classList', 
+    'p': 'part',
+    'ds': 'dataset',
+    '+': 'add'
+  }
+});
+
+// Equivalent to:
+// element.classList.add('class1')
+// element.part.add('part1')
+// element.dataset.userId = '123'
+```
+
+**Benefits:**
+
+- Reduces verbosity in repetitive patterns
+- Fully customizable shortcuts
+- Improves readability when you have many similar operations
+- Works seamlessly with `withMethods`
+
 While we are in the business of passing values of object A into object B, we might as well add some extremely common behavior that allows updating properties of object B based on the current values of object B -- things like incrementing, toggling, and deleting.  Deleting is critical for assignTentatively, but is included with both functions.
 
 ## Example 4 - Incrementing values with += command
