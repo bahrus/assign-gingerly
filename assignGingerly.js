@@ -320,6 +320,127 @@ function evaluatePathWithMethods(target, pathParts, value, withMethods) {
     };
 }
 /**
+ * Check if a value is iterable (can be used with for...of or has forEach)
+ */
+function isIterable(value) {
+    if (value == null)
+        return false;
+    // Check for Symbol.iterator
+    if (typeof value[Symbol.iterator] === 'function')
+        return true;
+    // Check if it's an Array
+    if (Array.isArray(value))
+        return true;
+    // Check if it's array-like (has length and numeric indices)
+    // This covers NodeList, HTMLCollection, etc.
+    if (typeof value.length === 'number' && value.length >= 0) {
+        return true;
+    }
+    return false;
+}
+/**
+ * Check if a segment is the forEach symbol (@each) or aliased to it
+ */
+function isForEachSymbol(segment, aliasMap) {
+    // Direct match
+    if (segment === '@each')
+        return true;
+    // Check if this segment is aliased to '@each'
+    const aliasTarget = aliasMap.get(segment);
+    return aliasTarget === '@each';
+}
+/**
+ * Apply a path to each item in an iterable
+ */
+function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, options) {
+    // Convert to array for iteration
+    const items = Array.isArray(iterable) ? iterable : Array.from(iterable);
+    // Apply the remaining path to each item
+    for (const item of items) {
+        if (remainingPath.length === 0) {
+            // No remaining path, can't do anything
+            continue;
+        }
+        // Check if there's another @each in the remaining path
+        const forEachIndex = remainingPath.findIndex(part => isForEachSymbol(part, aliasMap));
+        if (forEachIndex !== -1) {
+            // There's a nested @each
+            // Evaluate path up to the @each
+            const pathToForEach = remainingPath.slice(0, forEachIndex);
+            const pathAfterForEach = remainingPath.slice(forEachIndex + 1);
+            // Navigate to the nested iterable
+            let current = item;
+            for (const part of pathToForEach) {
+                if (withMethods.has(part)) {
+                    const method = current[part];
+                    if (typeof method === 'function') {
+                        // For methods in the middle, we need to check the next part
+                        const nextIndex = pathToForEach.indexOf(part) + 1;
+                        const nextPart = pathToForEach[nextIndex];
+                        if (nextPart && withMethods.has(nextPart)) {
+                            current = method.call(current);
+                        }
+                        else if (nextPart) {
+                            current = method.call(current, nextPart);
+                            // Skip next part
+                            pathToForEach.splice(nextIndex, 1);
+                        }
+                        else {
+                            current = method.call(current);
+                        }
+                    }
+                    else {
+                        current = current[part];
+                    }
+                }
+                else {
+                    current = current[part];
+                }
+            }
+            // Recursively apply to the nested iterable
+            if (isIterable(current)) {
+                applyToEach(current, pathAfterForEach, value, withMethods, aliasMap, options);
+            }
+        }
+        else {
+            // No nested @each, evaluate the remaining path normally
+            const result = evaluatePathWithMethods(item, remainingPath, value, withMethods);
+            if (result.isMethod) {
+                // Last segment is a method - call it
+                const method = result.target[result.lastKey];
+                if (typeof method === 'function') {
+                    if (Array.isArray(value)) {
+                        method.apply(result.target, value);
+                    }
+                    else {
+                        method.call(result.target, value);
+                    }
+                }
+            }
+            else {
+                // Normal assignment
+                const lastKey = result.lastKey;
+                const parent = result.target;
+                if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    if (lastKey in parent && (isReadonlyProperty(parent, lastKey) || isClassInstance(parent[lastKey]))) {
+                        const currentValue = parent[lastKey];
+                        if (typeof currentValue !== 'object' || currentValue === null) {
+                            throw new Error(`Cannot merge object into ${isReadonlyProperty(parent, lastKey) ? 'readonly ' : ''}primitive property '${String(lastKey)}'`);
+                        }
+                        assignGingerly(currentValue, value, options);
+                    }
+                    else {
+                        parent[lastKey] = value;
+                    }
+                }
+                else {
+                    parent[lastKey] = value;
+                }
+            }
+        }
+    }
+}
+/**
  * Apply alias substitutions to a key string.
  * Replaces complete tokens between `?.` delimiters with their aliased values.
  *
@@ -526,6 +647,35 @@ export function assignGingerly(target, source, options) {
         }
         if (isNestedPath(key)) {
             const pathParts = parsePath(key);
+            // Check if path contains @each (forEach)
+            const forEachIndex = pathParts.findIndex(part => isForEachSymbol(part, aliasMap));
+            if (forEachIndex !== -1) {
+                // Path contains @each - handle forEach
+                const pathToForEach = pathParts.slice(0, forEachIndex);
+                const pathAfterForEach = pathParts.slice(forEachIndex + 1);
+                // Navigate to the iterable
+                let current = target;
+                if (pathToForEach.length > 0) {
+                    if (withMethodsSet) {
+                        const result = evaluatePathWithMethods(target, pathToForEach, value, withMethodsSet);
+                        // The result.target is the current position after evaluating the path
+                        // This is already the iterable we want
+                        current = result.target;
+                    }
+                    else {
+                        for (const part of pathToForEach) {
+                            current = current[part];
+                        }
+                    }
+                }
+                // Apply to each item in the iterable
+                if (isIterable(current)) {
+                    applyToEach(current, pathAfterForEach, value, withMethodsSet || new Set(), aliasMap, options);
+                }
+                // If not iterable, let JavaScript throw error naturally when trying to iterate
+                continue;
+            }
+            // No @each in path - handle normally
             // Check if we need to handle methods
             if (withMethodsSet) {
                 const result = evaluatePathWithMethods(target, pathParts, value, withMethodsSet);

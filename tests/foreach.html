@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ForEach Tests</title>
+</head>
+<body>
+    <h1>ForEach (@each) Tests</h1>
+    <div id="results"></div>
+
+    <script type="module">
+        import assignGingerly from '../assignGingerly.js';
+
+        const results = [];
+        let testCount = 0;
+        let passCount = 0;
+
+        function test(name, fn) {
+            testCount++;
+            try {
+                fn();
+                passCount++;
+                results.push(`✓ ${name}`);
+                console.log(`✓ ${name}`);
+            } catch (error) {
+                results.push(`✗ ${name}: ${error.message}`);
+                console.error(`✗ ${name}:`, error);
+            }
+        }
+
+        // Test 1: Basic forEach with querySelectorAll
+        test('should apply to each element from querySelectorAll', () => {
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <my-element></my-element>
+                <my-element></my-element>
+                <my-element></my-element>
+            `;
+            
+            assignGingerly(div, {
+                '?.querySelectorAll?.my-element?.@each?.classList?.add': 'highlighted'
+            }, { withMethods: ['querySelectorAll', 'add'] });
+            
+            const elements = div.querySelectorAll('my-element');
+            for (const el of elements) {
+                if (!el.classList.contains('highlighted')) {
+                    throw new Error('Not all elements have the class');
+                }
+            }
+        });
+
+        // Test 2: ForEach with property assignment
+        test('should assign property to each element', () => {
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <input type="text">
+                <input type="text">
+                <input type="text">
+            `;
+            
+            assignGingerly(div, {
+                '?.querySelectorAll?.input?.@each?.value': 'default'
+            }, { withMethods: ['querySelectorAll'] });
+            
+            const inputs = div.querySelectorAll('input');
+            for (const input of inputs) {
+                if (input.value !== 'default') {
+                    throw new Error(`Expected 'default', got '${input.value}'`);
+                }
+            }
+        });
+
+        // Test 3: ForEach with aliased @each symbol
+        test('should work with aliased forEach symbol', () => {
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <my-element></my-element>
+                <my-element></my-element>
+            `;
+            
+            assignGingerly(div, {
+                '?.qsa?.my-element?.*?.c?.+': 'highlighted'
+            }, { 
+                withMethods: ['querySelectorAll', 'add'],
+                aka: { 
+                    'qsa': 'querySelectorAll',
+                    'c': 'classList',
+                    '+': 'add',
+                    '*': '@each'
+                }
+            });
+            
+            const elements = div.querySelectorAll('my-element');
+            for (const el of elements) {
+                if (!el.classList.contains('highlighted')) {
+                    throw new Error('Not all elements have the class');
+                }
+            }
+        });
+
+        // Test 4: ForEach with Array
+        test('should work with regular arrays', () => {
+            const obj = {
+                items: [
+                    { value: null },
+                    { value: null },
+                    { value: null }
+                ]
+            };
+            
+            assignGingerly(obj, {
+                '?.items?.@each?.value': 'test'
+            });
+            
+            for (const item of obj.items) {
+                if (item.value !== 'test') {
+                    throw new Error(`Expected 'test', got '${item.value}'`);
+                }
+            }
+        });
+
+        // Test 5: Empty collection
+        test('should handle empty collections gracefully', () => {
+            const div = document.createElement('div');
+            
+            // No error should be thrown
+            assignGingerly(div, {
+                '?.querySelectorAll?.nonexistent?.@each?.classList?.add': 'highlighted'
+            }, { withMethods: ['querySelectorAll', 'add'] });
+            
+            // Test passes if no error thrown
+        });
+
+        // Test 6: Nested forEach
+        test('should support nested forEach', () => {
+            const obj = {
+                groups: [
+                    { items: [{ value: null }, { value: null }] },
+                    { items: [{ value: null }, { value: null }] }
+                ]
+            };
+            
+            assignGingerly(obj, {
+                '?.groups?.@each?.items?.@each?.value': 'nested'
+            });
+            
+            for (const group of obj.groups) {
+                for (const item of group.items) {
+                    if (item.value !== 'nested') {
+                        throw new Error(`Expected 'nested', got '${item.value}'`);
+                    }
+                }
+            }
+        });
+
+        // Test 7: ForEach with method call
+        test('should call method on each element', () => {
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <div></div>
+                <div></div>
+                <div></div>
+            `;
+            
+            assignGingerly(div, {
+                '?.querySelectorAll?.div?.@each?.setAttribute': ['data-id', '123']
+            }, { withMethods: ['querySelectorAll', 'setAttribute'] });
+            
+            const divs = div.querySelectorAll('div');
+            for (const el of divs) {
+                if (el.getAttribute('data-id') !== '123') {
+                    throw new Error('Attribute not set on all elements');
+                }
+            }
+        });
+
+        // Test 8: Multiple forEach operations
+        test('should handle multiple forEach operations', () => {
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <my-element></my-element>
+                <my-element></my-element>
+            `;
+            
+            assignGingerly(div, {
+                '?.querySelectorAll?.my-element?.@each?.classList?.add': 'class1',
+                '?.querySelectorAll?.my-element?.@each?.dataset?.id': '456'
+            }, { withMethods: ['querySelectorAll', 'add'] });
+            
+            const elements = div.querySelectorAll('my-element');
+            for (const el of elements) {
+                if (!el.classList.contains('class1')) {
+                    throw new Error('class1 not added');
+                }
+                if (el.dataset.id !== '456') {
+                    throw new Error('dataset.id not set');
+                }
+            }
+        });
+
+        // Test 9: ForEach with chained methods
+        test('should work with chained methods before forEach', () => {
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <container>
+                    <item></item>
+                    <item></item>
+                </container>
+            `;
+            
+            assignGingerly(div, {
+                '?.querySelector?.container?.querySelectorAll?.item?.@each?.classList?.add': 'highlighted'
+            }, { withMethods: ['querySelector', 'querySelectorAll', 'add'] });
+            
+            const container = div.querySelector('container');
+            const items = container.querySelectorAll('item');
+            for (const item of items) {
+                if (!item.classList.contains('highlighted')) {
+                    throw new Error('Not all items highlighted');
+                }
+            }
+        });
+
+        // Test 10: ForEach with dataset
+        test('should set dataset properties on each element', () => {
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <div></div>
+                <div></div>
+            `;
+            
+            assignGingerly(div, {
+                '?.querySelectorAll?.div?.@each?.dataset?.userId': '789'
+            }, { withMethods: ['querySelectorAll'] });
+            
+            const divs = div.querySelectorAll('div');
+            for (const el of divs) {
+                if (el.dataset.userId !== '789') {
+                    throw new Error('dataset.userId not set');
+                }
+            }
+        });
+
+        // Test 11: ForEach at different positions in path
+        test('should work with forEach at different path positions', () => {
+            const obj = {
+                data: {
+                    items: [
+                        { nested: { value: null } },
+                        { nested: { value: null } }
+                    ]
+                }
+            };
+            
+            assignGingerly(obj, {
+                '?.data?.items?.@each?.nested?.value': 'deep'
+            });
+            
+            for (const item of obj.data.items) {
+                if (item.nested.value !== 'deep') {
+                    throw new Error(`Expected 'deep', got '${item.nested.value}'`);
+                }
+            }
+        });
+
+        // Test 12: ForEach with multiple classes
+        test('should add multiple classes using forEach', () => {
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <span></span>
+                <span></span>
+            `;
+            
+            assignGingerly(div, {
+                '?.querySelectorAll?.span?.@each?.classList?.add': 'class1',
+            }, { withMethods: ['querySelectorAll', 'add'] });
+            
+            assignGingerly(div, {
+                '?.querySelectorAll?.span?.@each?.classList?.add': 'class2',
+            }, { withMethods: ['querySelectorAll', 'add'] });
+            
+            const spans = div.querySelectorAll('span');
+            for (const span of spans) {
+                if (!span.classList.contains('class1') || !span.classList.contains('class2')) {
+                    throw new Error('Not all classes added');
+                }
+            }
+        });
+
+        // Test 13: ForEach with style properties
+        test('should set style properties on each element', () => {
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <div></div>
+                <div></div>
+            `;
+            
+            assignGingerly(div, {
+                '?.querySelectorAll?.div?.@each?.style?.color': 'red'
+            }, { withMethods: ['querySelectorAll'] });
+            
+            const divs = div.querySelectorAll('div');
+            for (const el of divs) {
+                if (el.style.color !== 'red') {
+                    throw new Error('style.color not set');
+                }
+            }
+        });
+
+        // Test 14: Access iterable property without @each
+        test('should access iterable property when @each is omitted', () => {
+            const obj = {
+                items: [1, 2, 3],
+                customProp: null
+            };
+            
+            // Access a custom property on the array itself (not iterating)
+            assignGingerly(obj, {
+                '?.items?.customProp': 'test'
+            });
+            
+            if (obj.items.customProp !== 'test') {
+                throw new Error('Property was not set on array itself');
+            }
+        });
+
+        // Test 15: ForEach with complex selector
+        test('should work with complex CSS selectors', () => {
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <div class="target"></div>
+                <div></div>
+                <div class="target"></div>
+            `;
+            
+            assignGingerly(div, {
+                '?.querySelectorAll?.div.target?.@each?.dataset?.selected': 'true'
+            }, { withMethods: ['querySelectorAll'] });
+            
+            const targets = div.querySelectorAll('div.target');
+            if (targets.length !== 2) {
+                throw new Error('Wrong number of targets');
+            }
+            for (const el of targets) {
+                if (el.dataset.selected !== 'true') {
+                    throw new Error('dataset.selected not set');
+                }
+            }
+        });
+
+        // Display results
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = `
+            <h2>Results: ${passCount}/${testCount} tests passed</h2>
+            <pre>${results.join('\n')}</pre>
+        `;
+
+        // Report to parent (for Playwright)
+        window.testResults = { passed: passCount, total: testCount, results };
+    </script>
+</body>
+</html>
