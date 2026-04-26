@@ -403,3 +403,116 @@ I think we have enough clarity to implement:
 6. **Property access**: Omitting `@each` allows accessing iterable properties
 
 Ready to implement?
+
+
+---
+
+## Implementation Complete ✅
+
+### Status: IMPLEMENTED
+
+The `@each` forEach feature has been successfully implemented with all requested functionality.
+
+### Implementation Summary:
+
+**Core Features Implemented:**
+1. ✅ `@each` symbol for explicit iteration
+2. ✅ Works with any iterable (Arrays, NodeList, HTMLCollection, etc.)
+3. ✅ Supports aliasing (e.g., `'*': '@each'`)
+4. ✅ Nested forEach support (`@each` within `@each`)
+5. ✅ Seamless integration with `withMethods`
+6. ✅ Empty collections handled gracefully
+7. ✅ Omitting `@each` allows accessing iterable properties
+
+**Files Modified:**
+- `assignGingerly.ts` - Added `isIterable()`, `isForEachSymbol()`, `applyToEach()` functions and forEach detection logic
+- `README.md` - Added Example 3e documenting the forEach feature
+- `tests/foreach.html` - Created 15 comprehensive tests
+- `tests/foreach.spec.ts` - Created Playwright test spec
+
+**Test Results:**
+- 15 forEach tests - all passing ✅
+- 51 total tests passing across 3 browsers (Chrome, Firefox, WebKit) ✅
+
+**Test Coverage:**
+1. Basic forEach with querySelectorAll
+2. Property assignment to each element
+3. Aliased forEach symbol (`*` → `@each`)
+4. Regular arrays
+5. Empty collections
+6. Nested forEach
+7. Method calls on each element
+8. Multiple forEach operations
+9. Chained methods before forEach
+10. Dataset properties
+11. ForEach at different path positions
+12. Multiple classes
+13. Style properties
+14. Accessing iterable properties (without @each)
+15. Complex CSS selectors
+
+### Example Usage:
+
+```typescript
+// Basic forEach
+assignGingerly(div, {
+  '?.querySelectorAll?.my-element?.@each?.classList?.add': 'highlighted'
+}, { withMethods: ['querySelectorAll', 'add'] });
+
+// With aliases
+assignGingerly(div, {
+  '?.qsa?.my-element?.*?.c?.+': 'highlighted'
+}, { 
+  withMethods: ['querySelectorAll', 'add'],
+  aka: { 
+    'qsa': 'querySelectorAll',
+    'c': 'classList',
+    '+': 'add',
+    '*': '@each'
+  }
+});
+
+// Nested forEach
+assignGingerly(obj, {
+  '?.groups?.@each?.items?.@each?.value': 'nested'
+});
+
+// Property assignment
+assignGingerly(div, {
+  '?.querySelectorAll?.input?.@each?.value': 'default'
+}, { withMethods: ['querySelectorAll'] });
+```
+
+### Implementation Details:
+
+**Iteration Detection:**
+- `isIterable()` checks for Symbol.iterator, Array, or array-like objects
+- `isForEachSymbol()` checks if segment is `@each` or aliased to it
+
+**Path Evaluation:**
+- When `@each` is found in path, split into before/after
+- Navigate to iterable using path before `@each`
+- Apply remaining path to each item via `applyToEach()`
+- Supports nested `@each` through recursive calls
+
+**Error Handling:**
+- Empty collections: silently skip (no operations, no errors)
+- Non-iterables: let JavaScript engine throw natural error
+- This provides clear, native error messages
+
+### Benefits Delivered:
+
+✅ **Explicit and clear** - `@each` makes iteration obvious in code  
+✅ **Flexible** - Works with any iterable type  
+✅ **Powerful** - Supports nesting and complex operations  
+✅ **Consistent** - Integrates with existing features (withMethods, aka)  
+✅ **Safe** - Graceful handling of edge cases  
+✅ **Readable** - Can use verbose `@each` or terse `*` via aliasing
+
+### Future Enhancements (Not Implemented):
+
+- Index access in forEach: `@each(index)` - Could be added later
+- Filter/map operations - Could be separate feature
+- Break/continue control - Would require different approach
+
+The feature is complete and ready for production use!

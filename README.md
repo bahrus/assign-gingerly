@@ -552,6 +552,122 @@ assignGingerly(element, {
 - Improves readability when you have many similar operations
 - Works seamlessly with `withMethods`
 
+## Example 3e - ForEach with @each
+
+The `@each` symbol allows you to iterate over collections and apply operations to each item. This works with any iterable including Arrays, NodeList, HTMLCollection, and more.
+
+```TypeScript
+import assignGingerly from 'assign-gingerly';
+
+const div = document.createElement('div');
+div.innerHTML = `
+  <my-element></my-element>
+  <my-element></my-element>
+  <my-element></my-element>
+`;
+
+// Apply to each element in the collection
+assignGingerly(div, {
+  '?.querySelectorAll?.my-element?.@each?.classList?.add': 'highlighted'
+}, { withMethods: ['querySelectorAll', 'add'] });
+
+// All my-element elements now have the 'highlighted' class
+```
+
+**How it works:**
+
+- `@each` marks the point where iteration begins
+- Everything before `@each` navigates to the iterable
+- Everything after `@each` is applied to each item in the collection
+- Empty collections are handled gracefully (no errors)
+
+**With regular arrays:**
+
+```TypeScript
+const obj = {
+  items: [
+    { value: null },
+    { value: null },
+    { value: null }
+  ]
+};
+
+assignGingerly(obj, {
+  '?.items?.@each?.value': 'test'
+});
+
+// All items now have value: 'test'
+```
+
+**Nested forEach:**
+
+```TypeScript
+const obj = {
+  groups: [
+    { items: [{ value: null }, { value: null }] },
+    { items: [{ value: null }, { value: null }] }
+  ]
+};
+
+assignGingerly(obj, {
+  '?.groups?.@each?.items?.@each?.value': 'nested'
+});
+
+// All nested items now have value: 'nested'
+```
+
+**With aliases:**
+
+```TypeScript
+assignGingerly(div, {
+  '?.qsa?.my-element?.*?.c?.+': 'highlighted'
+}, { 
+  withMethods: ['querySelectorAll', 'add'],
+  aka: { 
+    'qsa': 'querySelectorAll',
+    'c': 'classList',
+    '+': 'add',
+    '*': '@each'  // Alias * to @each for brevity
+  }
+});
+```
+
+**Method calls on each item:**
+
+```TypeScript
+assignGingerly(div, {
+  '?.querySelectorAll?.div?.@each?.setAttribute': ['data-id', '123']
+}, { withMethods: ['querySelectorAll', 'setAttribute'] });
+
+// All div elements now have data-id="123"
+```
+
+**Accessing iterable properties:**
+
+When you omit `@each`, you access properties on the iterable itself, not its items:
+
+```TypeScript
+const obj = {
+  items: [1, 2, 3],
+  customProp: null
+};
+
+// Set property on the array itself
+assignGingerly(obj, {
+  '?.items?.customProp': 'test'
+});
+
+console.log(obj.items.customProp); // 'test'
+```
+
+**Benefits:**
+
+- Works with any iterable (Arrays, NodeList, HTMLCollection, etc.)
+- Supports nested iterations
+- Integrates seamlessly with `withMethods` and `aka`
+- Clear distinction between iterating and accessing iterable properties
+- Graceful handling of empty collections
+
 While we are in the business of passing values of object A into object B, we might as well add some extremely common behavior that allows updating properties of object B based on the current values of object B -- things like incrementing, toggling, and deleting.  Deleting is critical for assignTentatively, but is included with both functions.
 
 ## Example 4 - Incrementing values with += command
