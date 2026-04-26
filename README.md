@@ -411,24 +411,30 @@ assignGingerly(elementRef, {
 // Equivalent to: elementRef.deref().classList.add('active')
 ```
 
-**Complex chaining:**
+**Complex chaining with real DOM elements:**
+
+Methods are called on the objects found through chained accessors, not just on the root object:
 
 ```TypeScript
-const shadowRoot = {
-  querySelector(selector) {
-    return this.elements[selector];
-  },
-  elements: {
-    'my-element': document.createElement('div')
-  }
-};
+const div = document.createElement('div');
+div.innerHTML = `
+  <my-element>
+    <your-element></your-element>
+  </my-element>
+`;
 
-assignGingerly(shadowRoot, {
-  '?.querySelector?.my-element?.classList?.add': 'highlighted'
+assignGingerly(div, {
+  '?.querySelector?.my-element?.querySelector?.your-element?.classList?.add': 'highlighted'
 }, { withMethods: ['querySelector', 'add'] });
 
-// Equivalent to: shadowRoot.querySelector('my-element').classList.add('highlighted')
+// Equivalent to:
+// div.querySelector('my-element').querySelector('your-element').classList.add('highlighted')
+
+const yourElement = div.querySelector('my-element')?.querySelector('your-element');
+console.log(yourElement?.classList.contains('highlighted')); // true
 ```
+
+The key insight: `querySelector` is called on each intermediate result in the chain. First on `div`, then on the `my-element` result, demonstrating that methods work naturally with the object hierarchy you're navigating.
 
 **Using Set for withMethods:**
 

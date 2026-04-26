@@ -313,6 +313,25 @@
             }
         });
 
+        // Test 16: Chained querySelector on real DOM elements
+        test('should call querySelector on chained DOM elements', () => {
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <my-element>
+                    <your-element></your-element>
+                </my-element>
+            `;
+            
+            assignGingerly(div, {
+                '?.querySelector?.my-element?.querySelector?.your-element?.classList?.add': 'highlighted'
+            }, { withMethods: ['querySelector', 'add'] });
+            
+            const yourElement = div.querySelector('my-element')?.querySelector('your-element');
+            if (!yourElement?.classList.contains('highlighted')) {
+                throw new Error('Class was not added to chained querySelector result');
+            }
+        });
+
         // Display results
         const resultsDiv = document.getElementById('results');
         resultsDiv.innerHTML = `
