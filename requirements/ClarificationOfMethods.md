@@ -29,10 +29,12 @@ This implies that the method "querySelector" has to be defined at the root level
 ```JavaScript
 const div = document.createElement('div');
 div.innerHTML = String.raw `
-    <my-element></my-element>
+    <my-element>
+      <your-element></your-element>
+    </my-element>
 `;
 assignGingerly(div, {
-  '?.querySelector?.my-element?.classList?.add': 'highlighted'
+  '?.querySelector?.my-element?.querySelector?.your-element?.classList?.add': 'highlighted'
 }, { withMethods: ['querySelector', 'add'] });
 ```
 
