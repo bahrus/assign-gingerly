@@ -237,3 +237,169 @@ assignGingerly(div, {
 ```
 
 
+
+
+---
+
+## Agent Response to Human Feedback
+
+Excellent clarifications! Your responses make the implementation path very clear:
+
+### Answers Summary:
+1. ✅ **Any iterable** - Most flexible approach
+2. ✅ **Let JS engine throw error** - Simplest for now, can refine later
+3. ✅ **Support nested iterations** - Maximum flexibility
+4. ✅ **Reserved symbol allows iterable property access** - Exactly right
+
+### On `@each` as Default with Alias Support
+
+**I really like this approach!** Here's why:
+
+**Pros of `@each` as default:**
+- **Self-documenting**: `@each` is immediately clear to anyone reading the code
+- **No ambiguity**: Unlike `*` which could mean many things, `@each` has one obvious meaning
+- **Familiar**: Similar to Ruby's `@` instance variables and Handlebars' `{{#each}}`
+- **Readable**: `?.querySelectorAll?.div?.@each?.classList` reads naturally
+
+**Pros of allowing alias to `*`:**
+- **Terseness**: Power users can use `*` for brevity
+- **Consistency**: Follows the aliasing pattern we just implemented
+- **Flexibility**: Users choose their preferred style
+- **Migration**: Easy to switch between verbose and terse as codebase matures
+
+### Implementation Plan
+
+```typescript
+// Built-in forEach symbol
+const FOREACH_SYMBOL = '@each';
+
+// In parsePath or evaluatePathWithMethods:
+// 1. Check if segment is '@each' or aliased to '@each'
+// 2. If yes, mark current value for iteration
+// 3. Apply remaining path to each item in the iterable
+```
+
+### Proposed Behavior
+
+```typescript
+// Default: @each
+assignGingerly(div, {
+  '?.querySelectorAll?.div?.@each?.classList?.add': 'highlight'
+}, { withMethods: ['querySelectorAll', 'add'] });
+
+// Aliased to *
+assignGingerly(div, {
+  '?.qsa?.div?.*?.c?.+': 'highlight'
+}, { 
+  withMethods: ['querySelectorAll', 'add'],
+  aka: { 
+    'qsa': 'querySelectorAll', 
+    'c': 'classList', 
+    '+': 'add',
+    '*': '@each'  // Alias * to @each
+  }
+});
+
+// Nested iterations
+assignGingerly(obj, {
+  '?.getGroups?.@each?.getItems?.@each?.value': 'test'
+}, { withMethods: ['getGroups', 'getItems'] });
+
+// Access iterable property (no @each)
+assignGingerly(div, {
+  '?.querySelectorAll?.div?.length': 0  // Access NodeList.length
+}, { withMethods: ['querySelectorAll'] });
+```
+
+### Edge Cases to Handle
+
+1. **Empty collections**: Silently skip (no operations, no errors)
+   ```typescript
+   // If querySelectorAll returns empty NodeList, nothing happens
+   '?.querySelectorAll?.nonexistent?.@each?.classList?.add': 'highlight'
+   ```
+
+2. **Non-iterable with @each**: Let JS engine throw error
+   ```typescript
+   // If querySelector returns single element (not iterable), JS will error
+   '?.querySelector?.div?.@each?.classList?.add': 'highlight'
+   ```
+
+3. **Nested empty collections**: Skip gracefully
+   ```typescript
+   // If outer or inner collection is empty, skip
+   '?.getGroups?.@each?.getItems?.@each?.value': 'test'
+   ```
+
+4. **Method calls on each item**:
+   ```typescript
+   // Call method on each item
+   '?.querySelectorAll?.div?.@each?.classList?.add': 'highlight'
+   ```
+
+5. **Property assignment on each item**:
+   ```typescript
+   // Set property on each item
+   '?.querySelectorAll?.input?.@each?.value': 'default'
+   ```
+
+### Implementation Considerations
+
+1. **Iteration Detection**:
+   ```typescript
+   function isIterable(value: any): boolean {
+     return value != null && (
+       typeof value[Symbol.iterator] === 'function' ||
+       Array.isArray(value) ||
+       (typeof value.length === 'number' && value.length >= 0) // Array-like
+     );
+   }
+   ```
+
+2. **Alias Resolution**:
+   - Check if segment equals `'@each'` OR
+   - Check if segment is aliased to `'@each'` (reverse lookup in alias map)
+
+3. **Path Evaluation**:
+   - When `@each` is encountered:
+     - Verify current value is iterable (or let JS error)
+     - Split remaining path
+     - For each item, evaluate remaining path
+     - Collect results (if needed) or just apply side effects
+
+4. **Integration with withMethods**:
+   - `@each` should work seamlessly with method calls
+   - Each item gets the method called on it
+
+### Questions Before Implementation
+
+1. **Should `@each` be a reserved keyword that cannot be aliased to something else?**
+   - My recommendation: Yes, keep `@each` reserved and only allow aliasing TO it (like `'*': '@each'`)
+
+2. **Should we support index access in forEach?**
+   ```typescript
+   // Future enhancement?
+   '?.querySelectorAll?.div?.@each(index)?.dataset?.index': index
+   ```
+   - My recommendation: Not for initial implementation, but good future enhancement
+
+3. **Should forEach return anything or just apply side effects?**
+   - My recommendation: Just side effects for now (like Array.forEach)
+   - The return value of assignGingerly is still the target object
+
+4. **Should we validate that the value is iterable before attempting iteration?**
+   - Per your answer: No, let JS engine throw error
+   - This keeps implementation simple
+
+### Recommendation: Proceed with Implementation
+
+I think we have enough clarity to implement:
+
+1. **Default symbol**: `@each`
+2. **Aliasing support**: Allow aliasing to `@each` (e.g., `'*': '@each'`)
+3. **Iterable detection**: Any iterable (Symbol.iterator, Array, array-like)
+4. **Error handling**: Let JS engine throw errors for non-iterables
+5. **Nested support**: Yes, full support for nested iterations
+6. **Property access**: Omitting `@each` allows accessing iterable properties
+
+Ready to implement?
