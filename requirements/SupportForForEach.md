@@ -203,3 +203,37 @@ assignGingerly(div, {
 ```
 
 What are your thoughts on this approach?
+
+---
+
+## Human Response I
+
+### Questions for Clarification
+
+1. Should `*` work with any iterable, or only specific types (Array, NodeList, etc.)?
+Any iterable
+2. What should happen if `*` is used on a non-iterable value? Error or treat as single item?
+Yes, error, maybe for now, just process like it is an array, and let the JS engine throw the error.  We can fine tune the error handling later.  
+3. Should we support nested iterations (`?.*?.*`)?
+Yes
+4. Should there be a way to access properties on the iterable itself when needed?
+Wouldn't this be possible if we reserve a for each symbol like *
+
+What are your thoughts on defaulting for @each for readability, but supporting alias:
+
+```typescript
+// Basic forEach
+assignGingerly(div, {
+  '?.querySelectorAll?.div?.@each?.classList?.add': 'highlight'
+}, { withMethods: ['querySelectorAll', 'add'] });
+
+// With aliases
+assignGingerly(div, {
+  '?.qsa?.div?.*?.c?.+': 'highlight'
+}, { 
+  withMethods: ['querySelectorAll', 'add'],
+  aka: { 'qsa': 'querySelectorAll', 'c': 'classList', '+': 'add', '@each': '*' }
+});
+```
+
+
