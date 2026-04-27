@@ -232,8 +232,10 @@ function ensureNestedPath(obj, pathParts) {
  * A property is readonly if:
  * - It's a data property with writable: false, OR
  * - It's an accessor property with a getter but no setter
+ *
+ * Exported for use by eachTime.ts
  */
-function isReadonlyProperty(obj, propName) {
+export function isReadonlyProperty(obj, propName) {
     let descriptor = Object.getOwnPropertyDescriptor(obj, propName);
     if (!descriptor) {
         // Check prototype chain
@@ -260,8 +262,10 @@ function isReadonlyProperty(obj, propName) {
 /**
  * Helper function to check if a value is a class instance (not a plain object)
  * Returns true for instances of classes, false for plain objects, arrays, and primitives
+ *
+ * Exported for use by eachTime.ts
  */
-function isClassInstance(value) {
+export function isClassInstance(value) {
     if (!value || typeof value !== 'object')
         return false;
     if (Array.isArray(value))
@@ -273,8 +277,10 @@ function isClassInstance(value) {
 /**
  * Helper function to evaluate a nested path with method calls
  * Handles chained method calls where path segments can be methods
+ *
+ * Exported for use by eachTime.ts
  */
-function evaluatePathWithMethods(target, pathParts, value, withMethods) {
+export function evaluatePathWithMethods(target, pathParts, value, withMethods) {
     let current = target;
     let i = 0;
     // Process all segments except the last one
@@ -348,6 +354,17 @@ function isForEachSymbol(segment, aliasMap) {
     // Check if this segment is aliased to '@each'
     const aliasTarget = aliasMap.get(segment);
     return aliasTarget === '@each';
+}
+/**
+ * Check if a segment is the reactive forEach symbol (@eachTime) or aliased to it
+ */
+function isReactiveForEachSymbol(segment, aliasMap) {
+    // Direct match
+    if (segment === '@eachTime')
+        return true;
+    // Check if this segment is aliased to '@eachTime'
+    const aliasTarget = aliasMap.get(segment);
+    return aliasTarget === '@eachTime';
 }
 /**
  * Apply a path to each item in an iterable
@@ -647,10 +664,25 @@ export function assignGingerly(target, source, options) {
         }
         if (isNestedPath(key)) {
             const pathParts = parsePath(key);
-            // Check if path contains @each (forEach)
-            const forEachIndex = pathParts.findIndex(part => isForEachSymbol(part, aliasMap));
+            // Check if path contains @each or @eachTime (forEach)
+            const forEachIndex = pathParts.findIndex(part => isForEachSymbol(part, aliasMap) || isReactiveForEachSymbol(part, aliasMap));
             if (forEachIndex !== -1) {
-                // Path contains @each - handle forEach
+                // Check if it's reactive (@eachTime)
+                const isReactive = isReactiveForEachSymbol(pathParts[forEachIndex], aliasMap);
+                if (isReactive) {
+                    // Reactive forEach - dynamic load and fire-and-forget
+                    (async () => {
+                        try {
+                            const { handleEachTime } = await import('./eachTime.js');
+                            await handleEachTime(target, pathParts, forEachIndex, value, withMethodsSet, aliasMap, options);
+                        }
+                        catch (error) {
+                            console.error('Error in @eachTime:', error);
+                        }
+                    })();
+                    continue;
+                }
+                // Static forEach (@each) - existing logic
                 const pathToForEach = pathParts.slice(0, forEachIndex);
                 const pathAfterForEach = pathParts.slice(forEachIndex + 1);
                 // Navigate to the iterable

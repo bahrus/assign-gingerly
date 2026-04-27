@@ -668,6 +668,123 @@ console.log(obj.items.customProp); // 'test'
 - Clear distinction between iterating and accessing iterable properties
 - Graceful handling of empty collections
 
+## Example 3f - Reactive Iteration with @eachTime
+
+The `@eachTime` symbol enables reactive iteration over elements as they mount or appear dynamically. Unlike `@each` which operates on static collections, `@eachTime` subscribes to events and applies operations to elements as they arrive over time.
+
+**Important:** This feature requires an `AbortSignal` for cleanup and is designed to work with EventTarget objects that emit 'mount' events (such as [mount-observer](https://github.com/bahrus/mount-observer)).
+
+```TypeScript
+import assignGingerly from 'assign-gingerly';
+
+const controller = new AbortController();
+const div = document.createElement('div');
+
+// Assume mountObserver is an IMountObserver instance that emits 'mount' events
+// when new elements matching 'my-element' are added to the DOM
+
+assignGingerly(div, {
+  '?.mountObserver?.@eachTime?.classList?.add': 'highlighted'
+}, { 
+  withMethods: ['add'],
+  signal: controller.signal  // Required for cleanup
+});
+
+// As elements mount, they automatically get the 'highlighted' class
+// Later, cleanup all listeners:
+controller.abort();
+```
+
+**How it works:**
+
+- `@eachTime` marks the point where reactive iteration begins
+- Everything before `@eachTime` must navigate to an EventTarget
+- The EventTarget must emit 'mount' events with a `mountedElement` property
+- Everything after `@eachTime` is applied to each mounted element
+- Event listeners are automatically cleaned up when the AbortSignal is aborted
+
+**With method calls:**
+
+```TypeScript
+const controller = new AbortController();
+
+assignGingerly(div, {
+  '?.mountObserver?.@eachTime?.setAttribute': ['data-mounted', 'true']
+}, { 
+  withMethods: ['setAttribute'],
+  signal: controller.signal
+});
+
+// Each mounted element gets data-mounted="true"
+```
+
+**With aliases:**
+
+```TypeScript
+const controller = new AbortController();
+
+assignGingerly(div, {
+  '?.mo?.@*?.c?.+': 'active'
+}, { 
+  withMethods: ['add'],
+  aka: { 
+    'mo': 'mountObserver',
+    '@*': '@eachTime',
+    'c': 'classList',
+    '+': 'add'
+  },
+  signal: controller.signal
+});
+```
+
+**Cleanup is required:**
+
+```TypeScript
+const controller = new AbortController();
+
+// Setup reactive iteration
+assignGingerly(div, {
+  '?.mountObserver?.@eachTime?.classList?.add': 'mounted'
+}, { 
+  withMethods: ['add'],
+  signal: controller.signal
+});
+
+// Later, when you're done observing:
+controller.abort();  // Removes all event listeners
+
+// Attempting to use @eachTime without a signal throws an error:
+assignGingerly(div, {
+  '?.mountObserver?.@eachTime?.classList?.add': 'mounted'
+}, { withMethods: ['add'] });
+// Error: @eachTime requires an AbortSignal in options.signal for cleanup
+```
+
+**Key differences from @each:**
+
+| Feature | @each | @eachTime |
+|---------|-------|-----------|
+| **Type** | Static iteration | Reactive iteration |
+| **Timing** | Immediate (synchronous) | Over time (asynchronous) |
+| **Use case** | Existing collections | Elements appearing dynamically |
+| **Cleanup** | Not needed | Required (AbortSignal) |
+| **Requirements** | Any iterable | EventTarget with 'mount' events |
+
+**Benefits:**
+
+- Declarative reactive programming without RxJS complexity
+- Automatic cleanup via standard AbortSignal API
+- JSON-serializable configuration (behavior is in implementation)
+- Fire-and-forget async pattern (doesn't block)
+- Minimal weight impact (~3% when not used, dynamically loaded when needed)
+
+**Limitations:**
+
+- Requires EventTarget that emits 'mount' events
+- AbortSignal is mandatory for cleanup
+- Testing is done in mount-observer package (no tests in assign-gingerly)
+- Single @eachTime per path (nested @eachTime not currently supported)
+
 While we are in the business of passing values of object A into object B, we might as well add some extremely common behavior that allows updating properties of object B based on the current values of object B -- things like incrementing, toggling, and deleting.  Deleting is critical for assignTentatively, but is included with both functions.
 
 ## Example 4 - Incrementing values with += command

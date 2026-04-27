@@ -775,3 +775,589 @@ What do you think?
 ## Human Response II
 
 The weight isn't bad at all, it is quite good, and is quite viable.  But I was thinking about the dilemma further, and I'm thinking it kind of makes sense to make support for @eachTime the exception to the rule, where the rule in this case is keep assign-gingerly synchronous. Since the assignment will happen sporadically, I'm thinking the developer will need to understand that this feature is by its very nature more asynchronous.  So most of the code could be moved out of assign-gingerly as much as possible in support of @eachTime -- say to eachTime.ts and if we conditionally encounter this directive, spawn an asynchronous fire nd forget type process that dynamically loads the library and passes the needed context.  If we did that, how much of a dent would make in reducing the 100 lines of code?
+
+
+---
+
+## Agent Response to Human Response II
+
+Excellent insight! Dynamic loading is the perfect solution here. Let's break down the code reduction:
+
+### Code Reduction Analysis
+
+#### What Stays in assignGingerly.ts (~20 lines)
+
+```typescript
+// 1. Detection helper (~5 lines)
+function isReactiveForEachSymbol(segment: string, aliasMap: Map<string, string>): boolean {
+  if (segment === '@eachTime') return true;
+  const aliasTarget = aliasMap.get(segment);
+  return aliasTarget === '@eachTime';
+}
+
+// 2. Detection and dynamic import (~15 lines)
+if (forEachIndex !== -1) {
+  const isReactive = isReactiveForEachSymbol(pathParts[forEachIndex], aliasMap);
+  
+  if (isReactive) {
+    // Fire and forget - async load and execute
+    (async () => {
+      const { handleEachTime } = await import('./eachTime.js');
+      await handleEachTime(target, pathParts, forEachIndex, value, withMethodsSet, aliasMap, options);
+    })();
+    continue;
+  }
+  
+  // ... existing @each logic
+}
+```
+
+#### What Moves to eachTime.ts (~75 lines)
+
+```typescript
+// eachTime.ts - Dynamically loaded only when @eachTime is used
+
+export async function handleEachTime(
+  target: any,
+  pathParts: string[],
+  forEachIndex: number,
+  value: any,
+  withMethods: Set<string>,
+  aliasMap: Map<string, string>,
+  options?: IAssignGingerlyOptions
+): Promise<void> {
+  // All the reactive logic (~75 lines)
+  // - Navigation to event source
+  // - Event listener setup
+  // - AbortSignal handling
+  // - Application to mounted elements
+}
+```
+
+#### Type Definition (~5 lines - stays)
+
+```typescript
+// types/assign-gingerly/types.d.ts
+export interface IAssignGingerlyOptions {
+  // ... existing
+  signal?: AbortSignal;
+}
+```
+
+### Total Impact on assignGingerly.ts
+
+**Before dynamic loading:** +100 lines  
+**After dynamic loading:** +20 lines  
+**Reduction:** 80 lines moved to eachTime.ts  
+**Weight increase:** Only ~2% instead of ~11%
+
+### Benefits of Dynamic Loading
+
+1. **Minimal Weight Impact**: Only 20 lines in core (~2% increase)
+2. **Zero Cost When Unused**: eachTime.ts never loaded if @eachTime not used
+3. **Keeps Core Synchronous**: assignGingerly remains sync, async is isolated
+4. **Clear Separation**: Reactive logic is self-contained
+5. **Better for Tree-Shaking**: Bundlers can eliminate eachTime.ts if not used
+6. **Async is Explicit**: Developers understand @eachTime is async by nature
+
+### Potential Concerns & Solutions
+
+#### Concern 1: Import Overhead
+
+**Issue**: Dynamic import has small overhead (~few ms)
+
+**Solution**: Acceptable because:
+- Only happens once per @eachTime usage
+- Reactive operations are inherently async anyway
+- User expects async behavior with @eachTime
+
+#### Concern 2: Error Handling
+
+**Issue**: Async errors in fire-and-forget
+
+**Solution**: Catch and log errors:
+```typescript
+(async () => {
+  try {
+    const { handleEachTime } = await import('./eachTime.js');
+    await handleEachTime(target, pathParts, forEachIndex, value, withMethodsSet, aliasMap, options);
+  } catch (error) {
+    console.error('Error in @eachTime:', error);
+    // Could also dispatch error event or call error handler from options
+  }
+})();
+```
+
+#### Concern 3: Testing
+
+**Issue**: Harder to test async fire-and-forget
+
+**Solution**: 
+- Tests in mount-observer package (as you planned)
+- Can export handleEachTime for testing
+- Fire-and-forget is intentional design
+
+#### Concern 4: Multiple @eachTime in Same Call
+
+**Issue**: Multiple dynamic imports
+
+**Solution**: Cache the import:
+```typescript
+let eachTimeModule: any = null;
+
+// In assignGingerly
+if (isReactive) {
+  (async () => {
+    if (!eachTimeModule) {
+      eachTimeModule = await import('./eachTime.js');
+    }
+    await eachTimeModule.handleEachTime(/* ... */);
+  })();
+  continue;
+}
+```
+
+But this adds ~5 lines. Probably not worth it unless performance is critical.
+
+### Recommended Implementation
+
+#### assignGingerly.ts (minimal changes)
+
+```typescript
+// Add detection helper
+function isReactiveForEachSymbol(segment: string, aliasMap: Map<string, string>): boolean {
+  if (segment === '@eachTime') return true;
+  const aliasTarget = aliasMap.get(segment);
+  return aliasTarget === '@eachTime';
+}
+
+// In nested path handling, after detecting forEach
+if (forEachIndex !== -1) {
+  const pathToForEach = pathParts.slice(0, forEachIndex);
+  const pathAfterForEach = pathParts.slice(forEachIndex + 1);
+  
+  // Check if reactive
+  const isReactive = isReactiveForEachSymbol(pathParts[forEachIndex], aliasMap);
+  
+  if (isReactive) {
+    // Dynamic load and fire-and-forget
+    (async () => {
+      try {
+        const { handleEachTime } = await import('./eachTime.js');
+        await handleEachTime(
+          target,
+          pathToForEach,
+          pathAfterForEach,
+          value,
+          withMethodsSet || new Set(),
+          aliasMap,
+          options
+        );
+      } catch (error) {
+        console.error('Error in @eachTime:', error);
+      }
+    })();
+    continue;
+  }
+  
+  // Existing @each logic
+  let current = target;
+  if (pathToForEach.length > 0) {
+    // ... existing navigation logic
+  }
+  
+  if (isIterable(current)) {
+    applyToEach(current, pathAfterForEach, value, withMethodsSet || new Set(), aliasMap, options);
+  }
+  
+  continue;
+}
+```
+
+#### eachTime.ts (new file)
+
+```typescript
+// eachTime.ts - Reactive forEach implementation
+// Only loaded when @eachTime is encountered
+
+import { IAssignGingerlyOptions } from './types/assign-gingerly/types';
+
+function isEventTarget(value: any): boolean {
+  return value != null && typeof value.addEventListener === 'function';
+}
+
+export async function handleEachTime(
+  target: any,
+  pathToForEach: string[],
+  pathAfterForEach: string[],
+  value: any,
+  withMethods: Set<string>,
+  aliasMap: Map<string, string>,
+  options?: IAssignGingerlyOptions
+): Promise<void> {
+  // Validate signal
+  if (!options?.signal) {
+    throw new Error('@eachTime requires an AbortSignal in options.signal for cleanup');
+  }
+  
+  // Navigate to event source
+  let eventSource = target;
+  if (pathToForEach.length > 0) {
+    // Import evaluatePathWithMethods if needed, or inline navigation
+    const { evaluatePathWithMethods } = await import('./assignGingerly.js');
+    const result = evaluatePathWithMethods(target, pathToForEach, value, withMethods);
+    eventSource = result.target;
+  }
+  
+  // Validate event source
+  if (!isEventTarget(eventSource)) {
+    throw new Error('@eachTime requires an EventTarget (e.g., IMountObserver)');
+  }
+  
+  // Setup event listener
+  const handler = (event: Event) => {
+    // Extract mounted element from IMountEvent
+    const mountedElement = (event as any).mountedElement;
+    if (!mountedElement) return;
+    
+    // Apply remaining path to mounted element
+    (async () => {
+      const { evaluatePathWithMethods, assignGingerly, isReadonlyProperty, isClassInstance } = 
+        await import('./assignGingerly.js');
+      
+      if (pathAfterForEach.length > 0) {
+        const result = evaluatePathWithMethods(mountedElement, pathAfterForEach, value, withMethods);
+        
+        if (result.isMethod) {
+          const method = result.target[result.lastKey];
+          if (typeof method === 'function') {
+            if (Array.isArray(value)) {
+              method.apply(result.target, value);
+            } else {
+              method.call(result.target, value);
+            }
+          }
+        } else {
+          const lastKey = result.lastKey;
+          const parent = result.target;
+          
+          if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            if (lastKey in parent && (isReadonlyProperty(parent, lastKey) || isClassInstance(parent[lastKey]))) {
+              const currentValue = parent[lastKey];
+              if (typeof currentValue !== 'object' || currentValue === null) {
+                throw new Error(`Cannot merge object into ${isReadonlyProperty(parent, lastKey) ? 'readonly ' : ''}primitive property '${String(lastKey)}'`);
+              }
+              assignGingerly(currentValue, value, options);
+            } else {
+              parent[lastKey] = value;
+            }
+          } else {
+            parent[lastKey] = value;
+          }
+        }
+      }
+    })();
+  };
+  
+  // Register listener with AbortSignal for automatic cleanup
+  eventSource.addEventListener('mount', handler, { signal: options.signal });
+}
+```
+
+### Final Line Count
+
+**assignGingerly.ts:**
+- Detection helper: 5 lines
+- Dynamic import logic: 15 lines
+- Error handling: 5 lines
+- **Total: ~25 lines** (~3% increase)
+
+**eachTime.ts (new file):**
+- Helper functions: 5 lines
+- Main handler: 70 lines
+- **Total: ~75 lines** (separate file, only loaded when needed)
+
+**Types:**
+- signal option: 5 lines
+
+**Grand Total: ~105 lines** (but only 25 in core!)
+
+### Comparison
+
+| Approach | Lines in Core | Total Lines | Weight Impact |
+|----------|---------------|-------------|---------------|
+| Inline | 100 | 100 | ~11% |
+| Dynamic Load | 25 | 105 | ~3% |
+
+**Winner: Dynamic Loading** - Only 3% weight increase in core, with 75 lines isolated in optional module.
+
+### Additional Benefits
+
+1. **Future Extensibility**: Could add more reactive features to eachTime.ts without bloating core
+2. **Separate Testing**: eachTime.ts can have its own test suite
+3. **Clear Async Boundary**: Developers see async behavior is isolated
+4. **Better Documentation**: Can document @eachTime separately as advanced feature
+
+### Recommendation
+
+**Proceed with dynamic loading approach:**
+- ✅ Minimal impact on core (~25 lines, ~3%)
+- ✅ Zero cost when not used
+- ✅ Keeps assignGingerly synchronous
+- ✅ Clear separation of concerns
+- ✅ Better for tree-shaking
+- ✅ Async nature is explicit
+
+This is the best of both worlds: powerful reactive capability with minimal weight impact!
+
+Ready to implement when you give the go-ahead.
+
+
+---
+
+## Agent Response to Human Response II - Final Comments
+
+Excellent! The dynamic loading approach is definitely the way to go. Your insight about making the async nature explicit is spot-on. Here are my final thoughts and clarifications:
+
+### Refined Implementation Strategy
+
+#### 1. Minimal Core Changes (~25 lines in assignGingerly.ts)
+
+The detection and dynamic import logic is beautifully simple:
+
+```typescript
+// In the forEach detection section
+if (forEachIndex !== -1) {
+  const isReactive = isReactiveForEachSymbol(pathParts[forEachIndex], aliasMap);
+  
+  if (isReactive) {
+    // Fire-and-forget async load
+    (async () => {
+      try {
+        const { handleEachTime } = await import('./eachTime.js');
+        await handleEachTime(target, pathParts, forEachIndex, value, withMethodsSet, aliasMap, options);
+      } catch (error) {
+        console.error('Error in @eachTime:', error);
+      }
+    })();
+    continue;
+  }
+  
+  // ... existing @each logic
+}
+```
+
+**Key points:**
+- Fire-and-forget pattern is perfect here
+- Error handling catches and logs issues
+- `continue` ensures we don't fall through to static @each logic
+- Only ~20-25 lines total impact
+
+#### 2. eachTime.ts Structure (~75 lines)
+
+The separate module should be self-contained:
+
+```typescript
+export async function handleEachTime(
+  target: any,
+  pathParts: string[],
+  forEachIndex: number,
+  value: any,
+  withMethods: Set<string> | undefined,
+  aliasMap: Map<string, string>,
+  options?: IAssignGingerlyOptions
+): Promise<void>
+```
+
+**Important considerations:**
+
+**A. Signal Validation (Critical)**
+```typescript
+if (!options?.signal) {
+  throw new Error('@eachTime requires an AbortSignal in options.signal for cleanup');
+}
+```
+This error should be thrown immediately - no point setting up listeners without cleanup mechanism.
+
+**B. Event Name Hardcoded**
+```typescript
+eventSource.addEventListener('mount', handler, { signal: options.signal });
+```
+As you specified, hardcode 'mount' for IMountObserver. Simple and predictable.
+
+**C. Extract mountedElement**
+```typescript
+const handler = (event: Event) => {
+  const mountedElement = (event as any).mountedElement;
+  if (!mountedElement) return;
+  // ... apply path to mountedElement
+};
+```
+This assumes IMountEvent structure. Clean and straightforward.
+
+**D. Avoid Circular Imports**
+The tricky part is that eachTime.ts needs functions from assignGingerly.ts:
+- `evaluatePathWithMethods`
+- `assignGingerly` (for recursive merging)
+- `isReadonlyProperty`
+- `isClassInstance`
+
+**Two approaches:**
+
+**Option 1: Dynamic import inside handler (safer)**
+```typescript
+const handler = (event: Event) => {
+  const mountedElement = (event as any).mountedElement;
+  if (!mountedElement) return;
+  
+  // Import on demand to avoid circular dependency
+  (async () => {
+    const { evaluatePathWithMethods, assignGingerly, isReadonlyProperty, isClassInstance } = 
+      await import('./assignGingerly.js');
+    
+    // ... use imported functions
+  })();
+};
+```
+
+**Option 2: Extract shared helpers to separate file**
+Create `pathHelpers.ts` with:
+- `evaluatePathWithMethods`
+- `isReadonlyProperty`
+- `isClassInstance`
+
+Then both assignGingerly.ts and eachTime.ts import from pathHelpers.ts.
+
+**Recommendation: Option 1** (dynamic import inside handler)
+- Simpler - no refactoring needed
+- Only imports when event fires (lazy)
+- No circular dependency issues
+- Slightly slower (negligible for mount events)
+
+#### 3. Type Definition Update
+
+```typescript
+export interface IAssignGingerlyOptions {
+  registry?: typeof EnhancementRegistry | EnhancementRegistry;
+  bypassChecks?: boolean;
+  withMethods?: string[] | Set<string>;
+  aka?: Record<string, string>;
+  
+  /**
+   * AbortSignal for cleaning up reactive subscriptions (@eachTime)
+   * Required when using @eachTime symbol
+   * When the signal is aborted, all event listeners are automatically removed
+   */
+  signal?: AbortSignal;
+}
+```
+
+### Weight Impact Analysis
+
+**Current assignGingerly.ts:** ~900 lines (compiled)  
+**After changes:**
+- Core: +25 lines (~3% increase)
+- eachTime.ts: +75 lines (separate file, only loaded when @eachTime used)
+
+**Bundle impact:**
+- Users NOT using @eachTime: +25 lines (~3%)
+- Users using @eachTime: +100 lines total (~11%)
+
+**This is excellent!** The 3% base cost is negligible, and users who need reactive features get them on-demand.
+
+### Testing Strategy
+
+As you mentioned, no tests in assign-gingerly package to avoid circular dependencies. Testing in mount-observer makes perfect sense:
+
+**Test scenarios for mount-observer:**
+1. Basic @eachTime with mount events
+2. AbortSignal cleanup (verify listeners removed)
+3. Error handling (missing signal, invalid event source)
+4. Nested paths after @eachTime
+5. Method calls after @eachTime
+6. Multiple @eachTime in same config
+7. Mixing @each and @eachTime
+
+### Documentation Updates
+
+README.md should include:
+
+**Example 3f: Reactive Iteration with @eachTime**
+```javascript
+const controller = new AbortController();
+
+// Apply to elements as they mount
+assignGingerly(div, {
+  '?.mountObserver?.@eachTime?.classList?.add': 'highlighted'
+}, { 
+  withMethods: ['add'],
+  signal: controller.signal
+});
+
+// Later, cleanup all reactive subscriptions
+controller.abort();
+```
+
+**Key points to document:**
+- Requires AbortSignal for cleanup
+- Works with EventTarget (specifically IMountObserver)
+- Listens for 'mount' events
+- Fire-and-forget async behavior
+- Extracts `mountedElement` from event
+
+### Potential Edge Cases
+
+**1. Multiple @eachTime in same call**
+```javascript
+assignGingerly(div, {
+  '?.observer1?.@eachTime?.classList?.add': 'class1',
+  '?.observer2?.@eachTime?.classList?.add': 'class2'
+}, { signal: controller.signal });
+```
+**Status:** ✅ Works - each fires independently
+
+**2. Nested @eachTime**
+```javascript
+'?.observer?.@eachTime?.subObserver?.@eachTime?.classList?.add': 'class'
+```
+**Status:** ⚠️ Complex - probably not supported initially (would need recursive handling)
+
+**3. @each followed by @eachTime**
+```javascript
+'?.items?.@each?.observer?.@eachTime?.classList?.add': 'class'
+```
+**Status:** ⚠️ Complex - static forEach, then reactive forEach on each item
+
+**Recommendation:** Start simple - support single @eachTime per path. Document limitations. Can enhance later if needed.
+
+### Implementation Checklist
+
+When implementing:
+
+- [ ] Add `isReactiveForEachSymbol()` helper to assignGingerly.ts
+- [ ] Add detection and dynamic import logic in forEach section
+- [ ] Create eachTime.ts with `handleEachTime()` function
+- [ ] Add `signal?: AbortSignal` to IAssignGingerlyOptions
+- [ ] Update README.md with Example 3f
+- [ ] Compile with `npx tsc`
+- [ ] Verify no circular dependency errors
+- [ ] Document in mount-observer for testing
+
+### Final Thoughts
+
+This design is **elegant and pragmatic**:
+
+1. **Minimal weight** - Only 3% increase for non-users
+2. **Standard APIs** - AbortSignal is familiar and well-supported
+3. **Clear boundaries** - Async behavior is isolated and explicit
+4. **No circular deps** - Dynamic imports solve dependency issues
+5. **Testable** - Testing in mount-observer makes sense
+6. **Extensible** - Can add more reactive features to eachTime.ts later
+
+The fire-and-forget async pattern is perfect for this use case. Developers using @eachTime understand they're opting into reactive behavior, and the AbortSignal requirement makes cleanup explicit and standard.
+
+**Ready to implement!** The design is solid, the weight impact is minimal, and the separation of concerns is clean. This will be a powerful feature for mount-observer users while keeping assign-gingerly lean and synchronous for everyone else.
+
+One final note: The dynamic import of assignGingerly functions inside the event handler (Option 1) is the cleanest approach. It avoids refactoring, prevents circular dependencies, and the performance impact is negligible since mount events are relatively infrequent.
+
+Great design discussion! 🎯

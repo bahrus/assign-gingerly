@@ -80,6 +80,23 @@ export interface IAssignGingerlyOptions {
    * // Equivalent to: element.querySelector('my-element').classList.add('highlighted')
    */
   aka?: Record<string, string>;
+  
+  /**
+   * AbortSignal for cleaning up reactive subscriptions (@eachTime)
+   * Required when using @eachTime symbol for reactive iteration
+   * When the signal is aborted, all event listeners are automatically removed
+   * 
+   * Example:
+   * const controller = new AbortController();
+   * assignGingerly(div, {
+   *   '?.mountObserver?.@eachTime?.classList?.add': 'highlighted'
+   * }, { 
+   *   withMethods: ['add'],
+   *   signal: controller.signal
+   * });
+   * // Later: controller.abort(); // Cleanup all listeners
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -343,8 +360,10 @@ function ensureNestedPath(obj: any, pathParts: string[]): any {
  * A property is readonly if:
  * - It's a data property with writable: false, OR
  * - It's an accessor property with a getter but no setter
+ * 
+ * Exported for use by eachTime.ts
  */
-function isReadonlyProperty(obj: any, propName: string | symbol): boolean {
+export function isReadonlyProperty(obj: any, propName: string | symbol): boolean {
   let descriptor = Object.getOwnPropertyDescriptor(obj, propName);
   
   if (!descriptor) {
@@ -375,8 +394,10 @@ function isReadonlyProperty(obj: any, propName: string | symbol): boolean {
 /**
  * Helper function to check if a value is a class instance (not a plain object)
  * Returns true for instances of classes, false for plain objects, arrays, and primitives
+ * 
+ * Exported for use by eachTime.ts
  */
-function isClassInstance(value: any): boolean {
+export function isClassInstance(value: any): boolean {
   if (!value || typeof value !== 'object') return false;
   if (Array.isArray(value)) return false;
   
@@ -388,8 +409,10 @@ function isClassInstance(value: any): boolean {
 /**
  * Helper function to evaluate a nested path with method calls
  * Handles chained method calls where path segments can be methods
+ * 
+ * Exported for use by eachTime.ts
  */
-function evaluatePathWithMethods(
+export function evaluatePathWithMethods(
   target: any,
   pathParts: string[],
   value: any,
@@ -472,6 +495,18 @@ function isForEachSymbol(segment: string, aliasMap: Map<string, string>): boolea
   // Check if this segment is aliased to '@each'
   const aliasTarget = aliasMap.get(segment);
   return aliasTarget === '@each';
+}
+
+/**
+ * Check if a segment is the reactive forEach symbol (@eachTime) or aliased to it
+ */
+function isReactiveForEachSymbol(segment: string, aliasMap: Map<string, string>): boolean {
+  // Direct match
+  if (segment === '@eachTime') return true;
+  
+  // Check if this segment is aliased to '@eachTime'
+  const aliasTarget = aliasMap.get(segment);
+  return aliasTarget === '@eachTime';
 }
 
 /**
@@ -801,11 +836,37 @@ export function assignGingerly(
     if (isNestedPath(key)) {
       const pathParts = parsePath(key);
       
-      // Check if path contains @each (forEach)
-      const forEachIndex = pathParts.findIndex(part => isForEachSymbol(part, aliasMap));
+      // Check if path contains @each or @eachTime (forEach)
+      const forEachIndex = pathParts.findIndex(part => 
+        isForEachSymbol(part, aliasMap) || isReactiveForEachSymbol(part, aliasMap)
+      );
       
       if (forEachIndex !== -1) {
-        // Path contains @each - handle forEach
+        // Check if it's reactive (@eachTime)
+        const isReactive = isReactiveForEachSymbol(pathParts[forEachIndex], aliasMap);
+        
+        if (isReactive) {
+          // Reactive forEach - dynamic load and fire-and-forget
+          (async () => {
+            try {
+              const { handleEachTime } = await import('./eachTime.js');
+              await handleEachTime(
+                target,
+                pathParts,
+                forEachIndex,
+                value,
+                withMethodsSet,
+                aliasMap,
+                options
+              );
+            } catch (error) {
+              console.error('Error in @eachTime:', error);
+            }
+          })();
+          continue;
+        }
+        
+        // Static forEach (@each) - existing logic
         const pathToForEach = pathParts.slice(0, forEachIndex);
         const pathAfterForEach = pathParts.slice(forEachIndex + 1);
         
