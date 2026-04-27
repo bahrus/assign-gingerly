@@ -486,3 +486,292 @@ I think maybe as far as cleanup, @eachTime should only be usable if an abort con
 Because assignGingerly is fundamentally synchronous, if we add it to assignGingerly, it necessarily  needs to add to the weight of the package.  How many lines of code would this requirement take, based on the understanding above?
 
 
+
+
+---
+
+## Agent Response to Human Feedback
+
+Excellent clarifications! This makes the implementation much clearer and more focused.
+
+### Key Decisions Summary:
+
+1. ✅ **EventTarget only** - No async iterators for now
+2. ✅ **@eachTime symbol** - Clear and consistent
+3. ✅ **Assume 'mount' event** - Standard convention for IMountObserver
+4. ✅ **AbortSignal for cleanup** - Standard web API pattern
+5. ✅ **No tests in this package** - Avoid circular dependencies
+
+### Implementation Approach with AbortSignal
+
+Using AbortSignal is brilliant because:
+- **Standard web API** - Developers already know it
+- **Automatic cleanup** - When signal aborts, listeners are removed
+- **No custom disposal** - Leverages built-in browser functionality
+- **Composable** - Can share one signal across multiple operations
+
+### Updated API Design
+
+```typescript
+interface IAssignGingerlyOptions {
+  registry?: typeof EnhancementRegistry | EnhancementRegistry;
+  bypassChecks?: boolean;
+  withMethods?: string[] | Set<string>;
+  aka?: Record<string, string>;
+  
+  /**
+   * AbortSignal for cleaning up reactive subscriptions (@eachTime)
+   * When the signal is aborted, all event listeners are removed
+   */
+  signal?: AbortSignal;
+}
+```
+
+### Usage Example
+
+```typescript
+const controller = new AbortController();
+
+assignGingerly(div, {
+  '?.mountObserver?.@eachTime?.classList?.add': 'highlighted'
+}, { 
+  withMethods: ['add'],
+  signal: controller.signal
+});
+
+// Later, cleanup all reactive subscriptions
+controller.abort();
+```
+
+### Implementation Estimate
+
+Based on the requirements, here's the code breakdown:
+
+#### 1. Helper Functions (~15 lines)
+```typescript
+function isReactiveForEachSymbol(segment: string, aliasMap: Map<string, string>): boolean {
+  if (segment === '@eachTime') return true;
+  const aliasTarget = aliasMap.get(segment);
+  return aliasTarget === '@eachTime';
+}
+
+function isEventTarget(value: any): boolean {
+  return value != null && typeof value.addEventListener === 'function';
+}
+```
+
+#### 2. Reactive Application Function (~40 lines)
+```typescript
+function applyToEachReactively(
+  eventTarget: EventTarget,
+  remainingPath: string[],
+  value: any,
+  withMethods: Set<string>,
+  aliasMap: Map<string, string>,
+  signal: AbortSignal | undefined,
+  options?: IAssignGingerlyOptions
+): void {
+  if (!signal) {
+    throw new Error('@eachTime requires an AbortSignal in options.signal for cleanup');
+  }
+  
+  const handler = (event: Event) => {
+    // Extract mounted element from IMountEvent
+    const mountedElement = (event as any).mountedElement;
+    if (!mountedElement) return;
+    
+    // Apply remaining path to the mounted element
+    if (remainingPath.length > 0) {
+      const result = evaluatePathWithMethods(mountedElement, remainingPath, value, withMethods);
+      
+      if (result.isMethod) {
+        const method = result.target[result.lastKey];
+        if (typeof method === 'function') {
+          if (Array.isArray(value)) {
+            method.apply(result.target, value);
+          } else {
+            method.call(result.target, value);
+          }
+        }
+      } else {
+        const lastKey = result.lastKey;
+        const parent = result.target;
+        
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          if (lastKey in parent && (isReadonlyProperty(parent, lastKey) || isClassInstance(parent[lastKey]))) {
+            const currentValue = parent[lastKey];
+            if (typeof currentValue !== 'object' || currentValue === null) {
+              throw new Error(`Cannot merge object into ${isReadonlyProperty(parent, lastKey) ? 'readonly ' : ''}primitive property '${String(lastKey)}'`);
+            }
+            assignGingerly(currentValue, value, options);
+          } else {
+            parent[lastKey] = value;
+          }
+        } else {
+          parent[lastKey] = value;
+        }
+      }
+    }
+  };
+  
+  // Use AbortSignal for automatic cleanup
+  eventTarget.addEventListener('mount', handler, { signal });
+}
+```
+
+#### 3. Integration in assignGingerly (~25 lines)
+```typescript
+// In the nested path handling section, after detecting @each:
+if (forEachIndex !== -1) {
+  const pathToForEach = pathParts.slice(0, forEachIndex);
+  const pathAfterForEach = pathParts.slice(forEachIndex + 1);
+  
+  // Check if it's reactive (@eachTime)
+  const isReactive = isReactiveForEachSymbol(pathParts[forEachIndex], aliasMap);
+  
+  // Navigate to the source
+  let current = target;
+  if (pathToForEach.length > 0) {
+    if (withMethodsSet) {
+      const result = evaluatePathWithMethods(target, pathToForEach, value, withMethodsSet);
+      current = result.target;
+    } else {
+      for (const part of pathToForEach) {
+        current = current[part];
+      }
+    }
+  }
+  
+  if (isReactive) {
+    // Reactive forEach - subscribe to events
+    if (!isEventTarget(current)) {
+      throw new Error('@eachTime requires an EventTarget');
+    }
+    applyToEachReactively(current, pathAfterForEach, value, withMethodsSet || new Set(), aliasMap, options?.signal, options);
+  } else {
+    // Static forEach - existing logic
+    if (isIterable(current)) {
+      applyToEach(current, pathAfterForEach, value, withMethodsSet || new Set(), aliasMap, options);
+    }
+  }
+  
+  continue;
+}
+```
+
+#### 4. Type Definition Update (~5 lines)
+```typescript
+// In types/assign-gingerly/types.d.ts
+export interface IAssignGingerlyOptions {
+  // ... existing options
+  signal?: AbortSignal;
+}
+```
+
+### Total Lines of Code: ~85 lines
+
+**Breakdown:**
+- Helper functions: ~15 lines
+- Reactive application: ~40 lines
+- Integration logic: ~25 lines
+- Type definitions: ~5 lines
+
+**Plus:**
+- Comments/documentation: ~15 lines
+- **Total with comments: ~100 lines**
+
+### Weight Impact
+
+**Current assignGingerly.ts**: ~900 lines  
+**After adding @eachTime**: ~1000 lines  
+**Increase**: ~11% (100 lines)
+
+This is reasonable for the functionality gained, especially since:
+- It's opt-in (only used when `@eachTime` is present)
+- No external dependencies
+- Leverages standard web APIs (AbortSignal)
+- Clean separation from existing code
+
+### Implementation Notes
+
+1. **Error Handling**: Throw clear error if `signal` is missing when `@eachTime` is used
+2. **Event Name**: Hardcode 'mount' for IMountObserver (as you specified)
+3. **Event Detail**: Extract `mountedElement` from IMountEvent
+4. **No Circular Dependency**: Only uses types, not runtime imports
+5. **Testing**: Deferred to mount-observer package
+
+### Potential Optimizations
+
+If you want to reduce code size further:
+
+1. **Lazy Loading** (~50 lines saved):
+   ```typescript
+   // Only load reactive logic when @eachTime is encountered
+   const { applyToEachReactively } = await import('./reactiveHelpers.js');
+   ```
+   But this adds async complexity.
+
+2. **Shared Logic** (~10 lines saved):
+   Reuse more code between `applyToEach` and `applyToEachReactively`
+
+3. **Minimal Error Checking** (~5 lines saved):
+   Trust that users provide correct inputs
+
+**Recommendation**: Keep it simple and inline (~100 lines total). The code is straightforward and the weight increase is justified.
+
+### Alternative: Separate Package
+
+If 100 lines feels too heavy for assignGingerly:
+
+**Option**: Create `assign-gingerly-reactive` package
+- Extends assignGingerly with `@eachTime` support
+- ~150 lines total (includes wrapper)
+- Users opt-in by importing the extended version
+- No weight impact on base package
+
+```typescript
+// assign-gingerly-reactive/index.ts
+import { assignGingerly as base } from 'assign-gingerly';
+
+export function assignGingerly(target, source, options) {
+  // Add @eachTime support
+  // Delegate to base for everything else
+}
+```
+
+**Pros:**
+- Zero weight impact on base package
+- Clear opt-in for reactive features
+- Can evolve independently
+
+**Cons:**
+- Another package to maintain
+- Users need to know about it
+- Slightly more complex import
+
+### My Recommendation
+
+**Keep it in assignGingerly** (~100 lines):
+- 11% increase is reasonable
+- Feature is opt-in (no cost if not used)
+- Simpler for users (one package)
+- Natural extension of `@each`
+- Standard web APIs (no dependencies)
+
+The implementation is clean, focused, and leverages AbortSignal perfectly. The weight increase is justified by the powerful reactive capability it enables.
+
+### Next Steps
+
+If you agree with this approach:
+1. I can implement the ~100 lines
+2. Update type definitions
+3. Add documentation to README
+4. You handle testing in mount-observer package
+
+What do you think?
+
+---
+
+## Human Response II
+
+The weight isn't bad at all, it is quite good, and is quite viable.  But I was thinking about the dilemma further, and I'm thinking it kind of makes sense to make support for @eachTime the exception to the rule, where the rule in this case is keep assign-gingerly synchronous. Since the assignment will happen sporadically, I'm thinking the developer will need to understand that this feature is by its very nature more asynchronous.  So most of the code could be moved out of assign-gingerly as much as possible in support of @eachTime -- say to eachTime.ts and if we conditionally encounter this directive, spawn an asynchronous fire nd forget type process that dynamically loads the library and passes the needed context.  If we did that, how much of a dent would make in reducing the 100 lines of code?
