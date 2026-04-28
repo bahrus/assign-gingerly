@@ -228,3 +228,129 @@ someOtherName(JSONSerializableMergePattern, {
 What name would you use for someOtherName, and afterResolving?
 
 
+
+---
+
+## Agent Response to Human Response I
+
+Good call on keeping it flat and going with `resolveValues`.
+
+### The Combined Function
+
+Looking at your example again:
+
+```javascript
+someOtherName(JSONSerializableMergePattern, {
+    afterResolving: sourceObjToMergeIn
+});
+```
+
+Wait — I notice `objToMergeInto` is defined but the combined function doesn't reference it. The function needs three things: the target to merge into, the pattern, and the source to resolve against. Let me assume the intent is something like:
+
+```javascript
+objToMergeInto.someOtherName(JSONSerializableMergePattern, {
+    afterResolving: sourceObjToMergeIn
+});
+```
+
+Or as a standalone:
+
+```javascript
+someOtherName(objToMergeInto, JSONSerializableMergePattern, {
+    afterResolving: sourceObjToMergeIn
+});
+```
+
+### Naming Ideas
+
+**For the combined function (`someOtherName`):**
+
+The function does two things: resolve values from a source, then assign them gingerly. It's essentially "assign gingerly, but first resolve the RHS paths." Some options:
+
+- `mergeResolved` — "merge the resolved values into target"
+- `assignResolved` — mirrors `assignGingerly` but with resolution step
+- `assignFrom` — "assign into target *from* this source, using this pattern"
+- `applyPattern` — "apply this pattern using this source"
+- `resolveAndAssign` — explicit about both steps, but verbose
+
+I'd lean toward **`assignFrom`** — it's concise and reads naturally:
+
+```javascript
+// As a prototype method:
+objToMergeInto.assignFrom(JSONSerializableMergePattern, {
+    from: sourceObjToMergeIn
+});
+
+// Or standalone:
+assignFrom(objToMergeInto, JSONSerializableMergePattern, {
+    from: sourceObjToMergeIn
+});
+```
+
+**For the option key (`afterResolving`):**
+
+- `afterResolving` — implies a temporal step, slightly misleading since it's not async
+- `from` — short, reads naturally: "assign from this source"
+- `using` — "assign using this source"
+- `via` — "assign via this source"
+- `source` — plain and descriptive
+
+I'd suggest **`from`** — it reads like English:
+
+```javascript
+objToMergeInto.assignFrom(pattern, { from: sourceObj });
+// "assign from sourceObj into objToMergeInto using pattern"
+```
+
+Or **`using`**:
+
+```javascript
+objToMergeInto.assignFrom(pattern, { using: sourceObj });
+// "assign from pattern, using sourceObj to resolve values"
+```
+
+### Implementation
+
+The combined function would be trivial — just glue:
+
+```typescript
+// assignFrom.ts (~15 lines)
+import { resolveValues } from './resolveValues.js';
+import assignGingerly from './assignGingerly.js';
+import { IAssignGingerlyOptions } from './assignGingerly.js';
+
+interface AssignFromOptions extends IAssignGingerlyOptions {
+  from: any;
+}
+
+export function assignFrom(
+  target: any,
+  pattern: Record<string, any>,
+  options: AssignFromOptions
+): any {
+  const resolved = resolveValues(pattern, options.from);
+  return assignGingerly(target, resolved, options);
+}
+```
+
+It inherits all `assignGingerly` options (withMethods, aka, signal, etc.) while adding `from`.
+
+### Summary of Deliverables
+
+1. **`resolveValues.ts`** (~25 lines) — standalone utility, exported
+2. **`assignFrom.ts`** (~15 lines) — combined function, exported
+3. Both added to `package.json` exports, `tsconfig.json`, type definitions
+4. README documentation
+5. Tests for `resolveValues` (the core logic)
+
+### Questions
+
+1. Does `assignFrom` with `{ from: sourceObj }` read well to you, or do you prefer a different combo?
+2. Should `assignFrom` also be added to `Object.prototype` (like `assignGingerly`), or keep it as an import-only function?
+
+---
+
+# Human Response II
+
+1.  assignFrom sounds fine.
+2.  Let's not add to Object.prototype yet.  I'm thinking this could be usefully packaged as a custom enhancement
