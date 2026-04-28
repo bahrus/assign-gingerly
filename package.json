@@ -55,6 +55,14 @@
     "./getHost.js": {
       "default": "./getHost.js",
       "types": "./getHost.ts"
+    },
+    "./resolveValues.js": {
+      "default": "./resolveValues.js",
+      "types": "./resolveValues.ts"
+    },
+    "./assignFrom.js": {
+      "default": "./assignFrom.js",
+      "types": "./assignFrom.ts"
     }
   },
   "main": "index.js",

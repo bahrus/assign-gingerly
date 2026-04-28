@@ -7,4 +7,6 @@ export { parseWithAttrs } from './parseWithAttrs.js';
 export { buildCSSQuery } from './buildCSSQuery.js';
 export { resolveTemplate } from './resolveTemplate.js';
 export { getHost } from './getHost.js';
+export { resolveValues } from './resolveValues.js';
+export { assignFrom } from './assignFrom.js';
 import './object-extension.js';

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>resolveValues and assignFrom Tests</title>
+</head>
+<body>
+    <div id="test-results"></div>
+    <script type="module">
+        import { resolveValues } from '../resolveValues.js';
+        import { assignFrom } from '../assignFrom.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function assert(condition, message) {
+            if (condition) {
+                passed++;
+                results.push(`PASS: ${message}`);
+            } else {
+                failed++;
+                results.push(`FAIL: ${message}`);
+                console.error(`FAIL: ${message}`);
+            }
+        }
+
+        function runTests() {
+            // ===== resolveValues tests =====
+
+            // Test 1: Basic path resolution
+            {
+                const source = { myPropContainer: { stringProp: 'Venus' }, myFooString: 'bar' };
+                const pattern = {
+                    hello: '?.myPropContainer?.stringProp',
+                    foo: '?.myFooString'
+                };
+                const result = resolveValues(pattern, source);
+                assert(result.hello === 'Venus', 'should resolve nested path');
+                assert(result.foo === 'bar', 'should resolve top-level path');
+            }
+
+            // Test 2: Non-path values pass through
+            {
+                const source = { a: 1 };
+                const pattern = {
+                    num: 42,
+                    bool: true,
+                    str: 'literal string',
+                    nul: null,
+                    arr: [1, 2, 3]
+                };
+                const result = resolveValues(pattern, source);
+                assert(result.num === 42, 'should pass through number');
+                assert(result.bool === true, 'should pass through boolean');
+                assert(result.str === 'literal string', 'should pass through non-path string');
+                assert(result.nul === null, 'should pass through null');
+                assert(Array.isArray(result.arr) && result.arr.length === 3, 'should pass through array');
+            }
+
+            // Test 3: Unresolvable path returns undefined
+            {
+                const source = { a: { b: 1 } };
+                const pattern = { val: '?.a?.c?.d' };
+                const result = resolveValues(pattern, source);
+                assert(result.val === undefined, 'should return undefined for unresolvable path');
+            }
+
+            // Test 4: Null in path chain stops resolution
+            {
+                const source = { a: { b: null } };
+                const pattern = { val: '?.a?.b?.c' };
+                const result = resolveValues(pattern, source);
+                assert(result.val == null, 'should return null/undefined when path hits null');
+            }
+
+            // Test 5: Resolves to object value
+            {
+                const source = { nested: { obj: { x: 1, y: 2 } } };
+                const pattern = { val: '?.nested?.obj' };
+                const result = resolveValues(pattern, source);
+                assert(result.val.x === 1 && result.val.y === 2, 'should resolve to object value');
+            }
+
+            // Test 6: Resolves to array value
+            {
+                const source = { items: [10, 20, 30] };
+                const pattern = { val: '?.items' };
+                const result = resolveValues(pattern, source);
+                assert(Array.isArray(result.val) && result.val[1] === 20, 'should resolve to array value');
+            }
+
+            // Test 7: Resolves to boolean/number
+            {
+                const source = { flag: false, count: 0 };
+                const pattern = { a: '?.flag', b: '?.count' };
+                const result = resolveValues(pattern, source);
+                assert(result.a === false, 'should resolve to false');
+                assert(result.b === 0, 'should resolve to zero');
+            }
+
+            // Test 8: LHS paths pass through untouched
+            {
+                const source = { color: 'red' };
+                const pattern = { '?.style?.color': '?.color' };
+                const result = resolveValues(pattern, source);
+                assert(result['?.style?.color'] === 'red', 'should preserve LHS path key and resolve RHS');
+            }
+
+            // Test 9: Empty pattern
+            {
+                const result = resolveValues({}, { a: 1 });
+                assert(Object.keys(result).length === 0, 'should return empty object for empty pattern');
+            }
+
+            // Test 10: Mixed paths and literals
+            {
+                const source = { theme: { primary: 'blue' } };
+                const pattern = {
+                    color: '?.theme?.primary',
+                    size: '16px',
+                    count: 5
+                };
+                const result = resolveValues(pattern, source);
+                assert(result.color === 'blue', 'should resolve path in mixed pattern');
+                assert(result.size === '16px', 'should keep literal string in mixed pattern');
+                assert(result.count === 5, 'should keep number in mixed pattern');
+            }
+
+            // ===== assignFrom tests =====
+
+            // Test 11: Basic assignFrom
+            {
+                const source = { theme: { color: 'red' }, label: 'Hello' };
+                const target = { color: 'blue', text: '' };
+                assignFrom(target, {
+                    color: '?.theme?.color',
+                    text: '?.label'
+                }, { from: source });
+                assert(target.color === 'red', 'assignFrom should resolve and assign color');
+                assert(target.text === 'Hello', 'assignFrom should resolve and assign text');
+            }
+
+            // Test 12: assignFrom with nested LHS paths
+            {
+                const source = { val: 'resolved' };
+                const target = { style: {} };
+                assignFrom(target, {
+                    '?.style?.color': '?.val'
+                }, { from: source });
+                assert(target.style.color === 'resolved', 'assignFrom should work with nested LHS paths');
+            }
+
+            // Test 13: assignFrom with literal values (no resolution needed)
+            {
+                const target = {};
+                assignFrom(target, {
+                    a: 42,
+                    b: 'literal'
+                }, { from: {} });
+                assert(target.a === 42, 'assignFrom should pass through literal number');
+                assert(target.b === 'literal', 'assignFrom should pass through literal string');
+            }
+
+            // Test 14: assignFrom inherits withMethods
+            {
+                const source = { cls: 'active' };
+                const el = document.createElement('div');
+                assignFrom(el, {
+                    '?.classList?.add': '?.cls'
+                }, { from: source, withMethods: ['add'] });
+                assert(el.classList.contains('active'), 'assignFrom should work with withMethods');
+            }
+
+            // Test 15: assignFrom with unresolvable path assigns undefined
+            {
+                const target = { val: 'original' };
+                assignFrom(target, {
+                    val: '?.nonexistent?.path'
+                }, { from: {} });
+                assert(target.val === undefined, 'assignFrom should assign undefined for unresolvable path');
+            }
+
+            // Display results
+            const resultsDiv = document.getElementById('test-results');
+            resultsDiv.innerHTML = `
+                <h2>resolveValues & assignFrom Tests: ${passed}/${passed + failed} passed</h2>
+                <pre>${results.join('\n')}</pre>
+            `;
+
+            window.__TEST_RESULTS__ = { passed, failed, total: passed + failed, results };
+        }
+
+        runTests();
+    </script>
+</body>
+</html>
