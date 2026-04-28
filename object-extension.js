@@ -65,8 +65,26 @@ class ElementEnhancementContainer {
         this.element = element;
     }
     /**
+     * Resolve a registryItem parameter to an EnhancementConfig.
+     * If a string or symbol is passed, looks it up via findByEnhKey in the registry.
+     * @param registryItem - EnhancementConfig object, or string/symbol enhKey
+     * @param registry - The enhancement registry to search
+     * @returns The resolved EnhancementConfig
+     * @throws Error if string/symbol not found in registry
+     */
+    resolveRegistryItem(registryItem, registry) {
+        if (typeof registryItem === 'string' || typeof registryItem === 'symbol') {
+            const found = registry.findByEnhKey(registryItem);
+            if (!found) {
+                throw new Error(`${String(registryItem)} not in registry`);
+            }
+            return found;
+        }
+        return registryItem;
+    }
+    /**
      * Get or spawn an instance for a registry item
-     * @param registryItem - The registry item to get/spawn instance for
+     * @param registryItem - The registry item (EnhancementConfig object, or string/symbol enhKey) to get/spawn instance for
      * @param mountCtx - Optional context to pass to the spawned instance
      * @returns The spawned instance
      */
@@ -77,6 +95,8 @@ class ElementEnhancementContainer {
         if (!registry) {
             throw new Error('customElementRegistry.enhancementRegistry not available');
         }
+        // Resolve string/symbol to EnhancementConfig via enhKey lookup
+        registryItem = this.resolveRegistryItem(registryItem, registry);
         // Check if registryItem is in the registry
         const items = registry.getItems();
         if (!items.includes(registryItem)) {
@@ -109,7 +129,7 @@ class ElementEnhancementContainer {
                         mountCtx,
                         synthesizerElement: mountCtx?.synthesizerElement
                     };
-                    attrInitVals = parseWithAttrs(element, registryItem.withAttrs, registryItem.allowUnprefixed || false, spawnContext);
+                    attrInitVals = parseWithAttrs(element, registryItem.withAttrs, registryItem.allowUnprefixed, spawnContext);
                 }
                 catch (e) {
                     console.error('Error parsing attributes:', e);
@@ -145,48 +165,81 @@ class ElementEnhancementContainer {
     }
     /**
      * Dispose of an enhancement instance
-     * @param registryItem - The registry item to dispose
+     * @param registryItem - The registry item (EnhancementConfig object, or string/symbol enhKey) to dispose
      */
     dispose(registryItem) {
         const element = this.element;
+        // Resolve string/symbol to EnhancementConfig via enhKey lookup
+        let resolved;
+        if (typeof registryItem === 'string' || typeof registryItem === 'symbol') {
+            const registry = element.customElementRegistry?.enhancementRegistry;
+            if (!registry) {
+                return; // No registry, nothing to dispose
+            }
+            const found = registry.findByEnhKey(registryItem);
+            if (!found) {
+                throw new Error(`${String(registryItem)} not in registry`);
+            }
+            resolved = found;
+        }
+        else {
+            resolved = registryItem;
+        }
         // Get the instance map
         const instanceMap = getInstanceMap();
         if (!instanceMap.has(element)) {
             return; // No instances for this element
         }
         const instances = instanceMap.get(element);
-        const spawnedInstance = instances.get(registryItem);
+        const spawnedInstance = instances.get(resolved);
         if (!spawnedInstance) {
             return; // No instance for this registry item
         }
         // Call dispose lifecycle method if it exists
-        const lifecycleKeys = normalizeLifecycleKeys(registryItem?.lifecycleKeys);
+        const lifecycleKeys = normalizeLifecycleKeys(resolved.lifecycleKeys);
         const disposeKey = lifecycleKeys?.dispose;
         if (disposeKey && typeof spawnedInstance[disposeKey] === 'function') {
-            spawnedInstance[disposeKey](registryItem);
+            spawnedInstance[disposeKey](resolved);
         }
         // Remove from instance map
-        instances.delete(registryItem);
+        instances.delete(resolved);
         // Remove from enh container if it has an enhKey
-        if (registryItem.enhKey) {
+        if (resolved.enhKey) {
             const self = this;
-            delete self[registryItem.enhKey];
+            delete self[resolved.enhKey];
         }
     }
     /**
      * Wait for an enhancement instance to be resolved
-     * @param registryItem - The registry item to wait for
+     * @param registryItem - The registry item (EnhancementConfig object, or string/symbol enhKey) to wait for
      * @param mountCtx - Optional context to pass to the spawned instance
      * @returns Promise that resolves with the spawned instance
      */
     async whenResolved(registryItem, mountCtx) {
-        const lifecycleKeys = normalizeLifecycleKeys(registryItem?.lifecycleKeys);
+        // Resolve string/symbol to EnhancementConfig via enhKey lookup
+        let resolved;
+        if (typeof registryItem === 'string' || typeof registryItem === 'symbol') {
+            const element = this.element;
+            const registry = element.customElementRegistry?.enhancementRegistry;
+            if (!registry) {
+                throw new Error('customElementRegistry.enhancementRegistry not available');
+            }
+            const found = registry.findByEnhKey(registryItem);
+            if (!found) {
+                throw new Error(`${String(registryItem)} not in registry`);
+            }
+            resolved = found;
+        }
+        else {
+            resolved = registryItem;
+        }
+        const lifecycleKeys = normalizeLifecycleKeys(resolved.lifecycleKeys);
         const resolvedKey = lifecycleKeys?.resolved;
         if (resolvedKey === undefined) {
             throw new Error('Must specify resolved key in lifecycleKeys');
         }
         // Get or spawn the instance (pass mountCtx through)
-        const spawnedInstance = this.get(registryItem, mountCtx);
+        const spawnedInstance = this.get(resolved, mountCtx);
         // Check if already resolved
         if (spawnedInstance[resolvedKey]) {
             return spawnedInstance;

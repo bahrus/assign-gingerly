@@ -975,7 +975,7 @@ This guarantees that applying the reversal object restores the object to its exa
 ## Dependency injection based on a registry object and a Symbolic reference mapping
 
 ```Typescript
-interface IEnhancementRegistryItem<T = any, TObjToExtend = any> {
+interface EnhancementConfig<T = any, TObjToExtend = any> {
     spawn: {new(objToExtend: TObjToExtend, ctx: SpawnContext, initVals: Partial<T>): T}
     symlinks?: {[key: symbol]: keyof T}
     // Optional: for element enhancement access
@@ -1001,7 +1001,7 @@ class YourEnhancement{
 }
 
 class EnhancementRegistry{
-    push(IEnhancementRegistryItem | IEnhancementRegistryItem[]){
+    push(EnhancementConfig | EnhancementConfig[]){
         ...
     }
 }
@@ -1358,7 +1358,7 @@ Element enhancement classes should follow this constructor signature:
 
 ```TypeScript
 interface SpawnContext<T, TMountContext = any> {
-  config: IEnhancementRegistryItem<T>;
+  config: EnhancementConfig<T>;
   mountCtx?: TMountContext;  // Optional custom context passed by caller
 }
 
@@ -1412,7 +1412,7 @@ This is useful for:
 In addition to spawn and symlinks, registry items support optional properties `enhKey`, `withAttrs`, `canSpawn`, and `lifecycleKeys`:
 
 ```TypeScript
-interface IEnhancementRegistryItem<T, TObj = Element> {
+interface EnhancementConfig<T, TObj = Element> {
   spawn: { 
     new (obj?: TObj, ctx?: SpawnContext<T>, initVals?: Partial<T>): T;
     canSpawn?: (obj: TObj, ctx?: SpawnContext<T>) => boolean;  // Optional spawn guard
@@ -1551,6 +1551,37 @@ console.log(element.enh.myEnh === instance); // true
 - **Explicit control**: Spawn instances programmatically without needing to use symbols or property assignment
 - **Shared instances**: Uses the same global instance map as `assignGingerly` and `enh.set`, ensuring only one instance per registry item
 - **Auto-registration**: Automatically adds registry items to the element's registry if not present
+
+**Lookup by enhKey (string or symbol):**
+
+Instead of passing the full registry item object, you can pass a string or symbol matching the `enhKey` of a previously registered enhancement:
+
+```TypeScript
+// First, register the enhancement (e.g., via mount-observer or manually)
+registry.push({
+  spawn: MyEnhancement,
+  enhKey: 'myEnh'
+});
+
+// Later, retrieve by enhKey string
+const instance = element.enh.get('myEnh');
+
+// Or by symbol enhKey
+const enhSym = Symbol.for('myEnh');
+const instance2 = element.enh.get(enhSym);
+```
+
+If the enhKey is not found in the registry, an error is thrown: `"myEnh not in registry"`.
+
+This also works with `enh.dispose()` and `enh.whenResolved()`:
+
+```TypeScript
+// Dispose by enhKey
+element.enh.dispose('myEnh');
+
+// Wait for resolution by enhKey
+const resolved = await element.enh.whenResolved('myEnh');
+```
 
 <details>
 <summary>Example with shared instances</summary>
@@ -2102,7 +2133,7 @@ static canSpawn(obj: any, ctx?: SpawnContext<T>): boolean
 ```
 
 - `obj`: The target object being enhanced (element, plain object, etc.)
-- `ctx`: Optional spawn context containing `{ config: IEnhancementRegistryItem<T> }`
+- `ctx`: Optional spawn context containing `{ config: EnhancementConfig<T> }`
 - Returns: `true` to allow spawning, `false` to block
 
 ### Use Cases
