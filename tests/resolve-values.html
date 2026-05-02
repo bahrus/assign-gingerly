@@ -180,6 +180,38 @@
                 assert(target.val === undefined, 'assignFrom should assign undefined for unresolvable path');
             }
 
+            // Test 16: resolveValues with ?. resolves to the source object itself
+            {
+                const source = { name: 'Alice', age: 30 };
+                const pattern = { self: '?.' };
+                const result = resolveValues(pattern, source);
+                assert(result.self === source, 'should resolve ?. to the source object itself');
+            }
+
+            // Test 17: assignFrom with ?. assigns the from object itself
+            {
+                const source = { name: 'Alice' };
+                const target = {};
+                assignFrom(target, {
+                    ref: '?.'
+                }, { from: source });
+                assert(target.ref === source, 'assignFrom should assign the from object itself with ?.');
+            }
+
+            // Test 18: assignFrom mixing ?. self-reference with path resolution
+            {
+                const source = { clone: document.createElement('div'), name: 'test' };
+                const target = {};
+                assignFrom(target, {
+                    element: '?.',
+                    clonedNode: '?.clone',
+                    label: '?.name'
+                }, { from: source });
+                assert(target.element === source, 'should assign from object itself');
+                assert(target.clonedNode === source.clone, 'should resolve clone path');
+                assert(target.label === 'test', 'should resolve name path');
+            }
+
             // Display results
             const resultsDiv = document.getElementById('test-results');
             resultsDiv.innerHTML = `

@@ -3303,6 +3303,28 @@ console.log(result);
 
 -->
 
+## Resolving and Assigning with `assignFrom`
+
+The `assignFrom` function combines RHS path resolution with `assignGingerly` in a single call. It resolves `?.`-prefixed RHS values against a source object, then assigns the results into a target. Use `?.` alone as a RHS value to reference the entire source object itself.
+
+```TypeScript
+import { assignFrom } from 'assign-gingerly/assignFrom.js';
+
+const viewModel = { username: 'Alice', clone: someDocumentFragment };
+
+assignFrom(target, {
+  '?.appendChild': '?..clone',                              // source.clone
+  '?.clone?.q?..username?.textContent': '?.username',       // source.username
+  ref: '?.'                                                  // the source object itself
+}, {
+  from: viewModel,
+  withMethods: ['appendChild'],
+  aka: { 'q': 'querySelector' }
+});
+```
+
+For full documentation, see [docs/assignFrom.md](docs/assignFrom.md).
+
 ## Itemscope Managers (Chrome 146+)
 
 Itemscope Managers provide a way to manage DOM fragments and their associated data/view models for elements with the `itemscope` attribute. This feature enables frameworks and libraries to manage light children of web components, DOM fragments from looping constructs, and scenarios where custom element wrapping is not feasible.

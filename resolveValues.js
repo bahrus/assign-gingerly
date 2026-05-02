@@ -26,8 +26,10 @@ export function resolveValues(pattern, source) {
     const result = {};
     for (const [key, value] of Object.entries(pattern)) {
         if (typeof value === 'string' && value.startsWith('?.')) {
-            // Parse path: split by '.', strip '?', filter empties
-            const parts = value.split('.').map(p => p.replace(/\?/g, '')).filter(p => p.length > 0);
+            // Parse path: split on '?.' delimiter, filter empties
+            // Use '?.' as the sole delimiter to preserve dots in values (e.g., CSS selectors)
+            // Special case: '?.' alone (empty path) resolves to the source object itself
+            const parts = value.split('?.').filter(p => p.length > 0);
             let current = source;
             for (const part of parts) {
                 if (current == null)
