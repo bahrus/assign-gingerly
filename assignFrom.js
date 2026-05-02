@@ -22,6 +22,9 @@
 import { resolveValues } from './resolveValues.js';
 import assignGingerly from './assignGingerly.js';
 export function assignFrom(target, pattern, options) {
-    const resolved = resolveValues(pattern, options.from);
+    const resolved = resolveValues(pattern, options.from, {
+        withMethods: options.withMethods,
+        aka: options.aka
+    });
     return assignGingerly(target, resolved, options);
 }

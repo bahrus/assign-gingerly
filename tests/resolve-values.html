@@ -212,6 +212,73 @@
                 assert(target.label === 'test', 'should resolve name path');
             }
 
+            // Test 19: resolveValues with aka aliases
+            {
+                const source = { myPropContainer: { stringProp: 'Venus' } };
+                const result = resolveValues({
+                    val: '?.mpc?.stringProp'
+                }, source, { aka: { 'mpc': 'myPropContainer' } });
+                assert(result.val === 'Venus', 'resolveValues should apply aka aliases');
+            }
+
+            // Test 20: resolveValues with withMethods
+            {
+                const div = document.createElement('div');
+                div.innerHTML = '<span class="username">Alice</span>';
+                const result = resolveValues({
+                    text: '?.querySelector?..username?.textContent'
+                }, div, { withMethods: ['querySelector'] });
+                assert(result.text === 'Alice', 'resolveValues should call methods with withMethods');
+            }
+
+            // Test 21: resolveValues with both aka and withMethods
+            {
+                const div = document.createElement('div');
+                div.innerHTML = '<span class="label">Hello</span>';
+                const result = resolveValues({
+                    text: '?.q?..label?.textContent'
+                }, div, { 
+                    withMethods: ['querySelector'],
+                    aka: { 'q': 'querySelector' }
+                });
+                assert(result.text === 'Hello', 'resolveValues should apply both aka and withMethods');
+            }
+
+            // Test 22: assignFrom passes withMethods and aka to resolveValues
+            {
+                const source = document.createElement('div');
+                source.innerHTML = '<span class="name">Bob</span>';
+                const target = {};
+                assignFrom(target, {
+                    name: '?.q?..name?.textContent'
+                }, { 
+                    from: source,
+                    withMethods: ['querySelector'],
+                    aka: { 'q': 'querySelector' }
+                });
+                assert(target.name === 'Bob', 'assignFrom should pass withMethods and aka to resolveValues');
+            }
+
+            // Test 23: resolveValues withMethods consecutive methods (no args)
+            {
+                const obj = {
+                    getInner() { return { getValue() { return 42; } }; }
+                };
+                const result = resolveValues({
+                    val: '?.getInner?.getValue'
+                }, obj, { withMethods: ['getInner', 'getValue'] });
+                assert(result.val === 42, 'resolveValues should handle consecutive methods');
+            }
+
+            // Test 24: resolveValues aka does not affect non-matching segments
+            {
+                const source = { realProp: { nested: 'value' } };
+                const result = resolveValues({
+                    val: '?.realProp?.nested'
+                }, source, { aka: { 'x': 'somethingElse' } });
+                assert(result.val === 'value', 'resolveValues aka should not affect non-matching segments');
+            }
+
             // Display results
             const resultsDiv = document.getElementById('test-results');
             resultsDiv.innerHTML = `

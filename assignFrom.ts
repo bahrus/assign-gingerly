@@ -32,6 +32,9 @@ export function assignFrom(
   pattern: Record<string, any>,
   options: AssignFromOptions
 ): any {
-  const resolved = resolveValues(pattern, options.from);
+  const resolved = resolveValues(pattern, options.from, {
+    withMethods: options.withMethods,
+    aka: options.aka
+  });
   return assignGingerly(target, resolved, options);
 }
