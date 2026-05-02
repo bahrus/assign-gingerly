@@ -82,7 +82,7 @@
 
         test('should handle non-existent path - direct assignment', () => {
             const obj = { a: { b: {} } };
-            assignGingerly(obj, { 'a.b.c +=': 5 });
+            assignGingerly(obj, { '?.a?.b?.c +=': 5 });
             expect(obj.a.b.c).toBe(5);
         });
 
@@ -152,7 +152,7 @@
 
         test('should preserve nested object structure when incrementing', () => {
             const obj = { data: { nested: { count: 5, name: 'test' } } };
-            assignGingerly(obj, { 'data.nested.count +=': 3 });
+            assignGingerly(obj, { '?.data?.nested?.count +=': 3 });
             expect(obj.data.nested).toEqual({
                 count: 8,
                 name: 'test'

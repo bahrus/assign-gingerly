@@ -326,11 +326,13 @@ function parseDeleteCommand(key: string): string | null {
 
 /**
  * Helper function to parse a path string with ?. notation
+ * Always splits on '?.' delimiter, preserving dots that are part of values
+ * (e.g., CSS class selectors like '.username')
+ * Paths must use ?. notation — plain dot notation is not supported.
  */
 function parsePath(path: string): string[] {
   return path
-    .split('.')
-    .map(part => part.replace(/\?/g, ''))
+    .split('?.')
     .filter(part => part.length > 0);
 }
 
