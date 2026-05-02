@@ -143,10 +143,15 @@ function hasDashOrNonASCII(str) {
  * Gets attribute value with smart enh- prefix handling
  * @param element - The element to read from
  * @param attrName - The attribute name (without enh- prefix)
- * @param allowUnprefixed - Pattern (string or RegExp) that element tag name must match to allow unprefixed attributes
+ * @param allowUnprefixed - Pattern (string or RegExp) that element tag name must match to allow unprefixed attributes,
+ *                          or `true` for custom element mode (read attributes directly, no enh- prefix)
  * @returns The attribute value or null
  */
 function getAttributeValue(element, attrName, allowUnprefixed) {
+    // Custom element mode - read attribute directly, no enh- prefix
+    if (allowUnprefixed === true) {
+        return element.getAttribute(attrName);
+    }
     const { localName } = element;
     const isCustomElement = localName.includes('-');
     const isSVGElement = typeof SVGElement !== 'undefined' && element instanceof SVGElement;
@@ -222,15 +227,18 @@ function getDefaultParser(instanceOf) {
  * Parses attributes from an element based on AttrPatterns configuration
  * @param element - The DOM element to read attributes from
  * @param attrPatterns - The attribute patterns configuration
- * @param allowUnprefixed - Pattern (string or RegExp) that element tag name must match to allow unprefixed attributes
+ * @param allowUnprefixed - Pattern (string or RegExp) that element tag name must match to allow unprefixed attributes,
+ *                          or `true` for custom element mode: reads attributes directly (no enh- prefix),
+ *                          skips base attribute dash validation, and skips properties already set on the element
  * @param spawnContext - Optional spawn context containing enhancement config and synthesizer element
  * @returns Object with parsed attribute values ready for initVals
  */
 export function parseWithAttrs(element, attrPatterns, allowUnprefixed, spawnContext) {
     // Extract synthesizerElement from spawnContext for backward compatibility
     const synthesizerElement = spawnContext?.synthesizerElement;
-    // Validate base attribute if present
-    if ('base' in attrPatterns) {
+    const isCustomElementMode = allowUnprefixed === true;
+    // Validate base attribute if present (skip in custom element mode)
+    if ('base' in attrPatterns && !isCustomElementMode) {
         const baseValue = attrPatterns.base;
         if (!hasDashOrNonASCII(baseValue)) {
             throw new Error(`Invalid base attribute "${baseValue}": must contain a dash (-) or non-ASCII character. ` +
@@ -284,6 +292,13 @@ export function parseWithAttrs(element, attrPatterns, allowUnprefixed, spawnCont
     }
     // Second pass: read attributes and parse values
     for (const [key, { attrName, config }] of resolvedAttrs) {
+        // In custom element mode, skip properties already set on the element
+        if (isCustomElementMode) {
+            const mapsTo = config.mapsTo ?? (key === 'base' ? '.' : key);
+            if (mapsTo !== '.' && element[mapsTo] !== undefined) {
+                continue;
+            }
+        }
         const attrValue = getAttributeValue(element, attrName, allowUnprefixed);
         // Create parser context
         const parserContext = {

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Custom Element Parsing Tests</title>
+</head>
+<body>
+    <div id="results"></div>
+
+    <script type="module">
+        import { parseWithAttrs } from '../parseWithAttrs.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function assert(condition, message) {
+            if (condition) {
+                passed++;
+                results.push(`PASS: ${message}`);
+            } else {
+                failed++;
+                results.push(`FAIL: ${message}`);
+                console.error(`FAIL: ${message}`);
+            }
+        }
+
+        // Define a simple custom element for testing
+        class MyCounter extends HTMLElement {
+            count = undefined;
+            username = undefined;
+            
+            connectedCallback() {
+                // Parse own attributes using custom element mode
+                const attrVals = parseWithAttrs(this, {
+                    count: 'initial-count',
+                    _count: {
+                        instanceOf: 'Number',
+                        valIfNull: 10,
+                    },
+                    username: 'username'
+                }, true);
+                
+                // Apply parsed values
+                Object.assign(this, attrVals);
+            }
+        }
+        customElements.define('my-counter', MyCounter);
+
+        function runTests() {
+            // Test 1: Basic custom element attribute parsing
+            {
+                const el = document.createElement('my-counter');
+                el.setAttribute('initial-count', '42');
+                el.setAttribute('username', 'Alice');
+                
+                const attrVals = parseWithAttrs(el, {
+                    count: 'initial-count',
+                    _count: { instanceOf: 'Number' },
+                    username: 'username'
+                }, true);
+                
+                assert(attrVals.count === 42, 'should parse number attribute');
+                assert(attrVals.username === 'Alice', 'should parse string attribute');
+            }
+
+            // Test 2: valIfNull works in custom element mode
+            {
+                const el = document.createElement('my-counter');
+                // No attributes set
+                
+                const attrVals = parseWithAttrs(el, {
+                    count: 'initial-count',
+                    _count: {
+                        instanceOf: 'Number',
+                        valIfNull: 10,
+                    },
+                    username: 'username'
+                }, true);
+                
+                assert(attrVals.count === 10, 'should use valIfNull when attribute missing');
+                assert(attrVals.username === undefined || !('username' in attrVals), 
+                    'should not include attribute without valIfNull when missing');
+            }
+
+            // Test 3: No enh- prefix required in custom element mode
+            {
+                const el = document.createElement('my-counter');
+                el.setAttribute('username', 'Bob');
+                // In enhancement mode, custom elements would need enh-username
+                // In custom element mode, username is read directly
+                
+                const attrVals = parseWithAttrs(el, {
+                    username: 'username'
+                }, true);
+                
+                assert(attrVals.username === 'Bob', 'should read attribute directly without enh- prefix');
+            }
+
+            // Test 4: Skip already-set properties
+            {
+                const el = document.createElement('my-counter');
+                el.setAttribute('initial-count', '42');
+                el.setAttribute('username', 'Alice');
+                
+                // Set count programmatically before parsing
+                el.count = 99;
+                
+                const attrVals = parseWithAttrs(el, {
+                    count: 'initial-count',
+                    _count: { instanceOf: 'Number' },
+                    username: 'username'
+                }, true);
+                
+                assert(!('count' in attrVals), 'should skip already-set property (count)');
+                assert(attrVals.username === 'Alice', 'should still parse non-set property (username)');
+            }
+
+            // Test 5: Skip already-set with falsy values (0, false, empty string)
+            {
+                const el = document.createElement('my-counter');
+                el.setAttribute('initial-count', '42');
+                
+                // Set to 0 (falsy but not undefined)
+                el.count = 0;
+                
+                const attrVals = parseWithAttrs(el, {
+                    count: 'initial-count',
+                    _count: { instanceOf: 'Number' },
+                }, true);
+                
+                assert(!('count' in attrVals), 'should skip property set to 0 (falsy but defined)');
+            }
+
+            // Test 6: Base attribute works without dash validation
+            {
+                const el = document.createElement('my-counter');
+                el.setAttribute('count', '7');
+                
+                // base: '' would throw in enhancement mode (no dash)
+                // In custom element mode, it should work
+                const attrVals = parseWithAttrs(el, {
+                    base: '',
+                    count: 'count',
+                    _count: { instanceOf: 'Number' },
+                }, true);
+                
+                assert(attrVals.count === 7, 'should work with empty base in custom element mode');
+            }
+
+            // Test 7: Base attribute with template syntax
+            {
+                const el = document.createElement('my-counter');
+                el.setAttribute('my-count', '15');
+                
+                const attrVals = parseWithAttrs(el, {
+                    base: 'my',
+                    count: '${base}-count',
+                    _count: { instanceOf: 'Number' },
+                }, true);
+                
+                assert(attrVals.count === 15, 'should support template syntax with base in custom element mode');
+            }
+
+            // Test 8: Enhancement mode still validates base (regression check)
+            {
+                let threw = false;
+                try {
+                    const el = document.createElement('div');
+                    parseWithAttrs(el, {
+                        base: 'nodashornonascii',
+                        count: '{base}-count',
+                    });
+                } catch (e) {
+                    threw = true;
+                }
+                assert(threw, 'enhancement mode should still validate base attribute has dash');
+            }
+
+            // Test 9: Enhancement mode on custom element requires enh- prefix (regression check)
+            {
+                const el = document.createElement('my-counter');
+                el.setAttribute('username', 'Alice');
+                // Without allowUnprefixed, custom elements need enh- prefix
+                
+                const attrVals = parseWithAttrs(el, {
+                    username: 'username'
+                });
+                
+                assert(attrVals.username === undefined || !('username' in attrVals), 
+                    'enhancement mode should not read unprefixed attributes on custom elements');
+            }
+
+            // Test 10: Boolean attribute in custom element mode
+            {
+                const el = document.createElement('my-counter');
+                el.setAttribute('disabled', '');
+                
+                const attrVals = parseWithAttrs(el, {
+                    disabled: 'disabled',
+                    _disabled: { instanceOf: 'Boolean' },
+                }, true);
+                
+                assert(attrVals.disabled === true, 'should parse boolean attribute (present = true)');
+            }
+
+            // Test 11: Boolean attribute missing in custom element mode
+            {
+                const el = document.createElement('my-counter');
+                // disabled not set
+                
+                const attrVals = parseWithAttrs(el, {
+                    disabled: 'disabled',
+                    _disabled: { instanceOf: 'Boolean' },
+                }, true);
+                
+                assert(attrVals.disabled === false, 'should parse boolean attribute (absent = false)');
+            }
+
+            // Test 12: mapsTo works in custom element mode
+            {
+                const el = document.createElement('my-counter');
+                el.setAttribute('initial-count', '25');
+                
+                const attrVals = parseWithAttrs(el, {
+                    count: 'initial-count',
+                    _count: { 
+                        instanceOf: 'Number',
+                        mapsTo: 'startValue'
+                    },
+                }, true);
+                
+                assert(attrVals.startValue === 25, 'should respect mapsTo in custom element mode');
+            }
+
+            // Display results
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `
+                <h2>Custom Element Parsing Tests: ${passed}/${passed + failed} passed</h2>
+                <pre>${results.join('\n')}</pre>
+            `;
+
+            window.__TEST_RESULTS__ = { passed, failed, total: passed + failed, results };
+        }
+
+        runTests();
+    </script>
+</body>
+</html>
