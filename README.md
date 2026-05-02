@@ -734,7 +734,7 @@ console.log(obj);
 // }
 ```
 
-The `+=` command syntax is `<path> +=` where the path can use the `?.` nested notation. The right-hand side value is added to the existing value using `+=`. If the path doesn't exist, it's created and set directly to the value.  If the expression is a string, string concatenation is used.  If the expression can't be "added to", it allows JavaScript to throw its natural error.
+The `+=` command syntax is `<path> +=` where the path uses the `?.` nested notation for nested properties, or a plain key for direct properties. The right-hand side value is added to the existing value using `+=`. If the path doesn't exist, it's created and set directly to the value.  If the expression is a string, string concatenation is used.  If the expression can't be "added to", it allows JavaScript to throw its natural error.
 
 ## Example 5 - Toggling boolean values and negating
 
@@ -764,7 +764,7 @@ console.log(obj);
 // }
 ```
 
-The `=!` command syntax is `<path> =!` where the path can use the `?.` nested notation. 
+The `=!` command syntax is `<path> =!` where the path uses the `?.` nested notation for nested properties, or a plain key for direct properties.
 
 For existing values, the toggle is performed using JavaScript's logical NOT operator (`!value`), regardless of what type it is.
 
