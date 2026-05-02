@@ -574,16 +574,25 @@ export function assignGingerly(target, source, options) {
         if (isIncCommand(key)) {
             const path = parseIncCommand(key);
             if (path) {
-                const pathParts = parsePath(path);
-                const lastKey = pathParts[pathParts.length - 1];
-                const parent = ensureNestedPath(target, pathParts);
-                // If the path doesn't exist, set it directly to the value
-                if (!(lastKey in parent)) {
-                    parent[lastKey] = value;
+                if (isNestedPath(path)) {
+                    const pathParts = parsePath(path);
+                    const lastKey = pathParts[pathParts.length - 1];
+                    const parent = ensureNestedPath(target, pathParts);
+                    if (!(lastKey in parent)) {
+                        parent[lastKey] = value;
+                    }
+                    else {
+                        parent[lastKey] += value;
+                    }
                 }
                 else {
-                    // Path exists, apply increment: oldValue += newValue
-                    parent[lastKey] += value;
+                    // Plain key - direct operation on target
+                    if (!(path in target)) {
+                        target[path] = value;
+                    }
+                    else {
+                        target[path] += value;
+                    }
                 }
             }
             continue;
@@ -593,10 +602,18 @@ export function assignGingerly(target, source, options) {
             const lhsPath = parseToggleCommand(key);
             if (lhsPath) {
                 const rhsPath = value;
-                // Parse LHS path
-                const lhsPathParts = parsePath(lhsPath);
-                const lhsLastKey = lhsPathParts[lhsPathParts.length - 1];
-                const lhsParent = ensureNestedPath(target, lhsPathParts);
+                // Resolve LHS
+                let lhsParent;
+                let lhsLastKey;
+                if (isNestedPath(lhsPath)) {
+                    const lhsPathParts = parsePath(lhsPath);
+                    lhsLastKey = lhsPathParts[lhsPathParts.length - 1];
+                    lhsParent = ensureNestedPath(target, lhsPathParts);
+                }
+                else {
+                    lhsLastKey = lhsPath;
+                    lhsParent = target;
+                }
                 // Determine what to negate
                 let valueToNegate;
                 if (rhsPath === '.') {
@@ -605,26 +622,30 @@ export function assignGingerly(target, source, options) {
                         valueToNegate = lhsParent[lhsLastKey];
                     }
                     else {
-                        // LHS doesn't exist, treat as undefined -> !undefined = true
                         valueToNegate = undefined;
                     }
                 }
                 else {
                     // RHS path: navigate to get the value (don't create paths)
-                    const rhsPathParts = parsePath(rhsPath);
-                    let current = target;
-                    let exists = true;
-                    for (const part of rhsPathParts) {
-                        if (current && typeof current === 'object' && part in current) {
-                            current = current[part];
+                    if (isNestedPath(rhsPath)) {
+                        const rhsPathParts = parsePath(rhsPath);
+                        let current = target;
+                        let exists = true;
+                        for (const part of rhsPathParts) {
+                            if (current && typeof current === 'object' && part in current) {
+                                current = current[part];
+                            }
+                            else {
+                                exists = false;
+                                break;
+                            }
                         }
-                        else {
-                            exists = false;
-                            break;
-                        }
+                        valueToNegate = exists ? current : true;
                     }
-                    // If RHS doesn't exist, treat as truthy (will become false)
-                    valueToNegate = exists ? current : true;
+                    else {
+                        // Plain key RHS
+                        valueToNegate = (rhsPath in target) ? target[rhsPath] : true;
+                    }
                 }
                 // Apply negation to LHS
                 lhsParent[lhsLastKey] = !valueToNegate;
@@ -635,28 +656,37 @@ export function assignGingerly(target, source, options) {
         if (isDeleteCommand(key)) {
             const path = parseDeleteCommand(key);
             if (path !== null) {
-                const pathParts = parsePath(path);
                 // Determine the parent object
                 let parent = target;
                 let canDelete = true;
-                // If path is empty or just '?', delete from root
-                if (pathParts.length === 0) {
-                    parent = target;
-                }
-                else {
-                    // Navigate to parent object
-                    for (const part of pathParts) {
-                        if (parent && typeof parent === 'object' && part in parent) {
-                            parent = parent[part];
-                        }
-                        else {
-                            canDelete = false;
-                            break;
+                if (isNestedPath(path)) {
+                    const pathParts = parsePath(path);
+                    if (pathParts.length === 0) {
+                        parent = target;
+                    }
+                    else {
+                        for (const part of pathParts) {
+                            if (parent && typeof parent === 'object' && part in parent) {
+                                parent = parent[part];
+                            }
+                            else {
+                                canDelete = false;
+                                break;
+                            }
                         }
                     }
                 }
+                else if (path.length > 0) {
+                    // Plain key - navigate one level
+                    if (parent && typeof parent === 'object' && path in parent) {
+                        parent = parent[path];
+                    }
+                    else {
+                        canDelete = false;
+                    }
+                }
+                // else: empty path = delete from root
                 if (canDelete && typeof parent === 'object' && parent !== null) {
-                    // RHS can be a string (single property) or array (multiple properties)
                     const propertiesToDelete = Array.isArray(value) ? value : [value];
                     for (const prop of propertiesToDelete) {
                         if (prop in parent) {
