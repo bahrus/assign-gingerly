@@ -51,14 +51,16 @@
             value = null;
         }
 
-        // Test 1: Merge into class instance on enh property
-        test('should merge into class instance on enh property', () => {
+        // Test 1: Merge into readonly enh property still works
+        test('should merge into readonly enh property', () => {
             const element = document.createElement('div');
-            // Use the proper API - enh is readonly and returns a container
+            // enh is a readonly getter on Element.prototype
+            // Assigning into it should merge, not replace
             element.enh.myEnh = new MyEnhancement(element, {}, {});
             
             const originalId = element.enh.myEnh.instanceId;
             
+            // enh is readonly, so this merges into the enh container
             assignGingerly(element, {
                 enh: {
                     myEnh: {
@@ -68,10 +70,7 @@
                 }
             });
             
-            // Should preserve the instance
-            if (element.enh.myEnh.instanceId !== originalId) {
-                throw new Error('Instance was replaced instead of merged');
-            }
+            // enh container is preserved (readonly), but myEnh is replaced (writable class instance)
             if (element.enh.myEnh.prop1 !== 'value1') {
                 throw new Error(`Expected prop1 to be 'value1', got '${element.enh.myEnh.prop1}'`);
             }
@@ -80,10 +79,9 @@
             }
         });
 
-        // Test 2: Multiple assignments preserve instance
-        test('should preserve instance across multiple assignments', () => {
+        // Test 2: Class instances on writable properties are replaced
+        test('should replace class instance on writable property', () => {
             const element = document.createElement('div');
-            // Use the proper API - enh is readonly and returns a container
             element.enh.myEnh = new MyEnhancement(element, {}, {});
             
             const originalId = element.enh.myEnh.instanceId;
@@ -92,18 +90,16 @@
                 enh: { myEnh: { prop1: 'first' } }
             });
             
-            assignGingerly(element, {
-                enh: { myEnh: { prop2: 'second' } }
-            });
-            
-            if (element.enh.myEnh.instanceId !== originalId) {
-                throw new Error('Instance was replaced');
+            // myEnh is writable, so the class instance is replaced with a plain object
+            if (element.enh.myEnh.instanceId === originalId) {
+                throw new Error('Instance should have been replaced, not merged');
             }
             if (element.enh.myEnh.prop1 !== 'first') {
                 throw new Error(`Expected prop1 to be 'first', got '${element.enh.myEnh.prop1}'`);
             }
-            if (element.enh.myEnh.prop2 !== 'second') {
-                throw new Error(`Expected prop2 to be 'second', got '${element.enh.myEnh.prop2}'`);
+            // instanceId should not exist on the replacement plain object
+            if (element.enh.myEnh.instanceId !== undefined) {
+                throw new Error('Replacement should not have instanceId');
             }
         });
 
@@ -126,8 +122,8 @@
             }
         });
 
-        // Test 4: Class instance at root level
-        test('should merge into class instance at root level', () => {
+        // Test 4: Class instance at root level is replaced
+        test('should replace class instance at root level', () => {
             const obj = {
                 enhancement: new AnotherEnhancement()
             };
@@ -140,16 +136,17 @@
                 }
             });
             
-            if (obj.enhancement.instanceId !== originalId) {
-                throw new Error('Instance was replaced');
+            // Class instance should be replaced, not merged
+            if (obj.enhancement.instanceId === originalId) {
+                throw new Error('Instance should have been replaced');
             }
             if (obj.enhancement.value !== 'test') {
                 throw new Error(`Expected value to be 'test', got '${obj.enhancement.value}'`);
             }
         });
 
-        // Test 5: Nested class instance
-        test('should merge into nested class instance', () => {
+        // Test 5: Nested class instance via path is replaced
+        test('should replace nested class instance via path', () => {
             const obj = {
                 data: {
                     enhancement: new AnotherEnhancement()
@@ -164,76 +161,59 @@
                 }
             });
             
-            if (obj.data.enhancement.instanceId !== originalId) {
-                throw new Error('Instance was replaced');
+            // Class instance should be replaced
+            if (obj.data.enhancement.instanceId === originalId) {
+                throw new Error('Instance should have been replaced');
             }
             if (obj.data.enhancement.value !== 'nested') {
                 throw new Error(`Expected value to be 'nested', got '${obj.data.enhancement.value}'`);
             }
         });
 
-        // Test 6: Mix of class instances and plain objects
-        test('should handle mix of class instances and plain objects', () => {
+        // Test 6: Replacing class instance with another object (real-world use case)
+        test('should replace DocumentFragment-like class with element reference', () => {
+            // Simulates the real-world use case: clone was a DocumentFragment,
+            // now we want to replace it with the web component itself
+            class FakeDocumentFragment {
+                constructor() {
+                    this.nodeType = 11;
+                    this.childNodes = [];
+                }
+            }
+            
             const obj = {
-                enhancement: new AnotherEnhancement(),
-                config: { old: 'value' }
+                clone: new FakeDocumentFragment()
             };
             
-            const originalId = obj.enhancement.instanceId;
+            const element = document.createElement('div');
             
             assignGingerly(obj, {
-                enhancement: { value: 'test' },
-                config: { new: 'value' }
+                clone: element
             });
             
-            // Class instance preserved
-            if (obj.enhancement.instanceId !== originalId) {
-                throw new Error('Enhancement instance was replaced');
-            }
-            if (obj.enhancement.value !== 'test') {
-                throw new Error(`Expected enhancement.value to be 'test'`);
-            }
-            
-            // Plain object replaced (simple assignment)
-            if (obj.config.old !== undefined) {
-                throw new Error('Plain object old property should be removed (replaced)');
-            }
-            if (obj.config.new !== 'value') {
-                throw new Error('Plain object new property should be set');
+            // Should have replaced the DocumentFragment with the element
+            if (obj.clone !== element) {
+                throw new Error('clone should be the element, not the DocumentFragment');
             }
         });
 
-        // Test 7: Deep merge into class instance
-        test('should deep merge into class instance', () => {
-            class ComplexEnhancement {
-                constructor() {
-                    this.instanceId = Math.random();
-                    this.nested = { level1: {} };
-                }
-            }
-            
-            const obj = {
-                complex: new ComplexEnhancement()
-            };
-            
-            const originalId = obj.complex.instanceId;
-            
-            assignGingerly(obj, {
-                complex: {
-                    nested: {
-                        level1: {
-                            level2: 'deep'
-                        }
-                    }
-                }
+        // Test 7: Readonly properties still trigger merge
+        test('should still merge into readonly properties', () => {
+            const obj = {};
+            Object.defineProperty(obj, 'config', {
+                value: { a: 1, b: 2 },
+                writable: false,
+                configurable: false
             });
             
-            if (obj.complex.instanceId !== originalId) {
-                throw new Error('Instance was replaced');
-            }
-            if (obj.complex.nested.level1.level2 !== 'deep') {
-                throw new Error(`Expected deep value, got '${obj.complex.nested.level1.level2}'`);
-            }
+            assignGingerly(obj, {
+                config: { c: 3 }
+            });
+            
+            // Readonly property should be merged into
+            if (obj.config.a !== 1) throw new Error('Original prop a should be preserved');
+            if (obj.config.b !== 2) throw new Error('Original prop b should be preserved');
+            if (obj.config.c !== 3) throw new Error('New prop c should be added');
         });
 
         // Test 8: Array values are not treated as class instances
@@ -255,54 +235,46 @@
             }
         });
 
-        // Test 9: Built-in class instances (Date, Map, Set)
-        test('should merge into built-in class instances', () => {
-            const obj = {
-                timestamp: new Date('2024-01-01')
-            };
-            
-            const originalTime = obj.timestamp.getTime();
-            
-            assignGingerly(obj, {
-                timestamp: {
-                    customProp: 'added'
-                }
+        // Test 9: Readonly accessor (getter-only) still triggers merge
+        test('should merge into readonly accessor property', () => {
+            const inner = { color: 'red', size: 10 };
+            const obj = {};
+            Object.defineProperty(obj, 'style', {
+                get() { return inner; },
+                // no setter = readonly
+                configurable: false
             });
             
-            // Should preserve the Date instance
-            if (obj.timestamp.getTime() !== originalTime) {
-                throw new Error('Date instance was replaced');
-            }
-            if (obj.timestamp.customProp !== 'added') {
-                throw new Error('Custom property was not added');
-            }
+            assignGingerly(obj, {
+                style: { color: 'blue' }
+            });
+            
+            if (obj.style.color !== 'blue') throw new Error('color should be merged');
+            if (obj.style.size !== 10) throw new Error('size should be preserved');
         });
 
-        // Test 10: Class instance with no existing properties
-        test('should merge into empty class instance', () => {
-            class EmptyClass {
-                constructor() {
-                    this.instanceId = Math.random();
-                }
-            }
-            
+        // Test 10: Replacing class instance preserves other properties
+        test('should replace class instance without affecting siblings', () => {
             const obj = {
-                empty: new EmptyClass()
+                enhancement: new AnotherEnhancement(),
+                config: { old: 'value' }
             };
             
-            const originalId = obj.empty.instanceId;
-            
             assignGingerly(obj, {
-                empty: {
-                    newProp: 'added'
-                }
+                enhancement: { value: 'test' }
             });
             
-            if (obj.empty.instanceId !== originalId) {
-                throw new Error('Instance was replaced');
+            // Class instance replaced
+            if (obj.enhancement instanceof AnotherEnhancement) {
+                throw new Error('Enhancement should no longer be an AnotherEnhancement instance');
             }
-            if (obj.empty.newProp !== 'added') {
-                throw new Error(`Expected newProp to be 'added', got '${obj.empty.newProp}'`);
+            if (obj.enhancement.value !== 'test') {
+                throw new Error('Enhancement value should be test');
+            }
+            
+            // Sibling untouched
+            if (obj.config.old !== 'value') {
+                throw new Error('Config should be untouched');
             }
         });
 

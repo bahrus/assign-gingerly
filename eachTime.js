@@ -58,7 +58,7 @@ export async function handleEachTime(target, pathParts, forEachIndex, value, wit
         (async () => {
             try {
                 // Import needed functions from assignGingerly
-                const { evaluatePathWithMethods, assignGingerly, isReadonlyProperty, isClassInstance } = await import('./assignGingerly.js');
+                const { evaluatePathWithMethods, assignGingerly, isReadonlyProperty } = await import('./assignGingerly.js');
                 if (pathAfterForEach.length > 0) {
                     const result = evaluatePathWithMethods(mountedElement, pathAfterForEach, value, withMethods || new Set());
                     if (result.isMethod) {
@@ -78,17 +78,17 @@ export async function handleEachTime(target, pathParts, forEachIndex, value, wit
                         const lastKey = result.lastKey;
                         const parent = result.target;
                         if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-                            // Check if property exists and is readonly OR is a class instance
-                            if (lastKey in parent && (isReadonlyProperty(parent, lastKey) || isClassInstance(parent[lastKey]))) {
+                            // Check if property exists and is readonly
+                            if (lastKey in parent && isReadonlyProperty(parent, lastKey)) {
                                 const currentValue = parent[lastKey];
                                 if (typeof currentValue !== 'object' || currentValue === null) {
-                                    throw new Error(`Cannot merge object into ${isReadonlyProperty(parent, lastKey) ? 'readonly ' : ''}primitive property '${String(lastKey)}'`);
+                                    throw new Error(`Cannot merge object into readonly primitive property '${String(lastKey)}'`);
                                 }
                                 // Recursively apply assignGingerly
                                 assignGingerly(currentValue, value, options);
                             }
                             else {
-                                // Property is writable and not a class instance - replace it
+                                // Property is writable - replace it
                                 parent[lastKey] = value;
                             }
                         }

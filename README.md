@@ -110,7 +110,7 @@ console.log(obj);
 
 When the right hand side of an expression is an object, assignGingerly behavior depends on the context:
 - For **nested paths** (starting with `?.`): recursively merges into nested objects, creating them if needed
-- For **plain keys**: performs simple assignment (like `Object.assign`), unless the target property is readonly or a class instance (see Examples 3a and 3b below)
+- For **plain keys**: performs simple assignment (like `Object.assign`), unless the target property is readonly or an accessor (see Examples 3a and 3b below)
 
 Of course, just as Object.assign led to object spread notation, assignGingerly could lead to some sort of deep structural JavaScript syntax, but that is outside the scope of this polyfill package.
 
@@ -144,38 +144,40 @@ console.log(obj.config); // { theme: 'dark' } - intermediate object created
 
 ## Example 3a - Automatic Readonly Property Detection
 
-assignGingerly automatically detects readonly properties and merges into them instead of attempting to replace them. This makes working with DOM properties like `style` and `dataset` much more ergonomic:
+assignGingerly automatically detects readonly properties and merges into them instead of attempting to replace them. This makes working with DOM properties like `dataset` ergonomic:
 
 ```TypeScript
-// Instead of this verbose syntax:
 const div = document.createElement('div');
 assignGingerly(div, {
-    '?.style?.height': '15px',
-    '?.style?.width': '20px'
-});
-
-// You can now use this cleaner syntax:
-assignGingerly(div, {
-    style: {
-        height: '15px',
-        width: '20px'
+    dataset: {
+        userId: '123',
+        userName: 'Alice'
     }
 });
-console.log(div.style.height); // '15px'
-console.log(div.style.width);  // '20px'
+console.log(div.dataset.userId);   // '123'
+console.log(div.dataset.userName); // 'Alice'
 ```
 
 **How it works:**
 
 When assignGingerly encounters an object value being assigned to an existing property, it checks if that property is readonly:
 - **Data properties** with `writable: false`
-- **Accessor properties** with a getter but no setter
+- **Accessor properties** with a getter but no setter (e.g., `dataset`, `shadowRoot`)
 
 If the property is readonly and its current value is an object, assignGingerly automatically merges into it recursively.
 
-**Examples of readonly properties:**
-- `HTMLElement.style` - The CSSStyleDeclaration object
-- `HTMLElement.dataset` - The DOMStringMap object  
+**Note on `element.style`:** The `style` property has both a getter and a setter, so it is *not* treated as readonly. Use nested path syntax instead:
+
+```TypeScript
+// Use nested path syntax for style
+assignGingerly(div, {
+    '?.style?.height': '15px',
+    '?.style?.width': '20px'
+});
+```
+
+**Examples of readonly properties that trigger merging:**
+- `HTMLElement.dataset` - getter only, no setter
 - Custom objects with `Object.defineProperty(obj, 'prop', { value: {}, writable: false })`
 - Accessor properties with getter only: `Object.defineProperty(obj, 'prop', { get() { return {}; } })`
 
@@ -225,134 +227,54 @@ assignGingerly(config, {
 console.log(config.settings.theme); // 'dark'
 ```
 
-## Example 3b - Automatic Class Instance Preservation
+## Example 3b - Class Instances Are Replaced
 
-In addition to readonly property detection, assignGingerly automatically preserves class instances when merging. This is particularly useful when working with enhancement instances:
+Unlike readonly/accessor properties, class instances on writable properties are **replaced** by simple assignment, just like plain objects. This allows you to swap one object for another without unexpected merging:
 
 ```TypeScript
-import 'assign-gingerly/object-extension.js';
-
-// Define an enhancement class
-class MyEnhancement {
-  constructor(element, ctx, initVals) {
-    this.element = element;
-    this.instanceId = Math.random(); // Track instance identity
-    if (initVals) {
-      Object.assign(this, initVals);
-    }
+class FakeDocumentFragment {
+  constructor() {
+    this.nodeType = 11;
+    this.childNodes = [];
   }
-  prop1 = null;
-  prop2 = null;
 }
 
-const element = document.createElement('div');
-element.enh = {
-  myEnh: new MyEnhancement(element, {}, {})
-};
-
-const originalId = element.enh.myEnh.instanceId;
-
-// Clean syntax - no need for ?.myEnh?.prop1 notation
-assignGingerly(element, {
-  enh: {
-    myEnh: {
-      prop1: 'value1',
-      prop2: 'value2'
-    }
-  }
-});
-
-console.log(element.enh.myEnh.instanceId === originalId); // true - instance preserved!
-console.log(element.enh.myEnh.prop1); // 'value1'
-console.log(element.enh.myEnh.prop2); // 'value2'
-```
-
-**How it works:**
-
-When assignGingerly encounters an object value being assigned to an existing property, it checks if the current value is a class instance (not a plain object):
-
-- **Class instances** are detected by checking if their prototype is something other than `Object.prototype` or `null`
-- **Plain objects** `{}` have `Object.prototype` as their prototype
-- **Class instances** have their class's prototype
-
-If the existing value is a class instance, assignGingerly merges into it instead of replacing it.
-
-**What counts as a class instance:**
-- Custom class instances: `new MyClass()`
-- Built-in class instances: `new Date()`, `new Map()`, `new Set()`, etc.
-- Enhancement instances on the `enh` property
-- Any object whose prototype is not `Object.prototype` or `null`
-
-**What doesn't count:**
-- Plain objects: `{}`, `{ a: 1 }`
-- Arrays: `[]`, `[1, 2, 3]` (arrays are replaced, not merged)
-- Primitives: strings, numbers, booleans
-
-**Benefits:**
-
-This feature enables clean, framework-friendly syntax for updating enhancements:
-
-```TypeScript
-// Before: Verbose nested path syntax
-assignGingerly(element, {
-  '?.enh?.mellowYellow?.madAboutFourteen': true
-});
-
-// After: Clean object syntax
-assignGingerly(element, {
-  enh: {
-    mellowYellow: {
-      madAboutFourteen: true
-    }
-  }
-});
-```
-
-**Additional examples:**
-
-```TypeScript
-// Multiple enhancements at once
-assignGingerly(element, {
-  enh: {
-    enhancement1: { prop: 'value1' },
-    enhancement2: { prop: 'value2' }
-  }
-});
-
-// Works with built-in classes too
 const obj = {
-  timestamp: new Date('2024-01-01')
+  clone: new FakeDocumentFragment()
 };
 
+const element = document.createElement('div');
+
+// Replace the DocumentFragment with the actual element
 assignGingerly(obj, {
-  timestamp: {
-    customProp: 'metadata'
-  }
+  clone: element
 });
 
-console.log(obj.timestamp instanceof Date); // true - Date instance preserved
-console.log(obj.timestamp.customProp);      // 'metadata'
+console.log(obj.clone === element); // true - replaced, not merged
 ```
 
-**Combined with readonly detection:**
+**Why replacement instead of merging?**
 
-Both readonly properties and class instances are preserved:
+In real-world use cases, you often need to replace one object with another of a completely different type. For example, replacing a cloned DocumentFragment with the actual web component element. Automatic merging would corrupt the target by mixing properties from incompatible types.
+
+**Readonly/accessor properties are still merged:**
+
+The distinction is clear:
+- **Writable data properties**: always replaced (whether holding a plain object or class instance)
+- **Readonly data properties** (`writable: false`): merged into
+- **Getter-only accessor properties** (no setter): merged into
+- **Getter+setter accessor properties** (e.g., `style`): setter runs with the value as-is
 
 ```TypeScript
 const div = document.createElement('div');
-div.enh = {
-  myEnh: new MyEnhancement(div, {}, {})
-};
 
 assignGingerly(div, {
-  style: { height: '100px' },      // Readonly - merged
-  enh: {
-    myEnh: { prop: 'value' }       // Class instance - merged
-  },
-  dataset: { userId: '123' }       // Readonly - merged
+  dataset: { userId: '123' },       // Getter-only - merged
+  '?.style?.height': '100px'        // Use nested path for style
 });
 
-// All instances and readonly objects preserved
+console.log(div.dataset.userId);  // '123'
+console.log(div.style.height);    // '100px'
 ```
 
 ## Example 3c - Method Calls with withMethods

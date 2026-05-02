@@ -29,14 +29,12 @@
             }
         }
 
-        // Test 1: Basic style property assignment
-        test('should merge into readonly style property', () => {
+        // Test 1: Style property requires nested path syntax (has getter+setter, not readonly)
+        test('should assign style properties via nested path', () => {
             const div = document.createElement('div');
             assignGingerly(div, {
-                style: {
-                    height: '15px',
-                    width: '20px'
-                }
+                '?.style?.height': '15px',
+                '?.style?.width': '20px'
             });
             
             if (div.style.height !== '15px') {
@@ -47,14 +45,14 @@
             }
         });
 
-        // Test 2: Multiple style assignments
-        test('should handle multiple style assignments', () => {
+        // Test 2: Multiple style assignments via nested path
+        test('should handle multiple style assignments via nested path', () => {
             const div = document.createElement('div');
             assignGingerly(div, {
-                style: { height: '10px' }
+                '?.style?.height': '10px'
             });
             assignGingerly(div, {
-                style: { width: '20px' }
+                '?.style?.width': '20px'
             });
             
             if (div.style.height !== '10px') {
@@ -198,9 +196,7 @@
             const div = document.createElement('div');
             assignGingerly(div, {
                 id: 'test-id',
-                style: {
-                    height: '100px'
-                },
+                '?.style?.height': '100px',
                 className: 'test-class'
             });
             
