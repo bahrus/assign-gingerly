@@ -162,7 +162,7 @@
                 '?.a?.b -=': 'c'
             }, { reversal });
             expect(obj).toEqual({ a: { b: { d: 'keep' } } });
-            expect(reversal).toEqual({ '?.a?.b.c': 'value' });
+            expect(reversal).toEqual({ '?.a?.b?.c': 'value' });
         });
 
         test('should guarantee reversal restores original state', () => {
@@ -457,7 +457,7 @@
             });
 
             expect(reversal2).toEqual({
-                '?.temp.data': 'value'
+                '?.temp?.data': 'value'
             });
         });
 

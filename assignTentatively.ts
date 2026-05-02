@@ -58,11 +58,13 @@ function parseDeleteCommand(key: string): string | null {
 
 /**
  * Helper function to parse a path string with ?. notation
+ * Always splits on '?.' delimiter, preserving dots that are part of values
+ * (e.g., CSS class selectors like '.username')
+ * Paths must use ?. notation — plain dot notation is not supported.
  */
 function parsePath(path: string): string[] {
   return path
-    .split('.')
-    .map(part => part.replace(/\?/g, ''))
+    .split('?.')
     .filter(part => part.length > 0);
 }
 
@@ -132,27 +134,39 @@ export function assignTentatively(
     if (isIncCommand(key)) {
       const path = parseIncCommand(key);
       if (path) {
-        const pathParts = parsePath(path);
-        const topLevelKey = pathParts[0];
-        
-        // Track if we created a new top-level path (BEFORE calling ensureNestedPath)
-        if (!(topLevelKey in target)) {
-          trackedCreatedPaths.add(topLevelKey);
-        }
-        
-        const lastKey = pathParts[pathParts.length - 1];
-        const parent = ensureNestedPath(target, pathParts);
-
-        // If property already exists, store original value for reversal
-        if (lastKey in parent) {
-          const fullPath = `?.${pathParts.join('?.')}`;
-          if (!(fullPath in reversal)) {
-            reversal[fullPath] = parent[lastKey];
+        if (isNestedPath(path)) {
+          const pathParts = parsePath(path);
+          const topLevelKey = pathParts[0];
+          
+          // Track if we created a new top-level path (BEFORE calling ensureNestedPath)
+          if (!(topLevelKey in target)) {
+            trackedCreatedPaths.add(topLevelKey);
           }
-          parent[lastKey] += value;
+          
+          const lastKey = pathParts[pathParts.length - 1];
+          const parent = ensureNestedPath(target, pathParts);
+
+          // If property already exists, store original value for reversal
+          if (lastKey in parent) {
+            const fullPath = `?.${pathParts.join('?.')}`;
+            if (!(fullPath in reversal)) {
+              reversal[fullPath] = parent[lastKey];
+            }
+            parent[lastKey] += value;
+          } else {
+            // Property doesn't exist, create it with the value
+            parent[lastKey] = value;
+          }
         } else {
-          // Property doesn't exist, create it with the value
-          parent[lastKey] = value;
+          // Plain key - direct operation on target
+          if (path in target) {
+            if (!(path in reversal)) {
+              reversal[path] = target[path];
+            }
+            target[path] += value;
+          } else {
+            target[path] = value;
+          }
         }
       }
       continue;
@@ -163,28 +177,39 @@ export function assignTentatively(
       const lhsPath = parseToggleCommand(key);
       if (lhsPath) {
         const rhsPath = value;
-        const pathParts = parsePath(lhsPath);
-        const topLevelKey = pathParts[0];
         
-        // Track if we created a new top-level path (BEFORE calling ensureNestedPath)
-        if (!(topLevelKey in target)) {
-          trackedCreatedPaths.add(topLevelKey);
+        let lhsParent: any;
+        let lhsLastKey: string;
+        let lhsPathParts: string[];
+        
+        if (isNestedPath(lhsPath)) {
+          lhsPathParts = parsePath(lhsPath);
+          const topLevelKey = lhsPathParts[0];
+          
+          // Track if we created a new top-level path (BEFORE calling ensureNestedPath)
+          if (!(topLevelKey in target)) {
+            trackedCreatedPaths.add(topLevelKey);
+          }
+          
+          lhsLastKey = lhsPathParts[lhsPathParts.length - 1];
+          lhsParent = ensureNestedPath(target, lhsPathParts);
+        } else {
+          lhsPathParts = [lhsPath];
+          lhsLastKey = lhsPath;
+          lhsParent = target;
         }
-        
-        const lastKey = pathParts[pathParts.length - 1];
-        const parent = ensureNestedPath(target, pathParts);
 
         // Determine what to negate
         let valueToNegate;
         if (rhsPath === '.') {
           // Self-reference
-          if (lastKey in parent) {
-            valueToNegate = parent[lastKey];
+          if (lhsLastKey in lhsParent) {
+            valueToNegate = lhsParent[lhsLastKey];
           } else {
             valueToNegate = undefined;
           }
-        } else {
-          // RHS path: navigate to get the value (don't create paths)
+        } else if (isNestedPath(rhsPath)) {
+          // RHS nested path: navigate to get the value (don't create paths)
           const rhsPathParts = parsePath(rhsPath);
           let current = target;
           let exists = true;
@@ -199,17 +224,20 @@ export function assignTentatively(
           }
           
           valueToNegate = exists ? current : true;
+        } else {
+          // Plain key RHS
+          valueToNegate = (rhsPath in target) ? target[rhsPath] : true;
         }
 
         // Store original value for reversal if it exists
-        if (lastKey in parent) {
-          const fullPath = `?.${pathParts.join('?.')}`;
+        if (lhsLastKey in lhsParent) {
+          const fullPath = `?.${lhsPathParts.join('?.')}`;
           if (!(fullPath in reversal)) {
-            reversal[fullPath] = parent[lastKey];
+            reversal[fullPath] = lhsParent[lhsLastKey];
           }
         }
         
-        parent[lastKey] = !valueToNegate;
+        lhsParent[lhsLastKey] = !valueToNegate;
       }
       continue;
     }
@@ -218,26 +246,35 @@ export function assignTentatively(
     if (isDeleteCommand(key)) {
       const path = parseDeleteCommand(key);
       if (path !== null) {
-        const pathParts = parsePath(path);
-
         // Determine the parent object
         let parent = target;
         let canDelete = true;
+        let pathParts: string[] = [];
 
-        // If path is empty or just '?', delete from root
-        if (pathParts.length === 0) {
-          parent = target;
-        } else {
-          // Navigate to parent without creating intermediate paths
-          for (const part of pathParts) {
-            if (parent && typeof parent === 'object' && part in parent) {
-              parent = parent[part];
-            } else {
-              canDelete = false;
-              break;
+        if (isNestedPath(path)) {
+          pathParts = parsePath(path);
+          if (pathParts.length === 0) {
+            parent = target;
+          } else {
+            for (const part of pathParts) {
+              if (parent && typeof parent === 'object' && part in parent) {
+                parent = parent[part];
+              } else {
+                canDelete = false;
+                break;
+              }
             }
           }
+        } else if (path.length > 0) {
+          // Plain key - navigate one level
+          pathParts = [path];
+          if (parent && typeof parent === 'object' && path in parent) {
+            parent = parent[path];
+          } else {
+            canDelete = false;
+          }
         }
+        // else: empty path = delete from root
 
         if (canDelete && typeof parent === 'object' && parent !== null) {
           // RHS can be a string (single property) or array (multiple properties)
@@ -247,7 +284,7 @@ export function assignTentatively(
             if (prop in parent) {
               // Store original value for reversal
               const fullPath = pathParts.length > 0 
-                ? `?.${pathParts.join('?.')}.${prop}` 
+                ? `?.${pathParts.join('?.')}?.${prop}` 
                 : `?.${prop}`;
               if (!(fullPath in reversal)) {
                 reversal[fullPath] = parent[prop];
