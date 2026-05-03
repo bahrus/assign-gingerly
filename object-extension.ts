@@ -1,5 +1,5 @@
 import assignGingerly, { EnhancementRegistry, ItemscopeRegistry, IAssignGingerlyOptions, getInstanceMap, INSTANCE_MAP_GUID } from './assignGingerly.js';
-import { EnhancementConfig } from './types/assign-gingerly/types.js';
+import { EnhancementConfig, SpawnContext } from './types/assign-gingerly/types.js';
 import { parseWithAttrs } from './parseWithAttrs.js';
 
 /**
@@ -225,7 +225,7 @@ class ElementEnhancementContainer {
       
       // Check if there's an enhKey
       if (registryItem.enhKey) {
-        const ctx = { config: registryItem, mountCtx };
+        const ctx: SpawnContext = { config: registryItem, mountCtx, emc: (mountCtx as any)?.emc };
         const self = this as any;
         
         // Get existing initVals from enhKey
@@ -245,7 +245,7 @@ class ElementEnhancementContainer {
         self[registryItem.enhKey] = instance;
       } else {
         // No enhKey, still pass attrInitVals
-        const ctx = { config: registryItem, mountCtx };
+        const ctx: SpawnContext = { config: registryItem, mountCtx, emc: (mountCtx as any)?.emc };
         instance = new SpawnClass(element, ctx, attrInitVals);
       }
       

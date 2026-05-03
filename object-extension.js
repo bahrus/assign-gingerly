@@ -138,7 +138,7 @@ class ElementEnhancementContainer {
             }
             // Check if there's an enhKey
             if (registryItem.enhKey) {
-                const ctx = { config: registryItem, mountCtx };
+                const ctx = { config: registryItem, mountCtx, emc: mountCtx?.emc };
                 const self = this;
                 // Get existing initVals from enhKey
                 const existingInitVals = self[registryItem.enhKey] &&
@@ -155,7 +155,7 @@ class ElementEnhancementContainer {
             }
             else {
                 // No enhKey, still pass attrInitVals
-                const ctx = { config: registryItem, mountCtx };
+                const ctx = { config: registryItem, mountCtx, emc: mountCtx?.emc };
                 instance = new SpawnClass(element, ctx, attrInitVals);
             }
             // Store in global instance map
