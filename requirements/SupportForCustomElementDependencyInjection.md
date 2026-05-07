@@ -541,3 +541,53 @@ Let me know which of these questions change the direction, and I'll start on a m
 Hmm, actually, this package is getting quite large as it is.  I'm thinking this feature would perhaps make more sense as a separate package that depends on this one, thanks for suggesting that possibility.  
 
 What name suggestions do you have for such a package, that hasn't yet been registered in npm?  npm is really finicky about not allowing names that are too close to other ones.  Can you suggest names that are highly likely to be accepted by npm?
+
+
+---
+
+## Kiro's Response I
+
+Good call on splitting it out. The package is already doing a lot, and DI for custom element features is a distinct enough concern (with its own registry surface area) that a separate package with a `peerDependency` on `assign-gingerly` makes sense.
+
+### Name suggestions
+
+npm's similarity detection rejects names that are too close to existing packages (edit distance, shared prefixes with popular packages, etc.). I searched npm to verify none of these are taken or likely to collide. Here are candidates grouped by naming strategy:
+
+**Staying in the "gingerly" family** (brand continuity with your existing package):
+
+1. **`inject-gingerly`** — mirrors `assign-gingerly` nicely. "Inject" is the verb, "gingerly" is the manner. Clear relationship to the parent package.
+2. **`spawn-gingerly`** — leans into your existing `spawn` terminology from `EnhancementConfig`. Slightly more specific to what the package actually does (lazily spawning feature instances).
+3. **`furnish-gingerly`** — "furnish" as in equipping/providing features to an element. A bit more distinctive, less likely to collide with generic DI packages.
+
+**Descriptive / domain-specific** (clearer to newcomers what it does):
+
+4. **`ce-feature-inject`** — "ce" for custom element, concise, descriptive. No collision found. The `ce-` prefix space is sparsely populated.
+5. **`element-features-di`** — very explicit. Unlikely to collide with anything.
+6. **`define-features`** — echoes `customElements.define()`. Short, memorable. Not taken.
+
+**More creative / distinctive** (harder for npm to reject on similarity grounds):
+
+7. **`equip-element`** — "equip" conveys adding capabilities. Distinctive enough to avoid similarity flags.
+8. **`endow-element`** — similar vibe to "equip" but even more unique on npm.
+9. **`trait-inject`** — borrows from Rust/Scala terminology for composable behavior units. Short, distinctive.
+
+### My recommendation
+
+**`inject-gingerly`** is my top pick. Reasons:
+
+- Immediately signals it's part of the `assign-gingerly` ecosystem.
+- The verb "inject" is exactly what the package does (dependency injection).
+- It's distinctive enough that npm won't flag it as too similar to `assign-gingerly` (different first word, different length).
+- Developers who find `assign-gingerly` will naturally discover this companion.
+
+Runner-up: **`equip-element`** if you'd prefer something that stands more on its own and doesn't tie the branding so tightly.
+
+### Regarding the other open questions
+
+Since this will be a separate package, a few of my earlier questions resolve naturally:
+
+- The new package owns `injectFeatures()` and the `dependencyInjections` WeakMap — it extends `CustomElementRegistry.prototype` just like assign-gingerly does for `enhancementRegistry`.
+- It imports from `assign-gingerly` only what it needs (likely just the readonly-property detection logic, or simply relies on the fact that assign-gingerly already handles getter-only properties correctly when consumers use both packages together).
+- Timing: `injectFeatures()` installs the lazy getters on the prototype, so it can be called before or after `define()` — it just needs the constructor reference.
+
+Want me to scaffold out the new package structure once you pick a name?
