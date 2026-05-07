@@ -533,3 +533,11 @@ Or is this intentionally loose to keep the API simple and JSON-friendly?
 5. Add tests: basic DI, fallback spawn, validateShape rejection, interaction with assignGingerly merging.
 
 Let me know which of these questions change the direction, and I'll start on a more concrete design doc or jump straight to implementation.
+
+---
+
+## Human Response I
+
+Hmm, actually, this package is getting quite large as it is.  I'm thinking this feature would perhaps make more sense as a separate package that depends on this one, thanks for suggesting that possibility.  
+
+What name suggestions do you have for such a package, that hasn't yet been registered in npm?  npm is really finicky about not allowing names that are too close to other ones.  Can you suggest names that are highly likely to be accepted by npm?
