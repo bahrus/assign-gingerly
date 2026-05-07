@@ -591,3 +591,123 @@ Since this will be a separate package, a few of my earlier questions resolve nat
 - Timing: `injectFeatures()` installs the lazy getters on the prototype, so it can be called before or after `define()` — it just needs the constructor reference.
 
 Want me to scaffold out the new package structure once you pick a name?
+
+---
+
+## Human Response II
+
+On thinking about this further, I've changed my mind -- although the assignGingerly function itself won't need much adjustments (in fact none) for this initial requirement, as we move on to future phases, assignGingerly will definitely become more feature-aware, so it will make sesne to keep this together in one coherent package without complex circular references.
+
+Also, I'm going to restate the initial requirements below, and answer the questions in the process.  Please forgive inaccurate pseudo TypeScript modeling.  If unsure what I mean, feel free to suggest different corrections that make sense to you.
+
+```TypeScript
+interface PhotoTaker {
+    takePicture();
+    someProp: string
+}
+class PhotoTakerDefaultImpl implements PhotoTaker{
+    takePicture(){
+        ...
+    }
+}
+class ClubMember extends HTMLElement  {
+    // Developer defines this below in its entirety
+    static supportedFeatures = {
+        photoTaker: {
+            //optional
+            fallbackSpawn: PhotoTakerDefaultImpl
+            //optional
+            validateShape(spawnedInstance){
+                if(!(typeof spawnedInstance.takePicture !== 'function')) return false;
+                return true;
+            }
+
+        }
+    }
+}
+class PhotoTakerMock implements PhotoTaker {
+    takePicture(){...}
+}
+customElementRegistry.define('club-member', ClubMember);
+interface HasCustomElementRegistry {
+    readonly customElementRegistry: CustomElementRegistry
+}
+
+type Constructor<T> = new(anyConstructorParams) => T;
+
+interface FeatureConfig<T implements HasCustomElementRegistry>{
+    spawn: Constructor<any>
+}
+
+declare global {
+  interface CustomElementRegistry {
+    assignFeatures<T implements HasCustomElementRegistry>(ctr: Constructor<T>, features: Record<keyof T, >)
+  }
+  
+  interface Element {
+    enh: any; // Enhancement container
+  }
+}
+customElementRegistry.assignFeatures(ClubMember, {
+    photoTaker: {
+        //optional
+        spawn: PhotoTakerMock
+    }
+});
+```
+
+What assignFeatures does:
+
+1.  Confirms that each of the keys passed into the second argument has a corresponding opt in from the class constructor's static supportedFeatures object.  If not, throws an error.
+2.  object-extension adds another registry:
+
+Object.defineProperty(CustomElementRegistry.prototype, 'featuresRegistry', {
+}
+
+similar to the enhancementRegistry.  The key is the class constructor passed into assignFeatures.  One can add more and more features with the same class constructor via multiple calls to assignFeatures, as long as the keys are different with each call for the same constructor.
+
+2.  For each key in the second argument of assignFeatures:
+    1.  If the class constructor prototype already has a property defined with the name of key throw an error.
+    2.  On the class prototype, use Object.defineProperty and define the getter only (no setter), where the name of the property is the key.
+3.  The code of the programmatically defined getter does something like:
+
+```JavaScript
+Object.defineProperty(CustomElementRegistry.prototype, key, {
+    get: function () {
+        //privateStorage is a map that is stored somewhere tied to the instance of the class
+        if(privateStorage[key] === undefined){
+            const {customElementRegistry} = this;
+            const {featuresRegistry} = customElementRegistry;
+            if(!featuresRegistry.has(ctr)){
+                throw "Weird Error, should be there"; 
+            }
+            const features = featuresRegistry.get(ctr)!;
+            const feature = features[key];
+            if(!feature){
+                throw "Another weird error, this shouldn't happen either";
+            }
+            let {spawn} = feature;
+            const optIn = ctr.supportedFeatures[key];
+            if(!optIn) throw "Weird error, shouldn't happen";
+            if(!spawn) spawn = optIn.fallbackSpawn;
+            if(!spawn) throw "No implementation found";
+            //get ctx, initVals similar to element enhancements
+            //we can create a separate requirement to focus on how we get the ctx, initVals
+            //so for first implementation, just instantiate spawn with a single parameter
+            const instance = new spawn(this, ctx, initVals);
+            if(optIn.validate){
+                if(!optIn.validate(instance)) throw "Doesn't look right".
+            }
+            privateStorage[key] = instance
+            
+
+        }
+        return privateStorage[key];
+    },
+    enumerable: true,   // Makes the property show up in loops like for...in
+    configurable: false // Prevents deletion or redefinition of the property
+});
+```
+
+
+
