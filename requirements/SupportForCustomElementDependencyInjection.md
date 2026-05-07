@@ -452,3 +452,84 @@ it... actually wouldn't need to do anything special, now that we have special tr
 
 
 
+
+
+---
+
+## Kiro's Comments / Questions
+
+Thanks for the detailed writeup. The progression from the idealized WHATWG proposal down to the practical "Human ask" section is clear — you want DI for custom element features without deep platform surgery. A few observations and questions to sharpen the requirements before implementation:
+
+### 1. Scope of this work within assign-gingerly
+
+The practical proposal at the bottom introduces `customElementRegistry.injectFeatures(...)` and a `static DIProps` convention. Is the intent that assign-gingerly itself provides:
+
+- (a) The lazy getter installation logic (reading `static DIProps`, wiring up the prototype getter), **and**
+- (b) The `injectFeatures` registry method (or a polyfill of it on `CustomElementRegistry.prototype`),
+
+...or is (b) expected to live in a separate package (like mount-observer) that depends on assign-gingerly?
+
+My read is that assign-gingerly already extends `CustomElementRegistry` with `enhancementRegistry` / `itemscopeRegistry`, so adding a `dependencyInjections` map here feels consistent. Just want to confirm.
+
+### 2. Timing: when do lazy getters get installed?
+
+The pseudocode shows the getter accessing `this.customElementRegistry` — but `HTMLElement` instances don't natively have that property. Two possible moments to wire things up:
+
+- **At `define()` time** — monkey-patch the prototype immediately when `customElements.define('club-member', ClubMember)` is called (or via a wrapper).
+- **At `injectFeatures()` time** — install getters only when `injectFeatures` is called, which could happen before or after `define()`.
+
+Which ordering should be supported? If `injectFeatures` can be called *before* `define`, the getter installation can't rely on the registry having the constructor registered yet. If it's always *after*, we can look up the registry from the constructor.
+
+### 3. Multiple registries (shadow DOM scoped registries)
+
+With scoped custom element registries on the horizon, a single `customElementRegistry.injectFeatures(ClubMember, ...)` call assumes one global registry. Should the API accept an optional registry parameter, or is it always tied to the registry where the element was defined?
+
+### 4. Constructor signature for spawned features
+
+The pseudocode shows:
+
+```JavaScript
+const instance = new spawn(this, ctx, initVals);
+```
+
+What are `ctx` and `initVals` in this context? For element enhancements they come from attribute parsing and the enhancement config. For DI features on a custom element, where do they originate? Possibilities:
+
+- `ctx` could carry a reference to the registry + the DIProps config entry.
+- `initVals` could come from the object being assigned via `assignGingerly` (the `photoTaker: { someProp: 'hello' }` example at the end).
+
+Or should the constructor signature be simpler for DI features — just `new spawn(hostElement)` — since the feature is "first-party" and can access what it needs through the host?
+
+### 5. Interaction with assignGingerly's readonly property detection
+
+You mention at the end that assignGingerly "wouldn't need to do anything special" because of existing readonly property treatment. Let me confirm the expected flow:
+
+1. `injectFeatures` installs a **getter-only** property (`photoTaker`) on the prototype.
+2. `assignGingerly(clubMember, { photoTaker: { someProp: 'hello' } })` detects it's a getter-only accessor.
+3. It reads the getter (which lazily spawns the feature instance), then recursively merges `{ someProp: 'hello' }` into that instance.
+
+That's elegant — the existing machinery handles it. Just confirming that's the intended interaction.
+
+### 6. validateShape — runtime only, or also TypeScript?
+
+The `validateShape` callback is a runtime guard. Is there also an expectation of TypeScript generics on `DIProps` to enforce the interface at compile time? Something like:
+
+```TypeScript
+static DIProps: DIPropsConfig<ClubMember> = {
+    photoTaker: {
+        fallbackSpawn: PhotoTakerDefaultImpl,
+        // TypeScript enforces PhotoTakerDefaultImpl implements PhotoTaker
+    }
+}
+```
+
+Or is this intentionally loose to keep the API simple and JSON-friendly?
+
+### 7. Suggested implementation plan (if the above is confirmed)
+
+1. Define a `DIPropsConfig` type and a `DependencyInjectionEntry` interface.
+2. Add a `dependencyInjections` WeakMap on `CustomElementRegistry.prototype` (keyed by constructor).
+3. Implement `injectFeatures(Ctor, config)` — merges config with `Ctor.DIProps`, installs lazy getters on `Ctor.prototype`.
+4. Ensure assignGingerly's existing readonly/accessor detection handles the lazy getter correctly (likely already works, needs a test).
+5. Add tests: basic DI, fallback spawn, validateShape rejection, interaction with assignGingerly merging.
+
+Let me know which of these questions change the direction, and I'll start on a more concrete design doc or jump straight to implementation.
