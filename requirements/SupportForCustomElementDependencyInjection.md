@@ -711,3 +711,79 @@ Object.defineProperty(CustomElementRegistry.prototype, key, {
 
 
 
+
+
+---
+
+## Kiro's Response II
+
+Good — keeping it in `assign-gingerly` makes sense given the future feature-awareness you're planning. Avoids the circular dependency headache entirely.
+
+And the rename from `injectFeatures` → `assignFeatures` is a nice touch. It's consistent with the package's identity ("assign" is the verb this package owns), and `assignFeatures` reads naturally as "assign these feature implementations to this custom element class."
+
+So the name question is settled — it stays in `assign-gingerly`. Let me respond to the restated requirements:
+
+### What I understand the implementation to be
+
+1. **`object-extension.ts`** adds a `featuresRegistry` property to `CustomElementRegistry.prototype` (a `Map<Constructor, Record<string, FeatureConfig>>`), similar to how it already adds `enhancementRegistry`.
+
+2. **`assignFeatures(ctr, features)`** is a new method on `CustomElementRegistry.prototype` that:
+   - Validates each key in `features` exists in `ctr.supportedFeatures` — throws if not.
+   - Validates the key doesn't already have a property descriptor on `ctr.prototype` — throws if it does.
+   - Merges the features into `featuresRegistry` under the `ctr` key (additive across multiple calls, but no duplicate keys for the same constructor).
+   - Defines a getter-only property on `ctr.prototype` for each key.
+
+3. **The getter** (per-key, per-constructor):
+   - Uses a private storage mechanism (WeakMap keyed by instance, or a per-instance Map) to cache the spawned feature.
+   - On first access: looks up the `featuresRegistry`, resolves `spawn` (falling back to `supportedFeatures[key].fallbackSpawn`), instantiates it, optionally validates shape, caches it, returns it.
+   - On subsequent access: returns cached instance.
+
+4. **assignGingerly integration** — works automatically because the getter-only property triggers the existing readonly/accessor merge path. No changes needed to assignGingerly for phase 1.
+
+### A few implementation details to confirm
+
+**Private storage mechanism:**
+
+Since we can't actually use `#privateFields` on a class we're monkey-patching from outside, the realistic options are:
+
+- **(A) WeakMap keyed by instance** — `const featureStorage = new WeakMap<object, Record<string, any>>()`. The getter closes over this WeakMap. Clean, no memory leaks, no collision risk.
+- **(B) A non-enumerable symbol property on the instance** — `this[Symbol.for('assign-gingerly:features')]`. Slightly more inspectable for debugging, but pollutes the instance.
+
+I'd lean toward **(A)** — a module-scoped WeakMap. It's the standard pattern for "private state on objects you don't own." Does that match your thinking?
+
+**Regarding `configurable: false`:**
+
+You specified `configurable: false` on the getter. That's a strong lock — it means:
+- The property can never be redefined or deleted from the prototype.
+- If someone calls `assignFeatures` again with the same key for the same constructor, it'll throw (which is your intent based on the "already has a property" check).
+
+This is fine and intentional — once a feature slot is claimed, it's permanent. Just noting that it also means you can't "hot-reload" a different spawn during development without a page refresh. Acceptable tradeoff?
+
+**Regarding `enumerable: true`:**
+
+You specified the getter should be enumerable. That means `Object.keys(instance)` and `for...in` will include these feature properties. This is a deliberate choice to make features discoverable/visible — correct? (Most prototype getters in the DOM are non-enumerable, but your use case is different since these are meant to be part of the public API.)
+
+**Constructor signature — phase 1 simplification:**
+
+You noted we can defer `ctx` and `initVals` to a future requirement. For phase 1, should the spawn constructor receive:
+
+- `new spawn(hostElement)` — just the element instance, or
+- `new spawn(hostElement, featureConfig)` — element + the config object from `supportedFeatures[key]` so the feature can read its own configuration?
+
+I'd suggest `new spawn(hostElement)` for phase 1 simplicity, with the understanding that phase 2 will expand the signature.
+
+**The `customElementRegistry` property on `this`:**
+
+The getter references `this.customElementRegistry`. This property doesn't exist natively on `HTMLElement`. I assume `object-extension.ts` already defines this (since it's needed for `enhancementRegistry` access too)? If not, we'll need to add it — likely a getter on `Element.prototype` that returns `customElements` (the global registry), or for scoped registries, walks up the DOM to find the relevant one.
+
+### Suggested file placement
+
+Since this stays in `assign-gingerly`:
+
+- **Types**: Add `SupportedFeatures`, `FeatureConfig`, and the `assignFeatures` signature to the existing type declarations.
+- **Implementation**: A new `assignFeatures.ts` / `assignFeatures.js` module, exported from the package.
+- **Registry setup**: The `featuresRegistry` definition goes in `object-extension.ts` alongside the existing registry definitions.
+
+### Ready to implement
+
+Once you confirm the above (especially the WeakMap vs symbol question and the phase-1 constructor signature), I can start writing the code. The scope is well-defined enough to move forward.
