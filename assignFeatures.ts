@@ -36,6 +36,33 @@ export interface SupportedFeatureConfig {
      * Return true if the instance is valid, false to throw.
      */
     validateShape?: (spawnedInstance: any) => boolean;
+
+    /**
+     * Optional lifecycle method configuration.
+     * 
+     * If set to `true`, installs a method named 'whenFeatureReady' on the prototype.
+     * If set to an object, allows customizing the method name.
+     * 
+     * The installed method accepts a feature key and returns a Promise that resolves
+     * with the feature instance once it's ready (useful for async spawners).
+     * For synchronous spawners, the Promise resolves immediately.
+     * 
+     * Suggested default name: 'whenFeatureReady'
+     * 
+     * @example
+     * // Use default name
+     * static supportedFeatures = { photoTaker: { lifecycleKeys: true } }
+     * // await el.whenFeatureReady('photoTaker')
+     * 
+     * @example
+     * // Custom name
+     * static supportedFeatures = { photoTaker: { lifecycleKeys: { whenFeatureReady: 'awaitFeature' } } }
+     * // await el.awaitFeature('photoTaker')
+     */
+    lifecycleKeys?: true | {
+        /** Method name for awaiting feature readiness. Defaults to 'whenFeatureReady'. */
+        whenFeatureReady?: string;
+    };
 }
 
 export interface FeatureInjection {
@@ -103,6 +130,49 @@ const RAW_INIT_VALS = Symbol('rawInitVals');
  * Sentinel symbol to mark stored values as error state from failed async spawn.
  */
 const FEATURE_ERROR = Symbol('featureError');
+
+/**
+ * WeakMap storing pending Promises for async feature resolution.
+ * Outer key: the instance. Inner map: feature key -> { promise, resolve, reject }.
+ */
+const pendingFeatures = new WeakMap<object, Map<string, { promise: Promise<any>, resolve: Function, reject: Function }>>();
+
+/**
+ * Resolves the whenFeatureReady method name from lifecycleKeys config.
+ * Returns undefined if lifecycleKeys is not set.
+ */
+function resolveWhenFeatureReadyName(lifecycleKeys: true | { whenFeatureReady?: string } | undefined): string | undefined {
+    if (lifecycleKeys === undefined) return undefined;
+    if (lifecycleKeys === true) return 'whenFeatureReady';
+    return lifecycleKeys.whenFeatureReady || 'whenFeatureReady';
+}
+
+/**
+ * Installs the whenFeatureReady method on the constructor prototype if not already present.
+ */
+function installWhenFeatureReadyMethod(ctr: Function, methodName: string): void {
+    // Only install once per class
+    if (Object.getOwnPropertyDescriptor(ctr.prototype, methodName)) return;
+
+    Object.defineProperty(ctr.prototype, methodName, {
+        value: function (this: any, featureKey: string): Promise<any> {
+            // Trigger the getter (starts async resolution if needed, or returns sync instance)
+            const current = this[featureKey];
+
+            // Check if there's a pending async resolution for this instance + key
+            const pending = pendingFeatures.get(this)?.get(featureKey);
+            if (pending) {
+                return pending.promise;
+            }
+
+            // No pending — feature is already resolved (sync or async already completed)
+            return Promise.resolve(current);
+        },
+        writable: true,
+        enumerable: false,
+        configurable: true
+    });
+}
 
 /**
  * Determines if a function is an async spawner (returns a Promise<Constructor>)
@@ -218,6 +288,20 @@ function installFeatureGetter(
                 // Capture host element reference for the async callback
                 const hostElement = this;
 
+                // Create a pending Promise for whenFeatureReady consumers
+                let pendingMap = pendingFeatures.get(hostElement);
+                if (!pendingMap) {
+                    pendingMap = new Map();
+                    pendingFeatures.set(hostElement, pendingMap);
+                }
+                let resolvePending: Function;
+                let rejectPending: Function;
+                const promise = new Promise<any>((resolve, reject) => {
+                    resolvePending = resolve;
+                    rejectPending = reject;
+                });
+                pendingMap.set(key, { promise, resolve: resolvePending!, reject: rejectPending! });
+
                 // Kick off async resolution
                 (SpawnClass as () => Promise<any>)().then((ResolvedClass: any) => {
                     // Mutate injection so future getter calls see the resolved constructor
@@ -249,12 +333,18 @@ function installFeatureGetter(
                             );
                             error.placeholder = currentPlaceholder;
                             currentStorage!.set(key, { [FEATURE_ERROR]: error });
+                            rejectPending!(error);
+                            pendingMap!.delete(key);
                             return;
                         }
                     }
 
                     // Replace placeholder with real instance
                     currentStorage!.set(key, instance);
+
+                    // Resolve the pending Promise and clean up
+                    resolvePending!(instance);
+                    pendingMap!.delete(key);
                 }).catch((err: any) => {
                     // Store error state — getter will throw on next access
                     const currentStorage = featureStorage.get(hostElement);
@@ -265,6 +355,10 @@ function installFeatureGetter(
                     error.placeholder = currentPlaceholder;
                     error.cause = err;
                     currentStorage?.set(key, { [FEATURE_ERROR]: error });
+
+                    // Reject the pending Promise and clean up
+                    rejectPending!(error);
+                    pendingMap!.delete(key);
                 });
 
                 return placeholder;
@@ -344,6 +438,15 @@ export function assignFeatures(
 
         // 5. Install the lazy getter on the prototype
         installFeatureGetter(ctr, key, featuresRegistry);
+
+        // 6. Install whenFeatureReady method if lifecycleKeys is configured
+        const optIn = supportedFeatures[key];
+        if (optIn.lifecycleKeys) {
+            const methodName = resolveWhenFeatureReadyName(optIn.lifecycleKeys);
+            if (methodName) {
+                installWhenFeatureReadyMethod(ctr, methodName);
+            }
+        }
     }
 }
 

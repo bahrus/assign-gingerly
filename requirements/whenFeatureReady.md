@@ -220,3 +220,17 @@ We agree, same time as the getters.
 #### 7.  Revised proposal
 
 There's a strange disconnect there.  What you put in for the interface is exactly what I'm suggesting -- oh, I see, I was mixing typescript with the typical (expected) value.  My bad.  You're right, it can be any string, that's the correct type.  We should add to the comment that the suggested name is "whenFeatureReady" and also comment lifecycleKeys to indicate it can be set to true which means default names ("whenFeatureReady" in this case) will be used.
+
+
+---
+
+## Kiro's Response I
+
+We're on the same page. Implementing now with:
+
+- `lifecycleKeys?: true | { whenFeatureReady?: string }` on `SupportedFeatureConfig`
+- `true` means use default name `'whenFeatureReady'`
+- Object form lets the developer pick a custom name
+- One method installed on the prototype (first time any feature with `lifecycleKeys` is processed)
+- Method takes a feature key argument, returns a Promise that resolves with the instance
+- Separate `pendingFeatures` WeakMap for async resolution signaling

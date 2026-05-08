@@ -47,6 +47,46 @@ const RAW_INIT_VALS = Symbol('rawInitVals');
  */
 const FEATURE_ERROR = Symbol('featureError');
 /**
+ * WeakMap storing pending Promises for async feature resolution.
+ * Outer key: the instance. Inner map: feature key -> { promise, resolve, reject }.
+ */
+const pendingFeatures = new WeakMap();
+/**
+ * Resolves the whenFeatureReady method name from lifecycleKeys config.
+ * Returns undefined if lifecycleKeys is not set.
+ */
+function resolveWhenFeatureReadyName(lifecycleKeys) {
+    if (lifecycleKeys === undefined)
+        return undefined;
+    if (lifecycleKeys === true)
+        return 'whenFeatureReady';
+    return lifecycleKeys.whenFeatureReady || 'whenFeatureReady';
+}
+/**
+ * Installs the whenFeatureReady method on the constructor prototype if not already present.
+ */
+function installWhenFeatureReadyMethod(ctr, methodName) {
+    // Only install once per class
+    if (Object.getOwnPropertyDescriptor(ctr.prototype, methodName))
+        return;
+    Object.defineProperty(ctr.prototype, methodName, {
+        value: function (featureKey) {
+            // Trigger the getter (starts async resolution if needed, or returns sync instance)
+            const current = this[featureKey];
+            // Check if there's a pending async resolution for this instance + key
+            const pending = pendingFeatures.get(this)?.get(featureKey);
+            if (pending) {
+                return pending.promise;
+            }
+            // No pending — feature is already resolved (sync or async already completed)
+            return Promise.resolve(current);
+        },
+        writable: true,
+        enumerable: false,
+        configurable: true
+    });
+}
+/**
  * Determines if a function is an async spawner (returns a Promise<Constructor>)
  * rather than a synchronous constructor.
  *
@@ -141,6 +181,19 @@ function installFeatureGetter(ctr, key, featuresRegistry) {
                 storage.set(key, placeholder);
                 // Capture host element reference for the async callback
                 const hostElement = this;
+                // Create a pending Promise for whenFeatureReady consumers
+                let pendingMap = pendingFeatures.get(hostElement);
+                if (!pendingMap) {
+                    pendingMap = new Map();
+                    pendingFeatures.set(hostElement, pendingMap);
+                }
+                let resolvePending;
+                let rejectPending;
+                const promise = new Promise((resolve, reject) => {
+                    resolvePending = resolve;
+                    rejectPending = reject;
+                });
+                pendingMap.set(key, { promise, resolve: resolvePending, reject: rejectPending });
                 // Kick off async resolution
                 SpawnClass().then((ResolvedClass) => {
                     // Mutate injection so future getter calls see the resolved constructor
@@ -166,11 +219,16 @@ function installFeatureGetter(ctr, key, featuresRegistry) {
                             const error = new Error(`assignFeatures: spawned instance for "${key}" failed shape validation`);
                             error.placeholder = currentPlaceholder;
                             currentStorage.set(key, { [FEATURE_ERROR]: error });
+                            rejectPending(error);
+                            pendingMap.delete(key);
                             return;
                         }
                     }
                     // Replace placeholder with real instance
                     currentStorage.set(key, instance);
+                    // Resolve the pending Promise and clean up
+                    resolvePending(instance);
+                    pendingMap.delete(key);
                 }).catch((err) => {
                     // Store error state — getter will throw on next access
                     const currentStorage = featureStorage.get(hostElement);
@@ -179,6 +237,9 @@ function installFeatureGetter(ctr, key, featuresRegistry) {
                     error.placeholder = currentPlaceholder;
                     error.cause = err;
                     currentStorage?.set(key, { [FEATURE_ERROR]: error });
+                    // Reject the pending Promise and clean up
+                    rejectPending(error);
+                    pendingMap.delete(key);
                 });
                 return placeholder;
             }
@@ -235,6 +296,14 @@ export function assignFeatures(ctr, features, featuresRegistry) {
         featuresRegistry.set(ctr, key, features[key]);
         // 5. Install the lazy getter on the prototype
         installFeatureGetter(ctr, key, featuresRegistry);
+        // 6. Install whenFeatureReady method if lifecycleKeys is configured
+        const optIn = supportedFeatures[key];
+        if (optIn.lifecycleKeys) {
+            const methodName = resolveWhenFeatureReadyName(optIn.lifecycleKeys);
+            if (methodName) {
+                installWhenFeatureReadyMethod(ctr, methodName);
+            }
+        }
     }
 }
 /**
