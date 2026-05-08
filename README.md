@@ -3949,7 +3949,7 @@ customElements.assignFeatures(
     ctr: Function,           // The class constructor
     features: {              // Feature injections
         [key: string]: {
-            spawn?: new (hostElement: any) => any  // Optional if fallbackSpawn exists
+            spawn?: new (hostElement: any, ctx: FeatureSpawnContext, initVals?: any) => any
         }
     }
 ): void;
@@ -3958,17 +3958,100 @@ customElements.assignFeatures(
 class MyElement extends HTMLElement {
     static supportedFeatures: {
         [key: string]: {
-            fallbackSpawn?: new (hostElement: any) => any,
+            fallbackSpawn?: new (hostElement: any, ctx: FeatureSpawnContext, initVals?: any) => any,
             validateShape?: (instance: any) => boolean
+        }
+    }
+}
+
+// Context passed to feature constructors:
+interface FeatureSpawnContext {
+    key: string;                        // The feature key (e.g., 'photoTaker')
+    optIn: SupportedFeatureConfig;      // The config from static supportedFeatures
+    injection: FeatureInjection;        // The config from assignFeatures()
+    featuresRegistry: FeaturesRegistry; // The registry reference
+}
+```
+
+### Constructor signature
+
+Feature classes receive three arguments:
+
+```JavaScript
+class MyFeature {
+    constructor(hostElement, ctx, initVals) {
+        // hostElement: the element instance that owns this feature
+        // ctx: { key, optIn, injection, featuresRegistry }
+        // initVals: any pre-set value captured before the feature was spawned (or undefined)
+        if (initVals) {
+            Object.assign(this, initVals);
         }
     }
 }
 ```
 
+### Pre-upgrade property capture with `captureFeatureInitVals`
+
+When a custom element exists in the DOM before `customElements.define()` is called, properties may be set on it directly (e.g., by a framework or server-rendered HTML hydration). After the element upgrades, these own-properties shadow the prototype getters installed by `assignFeatures`, preventing the lazy spawn mechanism from working.
+
+`captureFeatureInitVals` solves this by capturing and deleting those own-properties in the constructor, storing them so the getter can pass them as `initVals` when the feature is first accessed.
+
+**Usage:**
+
+```JavaScript
+import { captureFeatureInitVals } from 'assign-gingerly/assignFeatures.js';
+
+class ClubMember extends HTMLElement {
+    static supportedFeatures = {
+        photoTaker: { fallbackSpawn: PhotoTakerImpl }
+    }
+
+    constructor() {
+        super();
+        captureFeatureInitVals(this);
+    }
+}
+```
+
+**What it does:**
+
+1. Iterates over the keys in `static supportedFeatures`.
+2. For each key, checks if the instance has an own-property with that name (`Object.hasOwn`).
+3. If found: captures the value, deletes the own-property, and stores the value internally so the getter can retrieve it as `initVals` when the feature is first accessed.
+
+**When to use it:**
+
+- Always include it in the constructor if your element might exist in the DOM before `define()` is called (which is common with server-rendered HTML or lazy-loaded component definitions).
+- It's safe to call even when no own-properties exist — it simply does nothing.
+- It's a one-liner with no performance cost when there are no pre-set properties.
+
+**The full pre-upgrade flow:**
+
+```JavaScript
+// 1. Element exists in DOM before define (unknown element)
+const el = document.createElement('club-member');
+document.body.appendChild(el);
+
+// 2. Framework or hydration sets properties
+el.photoTaker = { someProp: 'hello', count: 42 };
+
+// 3. Later, the component definition loads
+customElements.assignFeatures(ClubMember, {
+    photoTaker: { spawn: PhotoTakerImpl }
+});
+customElements.define('club-member', ClubMember);
+// → constructor runs, captureFeatureInitVals captures el.photoTaker value
+
+// 4. First access spawns with initVals
+console.log(el.photoTaker.someProp); // 'hello'
+console.log(el.photoTaker.count);    // 42
+```
+
+**Important ordering:** Call `assignFeatures` before `customElements.define()`. The getters must be on the prototype before any instances are created or upgraded.
+
 ### Roadmap (future phases)
 
-- **Expanded constructor signature**: `new spawn(hostElement, featureConfig)` — pass the feature configuration to the spawned class.
 - **Attribute mapping**: Connect attributes to feature properties (similar to enhancement `withAttrs`).
-- **`ctx` and `initVals`**: Full spawn context and initial values, matching the enhancement pattern.
+- **Async spawn**: Support asynchronous feature loading (lazy-loaded feature implementations).
 - **Nested features**: Support `?.path?.notation` keys for deeply nested feature slots.
 - **`passThrough`**: Proxy top-level properties down to feature instances.

@@ -245,3 +245,40 @@ I proposed `FeatureSpawnContext` with `{ key, optIn, injection, featuresRegistry
 5. Document the ordering requirement (`assignFeatures` before `define`).
 
 This is a small, focused change to the getter logic — no new files needed, just updates to `assignFeatures.ts` / `.js` and the types.
+
+
+---
+
+## Kiro Session State — RESOLVED
+
+The initVals tests are now passing (23/23). Full test suite passes (60/60).
+
+### Final approach chosen: getter-only + `captureFeatureInitVals` helper
+
+The getter+setter approach was abandoned because it conflicts with assignGingerly's readonly property detection (which requires getter-only to trigger merge behavior).
+
+Instead:
+- **Getter-only** on the prototype (preserves assignGingerly merge behavior).
+- **`captureFeatureInitVals(this)`** — a helper function the custom element constructor calls to capture and delete own-properties that shadow the getter. The captured values are stored in the WeakMap tagged with a `RAW_INIT_VALS` sentinel symbol.
+- The getter checks for sentinel-tagged values in the WeakMap and uses them as `initVals` when spawning.
+
+### Usage pattern for custom element authors
+
+```javascript
+import { captureFeatureInitVals } from 'assign-gingerly/assignFeatures.js';
+
+class ClubMember extends HTMLElement {
+    static supportedFeatures = { photoTaker: { fallbackSpawn: PhotoTakerImpl } }
+    constructor() {
+        super();
+        captureFeatureInitVals(this); // captures pre-upgrade own-properties
+    }
+}
+```
+
+### What was implemented
+
+1. `assignFeatures.ts` — added `RAW_INIT_VALS` sentinel, updated getter to check for sentinel-tagged values, added `captureFeatureInitVals` export.
+2. `index.ts` — exports `captureFeatureInitVals`.
+3. `tests/assign-features.html` — initVals tests use the helper in the constructor, assignGingerly merge tests work with getter-only.
+

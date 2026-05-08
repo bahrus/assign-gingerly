@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>assignFeatures - Custom Element Features Tests</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-results { display: none; }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>assignFeatures - Custom Element Features Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    
+    <!-- This element signals test completion to Playwright -->
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0" style="display:none;"></div>
+
+    <script type="module">
+        import '../object-extension.js';
+        import assignGingerly from '../assignGingerly.js';
+        import { captureFeatureInitVals } from '../assignFeatures.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function test(name, fn) {
+            try {
+                fn();
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+        }
+
+        function expect(actual) {
+            return {
+                toEqual(expected) {
+                    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${expected} but got ${actual}`);
+                    }
+                },
+                toBeUndefined() {
+                    if (actual !== undefined) {
+                        throw new Error(`Expected undefined but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toBeInstanceOf(cls) {
+                    if (!(actual instanceof cls)) {
+                        throw new Error(`Expected instance of ${cls.name} but got ${actual?.constructor?.name}`);
+                    }
+                },
+                toThrow(expectedMsg) {
+                    // actual should be a function
+                    let threw = false;
+                    let errorMsg = '';
+                    try {
+                        actual();
+                    } catch (e) {
+                        threw = true;
+                        errorMsg = e.message;
+                    }
+                    if (!threw) {
+                        throw new Error(`Expected function to throw but it did not`);
+                    }
+                    if (expectedMsg && !errorMsg.includes(expectedMsg)) {
+                        throw new Error(`Expected error containing "${expectedMsg}" but got "${errorMsg}"`);
+                    }
+                },
+                toHaveProperty(prop) {
+                    if (!(prop in actual)) {
+                        throw new Error(`Expected object to have property "${prop}"`);
+                    }
+                }
+            };
+        }
+
+        // ============================================================
+        // Basic functionality tests
+        // ============================================================
+
+        test('basic: lazy getter is installed on prototype', () => {
+            class PhotoTakerImpl {
+                constructor(host) { this.host = host; }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    photoTaker: { fallbackSpawn: PhotoTakerImpl }
+                }
+            }
+            customElements.define('test-basic-getter', TestEl);
+            customElements.assignFeatures(TestEl, {
+                photoTaker: { spawn: PhotoTakerImpl }
+            });
+
+            const desc = Object.getOwnPropertyDescriptor(TestEl.prototype, 'photoTaker');
+            expect(typeof desc.get).toBe('function');
+            expect(desc.set).toBeUndefined();
+            expect(desc.enumerable).toBe(true);
+            expect(desc.configurable).toBe(false);
+        });
+
+        test('basic: feature is lazily instantiated on first access', () => {
+            let spawnCount = 0;
+            class CountingImpl {
+                constructor(host) { 
+                    this.host = host;
+                    spawnCount++;
+                }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    counter: { fallbackSpawn: CountingImpl }
+                }
+            }
+            customElements.define('test-lazy-spawn', TestEl);
+            customElements.assignFeatures(TestEl, {
+                counter: { spawn: CountingImpl }
+            });
+
+            const el = document.createElement('test-lazy-spawn');
+            expect(spawnCount).toBe(0); // Not yet spawned
+
+            const instance = el.counter;
+            expect(spawnCount).toBe(1); // Spawned on first access
+
+            const instance2 = el.counter;
+            expect(spawnCount).toBe(1); // Cached, not spawned again
+            expect(instance2).toBe(instance); // Same instance
+        });
+
+        test('basic: host element is passed to constructor', () => {
+            let receivedHost = null;
+            class HostCheckImpl {
+                constructor(host) { receivedHost = host; }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    checker: { fallbackSpawn: HostCheckImpl }
+                }
+            }
+            customElements.define('test-host-pass', TestEl);
+            customElements.assignFeatures(TestEl, {
+                checker: { spawn: HostCheckImpl }
+            });
+
+            const el = document.createElement('test-host-pass');
+            el.checker;
+            expect(receivedHost).toBe(el);
+        });
+
+        test('basic: ctx is passed to constructor', () => {
+            let receivedCtx = null;
+            class CtxCheckImpl {
+                constructor(host, ctx) { receivedCtx = ctx; }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    checker: { fallbackSpawn: CtxCheckImpl }
+                }
+            }
+            customElements.define('test-ctx-pass', TestEl);
+            customElements.assignFeatures(TestEl, {
+                checker: { spawn: CtxCheckImpl }
+            });
+
+            const el = document.createElement('test-ctx-pass');
+            el.checker;
+            expect(receivedCtx.key).toBe('checker');
+            expect(receivedCtx.optIn).toBe(TestEl.supportedFeatures.checker);
+            expect(typeof receivedCtx.featuresRegistry).toBe('object');
+        });
+
+        // ============================================================
+        // initVals / pre-upgrade property capture tests
+        // ============================================================
+
+        test('initVals: captures own-property set before getter access', () => {
+            let receivedInitVals = undefined;
+            class InitValImpl {
+                constructor(host, ctx, initVals) {
+                    receivedInitVals = initVals;
+                    if (initVals) Object.assign(this, initVals);
+                }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    feature: { fallbackSpawn: InitValImpl }
+                }
+                constructor() {
+                    super();
+                    captureFeatureInitVals(this);
+                }
+            }
+
+            // assignFeatures before define
+            customElements.assignFeatures(TestEl, {
+                feature: { spawn: InitValImpl }
+            });
+
+            // Create element in DOM before define — it's unknown, no getter yet
+            const el = document.createElement('test-initvals-basic');
+            document.body.appendChild(el);
+            el.feature = { someProp: 'hello', count: 42 };
+
+            // Define triggers upgrade — constructor calls captureFeatureInitVals
+            customElements.define('test-initvals-basic', TestEl);
+
+            // Access the feature — getter finds captured initVals
+            const instance = el.feature;
+            expect(receivedInitVals).toEqual({ someProp: 'hello', count: 42 });
+            expect(instance.someProp).toBe('hello');
+            expect(instance.count).toBe(42);
+            el.remove();
+        });
+
+        test('initVals: own-property is deleted after capture', () => {
+            class SimpleImpl {
+                constructor(host, ctx, initVals) {
+                    if (initVals) Object.assign(this, initVals);
+                }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    feature: { fallbackSpawn: SimpleImpl }
+                }
+                constructor() {
+                    super();
+                    captureFeatureInitVals(this);
+                }
+            }
+
+            // assignFeatures before define
+            customElements.assignFeatures(TestEl, {
+                feature: { spawn: SimpleImpl }
+            });
+
+            // Create and append before define
+            const el = document.createElement('test-initvals-delete');
+            document.body.appendChild(el);
+            el.feature = { x: 1 };
+
+            // Define triggers upgrade — constructor captures and deletes own-property
+            customElements.define('test-initvals-delete', TestEl);
+
+            // Own-property should be gone after constructor ran captureFeatureInitVals
+            expect(Object.hasOwn(el, 'feature')).toBe(false);
+
+            // Getter spawns with captured initVals
+            const instance = el.feature;
+            expect(instance instanceof SimpleImpl).toBe(true);
+            expect(instance.x).toBe(1);
+            el.remove();
+        });
+
+        test('initVals: undefined when no own-property exists', () => {
+            let receivedInitVals = 'NOT_UNDEFINED';
+            class CheckImpl {
+                constructor(host, ctx, initVals) {
+                    receivedInitVals = initVals;
+                }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    feature: { fallbackSpawn: CheckImpl }
+                }
+            }
+            customElements.assignFeatures(TestEl, {
+                feature: { spawn: CheckImpl }
+            });
+            customElements.define('test-initvals-none', TestEl);
+
+            const el = document.createElement('test-initvals-none');
+            el.feature;
+            expect(receivedInitVals).toBeUndefined();
+        });
+
+        test('initVals: works with primitive own-property values', () => {
+            let receivedInitVals = undefined;
+            class PrimImpl {
+                constructor(host, ctx, initVals) {
+                    receivedInitVals = initVals;
+                }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    feature: { fallbackSpawn: PrimImpl }
+                }
+                constructor() {
+                    super();
+                    captureFeatureInitVals(this);
+                }
+            }
+
+            // assignFeatures before define
+            customElements.assignFeatures(TestEl, {
+                feature: { spawn: PrimImpl }
+            });
+
+            // Create and append before define
+            const el = document.createElement('test-initvals-prim');
+            document.body.appendChild(el);
+            el.feature = 'a string value';
+
+            // Define triggers upgrade
+            customElements.define('test-initvals-prim', TestEl);
+
+            el.feature;
+            expect(receivedInitVals).toBe('a string value');
+            el.remove();
+        });
+
+        // ============================================================
+        // fallbackSpawn tests
+        // ============================================================
+
+        test('fallbackSpawn: used when no spawn in injection', () => {
+            class FallbackImpl {
+                constructor(host) { this.host = host; this.isFallback = true; }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    feature: { fallbackSpawn: FallbackImpl }
+                }
+            }
+            customElements.define('test-fallback', TestEl);
+            customElements.assignFeatures(TestEl, {
+                feature: {} // no spawn provided
+            });
+
+            const el = document.createElement('test-fallback');
+            expect(el.feature.isFallback).toBe(true);
+        });
+
+        test('fallbackSpawn: injection spawn takes priority over fallback', () => {
+            class FallbackImpl {
+                constructor(host) { this.type = 'fallback'; }
+            }
+            class InjectedImpl {
+                constructor(host) { this.type = 'injected'; }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    feature: { fallbackSpawn: FallbackImpl }
+                }
+            }
+            customElements.define('test-spawn-priority', TestEl);
+            customElements.assignFeatures(TestEl, {
+                feature: { spawn: InjectedImpl }
+            });
+
+            const el = document.createElement('test-spawn-priority');
+            expect(el.feature.type).toBe('injected');
+        });
+
+        // ============================================================
+        // validateShape tests
+        // ============================================================
+
+        test('validateShape: passes when validation returns true', () => {
+            class ValidImpl {
+                constructor(host) { this.takePicture = () => 'click'; }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    feature: {
+                        fallbackSpawn: ValidImpl,
+                        validateShape(instance) {
+                            return typeof instance.takePicture === 'function';
+                        }
+                    }
+                }
+            }
+            customElements.define('test-validate-pass', TestEl);
+            customElements.assignFeatures(TestEl, {
+                feature: { spawn: ValidImpl }
+            });
+
+            const el = document.createElement('test-validate-pass');
+            // Should not throw
+            const instance = el.feature;
+            expect(instance.takePicture()).toBe('click');
+        });
+
+        test('validateShape: throws when validation returns false', () => {
+            class InvalidImpl {
+                constructor(host) { /* missing takePicture */ }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    feature: {
+                        fallbackSpawn: InvalidImpl,
+                        validateShape(instance) {
+                            return typeof instance.takePicture === 'function';
+                        }
+                    }
+                }
+            }
+            customElements.define('test-validate-fail', TestEl);
+            customElements.assignFeatures(TestEl, {
+                feature: { spawn: InvalidImpl }
+            });
+
+            const el = document.createElement('test-validate-fail');
+            expect(() => el.feature).toThrow('failed shape validation');
+        });
+
+        // ============================================================
+        // Error condition tests
+        // ============================================================
+
+        test('error: throws if constructor has no supportedFeatures', () => {
+            class NoFeatures extends HTMLElement {}
+            customElements.define('test-no-features', NoFeatures);
+
+            expect(() => {
+                customElements.assignFeatures(NoFeatures, { foo: {} });
+            }).toThrow('does not define static supportedFeatures');
+        });
+
+        test('error: throws if key not in supportedFeatures', () => {
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    allowed: { fallbackSpawn: class { constructor() {} } }
+                }
+            }
+            customElements.define('test-bad-key', TestEl);
+
+            expect(() => {
+                customElements.assignFeatures(TestEl, { notAllowed: {} });
+            }).toThrow('is not declared in');
+        });
+
+        test('error: throws if property already exists on prototype', () => {
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    existing: { fallbackSpawn: class { constructor() {} } }
+                }
+                get existing() { return 'already here'; }
+            }
+            customElements.define('test-existing-prop', TestEl);
+
+            expect(() => {
+                customElements.assignFeatures(TestEl, { existing: {} });
+            }).toThrow('already exists on');
+        });
+
+        test('error: throws if same key assigned twice', () => {
+            class Impl { constructor() {} }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    feature: { fallbackSpawn: Impl }
+                }
+            }
+            customElements.define('test-double-assign', TestEl);
+            customElements.assignFeatures(TestEl, { feature: { spawn: Impl } });
+
+            expect(() => {
+                customElements.assignFeatures(TestEl, { feature: { spawn: Impl } });
+            }).toThrow('already');
+        });
+
+        test('error: throws if no spawn and no fallbackSpawn', () => {
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    feature: {} // no fallbackSpawn
+                }
+            }
+            customElements.define('test-no-spawn', TestEl);
+            customElements.assignFeatures(TestEl, {
+                feature: {} // no spawn either
+            });
+
+            const el = document.createElement('test-no-spawn');
+            expect(() => el.feature).toThrow('no spawn implementation found');
+        });
+
+        // ============================================================
+        // Multiple features tests
+        // ============================================================
+
+        test('multiple: supports multiple features on same class', () => {
+            class PhotoImpl {
+                constructor(host) { this.type = 'photo'; }
+            }
+            class BadgeImpl {
+                constructor(host) { this.type = 'badge'; }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    photoTaker: { fallbackSpawn: PhotoImpl },
+                    badgeMaker: { fallbackSpawn: BadgeImpl }
+                }
+            }
+            customElements.define('test-multi-features', TestEl);
+            customElements.assignFeatures(TestEl, {
+                photoTaker: { spawn: PhotoImpl },
+                badgeMaker: { spawn: BadgeImpl }
+            });
+
+            const el = document.createElement('test-multi-features');
+            expect(el.photoTaker.type).toBe('photo');
+            expect(el.badgeMaker.type).toBe('badge');
+        });
+
+        test('multiple: incremental assignFeatures calls work', () => {
+            class AImpl { constructor(host) { this.type = 'A'; } }
+            class BImpl { constructor(host) { this.type = 'B'; } }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    featureA: { fallbackSpawn: AImpl },
+                    featureB: { fallbackSpawn: BImpl }
+                }
+            }
+            customElements.define('test-incremental', TestEl);
+            customElements.assignFeatures(TestEl, { featureA: { spawn: AImpl } });
+            customElements.assignFeatures(TestEl, { featureB: { spawn: BImpl } });
+
+            const el = document.createElement('test-incremental');
+            expect(el.featureA.type).toBe('A');
+            expect(el.featureB.type).toBe('B');
+        });
+
+        // ============================================================
+        // Per-instance isolation tests
+        // ============================================================
+
+        test('isolation: each instance gets its own feature instance', () => {
+            let instanceCount = 0;
+            class CountImpl {
+                constructor(host) { this.id = ++instanceCount; }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    feature: { fallbackSpawn: CountImpl }
+                }
+            }
+            customElements.define('test-isolation', TestEl);
+            customElements.assignFeatures(TestEl, {
+                feature: { spawn: CountImpl }
+            });
+
+            const el1 = document.createElement('test-isolation');
+            const el2 = document.createElement('test-isolation');
+
+            expect(el1.feature.id).toBe(el1.feature.id); // same instance
+            expect(el2.feature.id).toBe(el2.feature.id); // same instance
+            // But different between elements
+            const id1 = el1.feature.id;
+            const id2 = el2.feature.id;
+            expect(id1 !== id2).toBe(true);
+        });
+
+        // ============================================================
+        // Integration with assignGingerly tests
+        // ============================================================
+
+        test('assignGingerly: merges into getter-only feature property', () => {
+            class MergeImpl {
+                constructor(host, ctx, initVals) {
+                    this.someProp = 'default';
+                    this.otherProp = 'untouched';
+                }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    feature: { fallbackSpawn: MergeImpl }
+                }
+            }
+            customElements.define('test-ag-merge', TestEl);
+            customElements.assignFeatures(TestEl, {
+                feature: { spawn: MergeImpl }
+            });
+
+            const el = document.createElement('test-ag-merge');
+            assignGingerly(el, {
+                feature: { someProp: 'updated' }
+            });
+
+            expect(el.feature.someProp).toBe('updated');
+            expect(el.feature.otherProp).toBe('untouched');
+        });
+
+        test('assignGingerly: triggers lazy spawn then merges', () => {
+            let spawned = false;
+            class LazyMergeImpl {
+                constructor(host) {
+                    spawned = true;
+                    this.value = 'initial';
+                }
+            }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    feature: { fallbackSpawn: LazyMergeImpl }
+                }
+            }
+            customElements.define('test-ag-lazy', TestEl);
+            customElements.assignFeatures(TestEl, {
+                feature: { spawn: LazyMergeImpl }
+            });
+
+            const el = document.createElement('test-ag-lazy');
+            expect(spawned).toBe(false);
+
+            assignGingerly(el, { feature: { value: 'merged' } });
+            expect(spawned).toBe(true);
+            expect(el.feature.value).toBe('merged');
+        });
+
+        // ============================================================
+        // Feature enumeration test
+        // ============================================================
+
+        test('enumerable: feature properties show up in for...in', () => {
+            class EnumImpl { constructor(host) {} }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = {
+                    myFeature: { fallbackSpawn: EnumImpl }
+                }
+            }
+            customElements.define('test-enumerable', TestEl);
+            customElements.assignFeatures(TestEl, {
+                myFeature: { spawn: EnumImpl }
+            });
+
+            let found = false;
+            for (const key in TestEl.prototype) {
+                if (key === 'myFeature') { found = true; break; }
+            }
+            expect(found).toBe(true);
+        });
+
+        // ============================================================
+        // Display results
+        // ============================================================
+
+        const total = passed + failed;
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const completeEl = document.getElementById('test-complete');
+
+        statusEl.innerHTML = `
+            <span class="${failed === 0 ? 'pass' : 'fail'}">
+                ${passed}/${total} tests passed
+            </span>
+        `;
+
+        results.forEach(result => {
+            const div = document.createElement('div');
+            div.className = `test-item ${result.status}`;
+            div.innerHTML = `
+                <strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}
+                ${result.error ? `<div class="error">${result.error}</div>` : ''}
+            `;
+            resultsEl.appendChild(div);
+        });
+
+        // Signal completion to Playwright
+        completeEl.setAttribute('data-passed', passed.toString());
+        completeEl.setAttribute('data-failed', failed.toString());
+        completeEl.setAttribute('data-total', total.toString());
+        completeEl.style.display = 'block';
+
+        console.log(`Tests complete: ${passed}/${total} passed`);
+    </script>
+</body>
+</html>
