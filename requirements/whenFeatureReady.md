@@ -188,3 +188,35 @@ The core idea is solid. My recommendation:
 5. Let the developer name the method via config to avoid prototype collisions.
 
 Want me to implement, or do you want to refine the config shape first?
+
+---
+
+## Human Response I
+
+> You're proposing `lifecycleKeys` on `SupportedFeatureConfig` to let the developer name the method. But I think there's a simpler framing: the method name is always the same (e.g., `whenFeatureReady`), and it accepts the feature key as an argument. This avoids installing a separate method per feature and keeps the API surface small
+
+It was never my intention that we install a separate method per feature.  One method at most.
+
+One thing we did with enhancements that might placate your conern a bit:  The developer can set:
+
+```Typescript
+export interface SupportedFeatureConfig {
+  ...
+
+  lifecycleKeys?: true
+}
+```
+
+in which case you just assume the default name "whenFeatureReady".  Unlikely as it seems, the option to specify the method is in case the custom element happens to need a method with name whenFeatureReady that has another meaning.  And the desire to treat the developer as a "power user" who may prefer a different name just for the aesthetics of it.
+
+#### 5. Should it be on the prototype or on the registry?
+
+On the prototype because assignGingerly will use it with an upcoming proposal.  We agree
+
+#### 6.  When to install the method
+
+We agree, same time as the getters.
+
+#### 7.  Revised proposal
+
+There's a strange disconnect there.  What you put in for the interface is exactly what I'm suggesting -- oh, I see, I was mixing typescript with the typical (expected) value.  My bad.  You're right, it can be any string, that's the correct type.  We should add to the comment that the suggested name is "whenFeatureReady" and also comment lifecycleKeys to indicate it can be set to true which means default names ("whenFeatureReady" in this case) will be used.
