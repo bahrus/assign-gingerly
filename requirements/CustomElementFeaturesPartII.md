@@ -56,3 +56,192 @@ export interface FeatureInjection {
 ```
 
 Let's actually stop there with this proposal.  I was thinking this proposal would also talk about supporting asynchronous spawneres, but let's make that Part III, and deal with the second implicit scenario after we fully resolve this first scenario.
+
+Keep in mind that future requirements will include absorbing parsed attributes defined with withAttrs settings.
+
+Please suggest what this API would look like below.
+
+
+---
+
+## Kiro's Comments / Questions
+
+Good framing. The core ask is clear: when the lazy getter fires, the spawned feature should receive whatever data was previously assigned to that property slot (before the getter existed or before the element upgraded). Let me work through the design.
+
+### The problem restated
+
+The timeline looks like this:
+
+```
+1. customElements.assignFeatures(ClubMember, { photoTaker: { spawn: PhotoTakerImpl } })
+   → installs getter-only on ClubMember.prototype
+2. customElements.define('club-member', ClubMember)
+3. const el = document.createElement('club-member')  // or parser creates it
+4. el.photoTaker  // getter fires, spawns instance with initVals
+```
+
+But what if data arrived *before* step 1 (or between steps 2 and 3 for parser-created elements that upgrade late)?
+
+```
+A. <club-member> exists in DOM as unknown element
+B. Someone does: el.photoTaker = { someProp: 'hello' }  
+   → This sets an own-property on the instance (no getter yet)
+C. Element upgrades, constructor runs
+D. el.photoTaker  // getter is on prototype, but own-property shadows it!
+```
+
+The own-property shadow is the classic custom element "pre-upgrade property" problem.
+
+### Your stated constraint
+
+You've said: **`assignFeatures` must be called before `define`**. This eliminates scenario (A→B→C) for the getter installation timing — by the time the element upgrades, the getter is already on the prototype. But the own-property shadow problem still exists if someone set `el.photoTaker = {...}` on the instance before upgrade.
+
+### Proposed API
+
+Here's what I think the API should look like:
+
+#### Updated types
+
+```TypeScript
+/**
+ * Context passed to feature spawn constructors
+ */
+export interface FeatureSpawnContext {
+    /** The feature key (e.g., 'photoTaker') */
+    key: string;
+    /** The SupportedFeatureConfig from static supportedFeatures */
+    optIn: SupportedFeatureConfig;
+    /** The FeatureInjection config from assignFeatures */
+    injection: FeatureInjection;
+    /** The features registry reference */
+    featuresRegistry: FeaturesRegistry;
+}
+
+export interface SupportedFeatureConfig {
+    fallbackSpawn?: { new(hostElement: any, ctx: FeatureSpawnContext, initVals?: any): any };
+    validateShape?: (spawnedInstance: any) => boolean;
+}
+
+export interface FeatureInjection {
+    spawn?: { new(hostElement: any, ctx: FeatureSpawnContext, initVals?: any): any };
+}
+```
+
+#### How initVals gets populated
+
+The getter, on first access, should:
+
+1. **Check for an own-property on the instance with the same key** — if one exists (set before the getter was reachable, or set during pre-upgrade), capture its value as `initVals`, then `delete` the own-property so the prototype getter is no longer shadowed.
+2. **Spawn with**: `new SpawnClass(hostElement, ctx, initVals)` where `initVals` may be `undefined` if nothing was pre-set.
+
+```JavaScript
+// Inside the getter for key:
+get: function() {
+    let storage = featureStorage.get(this);
+    if (!storage) {
+        storage = new Map();
+        featureStorage.set(this, storage);
+    }
+
+    if (!storage.has(key)) {
+        // Capture and clear any own-property that shadows this getter
+        let initVals = undefined;
+        if (Object.hasOwn(this, key)) {
+            initVals = this[key];
+            delete this[key]; // Unshadow the prototype getter
+        }
+
+        // ... resolve SpawnClass as before ...
+
+        const ctx = { key, optIn, injection, featuresRegistry };
+        const instance = new SpawnClass(this, ctx, initVals);
+
+        // If initVals was an object, merge it into the instance
+        // (the spawn constructor can do this itself, or we can do it here)
+        // I'd lean toward letting the constructor handle it — more flexible.
+
+        if (optIn.validateShape) {
+            if (!optIn.validateShape(instance)) {
+                throw new Error(`assignFeatures: spawned instance for "${key}" failed shape validation`);
+            }
+        }
+
+        storage.set(key, instance);
+    }
+
+    return storage.get(key);
+}
+```
+
+#### What the feature constructor does with initVals
+
+The feature class is responsible for applying `initVals` however it sees fit:
+
+```JavaScript
+class PhotoTakerImpl {
+    constructor(hostElement, ctx, initVals) {
+        this.host = hostElement;
+        if (initVals) {
+            // Simple case: merge properties
+            Object.assign(this, initVals);
+            // Or use assignGingerly for nested paths:
+            // assignGingerly(this, initVals);
+        }
+    }
+    takePicture() { ... }
+    someProp = 'default';
+}
+```
+
+This keeps the library non-opinionated about *how* initVals are applied — some features might want `Object.assign`, others might want `assignGingerly`, others might want selective picking.
+
+### Questions
+
+#### 1. Should the library auto-merge initVals, or leave it to the constructor?
+
+Two options:
+
+- **(A) Constructor handles it** — the library just passes `initVals` through. The feature class decides what to do. More flexible, less magic.
+- **(B) Library auto-merges** — after `new SpawnClass(this, ctx, initVals)`, the library also does `assignGingerly(instance, initVals)` if initVals is an object. Less boilerplate for feature authors, but potentially double-applies if the constructor already handled it.
+
+I'd recommend **(A)** — let the constructor handle it. It's consistent with how enhancement spawners work (they receive `initVals` and decide what to do). If we want a convenience, we could document a base class or mixin pattern.
+
+#### 2. The own-property delete — is this safe?
+
+Deleting the own-property to unshadow the getter is the standard pattern for custom element pre-upgrade properties (it's what LitElement, FAST, and others do in `connectedCallback`). The only edge case: if someone stored a non-serializable value (like a DOM node reference) as the own-property, we'd capture it as `initVals` and pass it to the constructor. That seems fine — the constructor can handle whatever type it receives.
+
+#### 3. Should `assignGingerly` also capture pre-set values?
+
+Consider this sequence:
+
+```JavaScript
+const el = document.createElement('club-member'); // getter already on prototype
+assignGingerly(el, { photoTaker: { someProp: 'hello' } });
+// → getter fires, spawns instance, then assignGingerly merges { someProp: 'hello' } into it
+```
+
+This already works correctly with the current implementation (getter-only triggers merge). The `initVals` mechanism is specifically for the case where a plain property was set *before* the getter existed on the prototype (pre-upgrade scenario).
+
+#### 4. Ordering documentation
+
+You mentioned we should document that `assignFeatures` must be called before `define`. I'd suggest adding this to both the README and as a JSDoc comment on the method. Something like:
+
+> **Important:** Call `assignFeatures` before `customElements.define()`. The lazy getters must be on the prototype before any instances are created, otherwise pre-set properties will shadow the getters without the capture-and-delete mechanism being in place.
+
+Actually — wait. If `assignFeatures` installs the getter on the prototype, and `define` doesn't change the prototype, then even if `define` is called first, the getter installed afterward would still be on the prototype and accessible to existing instances. The issue is only if instances were created *and had properties set on them* between `define` and `assignFeatures`. So the documentation should say:
+
+> **Important:** Call `assignFeatures` before `customElements.define()`, or at minimum before any instances of the element are created. If an instance has an own-property that matches a feature key, the getter will capture it as `initVals` on first access and delete the own-property.
+
+#### 5. The `ctx` shape — keep it lean?
+
+I proposed `FeatureSpawnContext` with `{ key, optIn, injection, featuresRegistry }`. Is there anything else you'd want in there? For enhancements, `SpawnContext` includes `config`, `mountCtx`, `synthesizerElement`, and `emc`. For features, I think we keep it minimal now and expand later (e.g., when `withAttrs` support arrives in a future phase).
+
+### Summary of proposed changes
+
+1. Add `FeatureSpawnContext` interface.
+2. Update `SupportedFeatureConfig.fallbackSpawn` and `FeatureInjection.spawn` signatures to `new(hostElement, ctx: FeatureSpawnContext, initVals?: any)`.
+3. In the getter: check `Object.hasOwn(this, key)`, capture value, delete own-property, pass as `initVals`.
+4. Pass `ctx` with `{ key, optIn, injection, featuresRegistry }`.
+5. Document the ordering requirement (`assignFeatures` before `define`).
+
+This is a small, focused change to the getter logic — no new files needed, just updates to `assignFeatures.ts` / `.js` and the types.
