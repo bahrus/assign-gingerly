@@ -272,3 +272,110 @@ function isAsyncFunction(fn) {
 If the network request fails, let the user see the naturally thrown error from the browser, and yes, the placeholder stays forever.  
 
 I like the idea of subsequent getter accesses throwing an error.  Can you pass the placeholder in the error object or is that not allowed.
+
+
+---
+
+## Kiro's Response I
+
+Good — the updated timeline is clearer and better. Instantiating immediately when the async resolves (rather than waiting for the next getter call) is a stronger design. It means by the time anyone accesses the property after resolution, the real instance is already there. No "one more access needed" awkwardness.
+
+Let me respond to each point:
+
+### On the timeline (T4→T5 happening without getter)
+
+This means the `.then()` callback does the instantiation itself:
+
+```javascript
+SpawnClass().then((ResolvedClass) => {
+    const stored = storage.get(key);
+    const instance = new ResolvedClass(hostElement, ctx, stored);
+    // validate if needed
+    storage.set(key, instance);
+    injection.spawn = ResolvedClass;
+});
+```
+
+One subtlety: we need to capture `hostElement` (the `this` from the getter) in the closure so the `.then()` callback can pass it to the constructor. That's fine — closures handle this naturally.
+
+### On #1 — reference stability and future EventTarget placeholder
+
+Makes sense as a future enhancement. For now, `{}` is fine. The EventTarget placeholder idea is nice — it would let consumers subscribe to the "upgrade" moment. We can add that later without breaking the `{}` path (just make the placeholder an EventTarget subclass instead of a bare object).
+
+### On #4 — `AsyncFunction` constructor check
+
+That works for `async function` declarations and `async () => {}` arrows. But it does NOT catch a regular (non-async) function that returns a Promise:
+
+```javascript
+// This is NOT an AsyncFunction — it's a regular function returning a Promise
+const spawn = () => import('./photo-taker.js').then(m => m.PhotoTakerImpl);
+spawn.constructor.name; // 'Function', not 'AsyncFunction'
+```
+
+The `() => import(...)` pattern (which is the most common lazy-loading pattern) is a regular arrow function, not an `async` function. So `fn.constructor.name === 'AsyncFunction'` would miss it.
+
+I think we need a combined check:
+
+```javascript
+function isAsyncSpawn(fn) {
+    if (typeof fn !== 'function') return false;
+    // Explicit async function
+    if (fn.constructor.name === 'AsyncFunction') return true;
+    // Arrow function or regular function without .prototype (not a class/constructor)
+    // Classes always have fn.prototype as a non-undefined object
+    if (fn.prototype === undefined) return true;
+    return false;
+}
+```
+
+The logic: if it has no `.prototype`, it's an arrow function (which can't be a constructor). If it's an `AsyncFunction`, it's explicitly async. Everything else (classes, `function` declarations) is treated as a constructor.
+
+This covers:
+- `async () => import(...)` → AsyncFunction ✓
+- `() => import(...).then(...)` → arrow, no `.prototype` ✓
+- `class PhotoTaker {}` → has `.prototype` → constructor ✓
+- `function PhotoTaker() {}` → has `.prototype` → constructor ✓
+
+The one edge case: a regular `function` that returns a Promise and is intended as an async spawner. But that's an unusual pattern — developers will use arrows or `async` for this. We can document it.
+
+### On #5 — error handling and passing the placeholder
+
+Yes, you can absolutely attach the placeholder to the error object:
+
+```javascript
+SpawnClass().catch((err) => {
+    const error = new Error(`assignFeatures: async spawn for "${key}" failed: ${err.message}`);
+    error.placeholder = storage.get(key); // the accumulated object
+    error.cause = err; // standard Error.cause for chaining
+    storage.set(key, { __featureError: error });
+});
+
+// Then in the getter:
+if (stored && stored.__featureError) {
+    throw stored.__featureError; // error.placeholder is accessible in catch blocks
+}
+```
+
+Consumers can then:
+
+```javascript
+try {
+    el.photoTaker;
+} catch (e) {
+    console.log(e.placeholder); // { someProp: 'hello' } — the accumulated data
+    console.log(e.cause);       // the original network/import error
+}
+```
+
+This is valid — custom properties on Error objects are a standard pattern. `Error.cause` is also well-supported (ES2022+).
+
+### Implementation plan
+
+1. Add `isAsyncSpawn(fn)` helper.
+2. In the getter's "first access" path: if `isAsyncSpawn(SpawnClass)`, create placeholder, store it, kick off resolution, return placeholder.
+3. In the `.then()` callback: instantiate the real class with the placeholder as `initVals`, replace in storage, update `injection.spawn`.
+4. In the `.catch()` callback: store error state with placeholder attached.
+5. In the getter's "already stored" path: check for `__featureError` and throw if present. Otherwise return stored value (which is either the placeholder pre-resolution or the real instance post-resolution).
+6. The `instanceof` check from my earlier sketch is no longer needed in the getter — the `.then()` callback handles the swap proactively.
+
+Shall I implement?
