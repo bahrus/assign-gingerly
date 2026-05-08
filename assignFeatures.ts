@@ -289,3 +289,41 @@ export function captureFeatureInitVals(instance: any): void {
         }
     }
 }
+
+// =============================================================================
+// Self-installing: adds featuresRegistry and assignFeatures to CustomElementRegistry
+// This code runs as a side effect when this module is imported.
+// =============================================================================
+
+declare global {
+    interface CustomElementRegistry {
+        featuresRegistry: FeaturesRegistry;
+        assignFeatures(ctr: Function, features: FeatureInjectionsMap): void;
+    }
+}
+
+if (typeof CustomElementRegistry !== 'undefined') {
+    Object.defineProperty(CustomElementRegistry.prototype, 'featuresRegistry', {
+        get: function () {
+            const registry = new FeaturesRegistry();
+            Object.defineProperty(this, 'featuresRegistry', {
+                value: registry,
+                writable: true,
+                enumerable: false,
+                configurable: true,
+            });
+            return registry;
+        },
+        enumerable: false,
+        configurable: true,
+    });
+
+    Object.defineProperty(CustomElementRegistry.prototype, 'assignFeatures', {
+        value: function (ctr: Function, features: FeatureInjectionsMap): void {
+            assignFeatures(ctr, features, this.featuresRegistry);
+        },
+        writable: true,
+        enumerable: false,
+        configurable: true,
+    });
+}

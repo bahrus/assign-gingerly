@@ -199,3 +199,27 @@ export function captureFeatureInitVals(instance) {
         }
     }
 }
+if (typeof CustomElementRegistry !== 'undefined') {
+    Object.defineProperty(CustomElementRegistry.prototype, 'featuresRegistry', {
+        get: function () {
+            const registry = new FeaturesRegistry();
+            Object.defineProperty(this, 'featuresRegistry', {
+                value: registry,
+                writable: true,
+                enumerable: false,
+                configurable: true,
+            });
+            return registry;
+        },
+        enumerable: false,
+        configurable: true,
+    });
+    Object.defineProperty(CustomElementRegistry.prototype, 'assignFeatures', {
+        value: function (ctr, features) {
+            assignFeatures(ctr, features, this.featuresRegistry);
+        },
+        writable: true,
+        enumerable: false,
+        configurable: true,
+    });
+}

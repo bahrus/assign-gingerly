@@ -3734,9 +3734,17 @@ This design ensures backward compatibility while providing powerful new capabili
 
 ## Custom Element Features (Preliminary)
 
-> **⚠️ WIP — This API is preliminary and subject to change.** The core mechanism works today, but the constructor signature and advanced features (attribute mapping, `ctx`/`initVals` passthrough, nested features) are planned for future phases.
+> **⚠️ WIP — This API is preliminary and subject to change.** The core mechanism works today, but the constructor signature and advanced features (attribute mapping, async spawn, nested features) are planned for future phases.
 
 Custom Element Features provide dependency injection for custom elements (and other objects). A custom element author declares which feature "slots" their class supports, and consumers inject implementations into those slots. Features are lazily instantiated on first property access.
+
+To use features, import the module directly — it is independent of `object-extension.js`:
+
+```JavaScript
+import 'assign-gingerly/assignFeatures.js';
+```
+
+This self-installs `featuresRegistry` and `assignFeatures()` on `CustomElementRegistry.prototype`. It does not require or pull in the enhancement/itemscope registries.
 
 This is useful for:
 
@@ -3756,7 +3764,7 @@ This is useful for:
 ### Basic example
 
 ```JavaScript
-import './object-extension.js';
+import 'assign-gingerly/assignFeatures.js';
 
 // 1. Define a feature implementation
 class PhotoTakerImpl {

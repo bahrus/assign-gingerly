@@ -1,6 +1,5 @@
 import assignGingerly, { EnhancementRegistry, ItemscopeRegistry, getInstanceMap } from './assignGingerly.js';
 import { parseWithAttrs } from './parseWithAttrs.js';
-import { FeaturesRegistry, assignFeatures } from './assignFeatures.js';
 /**
  * Normalizes lifecycleKeys to always return an object with dispose and resolved keys
  * @param lifecycleKeys - The lifecycleKeys from registry item (true or object)
@@ -51,37 +50,6 @@ if (typeof CustomElementRegistry !== 'undefined') {
             });
             return registry;
         },
-        enumerable: false,
-        configurable: true,
-    });
-    /**
-     * Adds featuresRegistry to CustomElementRegistry prototype as a lazy getter
-     */
-    Object.defineProperty(CustomElementRegistry.prototype, 'featuresRegistry', {
-        get: function () {
-            // Create a new FeaturesRegistry instance on first access and cache it
-            const registry = new FeaturesRegistry();
-            // Replace the getter with the actual value
-            Object.defineProperty(this, 'featuresRegistry', {
-                value: registry,
-                writable: true,
-                enumerable: false,
-                configurable: true,
-            });
-            return registry;
-        },
-        enumerable: false,
-        configurable: true,
-    });
-    /**
-     * Adds assignFeatures method to CustomElementRegistry prototype.
-     * Validates and registers feature injections, installs lazy getters on the class prototype.
-     */
-    Object.defineProperty(CustomElementRegistry.prototype, 'assignFeatures', {
-        value: function (ctr, features) {
-            assignFeatures(ctr, features, this.featuresRegistry);
-        },
-        writable: true,
         enumerable: false,
         configurable: true,
     });
