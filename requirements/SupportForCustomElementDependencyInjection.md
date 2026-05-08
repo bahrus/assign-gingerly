@@ -787,3 +787,27 @@ Since this stays in `assign-gingerly`:
 ### Ready to implement
 
 Once you confirm the above (especially the WeakMap vs symbol question and the phase-1 constructor signature), I can start writing the code. The scope is well-defined enough to move forward.
+
+---
+
+## Human Response III
+
+Private storage mechanism:  Weakmap sounds fine.
+
+configurable: false, enumerable: true
+
+I had not put much though into these settings, it was just a copy paste from some sample code.  I definitely want enumerable true.  configurable: false does sound a little confining.  I guess it's better to start out confining and loosen if a good use case presents itself, than the other way around, so I guess I weakly lean towards making it false as I accidentally specified.
+
+Constructor:
+
+Yes, let's go in baby steps, but maybe use a little forward thinking and make sure we will be able to pass the featureConfig when we move on to future phases.
+
+customElementRegistry property on this:
+
+With Chrome146+ and other future browsers, all elements have a customElementRegistry property.  To be backwards compatible, use (this.customElementRegistry || customElements).
+
+Note that I am not specifiying that the object that we add features to has to be a custom element.  I'm envisioning we could use for other things like element enhancements, but such classes would need to set the customElementRegistry from thae passed in element to be enhanced.
+
+File placement suggestions sound good.
+
+
