@@ -33,9 +33,9 @@ On top of that, this polyfill package builds on the newly minted Custom Element 
 
 2.  [itemscopeRegistry for Itemscope Managers](#itemscoperegistry) to automatically associate a function prototype or class instance with the itemscope attribute of an HTMLElement.
 
-3.  [featuresRegistry for Custom Element Features](#custom-element-features-preliminary) to support dependency injection of composable feature classes onto custom element prototypes via lazy getters.
+3.  [featuresRegistry for Custom Element Features](#custom-element-features-preliminary) to support dependency injection of composable feature classes or function prototypes onto custom element prototypes via lazy getters.
 
-So in our view this package helps fill the void left by not supporting the "is" attribute for built-in elements (but is not a complete solution, just a critical building block).  Mount-observer, mount-observer-script-element, and custom enhancements builds on top of the critical role that assign-gingerly plays.
+So in our view this package helps fill the void left by not supporting the "is" attribute for built-in elements (but is not a complete solution, just a critical building block).  Mount-observer builds on top of the critical role that assign-gingerly plays.
 
 5.  Iterator upgrade support [TODO] -- limited to ish?
 
@@ -52,11 +52,11 @@ assign-gingerly adds support for:
 1.  Carefully merging in nested properties.
 2.  Dependency injection based on a mapping protocol.
 
-and 
+The second fundamental utility function is:
 
 ## assignTentatively
 
-assignTentatively provides a far more limited subset of functionality compared to assignGingerly.   The tradeoff is that assignTentatively can do something important assignGingerly cannot do -- be "reversed". This can be quite useful for some scenarios.  Think of how css "turns on" visual effects while conditions are met, then reverts to how things were before the conditions were met when needed without as if nothing happened.  Another example is allowing user edits to be rolled back as they repeatedly hit "ctrl+z".
+assignTentatively provides a far more limited subset of functionality compared to assignGingerly.   The tradeoff is that assignTentatively can do something important assignGingerly cannot do -- be "reversed". This can be quite useful for some scenarios.  Think of how css "turns on" visual effects while conditions are met, then reverts to how things were before the conditions were met when when the conditions are no longer met, as if nothing happened.  Another example is allowing user edits to be rolled back as they repeatedly hit "ctrl+z".
 
 ## Example 1 - assignGingerly as a "superset" of Object.assign:
 
