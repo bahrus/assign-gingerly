@@ -190,3 +190,85 @@ The proposal is sound. It preserves the synchronous getter contract, uses the ex
 4. Decide whether to mutate `injection.spawn` in place or use a separate resolved-class store.
 
 Ready to implement when you confirm the approach.
+
+---
+
+## Human Response I
+
+The Timeline:
+
+Corrected below (if possible to implement):
+
+```
+T0: assignFeatures(ClubMember, { photoTaker: { spawn: () => import('./photo-taker.js').then(m => m.PhotoTakerImpl) } })
+T1: const el = document.createElement('club-member');
+T2: assignGingerly(el, { photoTaker: { someProp: 'hello' } })
+    → getter fires
+    → spawn is a function (not a constructor), so:
+      - create {} as placeholder, store in featureStorage
+      - kick off the async resolution (spawn().then(...))
+      - return the {} placeholder
+    → assignGingerly merges { someProp: 'hello' } into the {} placeholder
+T3: el.photoTaker.someProp  // 'hello' — it's on the placeholder object
+T4: async resolution completes — spawn is now PhotoTakerImpl (a constructor)
+    → but we don't instantiate yet (step 4 says keep returning the object)
+T5: without waiting for getter to fire:
+    → thing in storage is {} (not an instance of PhotoTakerImpl)
+    → instantiate: new PhotoTakerImpl(el, ctx, storedObject)
+    → storedObject becomes initVals — the accumulated { someProp: 'hello' }
+    → replace storage with the real instance
+T6: el.photoTaker
+    → getter fires
+    → spawn is now a constructor
+    → thing in storage is now an instance of the constructor
+    → return the real instance from storage
+T6: el.photoTaker.someProp  // 'hello' — now on the real instance (via initVals)
+```
+
+#### 1. Object reference stability
+
+You raise a really good point.  The same point could be raised with what we've already implemented, where properties get passed to the field of the unknown element during hydration / framework passing, prior to the custom element upgrading.
+
+Nevertheless, we might be able, with a future implementation, instead of returning {}, return an event target, so developers could do:
+
+```JavaScript
+let photo = el.photoTaker;
+if(photo.isPlaceHolderObject){
+    photo.addEventListener(e => {
+        photo = e.upgradedProp;
+    })
+}
+```
+
+
+#### 2. When does the swap happen?
+
+See updated timeline
+
+#### 3. Where does the resolved constructor get stored?
+
+We're on the same page:  A.
+
+#### 4. How to distinguish "async function" from "constructor"
+
+I did a search for this:
+
+```JavaScript
+/**
+ * Checks if a given function is declared as async.
+ * @param {Function} fn - The function to check.
+ * @returns {boolean} - True if async, false otherwise.
+ */
+function isAsyncFunction(fn) {
+    if (typeof fn !== 'function') {
+        throw new TypeError('Expected a function');
+    }
+    return fn.constructor.name === 'AsyncFunction';
+}
+```
+
+#### 5. Error handling
+
+If the network request fails, let the user see the naturally thrown error from the browser, and yes, the placeholder stays forever.  
+
+I like the idea of subsequent getter accesses throwing an error.  Can you pass the placeholder in the error object or is that not allowed.
