@@ -177,4 +177,8 @@ Yes, to that.
 
 #### 5. Error handling
 
-I agree with your suggestion.
+I agree with your suggestion. 
+
+#### 6. Implementation sketch
+
+Please proceed.
