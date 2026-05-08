@@ -9,4 +9,5 @@ export {resolveTemplate} from './resolveTemplate.js';
 export {getHost} from './getHost.js';
 export {resolveValues} from './resolveValues.js';
 export {assignFrom} from './assignFrom.js';
+export {assignFeatures, FeaturesRegistry} from './assignFeatures.js';
 import './object-extension.js';
