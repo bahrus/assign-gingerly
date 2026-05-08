@@ -33,9 +33,7 @@ On top of that, this polyfill package builds on the newly minted Custom Element 
 
 2.  [itemscopeRegistry for Itemscope Managers](#itemscoperegistry) to automatically associate a function prototype or class instance with the itemscope attribute of an HTMLElement.
 
-3.  Default Support For Not Replacing one object with another if it is a subclass. [TODO]
-
-4.  Custom Element Features [TODO]
+3.  [featuresRegistry for Custom Element Features](#custom-element-features-preliminary) to support dependency injection of composable feature classes onto custom element prototypes via lazy getters.
 
 So in our view this package helps fill the void left by not supporting the "is" attribute for built-in elements (but is not a complete solution, just a critical building block).  Mount-observer, mount-observer-script-element, and custom enhancements builds on top of the critical role that assign-gingerly plays.
 
@@ -3733,3 +3731,244 @@ ItemScope Managers follow these design principles:
 
 This design ensures backward compatibility while providing powerful new capabilities for managing DOM fragments.
 
+
+## Custom Element Features (Preliminary)
+
+> **⚠️ WIP — This API is preliminary and subject to change.** The core mechanism works today, but the constructor signature and advanced features (attribute mapping, `ctx`/`initVals` passthrough, nested features) are planned for future phases.
+
+Custom Element Features provide dependency injection for custom elements (and other objects). A custom element author declares which feature "slots" their class supports, and consumers inject implementations into those slots. Features are lazily instantiated on first property access.
+
+This is useful for:
+
+- **Decomposing large components** into smaller, testable units (e.g., a photo-taking feature, a badge-making feature).
+- **Mocking in tests** — swap real implementations for test doubles without subclassing.
+- **Reusing behaviors** across different custom elements without mixins.
+- **Lazy loading** — feature code isn't executed until the property is actually accessed.
+
+### How it works
+
+1. The custom element declares `static supportedFeatures` — an opt-in map of feature keys and their configuration.
+2. A consumer calls `customElements.assignFeatures(Constructor, injections)` to register implementations.
+3. Lazy getter-only properties are installed on the constructor's prototype.
+4. On first access, the getter spawns the feature instance, validates it (optionally), caches it, and returns it.
+5. Because the property is getter-only (no setter), `assignGingerly` automatically merges into the spawned instance when assigning object values to that property.
+
+### Basic example
+
+```JavaScript
+import './object-extension.js';
+
+// 1. Define a feature implementation
+class PhotoTakerImpl {
+    constructor(hostElement) {
+        this.host = hostElement;
+    }
+    takePicture() {
+        return `📸 taken by ${this.host.localName}`;
+    }
+    someProp = 'default';
+}
+
+// 2. Define the custom element with supported feature slots
+class ClubMember extends HTMLElement {
+    static supportedFeatures = {
+        photoTaker: {
+            // Used if no spawn is provided in assignFeatures
+            fallbackSpawn: PhotoTakerImpl,
+            // Optional runtime check on the spawned instance
+            validateShape(instance) {
+                return typeof instance.takePicture === 'function';
+            }
+        }
+    }
+}
+
+customElements.define('club-member', ClubMember);
+
+// 3. Inject features (can override fallbackSpawn with a different class)
+customElements.assignFeatures(ClubMember, {
+    photoTaker: {
+        spawn: PhotoTakerImpl
+    }
+});
+
+// 4. Use it — lazy instantiation on first access
+const el = document.createElement('club-member');
+console.log(el.photoTaker.takePicture()); // '📸 taken by club-member'
+
+// 5. assignGingerly merges into the feature instance automatically
+el.assignGingerly({
+    photoTaker: { someProp: 'hello' }
+});
+console.log(el.photoTaker.someProp); // 'hello'
+```
+
+### Using fallbackSpawn (no explicit injection needed)
+
+If `fallbackSpawn` is provided in `supportedFeatures`, you can call `assignFeatures` with an empty spawn — or even just `{}` — and the fallback will be used:
+
+```JavaScript
+class ClubMember extends HTMLElement {
+    static supportedFeatures = {
+        photoTaker: {
+            fallbackSpawn: PhotoTakerImpl
+        }
+    }
+}
+
+customElements.define('club-member', ClubMember);
+
+// No spawn provided — will use fallbackSpawn
+customElements.assignFeatures(ClubMember, {
+    photoTaker: {}
+});
+
+const el = document.createElement('club-member');
+console.log(el.photoTaker.takePicture()); // works via fallbackSpawn
+```
+
+### Testing with mocks
+
+```JavaScript
+class PhotoTakerMock {
+    constructor(hostElement) {
+        this.host = hostElement;
+        this.calls = [];
+    }
+    takePicture() {
+        this.calls.push('takePicture');
+        return 'mock click';
+    }
+}
+
+// In test setup:
+customElements.assignFeatures(ClubMember, {
+    photoTaker: { spawn: PhotoTakerMock }
+});
+
+const el = document.createElement('club-member');
+el.photoTaker.takePicture();
+console.log(el.photoTaker.calls); // ['takePicture']
+```
+
+### Multiple features
+
+```JavaScript
+class BadgeMakerImpl {
+    constructor(hostElement) {
+        this.host = hostElement;
+    }
+    makeBadge(name) {
+        return `🎫 ${name}`;
+    }
+}
+
+class ClubMember extends HTMLElement {
+    static supportedFeatures = {
+        photoTaker: { fallbackSpawn: PhotoTakerImpl },
+        badgeMaker: { fallbackSpawn: BadgeMakerImpl }
+    }
+}
+
+customElements.define('club-member', ClubMember);
+
+// Can assign all at once
+customElements.assignFeatures(ClubMember, {
+    photoTaker: { spawn: PhotoTakerImpl },
+    badgeMaker: { spawn: BadgeMakerImpl }
+});
+
+// Or incrementally (different keys each call)
+// customElements.assignFeatures(ClubMember, { photoTaker: { spawn: PhotoTakerImpl } });
+// customElements.assignFeatures(ClubMember, { badgeMaker: { spawn: BadgeMakerImpl } });
+```
+
+### Validation
+
+The `validateShape` callback runs after instantiation. If it returns `false`, an error is thrown:
+
+```JavaScript
+class ClubMember extends HTMLElement {
+    static supportedFeatures = {
+        photoTaker: {
+            fallbackSpawn: PhotoTakerImpl,
+            validateShape(instance) {
+                if (typeof instance.takePicture !== 'function') return false;
+                if (typeof instance.someProp !== 'string') return false;
+                return true;
+            }
+        }
+    }
+}
+```
+
+### Error conditions
+
+`assignFeatures` throws in these cases:
+
+| Condition | Error |
+|-----------|-------|
+| Constructor has no `static supportedFeatures` | `"does not define static supportedFeatures"` |
+| Key not declared in `supportedFeatures` | `"is not declared in Constructor.supportedFeatures"` |
+| Property already exists on prototype | `"already exists on Constructor.prototype"` |
+| Same key assigned twice for same constructor | `"has already been assigned for Constructor"` |
+| No `spawn` provided and no `fallbackSpawn` | `"no spawn implementation found"` (at access time) |
+| `validateShape` returns false | `"failed shape validation"` (at access time) |
+
+### Integration with assignGingerly
+
+Because `assignFeatures` installs **getter-only** properties (no setter), assignGingerly's existing readonly property detection kicks in automatically:
+
+```JavaScript
+// assignGingerly detects photoTaker is getter-only
+// → reads the getter (spawning the instance if needed)
+// → recursively merges the RHS object into the instance
+el.assignGingerly({
+    photoTaker: { someProp: 'updated' }
+});
+```
+
+This means no special handling is needed in assignGingerly for features — it "just works."
+
+### Scoped registry support
+
+The lazy getter uses `(this.customElementRegistry || customElements)` to resolve the features registry. This means:
+
+- On Chrome 146+ (and future browsers with scoped registries), the element's scoped `customElementRegistry` is used.
+- On older browsers, it falls back to the global `customElements`.
+
+### Not limited to custom elements
+
+While designed with custom elements in mind, `assignFeatures` works with any constructor whose instances will have a `customElementRegistry` property (or where the global `customElements` fallback is acceptable). This includes element enhancement classes that set `this.customElementRegistry` from the element they enhance.
+
+### API reference
+
+```TypeScript
+// On CustomElementRegistry.prototype:
+customElements.assignFeatures(
+    ctr: Function,           // The class constructor
+    features: {              // Feature injections
+        [key: string]: {
+            spawn?: new (hostElement: any) => any  // Optional if fallbackSpawn exists
+        }
+    }
+): void;
+
+// On the constructor (author-defined):
+class MyElement extends HTMLElement {
+    static supportedFeatures: {
+        [key: string]: {
+            fallbackSpawn?: new (hostElement: any) => any,
+            validateShape?: (instance: any) => boolean
+        }
+    }
+}
+```
+
+### Roadmap (future phases)
+
+- **Expanded constructor signature**: `new spawn(hostElement, featureConfig)` — pass the feature configuration to the spawned class.
+- **Attribute mapping**: Connect attributes to feature properties (similar to enhancement `withAttrs`).
+- **`ctx` and `initVals`**: Full spawn context and initial values, matching the enhancement pattern.
+- **Nested features**: Support `?.path?.notation` keys for deeply nested feature slots.
+- **`passThrough`**: Proxy top-level properties down to feature instances.
