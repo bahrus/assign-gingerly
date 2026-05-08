@@ -43,6 +43,30 @@ export class FeaturesRegistry {
  */
 const RAW_INIT_VALS = Symbol('rawInitVals');
 /**
+ * Sentinel symbol to mark stored values as error state from failed async spawn.
+ */
+const FEATURE_ERROR = Symbol('featureError');
+/**
+ * Determines if a function is an async spawner (returns a Promise<Constructor>)
+ * rather than a synchronous constructor.
+ *
+ * Heuristic:
+ * - AsyncFunction (async () => ...) → async spawner
+ * - Arrow function (no .prototype) → async spawner (assumed to return Promise<Constructor>)
+ * - Class or function declaration (has .prototype) → synchronous constructor
+ */
+function isAsyncSpawn(fn) {
+    if (typeof fn !== 'function')
+        return false;
+    // Explicit async function
+    if (fn.constructor.name === 'AsyncFunction')
+        return true;
+    // Arrow function or non-constructor function (no .prototype)
+    if (fn.prototype === undefined)
+        return true;
+    return false;
+}
+/**
  * Installs a getter/setter pair on the constructor's prototype for the given feature key.
  *
  * - The setter stores raw values (pre-upgrade or early assignment) into the WeakMap
@@ -64,7 +88,11 @@ function installFeatureGetter(ctr, key, featuresRegistry) {
                 featureStorage.set(this, storage);
             }
             const stored = storage.get(key);
-            // If already spawned (not a raw sentinel), return it
+            // Check for error state from failed async spawn
+            if (stored && typeof stored === 'object' && FEATURE_ERROR in stored) {
+                throw stored[FEATURE_ERROR];
+            }
+            // If already spawned (not a raw sentinel, not undefined), return it
             if (stored !== undefined && !(stored && typeof stored === 'object' && RAW_INIT_VALS in stored)) {
                 return stored;
             }
@@ -107,16 +135,65 @@ function installFeatureGetter(ctr, key, featuresRegistry) {
                 injection,
                 featuresRegistry: fr
             };
-            // Spawn with host element, context, and any captured initVals
-            const instance = new SpawnClass(this, ctx, initVals);
-            // Validate shape if configured
-            if (optIn.validateShape) {
-                if (!optIn.validateShape(instance)) {
-                    throw new Error(`assignFeatures: spawned instance for "${key}" failed shape validation`);
-                }
+            if (isAsyncSpawn(SpawnClass)) {
+                // Async path: SpawnClass is a function that returns Promise<Constructor>
+                const placeholder = initVals && typeof initVals === 'object' ? initVals : {};
+                storage.set(key, placeholder);
+                // Capture host element reference for the async callback
+                const hostElement = this;
+                // Kick off async resolution
+                SpawnClass().then((ResolvedClass) => {
+                    // Mutate injection so future getter calls see the resolved constructor
+                    injection.spawn = ResolvedClass;
+                    // Get the current placeholder (may have accumulated properties via assignGingerly)
+                    const currentStorage = featureStorage.get(hostElement);
+                    const currentPlaceholder = currentStorage?.get(key);
+                    // Don't upgrade if an error was stored or if already upgraded
+                    if (!currentPlaceholder || (typeof currentPlaceholder === 'object' && FEATURE_ERROR in currentPlaceholder)) {
+                        return;
+                    }
+                    // Instantiate the real class with the placeholder as initVals
+                    const realCtx = {
+                        key,
+                        optIn,
+                        injection,
+                        featuresRegistry: fr
+                    };
+                    const instance = new ResolvedClass(hostElement, realCtx, currentPlaceholder);
+                    // Validate shape if configured
+                    if (optIn.validateShape) {
+                        if (!optIn.validateShape(instance)) {
+                            const error = new Error(`assignFeatures: spawned instance for "${key}" failed shape validation`);
+                            error.placeholder = currentPlaceholder;
+                            currentStorage.set(key, { [FEATURE_ERROR]: error });
+                            return;
+                        }
+                    }
+                    // Replace placeholder with real instance
+                    currentStorage.set(key, instance);
+                }).catch((err) => {
+                    // Store error state — getter will throw on next access
+                    const currentStorage = featureStorage.get(hostElement);
+                    const currentPlaceholder = currentStorage?.get(key);
+                    const error = new Error(`assignFeatures: async spawn for "${key}" failed: ${err.message}`);
+                    error.placeholder = currentPlaceholder;
+                    error.cause = err;
+                    currentStorage?.set(key, { [FEATURE_ERROR]: error });
+                });
+                return placeholder;
             }
-            storage.set(key, instance);
-            return instance;
+            else {
+                // Synchronous path: SpawnClass is a constructor
+                const instance = new SpawnClass(this, ctx, initVals);
+                // Validate shape if configured
+                if (optIn.validateShape) {
+                    if (!optIn.validateShape(instance)) {
+                        throw new Error(`assignFeatures: spawned instance for "${key}" failed shape validation`);
+                    }
+                }
+                storage.set(key, instance);
+                return instance;
+            }
         },
         enumerable: true,
         configurable: false
