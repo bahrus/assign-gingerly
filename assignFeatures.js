@@ -170,11 +170,13 @@ function installFeatureGetter(ctr, key, featuresRegistry) {
                     `Provide spawn in assignFeatures() or fallbackSpawn in supportedFeatures.`);
             }
             // Build the spawn context
+            const shared = optIn.getSharedContext?.(this);
             const ctx = {
                 key,
                 optIn,
                 injection,
-                featuresRegistry: fr
+                featuresRegistry: fr,
+                shared
             };
             // Parse attributes if withAttrs is configured
             let attrInitVals = undefined;
@@ -245,7 +247,8 @@ function installFeatureGetter(ctr, key, featuresRegistry) {
                         key,
                         optIn,
                         injection,
-                        featuresRegistry: fr
+                        featuresRegistry: fr,
+                        shared: optIn.getSharedContext?.(hostElement)
                     };
                     const instance = new ResolvedClass(hostElement, realCtx, asyncInitVals);
                     // Validate shape if configured

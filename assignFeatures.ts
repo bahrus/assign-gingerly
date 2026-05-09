@@ -19,10 +19,12 @@ export interface FeatureSpawnContext {
     key: string;
     /** The SupportedFeatureConfig from static supportedFeatures */
     optIn: SupportedFeatureConfig;
-    /** The FeatureInjection config from assignFeatures */
+    /** The FeatureConfig from assignFeatures */
     injection: FeatureConfig;
     /** The features registry reference */
     featuresRegistry: FeaturesRegistry;
+    /** Shared context from the host element (via getSharedContext callback) */
+    shared?: any;
 }
 
 export interface SupportedFeatureConfig {
@@ -65,6 +67,31 @@ export interface SupportedFeatureConfig {
         /** Method name for awaiting feature readiness. Defaults to 'whenFeatureReady'. */
         whenFeatureReady?: string;
     };
+
+    /**
+     * Optional callback to provide shared context (e.g., ElementInternals, private state)
+     * to the feature at construction time.
+     * 
+     * Defined in the class body, this callback has access to #private fields
+     * because static methods/properties of a class can access private fields
+     * of instances of that class.
+     * 
+     * The returned object is passed to the feature constructor as `ctx.shared`.
+     * 
+     * @param instance - The host element instance
+     * @returns An object containing shared data for the feature
+     * 
+     * @example
+     * static supportedFeatures = {
+     *     ariaManager: {
+     *         fallbackSpawn: AriaManagerImpl,
+     *         getSharedContext(instance) {
+     *             return { internals: instance.#internals };
+     *         }
+     *     }
+     * }
+     */
+    getSharedContext?: (instance: any) => any;
 }
 
 export interface FeatureConfig {
@@ -289,11 +316,13 @@ function installFeatureGetter(
             }
 
             // Build the spawn context
+            const shared = optIn.getSharedContext?.(this);
             const ctx: FeatureSpawnContext = {
                 key,
                 optIn,
                 injection,
-                featuresRegistry: fr
+                featuresRegistry: fr,
+                shared
             };
 
             // Parse attributes if withAttrs is configured
@@ -379,7 +408,8 @@ function installFeatureGetter(
                         key,
                         optIn,
                         injection,
-                        featuresRegistry: fr
+                        featuresRegistry: fr,
+                        shared: optIn.getSharedContext?.(hostElement)
                     };
                     const instance = new ResolvedClass(hostElement, realCtx, asyncInitVals);
 
