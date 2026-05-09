@@ -131,3 +131,154 @@ This could be an object form (in addition to the array shorthand). But I'd defer
 | Async compat | Works naturally (reads through feature getter each time) |
 | Validation | Throw if forwarded prop already exists on prototype |
 | Renaming | Defer (array-only for now) |
+
+
+---
+
+## Human Response I
+
+I was thinking that since features can be defined on any class, not just a custom element class, this package starts out by providing a barebones "PropertyBag" feature class, like what was illustrated with the  "Eehaviors" or "RegistrationFeatures" in the WHATWG proposal.  It would:
+
+1.  Have a property "customElementRegistry", and set it from the passed in element and/or parent PropertyBag feature class.
+2.  Maybe provide some property forwarding API, so that the property forwarding isn't baked into the underlying feature api, but rather is a specific implementation of this PropertyBag feature.
+
+Can you see if that idea has any legs?  It would kind of provide a reference implementation of a really basic feature, perhaps?
+
+
+---
+
+## Kiro's Response I
+
+This idea has legs. Let me think through it:
+
+### The concept: `PropertyBag` as a built-in feature class
+
+A `PropertyBag` is a feature whose job is to be a namespace container for other features (or just properties). It:
+
+1. Carries `customElementRegistry` from the host element (so nested features can resolve their own registries).
+2. Optionally provides property forwarding from the host element down to its own properties.
+
+This is essentially the `Behaviors` or `RegistrationFeatures` class from the WHATWG proposal — but provided by the library as a reusable building block.
+
+### What it would look like
+
+```javascript
+import { PropertyBag } from 'assign-gingerly/assignFeatures.js';
+
+class ClubMember extends HTMLElement {
+    static supportedFeatures = {
+        behaviors: {
+            fallbackSpawn: PropertyBag,
+            // PropertyBag-specific config:
+            forwardProps: {
+                'command': 'commandBehavior.command',
+                'commandForElement': 'commandBehavior.commandForElement'
+            }
+        }
+    }
+}
+
+// Then features can be assigned to the PropertyBag:
+customElements.assignFeatures(PropertyBag, {
+    commandBehavior: { spawn: CommandFeatureImpl },
+    ariaBehavior: { spawn: AriaFeatureImpl }
+});
+```
+
+Usage:
+```javascript
+const el = document.createElement('club-member');
+el.behaviors.commandBehavior.command = 'toggle';
+// Or via forwarding:
+el.command = 'toggle'; // forwards to el.behaviors.commandBehavior.command
+```
+
+### Why this is better than baking forwarding into the core
+
+1. **Separation of concerns** — the core `assignFeatures` stays focused on lazy instantiation and DI. Forwarding is a *feature of a feature*, not a feature of the framework.
+2. **Composability** — `PropertyBag` is itself a feature, so it gets all the benefits (lazy spawn, `getSharedContext`, `withAttrs`, etc.).
+3. **Nestability** — `PropertyBag` can contain other `PropertyBag` instances, enabling the hierarchical grouping from the WHATWG proposal.
+4. **Reference implementation** — shows developers how to build their own feature classes, and demonstrates that the system is powerful enough to build higher-level abstractions on top.
+
+### What `PropertyBag` would need
+
+```javascript
+class PropertyBag {
+    constructor(hostElement, ctx, initVals) {
+        // 1. Carry the registry reference
+        this.customElementRegistry = hostElement.customElementRegistry || customElements;
+        
+        // 2. Apply any initVals
+        if (initVals) Object.assign(this, initVals);
+    }
+
+    // PropertyBag itself declares supportedFeatures so nested features can be assigned to it
+    static supportedFeatures = {};  // dynamically populated? or open-ended?
+}
+```
+
+### The challenge: dynamic `supportedFeatures`
+
+The current system requires `static supportedFeatures` to be declared upfront. A generic `PropertyBag` doesn't know what features will be assigned to it. Options:
+
+**(A) Open-ended PropertyBag** — skip the `supportedFeatures` validation for `PropertyBag` (or have it accept any key). This weakens the opt-in safety but makes it flexible.
+
+**(B) Subclass per use case** — developers extend `PropertyBag` with their specific features:
+
+```javascript
+class ClubMemberBehaviors extends PropertyBag {
+    static supportedFeatures = {
+        commandBehavior: { fallbackSpawn: CommandFeatureImpl },
+        ariaBehavior: { fallbackSpawn: AriaFeatureImpl }
+    }
+}
+```
+
+This preserves type safety and the opt-in pattern. The developer still declares what's allowed.
+
+**(C) PropertyBag accepts a schema at construction** — the `customData` or a dedicated config field tells it what properties to accept.
+
+I'd lean toward **(B)** — it's the most natural fit with the existing system. `PropertyBag` is a base class you extend, not a magic container.
+
+### Where does forwarding live?
+
+If forwarding is a `PropertyBag` concern (not a core concern), it could be:
+
+- A static method on `PropertyBag` that installs forwarding getters on the host prototype.
+- Or a helper function: `installForwarding(HostClass, featureKey, propMappings)`.
+
+```javascript
+import { PropertyBag, installForwarding } from 'assign-gingerly/assignFeatures.js';
+
+class ClubMemberBehaviors extends PropertyBag {
+    static supportedFeatures = {
+        commandBehavior: { fallbackSpawn: CommandFeatureImpl }
+    }
+}
+
+class ClubMember extends HTMLElement {
+    static supportedFeatures = {
+        behaviors: { fallbackSpawn: ClubMemberBehaviors }
+    }
+}
+
+customElements.assignFeatures(ClubMember, { behaviors: { spawn: ClubMemberBehaviors } });
+customElements.assignFeatures(ClubMemberBehaviors, { commandBehavior: { spawn: CommandFeatureImpl } });
+
+// Install forwarding separately:
+installForwarding(ClubMember, {
+    'command': 'behaviors.commandBehavior.command',
+    'commandForElement': 'behaviors.commandBehavior.commandForElement'
+});
+```
+
+### My take
+
+This is a solid direction. It keeps the core lean and pushes forwarding into userland (or a provided utility). The `PropertyBag` base class is small, useful as a reference implementation, and demonstrates the nested features pattern without requiring the core to support `?.path?.notation` keys natively.
+
+I'd suggest:
+1. Implement `PropertyBag` as a simple exported class (carries `customElementRegistry`, applies `initVals`).
+2. Implement `installForwarding` as a standalone utility that installs getter/setter pairs using dot-path resolution.
+3. Defer until the core features are fully stabilized and tested — this is additive.
+
+Want me to move this to a requirements doc and implement, or keep it as a thought experiment for now?
