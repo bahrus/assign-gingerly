@@ -9,6 +9,8 @@
  * properties installed on the class prototype.
  */
 
+import { parseWithAttrs } from './parseWithAttrs.js';
+
 /**
  * Context passed to feature spawn constructors
  */
@@ -18,7 +20,7 @@ export interface FeatureSpawnContext {
     /** The SupportedFeatureConfig from static supportedFeatures */
     optIn: SupportedFeatureConfig;
     /** The FeatureInjection config from assignFeatures */
-    injection: FeatureInjection;
+    injection: FeatureConfig;
     /** The features registry reference */
     featuresRegistry: FeaturesRegistry;
 }
@@ -65,7 +67,7 @@ export interface SupportedFeatureConfig {
     };
 }
 
-export interface FeatureInjection {
+export interface FeatureConfig {
     /**
      * The class to instantiate for this feature, or an async function that
      * resolves to such a class (for lazy-loading).
@@ -80,10 +82,24 @@ export interface FeatureInjection {
     spawn?: 
         | { new(hostElement: any, ctx: FeatureSpawnContext, initVals?: any): any }
         | (() => Promise<{ new(hostElement: any, ctx: FeatureSpawnContext, initVals?: any): any }>);
+
+    /**
+     * Attribute patterns for parsing element attributes into initVals.
+     * Attributes are the "base layer" — programmatic values override them.
+     * Always unprefixed for features (no enh- prefix).
+     */
+    withAttrs?: any; // AttrPatterns<any> — imported type from types
+
+    /**
+     * Reserved field for custom configuration data.
+     * Not interpreted by the library — available to the feature class
+     * via ctx.injection.customData in the constructor.
+     */
+    customData?: any;
 }
 
 export type SupportedFeaturesMap = Record<string, SupportedFeatureConfig>;
-export type FeatureInjectionsMap = Record<string, FeatureInjection>;
+export type FeatureConfigsMap = Record<string, FeatureConfig>;
 
 /**
  * WeakMap storing per-instance feature caches.
@@ -96,17 +112,17 @@ const featureStorage = new WeakMap<object, Map<string, any>>();
  * The features registry: maps a constructor to its accumulated feature injections.
  */
 export class FeaturesRegistry {
-    #registry = new Map<Function, Map<string, FeatureInjection>>();
+    #registry = new Map<Function, Map<string, FeatureConfig>>();
 
     has(ctr: Function): boolean {
         return this.#registry.has(ctr);
     }
 
-    get(ctr: Function): Map<string, FeatureInjection> | undefined {
+    get(ctr: Function): Map<string, FeatureConfig> | undefined {
         return this.#registry.get(ctr);
     }
 
-    set(ctr: Function, key: string, injection: FeatureInjection): void {
+    set(ctr: Function, key: string, injection: FeatureConfig): void {
         let features = this.#registry.get(ctr);
         if (!features) {
             features = new Map();
@@ -280,6 +296,28 @@ function installFeatureGetter(
                 featuresRegistry: fr
             };
 
+            // Parse attributes if withAttrs is configured
+            let attrInitVals: any = undefined;
+            if (injection.withAttrs && this instanceof Element) {
+                try {
+                    attrInitVals = parseWithAttrs(
+                        this as Element,
+                        injection.withAttrs,
+                        true // always unprefixed for features
+                    );
+                } catch (e) {
+                    console.error('Error parsing feature attributes:', e);
+                    throw e;
+                }
+            }
+
+            // Merge: attributes are base layer, programmatic initVals override
+            if (attrInitVals) {
+                initVals = initVals
+                    ? { ...attrInitVals, ...initVals }
+                    : attrInitVals;
+            }
+
             if (isAsyncSpawn(SpawnClass)) {
                 // Async path: SpawnClass is a function that returns Promise<Constructor>
                 const placeholder = initVals && typeof initVals === 'object' ? initVals : {};
@@ -316,14 +354,34 @@ function installFeatureGetter(
                         return;
                     }
 
-                    // Instantiate the real class with the placeholder as initVals
+                    // Parse attributes at resolution time (element should be in DOM by now)
+                    let asyncAttrInitVals: any = undefined;
+                    if (injection.withAttrs && hostElement instanceof Element) {
+                        try {
+                            asyncAttrInitVals = parseWithAttrs(
+                                hostElement as Element,
+                                injection.withAttrs,
+                                true // always unprefixed for features
+                            );
+                        } catch (e) {
+                            // Non-fatal: log and continue with placeholder as initVals
+                            console.error('Error parsing feature attributes during async resolution:', e);
+                        }
+                    }
+
+                    // Merge: attributes are base, placeholder (programmatic) overrides
+                    const asyncInitVals = asyncAttrInitVals
+                        ? { ...asyncAttrInitVals, ...currentPlaceholder }
+                        : currentPlaceholder;
+
+                    // Instantiate the real class with merged initVals
                     const realCtx: FeatureSpawnContext = {
                         key,
                         optIn,
                         injection,
                         featuresRegistry: fr
                     };
-                    const instance = new ResolvedClass(hostElement, realCtx, currentPlaceholder);
+                    const instance = new ResolvedClass(hostElement, realCtx, asyncInitVals);
 
                     // Validate shape if configured
                     if (optIn.validateShape) {
@@ -398,7 +456,7 @@ function installFeatureGetter(
  */
 export function assignFeatures(
     ctr: Function,
-    features: FeatureInjectionsMap,
+    features: FeatureConfigsMap,
     featuresRegistry: FeaturesRegistry
 ): void {
     // Validate that the constructor has static supportedFeatures
@@ -499,7 +557,7 @@ export function captureFeatureInitVals(instance: any): void {
 declare global {
     interface CustomElementRegistry {
         featuresRegistry: FeaturesRegistry;
-        assignFeatures(ctr: Function, features: FeatureInjectionsMap): void;
+        assignFeatures(ctr: Function, features: FeatureConfigsMap): void;
     }
 }
 
@@ -520,7 +578,7 @@ if (typeof CustomElementRegistry !== 'undefined') {
     });
 
     Object.defineProperty(CustomElementRegistry.prototype, 'assignFeatures', {
-        value: function (ctr: Function, features: FeatureInjectionsMap): void {
+        value: function (ctr: Function, features: FeatureConfigsMap): void {
             assignFeatures(ctr, features, this.featuresRegistry);
         },
         writable: true,

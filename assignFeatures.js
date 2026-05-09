@@ -8,6 +8,7 @@
  * Features are lazily instantiated on first property access via getter-only
  * properties installed on the class prototype.
  */
+import { parseWithAttrs } from './parseWithAttrs.js';
 /**
  * WeakMap storing per-instance feature caches.
  * Outer key: the instance (element or other object).
@@ -175,6 +176,24 @@ function installFeatureGetter(ctr, key, featuresRegistry) {
                 injection,
                 featuresRegistry: fr
             };
+            // Parse attributes if withAttrs is configured
+            let attrInitVals = undefined;
+            if (injection.withAttrs && this instanceof Element) {
+                try {
+                    attrInitVals = parseWithAttrs(this, injection.withAttrs, true // always unprefixed for features
+                    );
+                }
+                catch (e) {
+                    console.error('Error parsing feature attributes:', e);
+                    throw e;
+                }
+            }
+            // Merge: attributes are base layer, programmatic initVals override
+            if (attrInitVals) {
+                initVals = initVals
+                    ? { ...attrInitVals, ...initVals }
+                    : attrInitVals;
+            }
             if (isAsyncSpawn(SpawnClass)) {
                 // Async path: SpawnClass is a function that returns Promise<Constructor>
                 const placeholder = initVals && typeof initVals === 'object' ? initVals : {};
@@ -205,14 +224,30 @@ function installFeatureGetter(ctr, key, featuresRegistry) {
                     if (!currentPlaceholder || (typeof currentPlaceholder === 'object' && FEATURE_ERROR in currentPlaceholder)) {
                         return;
                     }
-                    // Instantiate the real class with the placeholder as initVals
+                    // Parse attributes at resolution time (element should be in DOM by now)
+                    let asyncAttrInitVals = undefined;
+                    if (injection.withAttrs && hostElement instanceof Element) {
+                        try {
+                            asyncAttrInitVals = parseWithAttrs(hostElement, injection.withAttrs, true // always unprefixed for features
+                            );
+                        }
+                        catch (e) {
+                            // Non-fatal: log and continue with placeholder as initVals
+                            console.error('Error parsing feature attributes during async resolution:', e);
+                        }
+                    }
+                    // Merge: attributes are base, placeholder (programmatic) overrides
+                    const asyncInitVals = asyncAttrInitVals
+                        ? { ...asyncAttrInitVals, ...currentPlaceholder }
+                        : currentPlaceholder;
+                    // Instantiate the real class with merged initVals
                     const realCtx = {
                         key,
                         optIn,
                         injection,
                         featuresRegistry: fr
                     };
-                    const instance = new ResolvedClass(hostElement, realCtx, currentPlaceholder);
+                    const instance = new ResolvedClass(hostElement, realCtx, asyncInitVals);
                     // Validate shape if configured
                     if (optIn.validateShape) {
                         if (!optIn.validateShape(instance)) {

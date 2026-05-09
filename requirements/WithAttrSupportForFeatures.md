@@ -125,3 +125,30 @@ Good catch.  Yes, allow unprefixed, for sure, never an option to enable it.  We 
 Sounds good.
 
 
+
+
+---
+
+## Kiro's Response I
+
+### On requiring a unique non-trivial base per feature
+
+I think this is a reasonable constraint but I'd leave it for a future requirement. Here's my reasoning:
+
+**Why it makes sense:** Each feature's `withAttrs.base` acts as a namespace for its attributes. If two features share the same base (or use an empty base), their attributes would collide. Enforcing uniqueness prevents that.
+
+**Why defer it:** 
+- The `AttrPatterns` type already requires a `base` field — it's not optional. So developers must provide *something*.
+- Validating uniqueness across features at `assignFeatures` time is straightforward to add later (just check that no two features in `supportedFeatures` share the same `withAttrs.base`).
+- For now, if a developer shoots themselves in the foot with duplicate bases, the behavior is "last write wins" on the parsed attributes — not catastrophic, just confusing.
+- Adding validation later is non-breaking (it only makes previously-silent mistakes into errors).
+
+**My recommendation:** Implement without the uniqueness check now. Add a validation pass in a future requirement that throws if duplicate bases are detected across features on the same class. Document the expectation that bases should be unique.
+
+### Proceeding with implementation
+
+I'll now:
+1. Rename `FeatureInjection` → `FeatureConfig`
+2. Add `withAttrs` and `customData`
+3. Wire up attribute parsing in both sync and async paths
+4. Always pass `allowUnprefixed: true` (never prefixed for features)
