@@ -60,6 +60,10 @@
       "default": "./resolveValues.js",
       "types": "./resolveValues.ts"
     },
+    "./installForwarding.js": {
+      "default": "./installForwarding.js",
+      "types": "./installForwarding.ts"
+    },
     "./assignFrom.js": {
       "default": "./assignFrom.js",
       "types": "./assignFrom.ts"

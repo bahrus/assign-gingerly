@@ -27,6 +27,24 @@ function applyAliases(path: string, aliasMap: Map<string, string>): string {
 }
 
 /**
+ * Path cache for parsed path strings.
+ * Avoids re-splitting the same path on repeated calls.
+ */
+const pathCache = new Map<string, string[]>();
+
+/**
+ * Parse a `?.`-delimited path string into segments, with caching.
+ */
+function parseCachedPath(path: string): string[] {
+    let parts = pathCache.get(path);
+    if (!parts) {
+        parts = path.split('?.').filter(p => p.length > 0);
+        pathCache.set(path, parts);
+    }
+    return parts;
+}
+
+/**
  * Navigate a path against a source object, optionally calling methods.
  * Returns the resolved value at the end of the path.
  */
@@ -128,8 +146,8 @@ export function resolveValues(
       // Apply aliases to the RHS path
       const aliased = applyAliases(value, aliasMap);
       
-      // Parse path: split on '?.' delimiter, filter empties
-      const parts = aliased.split('?.').filter(p => p.length > 0);
+      // Parse path with caching
+      const parts = parseCachedPath(aliased);
       
       // Navigate with method support
       result[key] = parts.length === 0 ? source : navigatePath(source, parts, withMethods);
@@ -138,4 +156,55 @@ export function resolveValues(
     }
   }
   return result;
+}
+
+/**
+ * Resolve a single `?.`-delimited path string against a source object.
+ * 
+ * This is a lighter-weight alternative to `resolveValues` when you only need
+ * to resolve one path and don't want the overhead of creating wrapper objects.
+ * 
+ * @param path - A `?.`-delimited path string (e.g., '?.behaviors?.command')
+ * @param source - Object to resolve the path against
+ * @param options - Optional withMethods and aka for method calls and aliases
+ * @returns The resolved value, or undefined if any segment is nullish
+ * 
+ * @example
+ * const value = resolveValue('?.behaviors?.commandBehavior?.command', el);
+ * 
+ * @example
+ * const value = resolveValue('?.q?.myEl?.textContent', el, {
+ *   withMethods: ['querySelector'],
+ *   aka: { 'q': 'querySelector' }
+ * });
+ */
+export function resolveValue(
+  path: string,
+  source: any,
+  options?: ResolveValuesOptions
+): any {
+  if (!path.startsWith('?.')) return path;
+
+  // Build alias map
+  let aliased = path;
+  if (options?.aka) {
+    const aliasMap = new Map<string, string>();
+    for (const [alias, target] of Object.entries(options.aka)) {
+      aliasMap.set(alias, target);
+    }
+    aliased = applyAliases(path, aliasMap);
+  }
+
+  // Parse path with caching
+  const parts = parseCachedPath(aliased);
+  if (parts.length === 0) return source;
+
+  // Build methods set
+  const withMethods = options?.withMethods
+    ? options.withMethods instanceof Set
+      ? options.withMethods
+      : new Set(options.withMethods)
+    : undefined;
+
+  return navigatePath(source, parts, withMethods);
 }

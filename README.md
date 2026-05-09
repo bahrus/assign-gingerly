@@ -3323,6 +3323,99 @@ assignFrom(target, {
 
 For full documentation, see [docs/assignFrom.md](docs/assignFrom.md).
 
+## Property Forwarding with `installForwarding`
+
+`installForwarding` installs getter/setter pairs on a class prototype that delegate to nested paths on the instance. This is useful for exposing deeply nested properties at the top level of an object — particularly for custom elements that delegate behavior to compositional feature classes.
+
+```JavaScript
+import { installForwarding } from 'assign-gingerly/installForwarding.js';
+```
+
+### Basic usage
+
+```JavaScript
+class ClubMember extends HTMLElement {
+    static propLinks = {
+        'command': '?.behaviors?.commandBehavior?.command',
+        'commandForElement': '?.behaviors?.commandBehavior?.commandForElement'
+    };
+}
+
+installForwarding(ClubMember);
+
+const el = document.createElement('club-member');
+el.command = 'toggle';
+// Equivalent to: assignGingerly(el, { '?.behaviors?.commandBehavior?.command': 'toggle' })
+
+console.log(el.command);
+// Equivalent to: resolveValue('?.behaviors?.commandBehavior?.command', el)
+```
+
+### How it works
+
+1. Reads `static propLinks` from the constructor — a map of top-level property names to `?.`-delimited path strings.
+2. For each entry, installs a getter/setter pair on the prototype:
+   - **Getter**: uses `resolveValue` to walk the path with optional chaining semantics. Returns `undefined` if any segment is nullish.
+   - **Setter**: uses `assignGingerly` to assign the value at the path, creating intermediate objects as needed.
+3. Validates that forwarded property names don't already exist on the prototype (throws if they do).
+
+### With methods and aliases
+
+Because the getter uses `resolveValue` and the setter uses `assignGingerly`, you get full access to `withMethods` and `aka` via the options parameter:
+
+```JavaScript
+class MyComponent extends HTMLElement {
+    static propLinks = {
+        'username': '?.q?.#user-input?.value'
+    };
+}
+
+installForwarding(MyComponent, {
+    withMethods: ['querySelector'],
+    aka: { 'q': 'querySelector' }
+});
+
+// el.username now resolves:
+// el.querySelector('#user-input').value
+```
+
+### Use with Custom Element Features
+
+A common pattern is forwarding top-level properties to feature instances:
+
+```JavaScript
+class CustomButton extends HTMLElement {
+    static supportedFeatures = {
+        commandBehavior: { fallbackSpawn: CommandFeatureImpl }
+    };
+    static propLinks = {
+        'command': '?.commandBehavior?.command',
+        'commandForElement': '?.commandBehavior?.commandForElement'
+    };
+}
+
+customElements.assignFeatures(CustomButton, {
+    commandBehavior: { spawn: CommandFeatureImpl }
+});
+installForwarding(CustomButton);
+
+// Now el.command delegates to el.commandBehavior.command
+// The feature getter triggers lazy instantiation automatically
+```
+
+### Error conditions
+
+| Condition | Error |
+|-----------|-------|
+| Property already exists on prototype | `"already exists on Constructor.prototype"` |
+| Path doesn't start with `?.` | `"path must start with '?.'"` |
+
+### Performance
+
+- Paths are cached after first parse — repeated getter/setter calls don't re-split strings.
+- The getter uses `resolveValue` (a lightweight single-path resolver with caching).
+- The setter uses `assignGingerly` which also benefits from path caching.
+
 ## Itemscope Managers (Chrome 146+)
 
 Itemscope Managers provide a way to manage DOM fragments and their associated data/view models for elements with the `itemscope` attribute. This feature enables frameworks and libraries to manage light children of web components, DOM fragments from looping constructs, and scenarios where custom element wrapping is not feasible.

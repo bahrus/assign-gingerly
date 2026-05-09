@@ -203,12 +203,21 @@ function parseDeleteCommand(key) {
  * Helper function to parse a path string with ?. notation
  * Always splits on '?.' delimiter, preserving dots that are part of values
  * (e.g., CSS class selectors like '.username')
+/**
+ * Path cache for parsed path strings in assignGingerly.
+ * Avoids re-splitting the same path on repeated calls.
+ */
+const agPathCache = new Map();
+/**
  * Paths must use ?. notation — plain dot notation is not supported.
  */
 function parsePath(path) {
-    return path
-        .split('?.')
-        .filter(part => part.length > 0);
+    let parts = agPathCache.get(path);
+    if (!parts) {
+        parts = path.split('?.').filter(part => part.length > 0);
+        agPathCache.set(path, parts);
+    }
+    return parts;
 }
 /**
  * Helper function to check if a path starts with ?. notation

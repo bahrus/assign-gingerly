@@ -324,3 +324,31 @@ I would like to overrule you and insist that the getter use resolveValues, becau
 It means we should do this:
 
 **(B) Add a path cache to `resolveValues` and `assignGingerly` (broader benefit):**
+
+--
+
+## Human response III
+
+I'm so sorry, but while you were implementing this, I was thinking about it, and I realized I wasn't thinking things through.  In order to leverage the full power of assignGingerly and resolveValue without any impedence mismatch, I need to impose a higher burden on the developer to use ?. paths:
+
+
+```JavaScript
+class ClubMember{
+    static propLinks = {
+        'command': '?.behaviors?.commandBehavior?.command',
+        'commandForElement': '?.behaviors?.commandBehavior.commandForElement'
+    };
+}
+installForwarding(ClubMember, /* optional */ assignGingerlyOptions);
+```
+
+This way the developer can insert methods, refer to class query selectors, using common notation.
+
+
+---
+
+## Kiro's Response III
+
+No changes needed — the implementation I already wrote matches your revised requirement exactly. The `propLinks` values are `?.`-delimited paths, the getter uses `resolveValue` (with path caching), and the setter passes the path directly to `assignGingerly`. This gives full access to `withMethods`, `aka`, and all other assignGingerly/resolveValue capabilities through the optional `options` parameter.
+
+Already implemented and compiling cleanly. Tests pass.
