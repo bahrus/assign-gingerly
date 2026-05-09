@@ -334,13 +334,13 @@ export function assignFeatures(ctr, features, featuresRegistry) {
         featuresRegistry.set(ctr, key, features[key]);
         // 5. Install the lazy getter on the prototype
         installFeatureGetter(ctr, key, featuresRegistry);
-        // 6. Install whenFeatureReady method if lifecycleKeys is configured
-        const optIn = supportedFeatures[key];
-        if (optIn.lifecycleKeys) {
-            const methodName = resolveWhenFeatureReadyName(optIn.lifecycleKeys);
-            if (methodName) {
-                installWhenFeatureReadyMethod(ctr, methodName);
-            }
+    }
+    // 6. Install whenFeatureReady method if featuresConfig.lifecycleKeys is configured
+    const featuresConfig = ctr.featuresConfig;
+    if (featuresConfig?.lifecycleKeys) {
+        const methodName = resolveWhenFeatureReadyName(featuresConfig.lifecycleKeys);
+        if (methodName) {
+            installWhenFeatureReadyMethod(ctr, methodName);
         }
     }
 }

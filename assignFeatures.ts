@@ -42,33 +42,6 @@ export interface SupportedFeatureConfig {
     validateShape?: (spawnedInstance: any) => boolean;
 
     /**
-     * Optional lifecycle method configuration.
-     * 
-     * If set to `true`, installs a method named 'whenFeatureReady' on the prototype.
-     * If set to an object, allows customizing the method name.
-     * 
-     * The installed method accepts a feature key and returns a Promise that resolves
-     * with the feature instance once it's ready (useful for async spawners).
-     * For synchronous spawners, the Promise resolves immediately.
-     * 
-     * Suggested default name: 'whenFeatureReady'
-     * 
-     * @example
-     * // Use default name
-     * static supportedFeatures = { photoTaker: { lifecycleKeys: true } }
-     * // await el.whenFeatureReady('photoTaker')
-     * 
-     * @example
-     * // Custom name
-     * static supportedFeatures = { photoTaker: { lifecycleKeys: { whenFeatureReady: 'awaitFeature' } } }
-     * // await el.awaitFeature('photoTaker')
-     */
-    lifecycleKeys?: true | {
-        /** Method name for awaiting feature readiness. Defaults to 'whenFeatureReady'. */
-        whenFeatureReady?: string;
-    };
-
-    /**
      * Optional callback to provide shared context (e.g., ElementInternals, private state)
      * to the feature at construction time.
      * 
@@ -92,6 +65,43 @@ export interface SupportedFeatureConfig {
      * }
      */
     getSharedContext?: (instance: any) => any;
+}
+
+/**
+ * Class-level configuration for the features system.
+ * Declared as `static featuresConfig` on the class.
+ * 
+ * @example
+ * class ClubMember extends HTMLElement {
+ *     static supportedFeatures = { photoTaker: { fallbackSpawn: PhotoTakerImpl } }
+ *     static featuresConfig = { lifecycleKeys: true }
+ * }
+ */
+export interface FeaturesClassConfig {
+    /**
+     * Lifecycle method configuration.
+     * 
+     * If set to `true`, installs a method named 'whenFeatureReady' on the prototype.
+     * If set to an object, allows customizing the method name.
+     * 
+     * The installed method accepts a feature key and returns a Promise that resolves
+     * with the feature instance once it's ready (useful for async spawners).
+     * For synchronous spawners, the Promise resolves immediately.
+     * 
+     * Suggested default name: 'whenFeatureReady'
+     * 
+     * @example
+     * static featuresConfig = { lifecycleKeys: true }
+     * // await el.whenFeatureReady('photoTaker')
+     * 
+     * @example
+     * static featuresConfig = { lifecycleKeys: { whenFeatureReady: 'awaitFeature' } }
+     * // await el.awaitFeature('photoTaker')
+     */
+    lifecycleKeys?: true | {
+        /** Method name for awaiting feature readiness. Defaults to 'whenFeatureReady'. */
+        whenFeatureReady?: string;
+    };
 }
 
 export interface FeatureConfig {
@@ -526,14 +536,14 @@ export function assignFeatures(
 
         // 5. Install the lazy getter on the prototype
         installFeatureGetter(ctr, key, featuresRegistry);
+    }
 
-        // 6. Install whenFeatureReady method if lifecycleKeys is configured
-        const optIn = supportedFeatures[key];
-        if (optIn.lifecycleKeys) {
-            const methodName = resolveWhenFeatureReadyName(optIn.lifecycleKeys);
-            if (methodName) {
-                installWhenFeatureReadyMethod(ctr, methodName);
-            }
+    // 6. Install whenFeatureReady method if featuresConfig.lifecycleKeys is configured
+    const featuresConfig: FeaturesClassConfig | undefined = (ctr as any).featuresConfig;
+    if (featuresConfig?.lifecycleKeys) {
+        const methodName = resolveWhenFeatureReadyName(featuresConfig.lifecycleKeys);
+        if (methodName) {
+            installWhenFeatureReadyMethod(ctr, methodName);
         }
     }
 }

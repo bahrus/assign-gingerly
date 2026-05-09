@@ -360,7 +360,9 @@
             class Impl { constructor(host) {} }
             class TestEl extends HTMLElement {
                 static supportedFeatures = {
-                    feat: { fallbackSpawn: Impl, lifecycleKeys: true }
+                    feat: { fallbackSpawn: Impl }
+                }
+                static featuresConfig = { lifecycleKeys: true
                 }
             }
             customElements.assignFeatures(TestEl, { feat: { spawn: Impl } });
@@ -373,8 +375,9 @@
             class Impl { constructor(host) {} }
             class TestEl extends HTMLElement {
                 static supportedFeatures = {
-                    feat: { fallbackSpawn: Impl, lifecycleKeys: { whenFeatureReady: 'awaitFeature' } }
+                    feat: { fallbackSpawn: Impl }
                 }
+                static featuresConfig = { lifecycleKeys: { whenFeatureReady: 'awaitFeature' } }
             }
             customElements.assignFeatures(TestEl, { feat: { spawn: Impl } });
             customElements.define('test-adv-lifecycle-custom', TestEl);
@@ -388,7 +391,9 @@
             }
             class TestEl extends HTMLElement {
                 static supportedFeatures = {
-                    feat: { fallbackSpawn: Impl, lifecycleKeys: true }
+                    feat: { fallbackSpawn: Impl }
+                }
+                static featuresConfig = { lifecycleKeys: true
                 }
             }
             customElements.assignFeatures(TestEl, { feat: { spawn: Impl } });
@@ -407,8 +412,9 @@
             }
             class TestEl extends HTMLElement {
                 static supportedFeatures = {
-                    feat: { fallbackSpawn: AsyncImpl, lifecycleKeys: true }
+                    feat: { fallbackSpawn: AsyncImpl }
                 }
+                static featuresConfig = { lifecycleKeys: true }
             }
             customElements.assignFeatures(TestEl, {
                 feat: { spawn: () => new Promise(resolve => setTimeout(() => resolve(AsyncImpl), 50)) }
@@ -424,8 +430,9 @@
         await test('whenFeatureReady: rejects when async spawn fails', async () => {
             class TestEl extends HTMLElement {
                 static supportedFeatures = {
-                    feat: { fallbackSpawn: class {}, lifecycleKeys: true }
+                    feat: { fallbackSpawn: class {} }
                 }
+                static featuresConfig = { lifecycleKeys: true }
             }
             customElements.assignFeatures(TestEl, {
                 feat: { spawn: () => Promise.reject(new Error('load failed')) }
@@ -526,8 +533,9 @@
             }
             class TestEl extends HTMLElement {
                 static supportedFeatures = {
-                    feat: { fallbackSpawn: AsyncFeature, lifecycleKeys: true }
+                    feat: { fallbackSpawn: AsyncFeature }
                 }
+                static featuresConfig = { lifecycleKeys: true }
                 async whenFeatureReady(key) {
                     // Simulate — just return the feature after a tick
                     await new Promise(r => setTimeout(r, 10));
