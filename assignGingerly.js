@@ -496,6 +496,12 @@ export function assignGingerly(target, source, options) {
             ? options.withMethods
             : new Set(options.withMethods)
         : undefined;
+    // Convert withAsyncMethods array to Set for O(1) lookup
+    const withAsyncMethodsSet = options?.withAsyncMethods
+        ? options.withAsyncMethods instanceof Set
+            ? options.withAsyncMethods
+            : new Set(options.withAsyncMethods)
+        : undefined;
     // Convert aka object to Map for O(1) lookup and validate aliases
     const aliasMap = new Map();
     if (options?.aka) {
@@ -743,6 +749,52 @@ export function assignGingerly(target, source, options) {
                 continue;
             }
             // No @each in path - handle normally
+            // Check if we need to handle async methods (fire-and-forget)
+            if (withAsyncMethodsSet && pathParts.some(p => withAsyncMethodsSet.has(p))) {
+                // Fire-and-forget: dynamically import the async evaluator and run the chain
+                const capturedTarget = target;
+                const capturedPathParts = pathParts;
+                const capturedValue = value;
+                const capturedWithMethodsSet = withMethodsSet || new Set();
+                const capturedOptions = options;
+                (async () => {
+                    const { evaluatePathWithAsyncMethods } = await import('./evaluatePathWithAsyncMethods.js');
+                    const result = await evaluatePathWithAsyncMethods(capturedTarget, capturedPathParts, capturedValue, capturedWithMethodsSet, withAsyncMethodsSet);
+                    if (result.isMethod || result.isAsyncMethod) {
+                        // Last segment is a method — call it
+                        const method = result.target[result.lastKey];
+                        if (typeof method === 'function') {
+                            const returnVal = Array.isArray(capturedValue)
+                                ? method.apply(result.target, capturedValue)
+                                : method.call(result.target, capturedValue);
+                            // If it's an async method, await it (for side effects)
+                            if (result.isAsyncMethod)
+                                await returnVal;
+                        }
+                    }
+                    else {
+                        // Not a method — assign the value
+                        const lastKey = result.lastKey;
+                        const parent = result.target;
+                        if (typeof capturedValue === 'object' && capturedValue !== null && !Array.isArray(capturedValue)) {
+                            if (lastKey in parent && isReadonlyProperty(parent, lastKey)) {
+                                const currentValue = parent[lastKey];
+                                if (typeof currentValue !== 'object' || currentValue === null) {
+                                    throw new Error(`Cannot merge object into readonly primitive property '${String(lastKey)}'`);
+                                }
+                                assignGingerly(currentValue, capturedValue, capturedOptions);
+                            }
+                            else {
+                                parent[lastKey] = capturedValue;
+                            }
+                        }
+                        else {
+                            parent[lastKey] = capturedValue;
+                        }
+                    }
+                })();
+                continue;
+            }
             // Check if we need to handle methods
             if (withMethodsSet) {
                 const result = evaluatePathWithMethods(target, pathParts, value, withMethodsSet);

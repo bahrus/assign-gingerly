@@ -67,6 +67,10 @@
     "./assignFeatures.js": {
       "default": "./assignFeatures.js",
       "types": "./assignFeatures.ts"
+    },
+    "./evaluatePathWithAsyncMethods.js": {
+      "default": "./evaluatePathWithAsyncMethods.js",
+      "types": "./evaluatePathWithAsyncMethods.ts"
     }
   },
   "main": "index.js",
