@@ -203,3 +203,124 @@ I agree.
 >  Should the getter use a compiled path for performance?
 
 This is a great question.  Please check if resolveValues and assignGingerly cache the parsed string, and consider adding caching if it doesn't.
+
+
+---
+
+## Kiro's Response I
+
+### On using `resolveValues` for the getter
+
+Good revision. Using `resolveValues` in the getter is consistent with the library's existing path resolution — it handles `withMethods`, `aka`, and optional-chaining semantics. The getter becomes:
+
+```javascript
+get() {
+    const resolved = resolveValues({ value: '?.behaviors?.commandBehavior?.command' }, this, assignGingerlyOptions);
+    return resolved.value;
+}
+```
+
+This is clean and reuses existing infrastructure. The only overhead vs raw property access is the path parsing and object allocation (`{ value: ... }` pattern object + result object). For a getter that may be called frequently, this is worth considering — which leads to your caching question.
+
+### On path caching
+
+**Neither `resolveValues` nor `assignGingerly` currently cache parsed paths.** Both call `.split('?.')` on every invocation. For `assignGingerly` this is typically fine — you call it once to merge a batch of properties. But for a forwarded getter that's called on every property access, re-splitting the same string every time is wasteful.
+
+**Options for caching:**
+
+**(A) Cache at the `installForwarding` level (simplest, no library changes):**
+
+Pre-split the path at install time and use `navigatePath` directly (or a local equivalent):
+
+```javascript
+// At install time:
+const parts = path.split('?.').filter(p => p.length > 0);
+
+// In the getter:
+get() {
+    let current = this;
+    for (const seg of parts) {
+        current = current?.[seg];
+        if (current == null) return undefined;
+    }
+    return current;
+}
+```
+
+This avoids `resolveValues` overhead entirely for the getter. The setter still uses `assignGingerly` (which is called less frequently and benefits from its full feature set).
+
+**(B) Add a path cache to `resolveValues` and `assignGingerly` (broader benefit):**
+
+A module-level `Map<string, string[]>` that caches `path → split parts`:
+
+```javascript
+const pathCache = new Map();
+function parsePath(path) {
+    let parts = pathCache.get(path);
+    if (!parts) {
+        parts = path.split('?.').filter(p => p.length > 0);
+        pathCache.set(path, parts);
+    }
+    return parts;
+}
+```
+
+This benefits all callers, not just forwarding. The cache grows unboundedly but path strings are typically few and small (no memory concern in practice).
+
+**My recommendation:** Do both.
+
+1. For `installForwarding`: pre-split at install time for the getter (option A). This is the hot path and should be as fast as possible.
+2. For the setter: use `assignGingerly` as-is (it's called less frequently).
+3. Separately (can be a follow-up): add path caching to `parsePath` in `assignGingerly.ts` and to `resolveValues.ts` for general benefit. This is a small optimization that helps all path-based operations.
+
+### Revised implementation plan
+
+```javascript
+export function installForwarding(ctr, assignGingerlyOptions) {
+    const propLinks = ctr.propLinks;
+    if (!propLinks) return;
+
+    for (const [propName, path] of Object.entries(propLinks)) {
+        if (Object.getOwnPropertyDescriptor(ctr.prototype, propName)) {
+            throw new Error(
+                `installForwarding: "${propName}" already exists on ${ctr.name}.prototype`
+            );
+        }
+
+        // Pre-split for the getter (hot path)
+        const segments = path.split('.'); // dot-separated in propLinks
+        // Build the assignGingerly path for the setter
+        const agPath = '?.' + segments.join('?.');
+
+        Object.defineProperty(ctr.prototype, propName, {
+            get() {
+                let current = this;
+                for (const seg of segments) {
+                    current = current?.[seg];
+                    if (current == null) return undefined;
+                }
+                return current;
+            },
+            set(value) {
+                assignGingerly(this, { [agPath]: value }, assignGingerlyOptions);
+            },
+            enumerable: true,
+            configurable: true
+        });
+    }
+}
+```
+
+The getter is a tight loop with no allocations. The setter delegates to `assignGingerly` for its full path-creation and method-call capabilities.
+
+Shall I implement?
+
+---
+
+## Human response II
+
+I would like to overrule you and insist that the getter use resolveValues, because of the power it provides.  Maybe later (or now?) we can break down the resolveValues to a separatie function within that module "resolveValue", so we don't have to create an object, and then pull the value.
+
+It means we should do this:
+
+**(B) Add a path cache to `resolveValues` and `assignGingerly` (broader benefit):**
