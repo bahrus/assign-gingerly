@@ -33,7 +33,7 @@ On top of that, this polyfill package builds on the newly minted Custom Element 
 
 2.  [itemscopeRegistry for Itemscope Managers](#itemscoperegistry) to automatically associate a function prototype or class instance with the itemscope attribute of an HTMLElement.
 
-3.  [featuresRegistry for Custom Element Features](#custom-element-features-preliminary) to support dependency injection of composable feature classes or function prototypes onto custom element prototypes via lazy getters.
+3.  [featuresRegistry for Custom Element Features](#custom-element-features) to support dependency injection of composable feature classes or function prototypes onto custom element prototypes via lazy getters.
 
 So in our view this package helps fill the void left by not supporting the "is" attribute for built-in elements (but is not a complete solution, just a critical building block).  Mount-observer builds on top of the critical role that assign-gingerly plays.
 
@@ -3732,9 +3732,7 @@ ItemScope Managers follow these design principles:
 This design ensures backward compatibility while providing powerful new capabilities for managing DOM fragments.
 
 
-## Custom Element Features (Preliminary)
-
-> **⚠️ WIP — This API is preliminary and subject to change.** The core mechanism works today, but the constructor signature and advanced features (attribute mapping, async spawn, nested features) are planned for future phases.
+## Custom Element Features
 
 Custom Element Features provide dependency injection for custom elements (and other objects). A custom element author declares which feature "slots" their class supports, and consumers inject implementations into those slots. Features are lazily instantiated on first property access.
 
