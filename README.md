@@ -4227,6 +4227,9 @@ class ClubMember extends HTMLElement {
             fallbackSpawn: PhotoTakerImpl,
             lifecycleKeys: true  // installs 'whenFeatureReady' method
         }
+    };
+    static featuresConfig = {
+        lifecycleKeys: true
     }
 }
 
