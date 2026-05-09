@@ -4,7 +4,7 @@
 
 ## Human Ask
 
-So let's now provide support for the property bag feature.  The benefits of this feature probably falls mostly along the lines of "this is how to do nested features properly, let us help guide you to the right way", which isn't at all obvious.  The actual implementation seems  fairly minimal.  I think the documentation in README.md, showing how this integrates with the just implemented installForwarding and propLinks support
+So let's now provide support for the property bag feature.  The benefits of this feature probably falls mostly along the lines of "this is how to do nested features properly, let us help guide you to the right way", which isn't at all obvious.  The actual implementation seems  fairly minimal.  I think the documentation in README.md, showing how this integrates with the just implemented installForwarding and propLinks support would be very helpful, and it would carry a little more weight if we officially endorsed a base class to work with.
 
 So as discussed in thoughtExperiments/SupportForPropertyForwarding.md:
 
