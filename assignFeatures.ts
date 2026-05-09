@@ -580,6 +580,61 @@ export function captureFeatureInitVals(instance: any): void {
 }
 
 // =============================================================================
+// PropertyBag — base class for nested feature containers
+// =============================================================================
+
+/**
+ * PropertyBag is a base class for creating nested feature containers.
+ * 
+ * Subclass it to group related features under a single namespace property.
+ * PropertyBag carries the `customElementRegistry` reference from the host element
+ * so that nested features can resolve their registries correctly.
+ * 
+ * PropertyBag must be subclassed — direct instantiation throws an error.
+ * Subclasses must define `static supportedFeatures` to declare their feature slots.
+ * 
+ * @example
+ * class ClubMemberBehaviors extends PropertyBag {
+ *     static supportedFeatures = {
+ *         commandBehavior: { fallbackSpawn: CommandFeatureImpl },
+ *         ariaBehavior: { fallbackSpawn: AriaFeatureImpl }
+ *     }
+ * }
+ * 
+ * class ClubMember extends HTMLElement {
+ *     static supportedFeatures = {
+ *         behaviors: { fallbackSpawn: ClubMemberBehaviors }
+ *     }
+ * }
+ * 
+ * customElements.assignFeatures(ClubMember, { behaviors: { spawn: ClubMemberBehaviors } });
+ * customElements.assignFeatures(ClubMemberBehaviors, {
+ *     commandBehavior: { spawn: CommandFeatureImpl }
+ * });
+ */
+export class PropertyBag {
+    /** Registry reference carried from the host element */
+    customElementRegistry: any;
+
+    constructor(hostElement: any, ctx?: FeatureSpawnContext, initVals?: any) {
+        if (this.constructor === PropertyBag) {
+            throw new Error(
+                'PropertyBag must be subclassed. Define static supportedFeatures on your subclass.'
+            );
+        }
+
+        // Carry the registry reference from the host element
+        this.customElementRegistry = hostElement.customElementRegistry || 
+            (typeof customElements !== 'undefined' ? customElements : undefined);
+
+        // Apply any initVals
+        if (initVals && typeof initVals === 'object') {
+            Object.assign(this, initVals);
+        }
+    }
+}
+
+// =============================================================================
 // Self-installing: adds featuresRegistry and assignFeatures to CustomElementRegistry
 // This code runs as a side effect when this module is imported.
 // =============================================================================

@@ -4377,9 +4377,77 @@ assignGingerly(el, {
 
 **Note:** Interaction with `@each` and `@eachTime` is not yet supported for async methods.
 
+### Nested features with `PropertyBag`
+
+`PropertyBag` is a base class for creating nested feature containers. It groups related features under a single namespace property, enabling hierarchical composition:
+
+```JavaScript
+import { PropertyBag, assignFeatures } from 'assign-gingerly/assignFeatures.js';
+import { installForwarding } from 'assign-gingerly/installForwarding.js';
+
+// 1. Define a feature container by subclassing PropertyBag
+class ClubMemberBehaviors extends PropertyBag {
+    static supportedFeatures = {
+        commandBehavior: { fallbackSpawn: CommandFeatureImpl },
+        ariaBehavior: { fallbackSpawn: AriaFeatureImpl }
+    }
+}
+
+// 2. Define the custom element with the container as a feature
+class ClubMember extends HTMLElement {
+    static supportedFeatures = {
+        behaviors: { fallbackSpawn: ClubMemberBehaviors }
+    }
+    // Forward nested properties to the top level
+    static propLinks = {
+        'command': '?.behaviors?.commandBehavior?.command',
+        'commandForElement': '?.behaviors?.commandBehavior?.commandForElement'
+    }
+}
+
+// 3. Register features at both levels
+customElements.assignFeatures(ClubMember, {
+    behaviors: { spawn: ClubMemberBehaviors }
+});
+customElements.assignFeatures(ClubMemberBehaviors, {
+    commandBehavior: { spawn: CommandFeatureImpl },
+    ariaBehavior: { spawn: AriaFeatureImpl }
+});
+installForwarding(ClubMember);
+customElements.define('club-member', ClubMember);
+
+// 4. Use it
+const el = document.createElement('club-member');
+el.command = 'toggle';  // forwards to el.behaviors.commandBehavior.command
+el.behaviors.ariaBehavior.setRole('button');  // access nested features directly
+```
+
+**How `PropertyBag` works:**
+
+- Carries `customElementRegistry` from the host element so nested features can resolve their registries.
+- Applies `initVals` via `Object.assign` (supports pre-upgrade property capture).
+- Must be subclassed — direct instantiation throws an error.
+- Subclasses must define `static supportedFeatures` (enforced by `assignFeatures` validation).
+
+**Why subclass instead of using `PropertyBag` directly?**
+
+Each subclass declares its own `static supportedFeatures`, which:
+- Provides opt-in safety (only declared feature keys are allowed).
+- Enables TypeScript type checking on the feature slots.
+- Documents the expected shape of the container.
+
+```JavaScript
+// This throws — PropertyBag has no supportedFeatures
+customElements.assignFeatures(PropertyBag, { anything: {} }); // Error!
+
+// This works — subclass declares what's allowed
+class MyBehaviors extends PropertyBag {
+    static supportedFeatures = { anything: { fallbackSpawn: AnythingImpl } }
+}
+customElements.assignFeatures(MyBehaviors, { anything: { spawn: AnythingImpl } }); // ✓
+```
+
 ### Roadmap (future phases)
 
-- **Property forwarding** (`forwardProps`): Proxy top-level properties down to feature instances.
-- **Nested features**: Support `?.path?.notation` keys for deeply nested feature slots.
+- **Nested features**: Support `?.path?.notation` keys directly in `assignFeatures` (without requiring `PropertyBag`).
 - **`@each` + async interaction**: Combine async methods with iteration.
-- **Unique base validation**: Enforce unique `withAttrs.base` across features on the same class.
