@@ -54,3 +54,19 @@ if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
     parent[lastKey] = value;
 }
 ```
+
+The intention here is to look for static methods on a class:
+
+```JavaScript
+class MyClass {
+    static assignTo(instance: MyClass, rhs: any, parent?: any, key: string){
+        ...
+    }
+}
+```
+
+
+Before I try to articulate the use cases I see for this, please let me know:
+
+1.  Would the code change I suggest ever hit MyClass's assignTo?  I.e. does my code make sense?
+2.  If so, what use cases do you see for this?  
