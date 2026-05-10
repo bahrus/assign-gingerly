@@ -54,7 +54,7 @@ The second fundamental utility function is:
 
 ## assignTentatively
 
-assignTentatively provides a far more limited subset of functionality compared to assignGingerly.   The tradeoff is that assignTentatively can do something important assignGingerly cannot do -- be "reversed". This can be quite useful for some scenarios.  Think of how css "turns on" visual effects while conditions are met, then reverts to how things were before the conditions were met when when the conditions are no longer met, as if nothing happened.  Another example is allowing user edits to be rolled back as they repeatedly hit "ctrl+z".
+assignTentatively provides a far more limited subset of functionality compared to assignGingerly.   The tradeoff is that assignTentatively can do something important assignGingerly cannot do -- be "reversed". This can be quite useful for some scenarios.  Think of how css "turns on" visual effects while conditions are met, then reverts to how things were before the conditions were met when the conditions are no longer met, as if nothing happened.  Another example is allowing user edits to be rolled back as they repeatedly hit "ctrl+z".
 
 ## Example 1 - assignGingerly as a "superset" of Object.assign:
 
