@@ -259,7 +259,7 @@ So `assignTo` gets full access to private fields, which makes it even more power
 
 I will add another use case:
 
-Classes that have standard properties, but also are iterable over a list stored in a private variable.  If the rhs is an array, we want to replace the private list with a (filtered) copy of the rhs.  If the rhs is a non array object, we just want to merge it in.
+Classes that have standard properties, but also are iterable over a list stored in a private variable, and no "list" property to access it / set it.  If the rhs is an array, we want to replace the private list with a (filtered) copy of the rhs.  If the rhs is a non array object, we just want to merge it in.
 
 This I think is what I was looking for with my murky thoughtExperiments/SupportForGeneratorIteratorBrainStorming.md and thoughtExperiments/SupportIteratorUpgrade.md, both of which you found too vague to function.  Does that make sense?
 
