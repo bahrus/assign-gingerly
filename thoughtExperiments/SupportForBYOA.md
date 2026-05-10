@@ -187,3 +187,26 @@ Worth documenting clearly: "If `assignTo` replaces `parent[key]`, existing refer
 The code works as intended. The pattern is essentially a "static protocol" — any class can opt into custom assignment behavior by defining `static assignTo`. It's lightweight (one `typeof` check per assignment to a class instance), non-breaking (only activates for classes that explicitly opt in), and opens up useful patterns for reactive models, immutable data, validation, and feature classes.
 
 I'd add the `Object.hasOwn(constructor, 'assignTo')` guard to prevent accidental inheritance from `Object` or other base classes.
+
+---
+
+## Human Response I
+
+Good suggestions, good use cases. 
+
+Two additional questions:
+
+1.  What do you think of the name?  Should it be assignTo or assignFrom?  Or something else?
+
+2.  Is it true or not true that the static method would have access to the private fields:
+
+```JavaScript
+class MyClass {
+    #myPrivateField = 'hello';
+    static assignTo(instance: MyClass, rhs: any, parent?: any, key: string){
+        console.log(instance.#myPrivateField);
+    }
+}
+```
+
+
