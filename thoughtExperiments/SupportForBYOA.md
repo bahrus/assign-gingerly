@@ -263,4 +263,4 @@ Classes that have standard properties, but also are iterable over a list stored 
 
 This I think is what I was looking for with my murky thoughtExperiments/SupportForGeneratorIteratorBrainStorming.md and thoughtExperiments/SupportIteratorUpgrade.md, both of which you found too vague to function.  Does that make sense?
 
-If we are on the same page, please implement (with your very helpful `Object.hasOwn(constructor, 'assignTo')` guard suggestion).
+If we are on the same page, please implement (with your very helpful `Object.hasOwn(constructor, 'assignTo')` guard suggestion).  Please keep these use cases in mind when documenting the feature in README.md
