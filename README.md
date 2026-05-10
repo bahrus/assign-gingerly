@@ -4417,8 +4417,8 @@ customElements.assignFeatures(ClubMember, {
         spawn: PhotoTakerImpl,
         withAttrs: {
             base: 'photo',
-            _resolution: { instanceOf: 'String', mapsTo: 'resolution' },
-            _format: { instanceOf: 'String', mapsTo: 'format' }
+            resolution: '${base}-resolution',
+            format: '${base}-format'
         }
     }
 });
@@ -4426,6 +4426,19 @@ customElements.assignFeatures(ClubMember, {
 
 ```HTML
 <club-member photo-resolution="4k" photo-format="png"></club-member>
+```
+
+This parses into `initVals = { resolution: '4k', format: 'png' }`. By default, non-underscore keys are assumed to be strings with `mapsTo` equal to the key name. The `_key` form is only needed to override defaults (e.g., parse as Number, map to a different property name, use a custom parser):
+
+```JavaScript
+withAttrs: {
+    base: 'photo',
+    resolution: '${base}-resolution',
+    // Override: parse as Number instead of String
+    _resolution: { instanceOf: 'Number', mapsTo: 'resolutionPx' },
+    format: '${base}-format'
+    // No _format needed — defaults to String, mapsTo: 'format'
+}
 ```
 
 **Merge priority (lowest to highest):**
