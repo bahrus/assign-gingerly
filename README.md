@@ -4034,14 +4034,14 @@ class ClubMember extends HTMLElement {
     }
 }
 
-customElements.define('club-member', ClubMember);
-
-// 3. Inject features (can override fallbackSpawn with a different class)
+// 3. Inject features before define (getters must be on prototype before instances exist)
 customElements.assignFeatures(ClubMember, {
     photoTaker: {
         spawn: PhotoTakerImpl
     }
 });
+
+customElements.define('club-member', ClubMember);
 
 // 4. Use it — lazy instantiation on first access
 const el = document.createElement('club-member');
