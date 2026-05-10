@@ -210,3 +210,57 @@ class MyClass {
 ```
 
 
+
+
+---
+
+## Kiro's Response I
+
+### 1. Naming: `assignTo` vs `assignFrom` vs something else
+
+Let me think about the semantics from the caller's perspective:
+
+- `assignGingerly(target, { myProp: value })` — we're assigning *to* `target.myProp`.
+- When the hook fires, we're saying "hey `MyClass`, someone is assigning *to* your instance."
+
+So **`assignTo`** reads as: "this is how you assign *to* an instance of this class." The subject is the caller (assignGingerly), the action is assigning *to* the instance. ✓
+
+**`assignFrom`** would read as: "this is how the instance assigns *from* the incoming value." The subject is the instance, the action is pulling *from* the RHS. Also valid, but slightly less intuitive since the static method is on the class, not the instance.
+
+Other options:
+- **`onAssign`** — event-like naming. "When assignment happens to an instance of this class, do this."
+- **`handleAssign`** — similar to event handler naming.
+- **`mergeInto`** — "merge the RHS into an instance of this class."
+
+**My recommendation: `assignTo`** — it's the most natural reading in context. "How to assign to this class." It also pairs nicely with the existing `assignGingerly` / `assignFrom` function names in the package without conflicting (those are standalone functions, this is a static method protocol).
+
+### 2. Private field access in static methods
+
+**Yes, this is true.** Static methods of a class *can* access private fields of instances of that class. This is by design in the JavaScript/TypeScript spec:
+
+```javascript
+class MyClass {
+    #myPrivateField = 'hello';
+    static assignTo(instance) {
+        console.log(instance.#myPrivateField); // ✅ Works! Logs 'hello'
+    }
+}
+```
+
+This works because private field access is scoped to the *class body* (the lexical scope where `#myPrivateField` is declared), not to the instance. Static methods are defined in the same class body, so they have access.
+
+This is the same reason `getSharedContext` works for sharing private data with features — it's defined in the class body and receives the instance as a parameter.
+
+So `assignTo` gets full access to private fields, which makes it even more powerful — it can implement custom merge logic that reads/writes private state that external code can't touch.
+
+---
+
+## Human Response II
+
+I will add another use case:
+
+Classes that have standard properties, but also are iterable over a list stored in a private variable.  If the rhs is an array, we want to replace the private list with a (filtered) copy of the rhs.  If the rhs is a non array object, we just want to merge it in.
+
+This I think is what I was looking for with my murky thoughtExperiments/SupportForGeneratorIteratorBrainStorming.md and thoughtExperiments/SupportIteratorUpgrade.md, both of which you found too vague to function.  Does that make sense?
+
+If we are on the same page, please implement (with your very helpful `Object.hasOwn(constructor, 'assignTo')` guard suggestion).
