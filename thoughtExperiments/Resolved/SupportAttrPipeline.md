@@ -1,0 +1,1 @@
+this was going to be thoughts on observing attributes and setting values.  Current thinking is to create a custom element feature that does this.

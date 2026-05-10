@@ -1,5 +1,7 @@
 # assigning referentially
 
+Resolved within the roundabout-lib package 
+
 This feature makes sense to add to assignGingerly, but not to assignTentatively, as it isn't really reversible.
 
 The desire for this pattern emerged when implementing [this library](https://raw.githubusercontent.com/bahrus/be-clonable/refs/heads/baseline/be-clonable.js), that uses assignGingerly heavily (it merges what the methods return into the object using assignGingerly).
