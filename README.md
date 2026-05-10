@@ -35,9 +35,7 @@ On top of that, this polyfill package builds on the newly minted Custom Element 
 
 3.  [featuresRegistry for Custom Element Features](#custom-element-features) to support dependency injection of composable feature classes or function prototypes onto custom element prototypes via lazy getters.
 
-So in our view this package helps fill the void left by not supporting the "is" attribute for built-in elements (but is not a complete solution, just a critical building block).  Mount-observer builds on top of the critical role that assign-gingerly plays.
-
-5.  Iterator upgrade support [TODO] -- limited to ish?
+So in our view this package helps fill the void left by not supporting the "is" attribute for built-in elements (but is not a complete solution, just a critical building block).  Mount-observer and custom enhancements builds on top of the critical role that assign-gingerly plays.
 
 Anyway, let's start out detailing the more innocent features of this package / polyfill.
 
