@@ -106,7 +106,7 @@ console.log(obj);
 
 When the right hand side of an expression is an object, assignGingerly behavior depends on the context:
 - For **nested paths** (starting with `?.`): recursively merges into nested objects, creating them if needed
-- For **plain keys**: performs simple assignment (like `Object.assign`), unless the target property is readonly or an accessor (see Examples 3a and 3b below)
+- For **plain keys**: performs simple assignment (like `Object.assign`), unless the target property is readonly, an accessor, or the current value's class defines [`static assignTo`](#custom-assignment-with-static-assignto-protocol) (see Examples 3a, 3b, and the assignTo section below)
 
 Of course, just as Object.assign led to object spread notation, assignGingerly could lead to some sort of deep structural JavaScript syntax, but that is outside the scope of this polyfill package.
 
@@ -223,7 +223,7 @@ assignGingerly(config, {
 console.log(config.settings.theme); // 'dark'
 ```
 
-## Example 3b - Class Instances Are Replaced
+## Example 3b - Class Instances Are Normally Replaced
 
 Unlike readonly/accessor properties, class instances on writable properties are **replaced** by simple assignment, just like plain objects. This allows you to swap one object for another without unexpected merging:
 
@@ -253,10 +253,31 @@ console.log(obj.clone === element); // true - replaced, not merged
 
 In real-world use cases, you often need to replace one object with another of a completely different type. For example, replacing a cloned DocumentFragment with the actual web component element. Automatic merging would corrupt the target by mixing properties from incompatible types.
 
+**Exception: classes with `static assignTo`**
+
+If the current value is an instance of a class that defines [`static assignTo`](#custom-assignment-with-static-assignto-protocol), that method is called instead of replacing. This allows classes to opt into custom assignment behavior (e.g., reactive models, validated records, iterable collections with private lists):
+
+```TypeScript
+class TodoList {
+    #items = [];
+    *[Symbol.iterator]() { yield* this.#items; }
+    static assignTo(instance, rhs) {
+        if (Array.isArray(rhs)) instance.#items = [...rhs];
+        else Object.assign(instance, rhs);
+    }
+}
+
+const app = { todos: new TodoList() };
+assignGingerly(app, { todos: ['Buy milk', 'Walk dog'] });
+// TodoList.assignTo is called — replaces internal list, not the instance
+console.log([...app.todos]); // ['Buy milk', 'Walk dog']
+console.log(app.todos instanceof TodoList); // true — instance preserved
+```
+
 **Readonly/accessor properties are still merged:**
 
 The distinction is clear:
-- **Writable data properties**: always replaced (whether holding a plain object or class instance)
+- **Writable data properties**: replaced (unless class defines `static assignTo`)
 - **Readonly data properties** (`writable: false`): merged into
 - **Getter-only accessor properties** (no setter): merged into
 - **Getter+setter accessor properties** (e.g., `style`): setter runs with the value as-is
