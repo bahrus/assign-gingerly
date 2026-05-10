@@ -3323,6 +3323,139 @@ assignFrom(target, {
 
 For full documentation, see [docs/assignFrom.md](docs/assignFrom.md).
 
+## Custom Assignment with `static assignTo` Protocol
+
+Classes can opt into custom assignment behavior by defining a `static assignTo` method. When `assignGingerly` encounters a property whose current value is an instance of such a class, it delegates the assignment to `assignTo` instead of performing the default merge/replace logic.
+
+```JavaScript
+class ReactiveModel {
+    #data = {};
+    #listeners = [];
+
+    static assignTo(instance, rhs, parent, key) {
+        // Custom merge: trigger reactive notifications
+        for (const [k, v] of Object.entries(rhs)) {
+            instance.#data[k] = v;
+            instance.#listeners.forEach(fn => fn(k, v));
+        }
+    }
+
+    get(prop) { return this.#data[prop]; }
+    onChange(fn) { this.#listeners.push(fn); }
+}
+```
+
+### How it works
+
+When `assignGingerly` is about to assign a value to a property, it checks if the property's current value is an object whose constructor defines `static assignTo`. If so, it calls `assignTo` instead of the default behavior:
+
+```JavaScript
+const obj = { model: new ReactiveModel() };
+
+assignGingerly(obj, { model: { name: 'Alice', age: 30 } });
+// Instead of replacing or merging, calls:
+// ReactiveModel.assignTo(obj.model, { name: 'Alice', age: 30 }, obj, 'model')
+```
+
+### Parameters
+
+```TypeScript
+class MyClass {
+    static assignTo(
+        instance: MyClass,  // The current value (instance of this class)
+        rhs: any,           // The value being assigned (from the RHS of assignGingerly)
+        parent: any,        // The parent object containing the property
+        key: string|symbol  // The property key being assigned to
+    ) { ... }
+}
+```
+
+The `parent` and `key` parameters allow `assignTo` to replace the instance entirely if needed (e.g., for immutable patterns):
+
+```JavaScript
+class ImmutableState {
+    #data;
+    constructor(data) { this.#data = Object.freeze({ ...data }); }
+    
+    static assignTo(instance, rhs, parent, key) {
+        // Replace with a new immutable instance
+        parent[key] = new ImmutableState({ ...instance.#data, ...rhs });
+    }
+}
+```
+
+### Use case: Iterable classes with private lists
+
+A class that is iterable over a private list can use `assignTo` to handle array assignment (replacing the list) vs object assignment (merging properties):
+
+```JavaScript
+class TodoList {
+    #items = [];
+    
+    *[Symbol.iterator]() { yield* this.#items; }
+    
+    static assignTo(instance, rhs) {
+        if (Array.isArray(rhs)) {
+            // Replace the private list
+            instance.#items = [...rhs];
+        } else if (typeof rhs === 'object' && rhs !== null) {
+            // Merge properties normally
+            Object.assign(instance, rhs);
+        }
+    }
+}
+
+const app = { todos: new TodoList() };
+
+// Assign an array — replaces the internal list
+assignGingerly(app, { todos: ['Buy milk', 'Walk dog'] });
+console.log([...app.todos]); // ['Buy milk', 'Walk dog']
+
+// Assign an object — merges properties
+assignGingerly(app, { todos: { title: 'My Todos' } });
+console.log(app.todos.title); // 'My Todos'
+console.log([...app.todos]); // ['Buy milk', 'Walk dog'] (list unchanged)
+```
+
+### Use case: Validation on assignment
+
+```JavaScript
+class TypedRecord {
+    static schema = { name: 'string', age: 'number' };
+    
+    static assignTo(instance, rhs) {
+        for (const [k, v] of Object.entries(rhs)) {
+            const expected = TypedRecord.schema[k];
+            if (expected && typeof v !== expected) {
+                throw new TypeError(`${k} must be ${expected}, got ${typeof v}`);
+            }
+            instance[k] = v;
+        }
+    }
+}
+```
+
+### Private field access
+
+Because `assignTo` is a static method defined in the class body, it has full access to `#private` fields:
+
+```JavaScript
+class SecureStore {
+    #secrets = {};
+    
+    static assignTo(instance, rhs) {
+        // Can read/write private fields
+        for (const [k, v] of Object.entries(rhs)) {
+            instance.#secrets[k] = encrypt(v);
+        }
+    }
+}
+```
+
+### Safety
+
+Only classes that explicitly define their own `assignTo` are affected. The check uses `Object.hasOwn(constructor, 'assignTo')` to prevent accidental inheritance — plain objects, arrays, and classes without `assignTo` use the default assignGingerly behavior.
+
 ## Property Forwarding with `installForwarding`
 
 `installForwarding` installs getter/setter pairs on a class prototype that delegate to nested paths on the instance. This is useful for exposing deeply nested properties at the top level of an object — particularly for custom elements that delegate behavior to compositional feature classes.

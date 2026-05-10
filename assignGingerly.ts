@@ -426,6 +426,27 @@ export function isReadonlyProperty(obj: any, propName: string | symbol): boolean
 }
 
 /**
+ * Checks if a class defines a static `assignTo` method and calls it.
+ * This is the "bring your own assigner" protocol — classes can opt into
+ * custom assignment behavior by defining `static assignTo`.
+ * 
+ * Only triggers for classes that explicitly define `assignTo` on themselves
+ * (not inherited from Object or other base classes).
+ * 
+ * @returns true if assignTo was found and called, false otherwise
+ */
+function tryAssignTo(currentValue: any, value: any, parent: any, key: string | symbol): boolean {
+  if (currentValue != null && typeof currentValue === 'object') {
+    const { constructor } = currentValue;
+    if (constructor && Object.hasOwn(constructor, 'assignTo') && typeof constructor.assignTo === 'function') {
+      constructor.assignTo(currentValue, value, parent, key);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Helper function to check if a value is a class instance (not a plain object)
  * Returns true for instances of classes, false for plain objects, arrays, and primitives
  * 
@@ -1024,6 +1045,11 @@ export function assignGingerly(
         const lastKey = result.lastKey;
         const parent = result.target;
         
+        // Check for static assignTo protocol
+        if (lastKey in parent && tryAssignTo(parent[lastKey], value, parent, lastKey)) {
+          continue;
+        }
+
         if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
           // Check if property exists and is readonly
           if (lastKey in parent && isReadonlyProperty(parent, lastKey)) {
@@ -1043,6 +1069,11 @@ export function assignGingerly(
         // No withMethods - use original logic
         const lastKey = pathParts[pathParts.length - 1];
         const parent = ensureNestedPath(target, pathParts);
+
+        // Check for static assignTo protocol
+        if (lastKey in parent && tryAssignTo(parent[lastKey], value, parent, lastKey)) {
+          continue;
+        }
 
         if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
           // Check if property exists and is readonly
@@ -1080,6 +1111,11 @@ export function assignGingerly(
       }
       
       // Normal assignment
+      // Check for static assignTo protocol
+      if (key in target && tryAssignTo(target[key], value, target, key)) {
+        continue;
+      }
+
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         // Check if property exists and is readonly
         if (key in target && isReadonlyProperty(target, key)) {
