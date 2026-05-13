@@ -401,10 +401,15 @@ export function assignFeatures(ctr, features, featuresRegistry) {
         featuresRegistry.set(ctr, key, features[key]);
         // 5. Install the lazy getter on the prototype
         installFeatureGetter(ctr, key, featuresRegistry);
-        // 6. Install callback forwarding if configured
+        // 6. Install callback forwarding if configured (merge author + consumer)
         const featureConfig = features[key];
-        if (featureConfig.callbackForwarding && featureConfig.callbackForwarding.length > 0) {
-            installCallbackForwarding(ctr, key, featureConfig.callbackForwarding);
+        const optIn = supportedFeatures[key];
+        const authorCallbacks = optIn.callbackForwarding || [];
+        const consumerCallbacks = featureConfig.callbackForwarding || [];
+        // Union of both (author defaults + consumer additions)
+        const allCallbacks = [...new Set([...authorCallbacks, ...consumerCallbacks])];
+        if (allCallbacks.length > 0) {
+            installCallbackForwarding(ctr, key, allCallbacks);
         }
     }
     // 6. Install whenFeatureReady method if featuresConfig.lifecycleKeys is configured

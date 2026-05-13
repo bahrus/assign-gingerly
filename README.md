@@ -4617,13 +4617,24 @@ customElements.assignFeatures(MyBehaviors, { anything: { spawn: AnythingImpl } }
 
 ### Lifecycle callback forwarding with `callbackForwarding`
 
-Features can receive custom element lifecycle callbacks by declaring `callbackForwarding` in their config:
+Features can receive custom element lifecycle callbacks by declaring `callbackForwarding` in their config. This can be specified by the feature author (in `static supportedFeatures`) and/or by the consumer (in `assignFeatures`). Both are merged — the author declares what the feature intrinsically needs, the consumer can add more:
 
 ```JavaScript
+// Author declares what the feature needs
+class MyElement extends HTMLElement {
+    static supportedFeatures = {
+        reflector: {
+            fallbackSpawn: Reflector,
+            callbackForwarding: ['connectedCallback', 'disconnectedCallback']
+        }
+    }
+}
+
+// Consumer can add more (but not remove author's)
 customElements.assignFeatures(MyElement, {
     reflector: {
         spawn: Reflector,
-        callbackForwarding: ['connectedCallback', 'disconnectedCallback']
+        callbackForwarding: ['adoptedCallback'] // merged with author's
     }
 });
 ```
