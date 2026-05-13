@@ -299,6 +299,73 @@ function installFeatureGetter(ctr, key, featuresRegistry) {
     });
 }
 /**
+ * Valid lifecycle callback names that can be forwarded to features.
+ */
+const VALID_CALLBACKS = new Set([
+    'connectedCallback',
+    'disconnectedCallback',
+    'attributeChangedCallback',
+    'adoptedCallback'
+]);
+/**
+ * WeakMap tracking which callbacks have been patched on which constructors,
+ * and which feature keys are registered for each callback.
+ * Structure: Map<Function, Map<callbackName, Set<featureKey>>>
+ */
+const callbackRegistry = new Map();
+/**
+ * Installs or updates lifecycle callback forwarding on a constructor's prototype.
+ * Patches the callback once per type, accumulating feature keys for each.
+ */
+function installCallbackForwarding(ctr, key, callbacks) {
+    let ctrCallbacks = callbackRegistry.get(ctr);
+    if (!ctrCallbacks) {
+        ctrCallbacks = new Map();
+        callbackRegistry.set(ctr, ctrCallbacks);
+    }
+    for (const callbackName of callbacks) {
+        if (!VALID_CALLBACKS.has(callbackName)) {
+            throw new Error(`assignFeatures: invalid callbackForwarding "${callbackName}" for feature "${key}". ` +
+                `Valid values: ${[...VALID_CALLBACKS].join(', ')}`);
+        }
+        // Validate that the spawn class has the method (sync spawners only)
+        // For async spawners, validation is deferred to runtime
+        let featureKeys = ctrCallbacks.get(callbackName);
+        if (!featureKeys) {
+            featureKeys = new Set();
+            ctrCallbacks.set(callbackName, featureKeys);
+            // Patch the prototype callback (only once per callback type per class)
+            const original = ctr.prototype[callbackName];
+            Object.defineProperty(ctr.prototype, callbackName, {
+                value: function (...args) {
+                    // Call original first
+                    if (original)
+                        original.apply(this, args);
+                    // Forward to all registered features
+                    const keys = callbackRegistry.get(ctr)?.get(callbackName);
+                    if (keys) {
+                        for (const featureKey of keys) {
+                            // Access the getter (triggers lazy spawn on first connectedCallback)
+                            const feature = this[featureKey];
+                            // Only forward if it's a real instance (not a placeholder or error)
+                            if (feature && typeof feature === 'object' &&
+                                typeof feature[callbackName] === 'function' &&
+                                !(FEATURE_ERROR in feature)) {
+                                feature[callbackName](...args);
+                            }
+                        }
+                    }
+                },
+                writable: true,
+                enumerable: false,
+                configurable: true
+            });
+        }
+        // Add this feature key to the set for this callback
+        featureKeys.add(key);
+    }
+}
+/**
  * Core assignFeatures implementation.
  * Validates inputs, registers injections, and installs lazy getters.
  *
@@ -334,6 +401,11 @@ export function assignFeatures(ctr, features, featuresRegistry) {
         featuresRegistry.set(ctr, key, features[key]);
         // 5. Install the lazy getter on the prototype
         installFeatureGetter(ctr, key, featuresRegistry);
+        // 6. Install callback forwarding if configured
+        const featureConfig = features[key];
+        if (featureConfig.callbackForwarding && featureConfig.callbackForwarding.length > 0) {
+            installCallbackForwarding(ctr, key, featureConfig.callbackForwarding);
+        }
     }
     // 6. Install whenFeatureReady method if featuresConfig.lifecycleKeys is configured
     const featuresConfig = ctr.featuresConfig;

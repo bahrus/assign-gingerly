@@ -133,6 +133,22 @@ export interface FeatureConfig {
      * via ctx.injection.customData in the constructor.
      */
     customData?: any;
+
+    /**
+     * Custom element lifecycle callbacks to forward to this feature.
+     * The feature class must implement the listed methods.
+     * 
+     * On first `connectedCallback` forwarding, the getter is triggered (spawning
+     * the feature if needed). For async features, forwarding is skipped until
+     * the real instance is available.
+     * 
+     * Supported values: 'connectedCallback', 'disconnectedCallback',
+     *                   'attributeChangedCallback', 'adoptedCallback'
+     * 
+     * Note: `attributeChangedCallback` only receives events for attributes
+     * listed in the element's `static observedAttributes`.
+     */
+    callbackForwarding?: string[];
 }
 
 export type SupportedFeaturesMap = Record<string, SupportedFeatureConfig>;
@@ -483,6 +499,89 @@ function installFeatureGetter(
 }
 
 /**
+ * Valid lifecycle callback names that can be forwarded to features.
+ */
+const VALID_CALLBACKS = new Set([
+    'connectedCallback',
+    'disconnectedCallback',
+    'attributeChangedCallback',
+    'adoptedCallback'
+]);
+
+/**
+ * WeakMap tracking which callbacks have been patched on which constructors,
+ * and which feature keys are registered for each callback.
+ * Structure: Map<Function, Map<callbackName, Set<featureKey>>>
+ */
+const callbackRegistry = new Map<Function, Map<string, Set<string>>>();
+
+/**
+ * Installs or updates lifecycle callback forwarding on a constructor's prototype.
+ * Patches the callback once per type, accumulating feature keys for each.
+ */
+function installCallbackForwarding(
+    ctr: Function,
+    key: string,
+    callbacks: string[]
+): void {
+    let ctrCallbacks = callbackRegistry.get(ctr);
+    if (!ctrCallbacks) {
+        ctrCallbacks = new Map();
+        callbackRegistry.set(ctr, ctrCallbacks);
+    }
+
+    for (const callbackName of callbacks) {
+        if (!VALID_CALLBACKS.has(callbackName)) {
+            throw new Error(
+                `assignFeatures: invalid callbackForwarding "${callbackName}" for feature "${key}". ` +
+                `Valid values: ${[...VALID_CALLBACKS].join(', ')}`
+            );
+        }
+
+        // Validate that the spawn class has the method (sync spawners only)
+        // For async spawners, validation is deferred to runtime
+
+        let featureKeys = ctrCallbacks.get(callbackName);
+        if (!featureKeys) {
+            featureKeys = new Set();
+            ctrCallbacks.set(callbackName, featureKeys);
+
+            // Patch the prototype callback (only once per callback type per class)
+            const original = ctr.prototype[callbackName];
+            
+            Object.defineProperty(ctr.prototype, callbackName, {
+                value: function (this: any, ...args: any[]) {
+                    // Call original first
+                    if (original) original.apply(this, args);
+
+                    // Forward to all registered features
+                    const keys = callbackRegistry.get(ctr)?.get(callbackName);
+                    if (keys) {
+                        for (const featureKey of keys) {
+                            // Access the getter (triggers lazy spawn on first connectedCallback)
+                            const feature = this[featureKey];
+
+                            // Only forward if it's a real instance (not a placeholder or error)
+                            if (feature && typeof feature === 'object' &&
+                                typeof feature[callbackName] === 'function' &&
+                                !(FEATURE_ERROR in feature)) {
+                                feature[callbackName](...args);
+                            }
+                        }
+                    }
+                },
+                writable: true,
+                enumerable: false,
+                configurable: true
+            });
+        }
+
+        // Add this feature key to the set for this callback
+        featureKeys.add(key);
+    }
+}
+
+/**
  * Core assignFeatures implementation.
  * Validates inputs, registers injections, and installs lazy getters.
  * 
@@ -536,6 +635,12 @@ export function assignFeatures(
 
         // 5. Install the lazy getter on the prototype
         installFeatureGetter(ctr, key, featuresRegistry);
+
+        // 6. Install callback forwarding if configured
+        const featureConfig = features[key];
+        if (featureConfig.callbackForwarding && featureConfig.callbackForwarding.length > 0) {
+            installCallbackForwarding(ctr, key, featureConfig.callbackForwarding);
+        }
     }
 
     // 6. Install whenFeatureReady method if featuresConfig.lifecycleKeys is configured

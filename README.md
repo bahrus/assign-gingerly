@@ -4615,6 +4615,103 @@ class MyBehaviors extends PropertyBag {
 customElements.assignFeatures(MyBehaviors, { anything: { spawn: AnythingImpl } }); // ✓
 ```
 
+### Lifecycle callback forwarding with `callbackForwarding`
+
+Features can receive custom element lifecycle callbacks by declaring `callbackForwarding` in their config:
+
+```JavaScript
+customElements.assignFeatures(MyElement, {
+    reflector: {
+        spawn: Reflector,
+        callbackForwarding: ['connectedCallback', 'disconnectedCallback']
+    }
+});
+```
+
+When the custom element's `connectedCallback` fires, the feature's `connectedCallback` is called automatically. This eliminates boilerplate forwarding code and handles feature activation timing naturally.
+
+**How it works:**
+
+1. `assignFeatures` patches the custom element's lifecycle callback on the prototype (once per callback type).
+2. The original callback runs first, then all registered features are forwarded.
+3. On first `connectedCallback`, the getter is triggered — spawning the feature lazily at the correct lifecycle moment (when the element is in the DOM and computed styles are available).
+4. For async features, forwarding is skipped until the real instance is available.
+
+**Supported callbacks:**
+
+| Callback | Use case |
+|----------|----------|
+| `connectedCallback` | Feature needs DOM context (computed styles, layout, etc.) |
+| `disconnectedCallback` | Feature needs cleanup (remove listeners, abort fetches) |
+| `attributeChangedCallback` | Feature reacts to attribute changes (limited to element's `observedAttributes`) |
+| `adoptedCallback` | Feature reacts to document adoption |
+
+**Example: Feature that reads computed styles on connect**
+
+```JavaScript
+class Reflector {
+    constructor(host, ctx) {
+        this.host = host;
+        this.internals = ctx.shared.internals;
+    }
+    
+    connectedCallback() {
+        // Safe to call getComputedStyle here — element is in the DOM
+        const styles = getComputedStyle(this.host);
+        const exports = styles.getPropertyValue('--custom-state-exports');
+        // ... process exports
+    }
+    
+    disconnectedCallback() {
+        // Cleanup
+    }
+}
+
+class MyElement extends HTMLElement {
+    #internals;
+    static supportedFeatures = {
+        reflector: {
+            fallbackSpawn: Reflector,
+            getSharedContext(instance) {
+                return { internals: instance.#internals };
+            }
+        }
+    }
+    constructor() {
+        super();
+        this.#internals = this.attachInternals();
+    }
+}
+
+customElements.assignFeatures(MyElement, {
+    reflector: {
+        spawn: Reflector,
+        callbackForwarding: ['connectedCallback', 'disconnectedCallback']
+    }
+});
+customElements.define('my-element', MyElement);
+```
+
+No manual getter access or `connectedCallback` boilerplate needed — the feature activates at the right time automatically.
+
+**Multiple features with callbacks:**
+
+```JavaScript
+customElements.assignFeatures(MyElement, {
+    reflector: {
+        spawn: Reflector,
+        callbackForwarding: ['connectedCallback']
+    },
+    logger: {
+        spawn: Logger,
+        callbackForwarding: ['connectedCallback', 'disconnectedCallback']
+    }
+});
+// Both features receive connectedCallback; only logger receives disconnectedCallback
+```
+
+**Note on `attributeChangedCallback`:** The feature only receives callbacks for attributes listed in the element's `static observedAttributes`. Features cannot add to this list after `define()` is called.
+
 ### Roadmap (future phases)
 
 - **Nested features**: Support `?.path?.notation` keys directly in `assignFeatures` (without requiring `PropertyBag`).
