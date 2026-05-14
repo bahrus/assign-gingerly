@@ -4723,6 +4723,62 @@ customElements.assignFeatures(MyElement, {
 
 **Note on `attributeChangedCallback`:** The feature only receives callbacks for attributes listed in the element's `static observedAttributes`. Features cannot add to this list after `define()` is called.
 
+### Class-level setup with `static onAssigned`
+
+Some features need one-time class-level setup before any instances are created — for example, installing prototype getter/setters or pre-loading modules. The `static onAssigned` method on the spawn class is called by `assignFeatures` immediately after registration:
+
+```JavaScript
+class RoundaboutFeature {
+    // Called once when assignFeatures processes this feature
+    static async onAssigned(ctr, featureConfig) {
+        // One-time class-level setup: install prototype getter/setters, pre-load modules
+        await makeRoundaboutReady(ctr, featureConfig.customData);
+    }
+
+    constructor(host, ctx, initVals) {
+        // Instance-level setup (runs on first getter access)
+        const [vm, propagator] = roundaboutSync({
+            vm: host,
+            ...ctx.injection.customData,
+        });
+        this._vm = vm;
+        this._propagator = propagator;
+    }
+}
+```
+
+**Usage:**
+
+```JavaScript
+// await is safe — returns undefined if no async onAssigned hooks exist
+await customElements.assignFeatures(MyElement, {
+    roundabout: {
+        spawn: RoundaboutFeature,
+        customData: raConfig
+    }
+});
+
+// Now define — class is fully set up, connectedCallback will be synchronous
+customElements.define('my-element', MyElement);
+```
+
+**How it works:**
+
+- `assignFeatures` checks if the spawn class defines `static onAssigned` (via `Object.hasOwn`).
+- If found, calls `SpawnClass.onAssigned(ctr, featureConfig)` after installing the getter.
+- If `onAssigned` returns a Promise, `assignFeatures` returns a `Promise<void>` that resolves when all async hooks complete.
+- If no `onAssigned` hooks are async (or none exist), `assignFeatures` returns `undefined` (backward compatible — existing code that doesn't `await` still works).
+- Only applies to synchronous spawners (the class must be available at registration time). Async spawners can't define `onAssigned` since the class isn't loaded yet.
+
+**`await` is always safe:**
+
+```JavaScript
+// These are equivalent for sync features (no onAssigned or sync onAssigned):
+customElements.assignFeatures(MyElement, { feature: { spawn: SyncFeature } });
+await customElements.assignFeatures(MyElement, { feature: { spawn: SyncFeature } });
+// Both work — await on undefined is a no-op
+```
+
 ### Roadmap (future phases)
 
 - **Nested features**: Support `?.path?.notation` keys directly in `assignFeatures` (without requiring `PropertyBag`).

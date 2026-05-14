@@ -383,6 +383,7 @@ export function assignFeatures(ctr, features, featuresRegistry) {
     if (!supportedFeatures) {
         throw new Error(`assignFeatures: ${ctr.name || 'constructor'} does not define static supportedFeatures`);
     }
+    const onAssignedPromises = [];
     for (const key of Object.keys(features)) {
         // 1. Confirm the key is opted-in via supportedFeatures
         if (!(key in supportedFeatures)) {
@@ -411,8 +412,18 @@ export function assignFeatures(ctr, features, featuresRegistry) {
         if (allCallbacks.length > 0) {
             installCallbackForwarding(ctr, key, allCallbacks);
         }
+        // 7. Call static onAssigned if the spawn class defines it
+        const SpawnClass = featureConfig.spawn;
+        if (SpawnClass && !isAsyncSpawn(SpawnClass) &&
+            Object.hasOwn(SpawnClass, 'onAssigned') &&
+            typeof SpawnClass.onAssigned === 'function') {
+            const result = SpawnClass.onAssigned(ctr, featureConfig);
+            if (result && typeof result.then === 'function') {
+                onAssignedPromises.push(result);
+            }
+        }
     }
-    // 6. Install whenFeatureReady method if featuresConfig.lifecycleKeys is configured
+    // 8. Install whenFeatureReady method if featuresConfig.lifecycleKeys is configured
     const featuresConfig = ctr.featuresConfig;
     if (featuresConfig?.lifecycleKeys) {
         const methodName = resolveWhenFeatureReadyName(featuresConfig.lifecycleKeys);
@@ -420,6 +431,11 @@ export function assignFeatures(ctr, features, featuresRegistry) {
             installWhenFeatureReadyMethod(ctr, methodName);
         }
     }
+    // Return a Promise if any onAssigned hooks are async, otherwise undefined
+    if (onAssignedPromises.length > 0) {
+        return Promise.all(onAssignedPromises).then(() => { });
+    }
+    return undefined;
 }
 /**
  * Captures own-properties that shadow feature getters and stores them as initVals.
@@ -525,7 +541,7 @@ if (typeof CustomElementRegistry !== 'undefined') {
     });
     Object.defineProperty(CustomElementRegistry.prototype, 'assignFeatures', {
         value: function (ctr, features) {
-            assignFeatures(ctr, features, this.featuresRegistry);
+            return assignFeatures(ctr, features, this.featuresRegistry);
         },
         writable: true,
         enumerable: false,

@@ -607,7 +607,7 @@ export function assignFeatures(
     ctr: Function,
     features: FeatureConfigsMap,
     featuresRegistry: FeaturesRegistry
-): void {
+): Promise<void> | undefined {
     // Validate that the constructor has static supportedFeatures
     const supportedFeatures: SupportedFeaturesMap | undefined = (ctr as any).supportedFeatures;
 
@@ -616,6 +616,8 @@ export function assignFeatures(
             `assignFeatures: ${ctr.name || 'constructor'} does not define static supportedFeatures`
         );
     }
+
+    const onAssignedPromises: Promise<void>[] = [];
 
     for (const key of Object.keys(features)) {
         // 1. Confirm the key is opted-in via supportedFeatures
@@ -656,9 +658,20 @@ export function assignFeatures(
         if (allCallbacks.length > 0) {
             installCallbackForwarding(ctr, key, allCallbacks);
         }
+
+        // 7. Call static onAssigned if the spawn class defines it
+        const SpawnClass = featureConfig.spawn;
+        if (SpawnClass && !isAsyncSpawn(SpawnClass) && 
+            Object.hasOwn(SpawnClass as any, 'onAssigned') && 
+            typeof (SpawnClass as any).onAssigned === 'function') {
+            const result = (SpawnClass as any).onAssigned(ctr, featureConfig);
+            if (result && typeof result.then === 'function') {
+                onAssignedPromises.push(result);
+            }
+        }
     }
 
-    // 6. Install whenFeatureReady method if featuresConfig.lifecycleKeys is configured
+    // 8. Install whenFeatureReady method if featuresConfig.lifecycleKeys is configured
     const featuresConfig: FeaturesClassConfig | undefined = (ctr as any).featuresConfig;
     if (featuresConfig?.lifecycleKeys) {
         const methodName = resolveWhenFeatureReadyName(featuresConfig.lifecycleKeys);
@@ -666,6 +679,12 @@ export function assignFeatures(
             installWhenFeatureReadyMethod(ctr, methodName);
         }
     }
+
+    // Return a Promise if any onAssigned hooks are async, otherwise undefined
+    if (onAssignedPromises.length > 0) {
+        return Promise.all(onAssignedPromises).then(() => {});
+    }
+    return undefined;
 }
 
 /**
@@ -772,7 +791,7 @@ export class PropertyBag {
 declare global {
     interface CustomElementRegistry {
         featuresRegistry: FeaturesRegistry;
-        assignFeatures(ctr: Function, features: FeatureConfigsMap): void;
+        assignFeatures(ctr: Function, features: FeatureConfigsMap): Promise<void> | undefined;
     }
 }
 
@@ -793,8 +812,8 @@ if (typeof CustomElementRegistry !== 'undefined') {
     });
 
     Object.defineProperty(CustomElementRegistry.prototype, 'assignFeatures', {
-        value: function (ctr: Function, features: FeatureConfigsMap): void {
-            assignFeatures(ctr, features, this.featuresRegistry);
+        value: function (ctr: Function, features: FeatureConfigsMap): Promise<void> | undefined {
+            return assignFeatures(ctr, features, this.featuresRegistry);
         },
         writable: true,
         enumerable: false,
