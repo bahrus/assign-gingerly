@@ -4779,6 +4779,17 @@ await customElements.assignFeatures(MyElement, { feature: { spawn: SyncFeature }
 // Both work — await on undefined is a no-op
 ```
 
+<details>
+<summary>Catalog of Published Custom Element Features</summary>
+
+| Package | Description | Source |
+|---------|-------------|--------|
+| [truth-sourcer](https://www.npmjs.com/package/truth-sourcer) | Attribute/property binding and truth-sourcing for custom elements | [GitHub](https://github.com/bahrus/truth-sourcer) |
+| [be-reflective](https://www.npmjs.com/package/be-reflective) | CSS custom state reflection from computed styles | [GitHub](https://github.com/bahrus/be-reflective) |
+| [time-ticker](https://www.npmjs.com/package/time-ticker) | Web component that fires events periodically (example of a feature-based component with no code in the class) | [GitHub](https://github.com/bahrus/time-ticker) |
+
+</details>
+
 ### Roadmap (future phases)
 
 - **Nested features**: Support `?.path?.notation` keys directly in `assignFeatures` (without requiring `PropertyBag`).
