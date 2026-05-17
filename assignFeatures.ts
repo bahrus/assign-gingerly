@@ -515,7 +515,10 @@ const VALID_CALLBACKS = new Set([
     'connectedCallback',
     'disconnectedCallback',
     'attributeChangedCallback',
-    'adoptedCallback'
+    'adoptedCallback',
+    'formDisabledCallback',
+    'formResetCallback',
+    'formStateRestoreCallback'
 ]);
 
 /**

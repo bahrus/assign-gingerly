@@ -4656,6 +4656,9 @@ When the custom element's `connectedCallback` fires, the feature's `connectedCal
 | `disconnectedCallback` | Feature needs cleanup (remove listeners, abort fetches) |
 | `attributeChangedCallback` | Feature reacts to attribute changes (limited to element's `observedAttributes`) |
 | `adoptedCallback` | Feature reacts to document adoption |
+| `formDisabledCallback` | Feature reacts to disabled state changes (form-associated elements) |
+| `formResetCallback` | Feature reacts to form reset (form-associated elements) |
+| `formStateRestoreCallback` | Feature restores state after navigation/session restore (form-associated elements) |
 
 **Example: Feature that reads computed styles on connect**
 
@@ -4786,6 +4789,7 @@ await customElements.assignFeatures(MyElement, { feature: { spawn: SyncFeature }
 |---------|-------------|--------|
 | [truth-sourcer](https://www.npmjs.com/package/truth-sourcer) | Attribute/property binding and truth-sourcing for custom elements | [GitHub](https://github.com/bahrus/truth-sourcer) |
 | [be-reflective](https://www.npmjs.com/package/be-reflective) | CSS custom state reflection from computed styles | [GitHub](https://github.com/bahrus/be-reflective) |
+| [face-up](https://www.npmjs.com/package/face-up) | Form Associated Custom Element behavior via ElementInternals | [GitHub](https://github.com/bahrus/face-up) |
 | [time-ticker](https://www.npmjs.com/package/time-ticker) | Web component that fires events periodically (example of a feature-based component with no code in the class) | [GitHub](https://github.com/bahrus/time-ticker) |
 
 </details>

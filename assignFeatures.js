@@ -305,7 +305,10 @@ const VALID_CALLBACKS = new Set([
     'connectedCallback',
     'disconnectedCallback',
     'attributeChangedCallback',
-    'adoptedCallback'
+    'adoptedCallback',
+    'formDisabledCallback',
+    'formResetCallback',
+    'formStateRestoreCallback'
 ]);
 /**
  * WeakMap tracking which callbacks have been patched on which constructors,
