@@ -801,6 +801,10 @@ export function assignGingerly(
           const parent = ensureNestedPath(target, pathParts);
           if (!(lastKey in parent)) {
             parent[lastKey] = value;
+          } else if (Array.isArray(parent[lastKey])) {
+            parent[lastKey] = Array.isArray(value)
+              ? [...parent[lastKey], ...value]
+              : [...parent[lastKey], value];
           } else {
             parent[lastKey] += value;
           }
@@ -808,6 +812,10 @@ export function assignGingerly(
           // Plain key - direct operation on target
           if (!(path in target)) {
             target[path] = value;
+          } else if (Array.isArray(target[path])) {
+            target[path] = Array.isArray(value)
+              ? [...target[path], ...value]
+              : [...target[path], value];
           } else {
             target[path] += value;
           }

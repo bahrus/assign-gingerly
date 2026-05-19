@@ -751,7 +751,31 @@ console.log(obj);
 // }
 ```
 
-The `+=` command syntax is `<path> +=` where the path uses the `?.` nested notation for nested properties, or a plain key for direct properties. The right-hand side value is added to the existing value using `+=`. If the path doesn't exist, it's created and set directly to the value.  If the expression is a string, string concatenation is used.  If the expression can't be "added to", it allows JavaScript to throw its natural error.
+The `+=` command syntax is `<path> +=` where the path uses the `?.` nested notation for nested properties, or a plain key for direct properties. The right-hand side value is added to the existing value using `+=`. If the path doesn't exist, it's created and set directly to the value.
+
+**Behavior by type:**
+
+| LHS type | RHS type | Result |
+|----------|----------|--------|
+| number | number | addition (`2 += 3` → `5`) |
+| string | any | string concatenation (`"hello" += 3` → `"hello3"`) |
+| array | array | array concatenation (`[1,2] += [3,4]` → `[1,2,3,4]`) |
+| array | non-array | push single item (`[1,2] += 3` → `[1,2,3]`) |
+| undefined/missing | any | direct assignment |
+
+```TypeScript
+const obj = {
+    tags: ['a', 'b'],
+    name: 'hello'
+};
+assignGingerly(obj, {
+    '?.tags +=': ['c', 'd'],   // array concat: ['a', 'b', 'c', 'd']
+    '?.name +=': ' world'      // string concat: 'hello world'
+});
+
+// Push a single item
+assignGingerly(obj, { '?.tags +=': 'e' }); // ['a', 'b', 'c', 'd', 'e']
+```
 
 ## Example 5 - Toggling boolean values and negating
 

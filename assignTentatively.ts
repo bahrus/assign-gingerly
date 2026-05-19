@@ -152,7 +152,13 @@ export function assignTentatively(
             if (!(fullPath in reversal)) {
               reversal[fullPath] = parent[lastKey];
             }
-            parent[lastKey] += value;
+            if (Array.isArray(parent[lastKey])) {
+              parent[lastKey] = Array.isArray(value)
+                ? [...parent[lastKey], ...value]
+                : [...parent[lastKey], value];
+            } else {
+              parent[lastKey] += value;
+            }
           } else {
             // Property doesn't exist, create it with the value
             parent[lastKey] = value;
@@ -163,7 +169,13 @@ export function assignTentatively(
             if (!(path in reversal)) {
               reversal[path] = target[path];
             }
-            target[path] += value;
+            if (Array.isArray(target[path])) {
+              target[path] = Array.isArray(value)
+                ? [...target[path], ...value]
+                : [...target[path], value];
+            } else {
+              target[path] += value;
+            }
           } else {
             target[path] = value;
           }
