@@ -479,6 +479,86 @@ export function captureFeatureInitVals(instance) {
         }
     }
 }
+/**
+ * Global store for inter-feature suggestions.
+ * Structure: Map<targetSymbol, Map<targetClass, Array<FeatureInfoSuggestion>>>
+ * Scoped per target class to prevent leaking between different custom elements.
+ */
+const featureInfoSuggestions = new Map();
+/**
+ * Suggest configuration to another feature during registration.
+ *
+ * Call this in a feature's `static onAssigned` to provide config fragments
+ * (withAttrs, customData) that another feature should merge into its own config.
+ *
+ * The target feature is identified by a Symbol (stable across versions and mocks).
+ * Suggestions are scoped per target class to prevent leaking between different
+ * custom elements that use the same features.
+ *
+ * @param fromFeatureCtr - The feature class making the suggestion (for tracing)
+ * @param toFeatureSymbol - Symbol identifying the target feature
+ * @param featureInfo - Config fragments to suggest (withAttrs, customData)
+ * @param targetClass - The custom element class being configured
+ *
+ * @example
+ * import { suggestFeatureInfo } from 'assign-gingerly/assignFeatures.js';
+ * import { ROUNDABOUT_FEATURE } from 'roundabout/symbols.js';
+ *
+ * class FaceUp {
+ *     static onAssigned(ctr, featureConfig) {
+ *         suggestFeatureInfo(FaceUp, ROUNDABOUT_FEATURE, {
+ *             customData: { formBindings: { value: 'value' } }
+ *         }, ctr);
+ *     }
+ * }
+ */
+export function suggestFeatureInfo(fromFeatureCtr, toFeatureSymbol, featureInfo, targetClass) {
+    let symbolMap = featureInfoSuggestions.get(toFeatureSymbol);
+    if (!symbolMap) {
+        symbolMap = new Map();
+        featureInfoSuggestions.set(toFeatureSymbol, symbolMap);
+    }
+    let suggestions = symbolMap.get(targetClass);
+    if (!suggestions) {
+        suggestions = [];
+        symbolMap.set(targetClass, suggestions);
+    }
+    suggestions.push({
+        from: fromFeatureCtr,
+        ...featureInfo
+    });
+}
+/**
+ * Retrieve suggestions made to a feature by other features.
+ *
+ * Call this in a feature's `static onAssigned` to read config fragments
+ * suggested by other features that were processed earlier.
+ *
+ * @param toFeatureSymbol - Symbol identifying this feature (the target)
+ * @param targetClass - The custom element class being configured
+ * @returns Array of suggestions (empty if none)
+ *
+ * @example
+ * import { getFeatureInfoSuggestions } from 'assign-gingerly/assignFeatures.js';
+ * import { ROUNDABOUT_FEATURE } from './symbols.js';
+ *
+ * class RoundaboutFeature {
+ *     static onAssigned(ctr, featureConfig) {
+ *         const suggestions = getFeatureInfoSuggestions(ROUNDABOUT_FEATURE, ctr);
+ *         for (const suggestion of suggestions) {
+ *             if (suggestion.customData) {
+ *                 featureConfig.customData = { ...featureConfig.customData, ...suggestion.customData };
+ *             }
+ *         }
+ *     }
+ * }
+ */
+export function getFeatureInfoSuggestions(toFeatureSymbol, targetClass) {
+    const symbolMap = featureInfoSuggestions.get(toFeatureSymbol);
+    if (!symbolMap)
+        return [];
+    return symbolMap.get(targetClass) || [];
+}
 // =============================================================================
 // PropertyBag — base class for nested feature containers
 // =============================================================================

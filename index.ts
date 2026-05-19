@@ -9,6 +9,6 @@ export {resolveTemplate} from './resolveTemplate.js';
 export {getHost} from './getHost.js';
 export {resolveValues, resolveValue} from './resolveValues.js';
 export {assignFrom} from './assignFrom.js';
-export {assignFeatures, FeaturesRegistry, captureFeatureInitVals, PropertyBag} from './assignFeatures.js';
+export {assignFeatures, FeaturesRegistry, captureFeatureInitVals, PropertyBag, suggestFeatureInfo, getFeatureInfoSuggestions} from './assignFeatures.js';
 export {installForwarding} from './installForwarding.js';
 import './object-extension.js';

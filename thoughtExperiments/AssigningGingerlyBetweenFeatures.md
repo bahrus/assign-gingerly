@@ -180,3 +180,229 @@ If this becomes a common pattern across many packages, **Option 2** (formalized 
 ### One more thought: runtime inter-feature communication
 
 The above is all about *registration-time* coordination. For *runtime* communication between spawned feature instances (e.g., Feature A's instance dispatches an event that Feature B's instance listens to), the `propagator` pattern you're already using (shared EventTarget via `getSharedContext`) is the right approach. Features that need to talk at runtime share a propagator and dispatch/listen for events on it.
+
+## Human Response I
+
+Thanks for your input.  I think because the need for sharing seems to me to be so common, I would like to push forward with a formal solution, shown below.  Actually, the ideal solution, and why it could pose problems followed by a more foolproof suggestion, perhaps.
+
+### Appealing, but problematic solution
+
+1.  assignFeatures should provide an API, suggestFeatureInfo:
+
+(fromFeatureCtr is the class definition for the feature that wants to provide input to the other feature with class toFea)
+
+```JavaScript
+// module assignFeatures.js
+
+//replace any with the correct type
+export function suggestFeatureInfo(fromFeatureCtr: any, toFeatureCTR: any,  featureInfo: {
+    withAttr?: AttrPattern,
+    customData?: any
+}){
+    //please figure out how to implement this
+}
+
+export function getFeatureInfoSuggestions(toFeatureCtr: any){
+    //please figure out how to implement this
+}: Map<ctr, {withAttr?: AttrPattern, customData?: any} >
+```
+
+### Why the solution above is problematic
+
+If feature A assumes version 1.0 of Feature B will be used, but in fact version 1.1 is used, the keys won't match.  Likewise, what about mock features?
+
+### Less elegnt solution
+
+Feature A publishes unique 
+
+```JavaScript
+export const myID =  Symfol.for('feature-a-my-id');
+```
+
+New versions will still use the same constant, and mock features that want to import shared info should use the same one as well
+
+```JavaScript
+// module assignFeatures.js
+
+//replace any with the correct type
+export function suggestFeatureInfo(fromFeatureCtr: any, toFeatureSymbol: Symbol,  featureInfo: {
+    withAttr?: AttrPattern,
+    customData?: any
+}){
+    //please figure out how to implement this
+}
+
+export function getFeatureInfoSuggestions(toFeatureSymbol: Symbol){
+    //please figure out how to implement this
+}: Map<ctr, {withAttr?: AttrPattern, customData?: any} >
+```
+
+
+
+
+
+---
+
+## Kiro's Response I
+
+Good thinking on the versioning/mock problem. Using a Symbol as the stable identifier is the right call — it decouples the "who am I sending to" from the actual class reference, which solves both the version mismatch and mock substitution problems.
+
+### On the API shape
+
+The Symbol-based approach is clean. Let me refine the implementation:
+
+```typescript
+// A global (module-scoped) map of suggestions
+// Key: target feature Symbol, Value: array of suggestions from various sources
+const featureInfoSuggestions = new Map<symbol, Array<{
+    from: Function;  // the suggesting feature's constructor (for debugging/tracing)
+    withAttrs?: any; // AttrPatterns to merge
+    customData?: any; // customData to merge
+}>>();
+
+export function suggestFeatureInfo(
+    fromFeatureCtr: Function,
+    toFeatureSymbol: symbol,
+    featureInfo: { withAttrs?: any; customData?: any }
+): void {
+    let suggestions = featureInfoSuggestions.get(toFeatureSymbol);
+    if (!suggestions) {
+        suggestions = [];
+        featureInfoSuggestions.set(toFeatureSymbol, suggestions);
+    }
+    suggestions.push({ from: fromFeatureCtr, ...featureInfo });
+}
+
+export function getFeatureInfoSuggestions(
+    toFeatureSymbol: symbol
+): Array<{ from: Function; withAttrs?: any; customData?: any }> {
+    return featureInfoSuggestions.get(toFeatureSymbol) || [];
+}
+```
+
+### How it would be used
+
+Feature A (e.g., template parser) publishes its Symbol and calls `suggestFeatureInfo` during its `onAssigned`:
+
+```javascript
+// face-up/symbols.js
+export const FACE_UP_FEATURE = Symbol.for('bahrus/face-up');
+
+// face-up/FaceUp.js
+import { suggestFeatureInfo } from 'assign-gingerly/assignFeatures.js';
+import { FACE_UP_FEATURE } from './symbols.js';
+import { ROUNDABOUT_FEATURE } from 'roundabout/symbols.js';
+
+class FaceUp {
+    static onAssigned(ctr, featureConfig) {
+        // ... face-up setup ...
+        
+        // Suggest config to roundabout (if it's being used)
+        suggestFeatureInfo(FaceUp, ROUNDABOUT_FEATURE, {
+            customData: {
+                formBindings: { value: 'value', validity: 'validity' }
+            },
+            withAttrs: {
+                // additional attributes roundabout should parse
+            }
+        });
+    }
+}
+```
+
+Feature B (roundabout) reads suggestions during its `onAssigned`:
+
+```javascript
+// roundabout/symbols.js
+export const ROUNDABOUT_FEATURE = Symbol.for('bahrus/roundabout');
+
+// roundabout/RoundaboutFeature.js
+import { getFeatureInfoSuggestions } from 'assign-gingerly/assignFeatures.js';
+import { ROUNDABOUT_FEATURE } from './symbols.js';
+
+class RoundaboutFeature {
+    static onAssigned(ctr, featureConfig) {
+        // Read suggestions from other features
+        const suggestions = getFeatureInfoSuggestions(ROUNDABOUT_FEATURE);
+        
+        for (const suggestion of suggestions) {
+            if (suggestion.customData) {
+                featureConfig.customData = {
+                    ...featureConfig.customData,
+                    ...suggestion.customData
+                };
+            }
+            if (suggestion.withAttrs) {
+                // Merge withAttrs (this needs thought — how to merge AttrPatterns?)
+                featureConfig.withAttrs = {
+                    ...featureConfig.withAttrs,
+                    ...suggestion.withAttrs
+                };
+            }
+        }
+        
+        // ... rest of roundabout setup
+    }
+}
+```
+
+### Timing consideration
+
+This works cleanly **if** Feature A's `onAssigned` runs before Feature B's `onAssigned`. Since `assignFeatures` processes keys in declaration order, the consumer just needs to declare them in the right order:
+
+```javascript
+await customElements.assignFeatures(MyElement, {
+    faceUp: { spawn: FaceUp },           // runs first, calls suggestFeatureInfo
+    roundabout: { spawn: RoundaboutFeature }  // runs second, reads suggestions
+});
+```
+
+If the consumer gets the order wrong, roundabout's `onAssigned` won't see face-up's suggestions (they haven't been posted yet). This is acceptable — it's a documented ordering requirement, same as "call `assignFeatures` before `define`."
+
+### One refinement: scoping suggestions per class
+
+The current design is global — suggestions accumulate across all classes. If two different custom elements both use face-up and roundabout, face-up's suggestions from Element A would leak into Element B's roundabout.
+
+Fix: scope suggestions per target class:
+
+```typescript
+const featureInfoSuggestions = new Map<symbol, Map<Function, Array<{...}>>>();
+
+export function suggestFeatureInfo(
+    fromFeatureCtr: Function,
+    toFeatureSymbol: symbol,
+    featureInfo: { withAttrs?: any; customData?: any },
+    targetClass: Function  // the class being configured
+): void { ... }
+
+export function getFeatureInfoSuggestions(
+    toFeatureSymbol: symbol,
+    targetClass: Function
+): Array<{...}> { ... }
+```
+
+Then `onAssigned` passes `ctr` as the `targetClass`:
+
+```javascript
+static onAssigned(ctr, featureConfig) {
+    suggestFeatureInfo(FaceUp, ROUNDABOUT_FEATURE, { ... }, ctr);
+}
+```
+
+And roundabout reads:
+
+```javascript
+static onAssigned(ctr, featureConfig) {
+    const suggestions = getFeatureInfoSuggestions(ROUNDABOUT_FEATURE, ctr);
+}
+```
+
+### Summary
+
+The Symbol-based approach is solid. I'd implement it with:
+1. `suggestFeatureInfo(fromCtr, toSymbol, info, targetClass)` — scoped per target class
+2. `getFeatureInfoSuggestions(toSymbol, targetClass)` — returns array of suggestions
+3. Document the ordering requirement (suggesting feature must be declared before consuming feature)
+4. Each feature package exports its Symbol (e.g., `export const ROUNDABOUT_FEATURE = Symbol.for('bahrus/roundabout')`)
+
+Want me to implement this?
