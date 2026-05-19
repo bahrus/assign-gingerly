@@ -1,6 +1,6 @@
 {
   "name": "assign-gingerly",
-  "version": "0.0.43",
+  "version": "0.0.44",
   "description": "This package provides a utility function for carefully merging one object into another.",
   "homepage": "https://github.com/bahrus/assign-gingerly#readme",
   "bugs": {
