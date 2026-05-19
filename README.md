@@ -4790,6 +4790,7 @@ await customElements.assignFeatures(MyElement, { feature: { spawn: SyncFeature }
 | [truth-sourcer](https://www.npmjs.com/package/truth-sourcer) | Attribute/property binding and truth-sourcing for custom elements | [GitHub](https://github.com/bahrus/truth-sourcer) |
 | [be-reflective](https://www.npmjs.com/package/be-reflective) | CSS custom state reflection from computed styles | [GitHub](https://github.com/bahrus/be-reflective) |
 | [face-up](https://www.npmjs.com/package/face-up) | Form Associated Custom Element behavior via ElementInternals | [GitHub](https://github.com/bahrus/face-up) |
+| [roundabout](https://www.npmjs.com/package/roundabout) | Reactive view-model binding with template rendering and computed property orchestration | [GitHub](https://github.com/bahrus/roundabout#using-roundaboutfeature-with-assignfeatures) |
 | [time-ticker](https://www.npmjs.com/package/time-ticker) | Web component that fires events periodically (example of a feature-based component with no code in the class) | [GitHub](https://github.com/bahrus/time-ticker) |
 
 </details>
