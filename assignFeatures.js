@@ -386,57 +386,98 @@ export function assignFeatures(ctr, features, featuresRegistry) {
     if (!supportedFeatures) {
         throw new Error(`assignFeatures: ${ctr.name || 'constructor'} does not define static supportedFeatures`);
     }
-    const onAssignedPromises = [];
+    let hasAsync = false;
+    async function processFeatures() {
+        for (const key of Object.keys(features)) {
+            // 1. Confirm the key is opted-in via supportedFeatures
+            if (!(key in supportedFeatures)) {
+                throw new Error(`assignFeatures: "${key}" is not declared in ${ctr.name || 'constructor'}.supportedFeatures`);
+            }
+            // 2. Check that the prototype doesn't already have this property defined
+            const existingDescriptor = Object.getOwnPropertyDescriptor(ctr.prototype, key);
+            if (existingDescriptor) {
+                throw new Error(`assignFeatures: "${key}" already exists on ${ctr.name || 'constructor'}.prototype`);
+            }
+            // 3. Check that this key hasn't already been registered for this constructor
+            if (featuresRegistry.hasKey(ctr, key)) {
+                throw new Error(`assignFeatures: "${key}" has already been assigned for ${ctr.name || 'constructor'}`);
+            }
+            // 4. Register the injection
+            featuresRegistry.set(ctr, key, features[key]);
+            // 5. Install the lazy getter on the prototype
+            installFeatureGetter(ctr, key, featuresRegistry);
+            // 6. Install callback forwarding if configured (merge author + consumer)
+            const featureConfig = features[key];
+            const optIn = supportedFeatures[key];
+            const authorCallbacks = optIn.callbackForwarding || [];
+            const consumerCallbacks = featureConfig.callbackForwarding || [];
+            // Union of both (author defaults + consumer additions)
+            const allCallbacks = [...new Set([...authorCallbacks, ...consumerCallbacks])];
+            if (allCallbacks.length > 0) {
+                installCallbackForwarding(ctr, key, allCallbacks);
+            }
+            // 7. Call static onAssigned if the spawn class defines it (sequentially awaited)
+            const SpawnClass = featureConfig.spawn;
+            if (SpawnClass && !isAsyncSpawn(SpawnClass) &&
+                Object.hasOwn(SpawnClass, 'onAssigned') &&
+                typeof SpawnClass.onAssigned === 'function') {
+                const result = SpawnClass.onAssigned(ctr, featureConfig, key);
+                if (result && typeof result.then === 'function') {
+                    hasAsync = true;
+                    await result;
+                }
+            }
+        }
+        // 8. Install whenFeatureReady method if featuresConfig.lifecycleKeys is configured
+        const featuresConfig = ctr.featuresConfig;
+        if (featuresConfig?.lifecycleKeys) {
+            const methodName = resolveWhenFeatureReadyName(featuresConfig.lifecycleKeys);
+            if (methodName) {
+                installWhenFeatureReadyMethod(ctr, methodName);
+            }
+        }
+    }
+    // Check if any feature has an async onAssigned (pre-scan)
     for (const key of Object.keys(features)) {
-        // 1. Confirm the key is opted-in via supportedFeatures
-        if (!(key in supportedFeatures)) {
-            throw new Error(`assignFeatures: "${key}" is not declared in ${ctr.name || 'constructor'}.supportedFeatures`);
-        }
-        // 2. Check that the prototype doesn't already have this property defined
-        const existingDescriptor = Object.getOwnPropertyDescriptor(ctr.prototype, key);
-        if (existingDescriptor) {
-            throw new Error(`assignFeatures: "${key}" already exists on ${ctr.name || 'constructor'}.prototype`);
-        }
-        // 3. Check that this key hasn't already been registered for this constructor
-        if (featuresRegistry.hasKey(ctr, key)) {
-            throw new Error(`assignFeatures: "${key}" has already been assigned for ${ctr.name || 'constructor'}`);
-        }
-        // 4. Register the injection
-        featuresRegistry.set(ctr, key, features[key]);
-        // 5. Install the lazy getter on the prototype
-        installFeatureGetter(ctr, key, featuresRegistry);
-        // 6. Install callback forwarding if configured (merge author + consumer)
         const featureConfig = features[key];
-        const optIn = supportedFeatures[key];
-        const authorCallbacks = optIn.callbackForwarding || [];
-        const consumerCallbacks = featureConfig.callbackForwarding || [];
-        // Union of both (author defaults + consumer additions)
-        const allCallbacks = [...new Set([...authorCallbacks, ...consumerCallbacks])];
-        if (allCallbacks.length > 0) {
-            installCallbackForwarding(ctr, key, allCallbacks);
-        }
-        // 7. Call static onAssigned if the spawn class defines it
         const SpawnClass = featureConfig.spawn;
         if (SpawnClass && !isAsyncSpawn(SpawnClass) &&
             Object.hasOwn(SpawnClass, 'onAssigned') &&
             typeof SpawnClass.onAssigned === 'function') {
-            const result = SpawnClass.onAssigned(ctr, featureConfig, key);
-            if (result && typeof result.then === 'function') {
-                onAssignedPromises.push(result);
-            }
+            // We can't know if it's async without calling it, so always use the async path
+            // if any onAssigned exists
+            return processFeatures();
         }
     }
-    // 8. Install whenFeatureReady method if featuresConfig.lifecycleKeys is configured
+    // No onAssigned hooks — run synchronously (inline the logic to avoid the async wrapper)
+    for (const key of Object.keys(features)) {
+        if (!(key in supportedFeatures)) {
+            throw new Error(`assignFeatures: "${key}" is not declared in ${ctr.name || 'constructor'}.supportedFeatures`);
+        }
+        const existingDescriptor = Object.getOwnPropertyDescriptor(ctr.prototype, key);
+        if (existingDescriptor) {
+            throw new Error(`assignFeatures: "${key}" already exists on ${ctr.name || 'constructor'}.prototype`);
+        }
+        if (featuresRegistry.hasKey(ctr, key)) {
+            throw new Error(`assignFeatures: "${key}" has already been assigned for ${ctr.name || 'constructor'}`);
+        }
+        featuresRegistry.set(ctr, key, features[key]);
+        installFeatureGetter(ctr, key, featuresRegistry);
+        const featureConfig = features[key];
+        const optIn = supportedFeatures[key];
+        const authorCallbacks = optIn.callbackForwarding || [];
+        const consumerCallbacks = featureConfig.callbackForwarding || [];
+        const allCallbacks = [...new Set([...authorCallbacks, ...consumerCallbacks])];
+        if (allCallbacks.length > 0) {
+            installCallbackForwarding(ctr, key, allCallbacks);
+        }
+    }
     const featuresConfig = ctr.featuresConfig;
     if (featuresConfig?.lifecycleKeys) {
         const methodName = resolveWhenFeatureReadyName(featuresConfig.lifecycleKeys);
         if (methodName) {
             installWhenFeatureReadyMethod(ctr, methodName);
         }
-    }
-    // Return a Promise if any onAssigned hooks are async, otherwise undefined
-    if (onAssignedPromises.length > 0) {
-        return Promise.all(onAssignedPromises).then(() => { });
     }
     return undefined;
 }
