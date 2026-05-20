@@ -420,7 +420,7 @@ export function assignFeatures(ctr, features, featuresRegistry) {
         if (SpawnClass && !isAsyncSpawn(SpawnClass) &&
             Object.hasOwn(SpawnClass, 'onAssigned') &&
             typeof SpawnClass.onAssigned === 'function') {
-            const result = SpawnClass.onAssigned(ctr, featureConfig);
+            const result = SpawnClass.onAssigned(ctr, featureConfig, key);
             if (result && typeof result.then === 'function') {
                 onAssignedPromises.push(result);
             }

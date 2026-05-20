@@ -517,7 +517,7 @@ export function assignFeatures(
         if (SpawnClass && !isAsyncSpawn(SpawnClass) && 
             Object.hasOwn(SpawnClass as any, 'onAssigned') && 
             typeof (SpawnClass as any).onAssigned === 'function') {
-            const result = (SpawnClass as any).onAssigned(ctr, featureConfig);
+            const result = (SpawnClass as any).onAssigned(ctr, featureConfig, key);
             if (result && typeof result.then === 'function') {
                 onAssignedPromises.push(result);
             }
