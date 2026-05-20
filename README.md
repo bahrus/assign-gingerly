@@ -4792,10 +4792,22 @@ customElements.define('my-element', MyElement);
 **How it works:**
 
 - `assignFeatures` checks if the spawn class defines `static onAssigned` (via `Object.hasOwn`).
-- If found, calls `SpawnClass.onAssigned(ctr, featureConfig)` after installing the getter.
-- If `onAssigned` returns a Promise, `assignFeatures` returns a `Promise<void>` that resolves when all async hooks complete.
-- If no `onAssigned` hooks are async (or none exist), `assignFeatures` returns `undefined` (backward compatible — existing code that doesn't `await` still works).
+- If found, calls `SpawnClass.onAssigned(ctr, featureConfig, key)` after installing the getter.
+- If `onAssigned` returns a Promise, it is **awaited sequentially** before processing the next feature. This guarantees that features declared earlier complete their setup before later features run.
+- This sequential ordering enables inter-feature communication: Feature A can post configuration (via `suggestFeatureInfo`) that Feature B reads in its own `onAssigned`.
+- If no features have `onAssigned`, `assignFeatures` runs synchronously and returns `undefined` (backward compatible).
 - Only applies to synchronous spawners (the class must be available at registration time). Async spawners can't define `onAssigned` since the class isn't loaded yet.
+
+**Sequential ordering guarantee:**
+
+```JavaScript
+await customElements.assignFeatures(MyElement, {
+    featureA: { spawn: FeatureA },  // FeatureA.onAssigned runs first, completes
+    featureB: { spawn: FeatureB }   // FeatureB.onAssigned runs second, can read A's output
+});
+```
+
+Features are processed in declaration order. If Feature A's `onAssigned` is async, it fully completes before Feature B's `onAssigned` starts. This makes it safe for features to communicate via `suggestFeatureInfo` / `getFeatureInfoSuggestions`.
 
 **`await` is always safe:**
 
