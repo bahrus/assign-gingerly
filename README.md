@@ -4809,6 +4809,8 @@ await customElements.assignFeatures(MyElement, {
 
 Features are processed in declaration order. If Feature A's `onAssigned` is async, it fully completes before Feature B's `onAssigned` starts. This makes it safe for features to communicate via `suggestFeatureInfo` / `getFeatureInfoSuggestions`.
 
+For full documentation on inter-feature communication, see [docs/inter-feature-communication.md](docs/inter-feature-communication.md).
+
 **`await` is always safe:**
 
 ```JavaScript
