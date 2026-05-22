@@ -52,7 +52,7 @@ const resolvedSpawnCache = new WeakMap();
  * @param registry - Optional custom element registry (defaults to global `customElements`)
  * @returns The newly created and defined custom element class
  */
-export async function defineWithFeatures(tagName, baseTagName, config, registry) {
+export async function defineWithFeatures(tagName, baseTagName, config, registry, options) {
     const reg = registry || customElements;
     // 1. Resolve base class — wait for it if not yet defined
     let BaseClass = reg.get(baseTagName);
@@ -99,6 +99,10 @@ export async function defineWithFeatures(tagName, baseTagName, config, registry)
     // 3. Create subclass
     const NewClass = class extends BaseClass {
     };
+    // 3b. Call onSubclassCreated callback (before define, before features if needed)
+    if (options?.onSubclassCreated) {
+        options.onSubclassCreated(NewClass);
+    }
     // 4. Build FeatureConfigsMap: resolved spawns + JSON config
     const featuresMap = {};
     for (const [key, jsonConfig] of Object.entries(config.assignFeatures)) {

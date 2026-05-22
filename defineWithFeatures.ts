@@ -34,6 +34,14 @@ export interface DefineWithFeaturesConfig {
 }
 
 /**
+ * Options for defineWithFeatures.
+ */
+export interface DefineWithFeaturesOptions {
+    /** Called after the subclass is created but before registry.define(). */
+    onSubclassCreated?: (NewCtr: Function) => void;
+}
+
+/**
  * Determines if a function is an async spawner (same heuristic as assignFeatures).
  */
 function isAsyncSpawn(fn: any): boolean {
@@ -68,7 +76,8 @@ export async function defineWithFeatures(
     tagName: string,
     baseTagName: string,
     config: DefineWithFeaturesConfig,
-    registry?: CustomElementRegistry
+    registry?: CustomElementRegistry,
+    options?: DefineWithFeaturesOptions
 ): Promise<Function> {
     const reg = registry || customElements;
 
@@ -128,6 +137,11 @@ export async function defineWithFeatures(
 
     // 3. Create subclass
     const NewClass = class extends (BaseClass as any) {};
+
+    // 3b. Call onSubclassCreated callback (before define, before features if needed)
+    if (options?.onSubclassCreated) {
+        options.onSubclassCreated(NewClass);
+    }
 
     // 4. Build FeatureConfigsMap: resolved spawns + JSON config
     const featuresMap: FeatureConfigsMap = {};

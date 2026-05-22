@@ -17,7 +17,8 @@ await defineWithFeatures(
     tagName,        // Custom element tag name to define (e.g., 'time-ticker')
     baseTagName,    // Tag name of the base class to extend (e.g., 'el-maker')
     config,         // JSON-serializable feature configuration
-    registry?       // Optional scoped CustomElementRegistry (defaults to global)
+    registry?,      // Optional scoped CustomElementRegistry (defaults to global)
+    options?        // Optional { onSubclassCreated(NewCtr) {} }
 );
 ```
 
@@ -133,6 +134,21 @@ Pass a scoped registry as the fourth argument:
 const scopedRegistry = new CustomElementRegistry();
 await defineWithFeatures('my-ticker', 'el-maker', config, scopedRegistry);
 ```
+
+## Options: `onSubclassCreated` callback
+
+The fifth parameter accepts an options object with an `onSubclassCreated` callback. This fires after the subclass is created but before `registry.define()` — the right moment to set static properties that the element's constructor or `connectedCallback` might need during synchronous upgrade:
+
+```javascript
+await defineWithFeatures('time-ticker', 'el-maker', config, registry, {
+    onSubclassCreated(NewCtr) {
+        // Set static properties before any instances are created
+        NewCtr.seedRef = new WeakRef(scriptEl);
+    }
+});
+```
+
+**Why this matters:** When `registry.define(tagName, NewCtr)` is called, the browser synchronously upgrades any existing elements of that tag in the DOM. If the class's `connectedCallback` reads a static property (like `this.constructor.seedRef`), it must already be set. The callback guarantees this timing.
 
 ## What's NOT in the JSON config
 
