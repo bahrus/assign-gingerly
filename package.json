@@ -64,6 +64,10 @@
       "default": "./installForwarding.js",
       "types": "./installForwarding.ts"
     },
+    "./defineWithFeatures.js": {
+      "default": "./defineWithFeatures.js",
+      "types": "./defineWithFeatures.ts"
+    },
     "./assignFrom.js": {
       "default": "./assignFrom.js",
       "types": "./assignFrom.ts"
