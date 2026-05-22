@@ -4820,6 +4820,31 @@ await customElements.assignFeatures(MyElement, { feature: { spawn: SyncFeature }
 // Both work — await on undefined is a no-op
 ```
 
+### Declarative element definition with `defineWithFeatures`
+
+`defineWithFeatures` enables defining custom elements from JSON-serializable configuration — no class authoring needed for derived elements:
+
+```JavaScript
+import { defineWithFeatures } from 'assign-gingerly/defineWithFeatures.js';
+
+await defineWithFeatures('time-ticker', 'el-maker', {
+    assignFeatures: {
+        roundabout: {
+            customData: { template: myTemplate },
+            withAttrs: { base: 'ra', mode: '${base}-mode' },
+            callbackForwarding: ['connectedCallback']
+        },
+        truthSourcer: {
+            callbackForwarding: ['connectedCallback', 'attributeChangedCallback']
+        }
+    }
+});
+```
+
+It resolves async `fallbackSpawn` implementations from the base class, creates a subclass, wires up features, and defines the element. Designed for use with [mount-observer cede scripts](https://github.com/bahrus/mount-observer#custom-element-definition-cede-scripts) but works standalone.
+
+For full documentation, see [docs/defineWithFeatures.md](docs/defineWithFeatures.md).
+
 <details>
 <summary>Catalog of Published Custom Element Features</summary>
 
