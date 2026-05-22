@@ -8,11 +8,11 @@ Custom Elements that adopt the features support of this package / polyfill can i
 
 This package adds an assignFeatures method to the CustomElementRegistry  that allows the party registering the custom element to first choose concrete choices as far as which features to actually add lazy getters to, as well as things like custom data, and then define the custom element. It happens within the auspices of unfettered access to the JavaScript runtime engine.
 
-The package mount-observer leverages this package (assign-gingerly), and adds something called ["cede scripts"](https://github.com/bahrus/mount-observer#custom-element-definition-cede-scripts) that allows us to declarative define custom elements within the HTML markup, by indicating the name of custom element to extend.  Please read that documentation carefully until it is well understood.
+The package mount-observer leverages this package (assign-gingerly), and adds something called ["cede scripts"](https://github.com/bahrus/mount-observer#custom-element-definition-cede-scripts) that allows us to declaratively define custom elements within the HTML markup, by indicating the name of custom element to extend.  Please read that documentation carefully until it is well understood.
 
 But for the benefit of cede scripts, it would be helpful to:
 
-1.  Allow the developer to define a very simple base custom element class, even an "abstract class", at least in concept, that expects and indicates support for a large swath of compatible features it wants to recognize as "legitimate" features for custom elements deriving from the base class. Each feature would specify one (asynchronous) fallback spawn, in addition to other universal setting.
+1.  Allow the developer to define a very simple base custom element class, even an "abstract class", at least in concept, that expects and indicates support for a large swath of compatible features it wants to recognize as "legitimate" features for custom elements deriving from the base class. Each feature would specify one (asynchronous) fallback spawn, in addition to other universal settings.
 
 The expectation is that this "abstract class" would be defined, featureless in the customElementRegistry.define call.  It is used as a blueprint for a family of declarative custom element definitions that do similar but not identical things, and that will want to pick and choose which features are actually needed for the problem at hand.
 
@@ -225,3 +225,31 @@ export async function defineWithFeatures(
 | Spawn caching | Worth adding for repeated definitions |
 
 Want me to implement this?
+
+---
+
+## Human Response I
+
+```JavaScript
+await defineFromCede('time-ticker', 'el-maker', {
+```
+
+good start, I like passing in the name of the custom element rather than the constructor as I suggested (my mistake).  But this signature is missing passing in the (scoped) customElementRegistry, which you actually added when you spelled out the implementation, so we are good there.
+
+> Internally:
+
+> 1. **Resolve the base class** — look up `'el-maker'` in the registry to get the constructor. Read its `static supportedFeatures`.
+
+Yes, if customElementRegistry.get('el-maker') is null, do an await customElementRegistry.whenDefined('el-maker').
+
+> The `getSharedAccess` question
+
+That's a good catch, I should have proofread what I copied and pasted, that is definitely a wrinkle of complexity that needs a solid use case before doing anything about.  Let's definitely hold off on implementing any declarative getSharedAccess support.
+
+> Naming
+
+I think defineWithFeatures is the most descriptive name, I agree.
+
+> Where should this live?
+
+I agree separate module, defineWithFeatures.js
