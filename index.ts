@@ -12,4 +12,5 @@ export {assignFrom} from './assignFrom.js';
 export {assignFeatures, FeaturesRegistry, captureFeatureInitVals, PropertyBag, suggestFeatureInfo, getFeatureInfoSuggestions} from './assignFeatures.js';
 export {installForwarding} from './installForwarding.js';
 export {defineWithFeatures} from './defineWithFeatures.js';
+export {resolveAndAssignFeatures} from './resolveAndAssignFeatures.js';
 import './object-extension.js';

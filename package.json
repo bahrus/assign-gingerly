@@ -68,6 +68,10 @@
       "default": "./defineWithFeatures.js",
       "types": "./defineWithFeatures.ts"
     },
+    "./resolveAndAssignFeatures.js": {
+      "default": "./resolveAndAssignFeatures.js",
+      "types": "./resolveAndAssignFeatures.ts"
+    },
     "./assignFrom.js": {
       "default": "./assignFrom.js",
       "types": "./assignFrom.ts"
