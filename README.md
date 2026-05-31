@@ -4845,6 +4845,43 @@ It resolves async `fallbackSpawn` implementations from the base class, creates a
 
 For full documentation, see [docs/defineWithFeatures.md](docs/defineWithFeatures.md).
 
+### Resolving async spawns with `resolveAndAssignFeatures`
+
+When defining a custom element via a traditional JS module (rather than declaratively via cede scripts), `resolveAndAssignFeatures` handles the boilerplate of resolving async `fallbackSpawn` implementations before calling `assignFeatures`:
+
+```JavaScript
+import { resolveAndAssignFeatures } from 'assign-gingerly/resolveAndAssignFeatures.js';
+
+export async function wireFeatures(ElementClass, cfg) {
+    const { roundabout } = cfg.features;
+    const { customData, withAttrs } = roundabout;
+
+    await resolveAndAssignFeatures(ElementClass, {
+        timeTicker: { spawn: TimeTicker },  // explicit spawn — used as-is
+        faceUp: {                           // no spawn — resolved from fallbackSpawn
+            callbackForwarding: ['connectedCallback', 'disconnectedCallback']
+        },
+        roundabout: {                       // no spawn — resolved from fallbackSpawn
+            customData,
+            withAttrs,
+            callbackForwarding: ['connectedCallback']
+        }
+    });
+}
+```
+
+**What it does:**
+
+For each feature in the config that doesn't have an explicit `spawn`, it resolves the async `fallbackSpawn` from the class's `static supportedFeatures`, sets it as the spawn, then calls `assignFeatures`. Features with an explicit `spawn` are left untouched.
+
+**When to use it:**
+
+- Defining custom elements via JS modules (the traditional `import` + `define` pattern)
+- When the base class uses async `fallbackSpawn` for lazy loading but you want synchronous feature access after registration
+- As a reusable `wireFeatures` function that multiple element definitions can share
+
+See [time-ticker/wireFeatures.js](https://github.com/bahrus/time-ticker/blob/baseline/wireFeatures.js) for a real-world example.
+
 <details>
 <summary>Catalog of Published Custom Element Features</summary>
 
