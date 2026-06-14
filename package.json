@@ -97,7 +97,7 @@
   "devDependencies": {
     "@playwright/test": "1.60.0",
     "spa-ssi": "0.0.27",
-    "@types/node": "25.8.0",
+    "@types/node": "25.9.3",
     "typescript": "6.0.3"
   }
 }
