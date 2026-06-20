@@ -199,3 +199,16 @@ Is `"..."` the right key name? Considerations:
 - Alternative: `"$ref"` (JSON Schema convention), `"@spread"`, `"...spread"`
 
 I think `"..."` is fine — it's short, visually clear, and JSON-safe.
+
+---
+
+## Human Response I
+
+On reflection, after thinking about your input, I'm leaning towards:
+
+1.  Making the function resolveValues, and therefore assignFrom, asynchronous.  I'll take care of adjusting all the references to this function to work with that in external packages with dependencies on this package.
+2.  Only add the protocols option to type ResolveValuesOptions
+3.  Add an async function resolveProtocolValue, parallel to resolveValue, that gets invoked if the rhs starts with one of the supported protocols.
+4.  The convention should be that the protocol string ends at the first ?. in the rhs.  If there is an ?. in the right hand side, call resolve value, passing in the rhs starting with ?.
+5.  Support "..." in assignFrom only.
+ 
