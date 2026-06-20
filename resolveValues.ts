@@ -216,6 +216,15 @@ export async function resolveValues(
     } else if (typeof value === 'string' && protocols && hasProtocol(value)) {
       // Protocol-prefixed value — resolve asynchronously
       result[key] = await resolveProtocolValue(value, protocols, options);
+    } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      // Recursively resolve nested plain objects (e.g., headers: { "...": "globalThis://key" })
+      // Only recurse into plain objects — skip DOM elements, class instances, etc.
+      const proto = Object.getPrototypeOf(value);
+      if (proto === Object.prototype || proto === null) {
+        result[key] = await resolveValues(value, source, options);
+      } else {
+        result[key] = value;
+      }
     } else {
       result[key] = value;
     }

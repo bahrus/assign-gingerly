@@ -27,13 +27,30 @@ export async function assignFrom(target, pattern, options) {
         aka: options.aka,
         protocols: options.protocols
     });
-    // Handle "..." spread key — merge resolved value into parent
-    if ('...' in resolved) {
-        const spreadValue = resolved['...'];
-        if (spreadValue && typeof spreadValue === 'object') {
-            Object.assign(resolved, spreadValue);
-        }
-        delete resolved['...'];
-    }
+    // Recursively handle "..." spread keys at all nesting levels
+    handleSpreads(resolved);
     return assignGingerly(target, resolved, options);
+}
+/**
+ * Recursively walk an object and handle "..." spread keys.
+ * When a "..." key is found, its value (which should be an object after protocol resolution)
+ * is spread into the parent, replacing the "..." entry.
+ */
+function handleSpreads(obj) {
+    for (const [key, value] of Object.entries(obj)) {
+        if (key !== '...' && typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            const proto = Object.getPrototypeOf(value);
+            if (proto === Object.prototype || proto === null) {
+                obj[key] = handleSpreads(value);
+            }
+        }
+    }
+    if ('...' in obj) {
+        const spreadValue = obj['...'];
+        delete obj['...'];
+        if (spreadValue && typeof spreadValue === 'object') {
+            Object.assign(obj, spreadValue);
+        }
+    }
+    return obj;
 }
