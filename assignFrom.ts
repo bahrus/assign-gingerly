@@ -19,22 +19,33 @@
  * }, { from: source });
  * // target is now { color: 'red', text: 'Hello' }
  */
-import { resolveValues } from './resolveValues.js';
+import { resolveValues, ResolveValuesOptions } from './resolveValues.js';
 import assignGingerly, { IAssignGingerlyOptions } from './assignGingerly.js';
 
-export interface AssignFromOptions extends IAssignGingerlyOptions {
+export interface AssignFromOptions extends IAssignGingerlyOptions, ResolveValuesOptions {
   /** Source object to resolve RHS path strings against */
   from: any;
 }
 
-export function assignFrom(
+export async function assignFrom(
   target: any,
   pattern: Record<string, any>,
   options: AssignFromOptions
-): any {
-  const resolved = resolveValues(pattern, options.from, {
+): Promise<any> {
+  const resolved = await resolveValues(pattern, options.from, {
     withMethods: options.withMethods,
-    aka: options.aka
+    aka: options.aka,
+    protocols: options.protocols
   });
+
+  // Handle "..." spread key — merge resolved value into parent
+  if ('...' in resolved) {
+    const spreadValue = resolved['...'];
+    if (spreadValue && typeof spreadValue === 'object') {
+      Object.assign(resolved, spreadValue);
+    }
+    delete resolved['...'];
+  }
+
   return assignGingerly(target, resolved, options);
 }

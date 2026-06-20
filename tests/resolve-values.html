@@ -24,7 +24,7 @@
             }
         }
 
-        function runTests() {
+        async function runTests() {
             // ===== resolveValues tests =====
 
             // Test 1: Basic path resolution
@@ -34,7 +34,7 @@
                     hello: '?.myPropContainer?.stringProp',
                     foo: '?.myFooString'
                 };
-                const result = resolveValues(pattern, source);
+                const result = await resolveValues(pattern, source);
                 assert(result.hello === 'Venus', 'should resolve nested path');
                 assert(result.foo === 'bar', 'should resolve top-level path');
             }
@@ -49,7 +49,7 @@
                     nul: null,
                     arr: [1, 2, 3]
                 };
-                const result = resolveValues(pattern, source);
+                const result = await resolveValues(pattern, source);
                 assert(result.num === 42, 'should pass through number');
                 assert(result.bool === true, 'should pass through boolean');
                 assert(result.str === 'literal string', 'should pass through non-path string');
@@ -61,7 +61,7 @@
             {
                 const source = { a: { b: 1 } };
                 const pattern = { val: '?.a?.c?.d' };
-                const result = resolveValues(pattern, source);
+                const result = await resolveValues(pattern, source);
                 assert(result.val === undefined, 'should return undefined for unresolvable path');
             }
 
@@ -69,7 +69,7 @@
             {
                 const source = { a: { b: null } };
                 const pattern = { val: '?.a?.b?.c' };
-                const result = resolveValues(pattern, source);
+                const result = await resolveValues(pattern, source);
                 assert(result.val == null, 'should return null/undefined when path hits null');
             }
 
@@ -77,7 +77,7 @@
             {
                 const source = { nested: { obj: { x: 1, y: 2 } } };
                 const pattern = { val: '?.nested?.obj' };
-                const result = resolveValues(pattern, source);
+                const result = await resolveValues(pattern, source);
                 assert(result.val.x === 1 && result.val.y === 2, 'should resolve to object value');
             }
 
@@ -85,7 +85,7 @@
             {
                 const source = { items: [10, 20, 30] };
                 const pattern = { val: '?.items' };
-                const result = resolveValues(pattern, source);
+                const result = await resolveValues(pattern, source);
                 assert(Array.isArray(result.val) && result.val[1] === 20, 'should resolve to array value');
             }
 
@@ -93,7 +93,7 @@
             {
                 const source = { flag: false, count: 0 };
                 const pattern = { a: '?.flag', b: '?.count' };
-                const result = resolveValues(pattern, source);
+                const result = await resolveValues(pattern, source);
                 assert(result.a === false, 'should resolve to false');
                 assert(result.b === 0, 'should resolve to zero');
             }
@@ -102,13 +102,13 @@
             {
                 const source = { color: 'red' };
                 const pattern = { '?.style?.color': '?.color' };
-                const result = resolveValues(pattern, source);
+                const result = await resolveValues(pattern, source);
                 assert(result['?.style?.color'] === 'red', 'should preserve LHS path key and resolve RHS');
             }
 
             // Test 9: Empty pattern
             {
-                const result = resolveValues({}, { a: 1 });
+                const result = await resolveValues({}, { a: 1 });
                 assert(Object.keys(result).length === 0, 'should return empty object for empty pattern');
             }
 
@@ -120,7 +120,7 @@
                     size: '16px',
                     count: 5
                 };
-                const result = resolveValues(pattern, source);
+                const result = await resolveValues(pattern, source);
                 assert(result.color === 'blue', 'should resolve path in mixed pattern');
                 assert(result.size === '16px', 'should keep literal string in mixed pattern');
                 assert(result.count === 5, 'should keep number in mixed pattern');
@@ -132,7 +132,7 @@
             {
                 const source = { theme: { color: 'red' }, label: 'Hello' };
                 const target = { color: 'blue', text: '' };
-                assignFrom(target, {
+                await assignFrom(target, {
                     color: '?.theme?.color',
                     text: '?.label'
                 }, { from: source });
@@ -144,7 +144,7 @@
             {
                 const source = { val: 'resolved' };
                 const target = { style: {} };
-                assignFrom(target, {
+                await assignFrom(target, {
                     '?.style?.color': '?.val'
                 }, { from: source });
                 assert(target.style.color === 'resolved', 'assignFrom should work with nested LHS paths');
@@ -153,7 +153,7 @@
             // Test 13: assignFrom with literal values (no resolution needed)
             {
                 const target = {};
-                assignFrom(target, {
+                await assignFrom(target, {
                     a: 42,
                     b: 'literal'
                 }, { from: {} });
@@ -165,7 +165,7 @@
             {
                 const source = { cls: 'active' };
                 const el = document.createElement('div');
-                assignFrom(el, {
+                await assignFrom(el, {
                     '?.classList?.add': '?.cls'
                 }, { from: source, withMethods: ['add'] });
                 assert(el.classList.contains('active'), 'assignFrom should work with withMethods');
@@ -174,7 +174,7 @@
             // Test 15: assignFrom with unresolvable path assigns undefined
             {
                 const target = { val: 'original' };
-                assignFrom(target, {
+                await assignFrom(target, {
                     val: '?.nonexistent?.path'
                 }, { from: {} });
                 assert(target.val === undefined, 'assignFrom should assign undefined for unresolvable path');
@@ -184,7 +184,7 @@
             {
                 const source = { name: 'Alice', age: 30 };
                 const pattern = { self: '?.' };
-                const result = resolveValues(pattern, source);
+                const result = await resolveValues(pattern, source);
                 assert(result.self === source, 'should resolve ?. to the source object itself');
             }
 
@@ -192,7 +192,7 @@
             {
                 const source = { name: 'Alice' };
                 const target = {};
-                assignFrom(target, {
+                await assignFrom(target, {
                     ref: '?.'
                 }, { from: source });
                 assert(target.ref === source, 'assignFrom should assign the from object itself with ?.');
@@ -202,7 +202,7 @@
             {
                 const source = { clone: document.createElement('div'), name: 'test' };
                 const target = {};
-                assignFrom(target, {
+                await assignFrom(target, {
                     element: '?.',
                     clonedNode: '?.clone',
                     label: '?.name'
@@ -215,7 +215,7 @@
             // Test 19: resolveValues with aka aliases
             {
                 const source = { myPropContainer: { stringProp: 'Venus' } };
-                const result = resolveValues({
+                const result = await resolveValues({
                     val: '?.mpc?.stringProp'
                 }, source, { aka: { 'mpc': 'myPropContainer' } });
                 assert(result.val === 'Venus', 'resolveValues should apply aka aliases');
@@ -225,7 +225,7 @@
             {
                 const div = document.createElement('div');
                 div.innerHTML = '<span class="username">Alice</span>';
-                const result = resolveValues({
+                const result = await resolveValues({
                     text: '?.querySelector?..username?.textContent'
                 }, div, { withMethods: ['querySelector'] });
                 assert(result.text === 'Alice', 'resolveValues should call methods with withMethods');
@@ -235,7 +235,7 @@
             {
                 const div = document.createElement('div');
                 div.innerHTML = '<span class="label">Hello</span>';
-                const result = resolveValues({
+                const result = await resolveValues({
                     text: '?.q?..label?.textContent'
                 }, div, { 
                     withMethods: ['querySelector'],
@@ -249,7 +249,7 @@
                 const source = document.createElement('div');
                 source.innerHTML = '<span class="name">Bob</span>';
                 const target = {};
-                assignFrom(target, {
+                await assignFrom(target, {
                     name: '?.q?..name?.textContent'
                 }, { 
                     from: source,
@@ -264,7 +264,7 @@
                 const obj = {
                     getInner() { return { getValue() { return 42; } }; }
                 };
-                const result = resolveValues({
+                const result = await resolveValues({
                     val: '?.getInner?.getValue'
                 }, obj, { withMethods: ['getInner', 'getValue'] });
                 assert(result.val === 42, 'resolveValues should handle consecutive methods');
@@ -273,7 +273,7 @@
             // Test 24: resolveValues aka does not affect non-matching segments
             {
                 const source = { realProp: { nested: 'value' } };
-                const result = resolveValues({
+                const result = await resolveValues({
                     val: '?.realProp?.nested'
                 }, source, { aka: { 'x': 'somethingElse' } });
                 assert(result.val === 'value', 'resolveValues aka should not affect non-matching segments');
@@ -289,7 +289,10 @@
             window.__TEST_RESULTS__ = { passed, failed, total: passed + failed, results };
         }
 
-        runTests();
+        runTests().catch(e => {
+            console.error('Test error:', e);
+            window.__TEST_RESULTS__ = { passed: 0, failed: 1, total: 1, results: [`FAIL: ${e.message}`] };
+        });
     </script>
 </body>
 </html>

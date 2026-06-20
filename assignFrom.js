@@ -21,10 +21,19 @@
  */
 import { resolveValues } from './resolveValues.js';
 import assignGingerly from './assignGingerly.js';
-export function assignFrom(target, pattern, options) {
-    const resolved = resolveValues(pattern, options.from, {
+export async function assignFrom(target, pattern, options) {
+    const resolved = await resolveValues(pattern, options.from, {
         withMethods: options.withMethods,
-        aka: options.aka
+        aka: options.aka,
+        protocols: options.protocols
     });
+    // Handle "..." spread key — merge resolved value into parent
+    if ('...' in resolved) {
+        const spreadValue = resolved['...'];
+        if (spreadValue && typeof spreadValue === 'object') {
+            Object.assign(resolved, spreadValue);
+        }
+        delete resolved['...'];
+    }
     return assignGingerly(target, resolved, options);
 }

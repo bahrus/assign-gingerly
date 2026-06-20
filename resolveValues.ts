@@ -13,6 +13,21 @@ export interface ResolveValuesOptions {
    * Substituted before path resolution, matching complete tokens between `?.` delimiters.
    */
   aka?: Record<string, string>;
+
+  /**
+   * Protocol handlers for resolving protocol-prefixed values (e.g., 'globalThis://key').
+   * Each handler receives the key portion and returns the resolved value (sync or async).
+   * 
+   * If a value contains '://' but the protocol isn't in this map, the value passes through unchanged.
+   * If a '?.' appears after the protocol key, the remaining path is resolved against the handler's result.
+   * 
+   * @example
+   * protocols: {
+   *     globalThis: (key) => globalThis[key],
+   *     localStorage: (key) => JSON.parse(localStorage.getItem(key) || 'null')
+   * }
+   */
+  protocols?: Record<string, (key: string) => any | Promise<any>>;
 }
 
 /**
@@ -42,6 +57,51 @@ function parseCachedPath(path: string): string[] {
         pathCache.set(path, parts);
     }
     return parts;
+}
+
+/**
+ * Resolves a protocol-prefixed value (e.g., 'globalThis://key?.path').
+ * 
+ * 1. Extracts the protocol name (before '://')
+ * 2. If the protocol isn't in the protocols map, returns the value unchanged (false positive)
+ * 3. Extracts the key (between '://' and first '?.' or end of string)
+ * 4. Calls the protocol handler with the key
+ * 5. If there's a remaining '?.' path, resolves it against the handler's result
+ */
+async function resolveProtocolValue(
+    value: string,
+    protocols: Record<string, (key: string) => any | Promise<any>>,
+    options?: ResolveValuesOptions
+): Promise<any> {
+    // Extract protocol name (before ://)
+    const protoEnd = value.indexOf('://');
+    const protocol = value.substring(0, protoEnd);
+
+    // Resolve via protocol handler
+    const handler = protocols[protocol];
+    if (!handler) return value; // false flag — coincidentally looks like a protocol
+
+    const rest = value.substring(protoEnd + 3);
+
+    // Split at first ?. to separate key from path
+    const pathStart = rest.indexOf('?.');
+    const key = pathStart === -1 ? rest : rest.substring(0, pathStart);
+    const path = pathStart === -1 ? null : rest.substring(pathStart);
+
+    const resolved = await handler(key);
+
+    // If there's a remaining path, resolve it against the result
+    if (path) {
+        return resolveValue(path, resolved, options);
+    }
+    return resolved;
+}
+
+/**
+ * Checks if a string value looks like a protocol reference.
+ */
+function hasProtocol(value: string): boolean {
+    return value.includes('://');
 }
 
 /**
@@ -120,11 +180,11 @@ function navigatePath(
  *   aka: { 'q': 'querySelector' }
  * });
  */
-export function resolveValues(
+export async function resolveValues(
   pattern: Record<string, any>,
   source: any,
   options?: ResolveValuesOptions
-): Record<string, any> {
+): Promise<Record<string, any>> {
   // Build alias map
   const aliasMap = new Map<string, string>();
   if (options?.aka) {
@@ -139,6 +199,8 @@ export function resolveValues(
       ? options.withMethods
       : new Set(options.withMethods)
     : undefined;
+
+  const protocols = options?.protocols;
   
   const result: Record<string, any> = {};
   for (const [key, value] of Object.entries(pattern)) {
@@ -151,6 +213,9 @@ export function resolveValues(
       
       // Navigate with method support
       result[key] = parts.length === 0 ? source : navigatePath(source, parts, withMethods);
+    } else if (typeof value === 'string' && protocols && hasProtocol(value)) {
+      // Protocol-prefixed value — resolve asynchronously
+      result[key] = await resolveProtocolValue(value, protocols, options);
     } else {
       result[key] = value;
     }
