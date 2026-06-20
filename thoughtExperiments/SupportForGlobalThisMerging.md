@@ -58,7 +58,7 @@ oForm.assignGingerly({
     "path": "api/v2/:operation/:expression",
     "headerFields": ["#myHeader"],
     "headers": {
-        "...": "rPpwNLcYsUOjFcg+N8lmOA"
+        "...": "globalThis://rPpwNLcYsUOjFcg+N8lmOA"
     }
 }, {
     protocols: {
