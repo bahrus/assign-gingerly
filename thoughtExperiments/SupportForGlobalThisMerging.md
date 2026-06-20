@@ -315,3 +315,51 @@ The `"..."` key would cause the resolved object to be merged (spread) into the p
 3. **Detection heuristic** — a value is a protocol reference if it's a string containing `://` and the part before `://` matches a key in the `protocols` option. This is safe — normal `?.`-prefixed paths and plain strings don't contain `://`.
 
 Shall I implement?
+
+---
+## Human Response II
+
+I suggest the following changes to the implementation (but I may be missing something, don't assume anything if it doesn't make sense):
+
+```typescript
+async function resolveProtocolValue(
+    value: string,
+    protocols: Record<string, (key: string) => any | Promise<any>>,
+    options?: ResolveValuesOptions
+): Promise<any> {
+    // Extract protocol name (before ://)
+    const protoEnd = value.indexOf('://');
+    const protocol = value.substring(0, protoEnd);
+
+    // Resolve via protocol handler
+    const handler = protocols[protocol];
+    if (!handler) return value; // false flag.  Coincidentally looks like a protocol
+
+    const resolved = await handler(key);
+
+    const rest = value.substring(protoEnd + 3);
+    
+    // Split at first ?. to separate key from path
+    const pathStart = rest.indexOf('?.');
+    const key = pathStart === -1 ? rest : rest.substring(0, pathStart);
+    const path = pathStart === -1 ? null : rest.substring(pathStart);
+    
+
+
+    
+    // If there's a remaining path, resolve it against the result
+    if (path) {
+        return resolveValue(path, resolved, options);
+    }
+    return resolved;
+}
+```
+
+I agree with all of the ways you are leaning with all three questions.
+
+Please implement if the code changes above make sense.
+
+
+
+
+
