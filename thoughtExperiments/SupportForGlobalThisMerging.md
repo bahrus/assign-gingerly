@@ -212,3 +212,106 @@ On reflection, after thinking about your input, I'm leaning towards:
 4.  The convention should be that the protocol string ends at the first ?. in the rhs.  If there is an ?. in the right hand side, call resolve value, passing in the rhs starting with ?.
 5.  Support "..." in assignFrom only.
  
+
+
+---
+
+## Kiro's Response I
+
+This is a clean design. Let me make sure I understand the flow:
+
+### The model
+
+```javascript
+const resolved = await resolveValues({
+    baseURL: 'globalThis://newton-microservice/href?.href',
+    headers: 'localStorage://myHeaders?.authToken'
+}, source, {
+    protocols: {
+        globalThis: (key) => globalThis[key],
+        localStorage: (key) => JSON.parse(localStorage.getItem(key) || 'null')
+    }
+});
+```
+
+For `'globalThis://newton-microservice/href?.href'`:
+
+1. Extract protocol: `globalThis`
+2. Extract key (between `://` and first `?.`): `newton-microservice/href`
+3. Call protocol handler: `protocols.globalThis('newton-microservice/href')` → returns the object at `globalThis['newton-microservice/href']`
+4. Remaining path: `?.href` → call `resolveValue('?.href', resolvedObject)` → returns the `href` property
+5. Final value: the resolved `href`
+
+For values without a `?.` after the protocol:
+- `'globalThis://qmywdO1vr0SwyuIe4fvzxQ'` → just returns `globalThis['qmywdO1vr0SwyuIe4fvzxQ']` directly
+
+### On `"..."` in assignFrom only
+
+Makes sense — `assignFrom` already combines `resolveValues` + `assignGingerly`. The `"..."` spread key would be handled during the resolve phase: if a key is `"..."`, the resolved value is spread into the parent object rather than assigned to a property named `"..."`.
+
+```javascript
+await assignFrom(target, {
+    "...": "globalThis://qmywdO1vr0SwyuIe4fvzxQ",
+    path: "api/v2/:operation/:expression",
+    headers: {
+        "...": "globalThis://rPpwNLcYsUOjFcg+N8lmOA"
+    }
+}, { from: source, protocols: { globalThis: (key) => globalThis[key] } });
+```
+
+The `"..."` key would cause the resolved object to be merged (spread) into the parent rather than assigned to a `"..."` property.
+
+### Implementation plan
+
+1. **Make `resolveValues` async** — change return type to `Promise<Record<string, any>>`. For values that don't use protocols, resolution is still instant (just awaiting a resolved Promise is negligible overhead).
+
+2. **Add `protocols` to `ResolveValuesOptions`:**
+   ```typescript
+   protocols?: Record<string, (key: string) => any | Promise<any>>;
+   ```
+
+3. **Add `resolveProtocolValue` function:**
+   ```typescript
+   async function resolveProtocolValue(
+       value: string,
+       protocols: Record<string, (key: string) => any | Promise<any>>,
+       options?: ResolveValuesOptions
+   ): Promise<any> {
+       // Extract protocol name (before ://)
+       const protoEnd = value.indexOf('://');
+       const protocol = value.substring(0, protoEnd);
+       const rest = value.substring(protoEnd + 3);
+       
+       // Split at first ?. to separate key from path
+       const pathStart = rest.indexOf('?.');
+       const key = pathStart === -1 ? rest : rest.substring(0, pathStart);
+       const path = pathStart === -1 ? null : rest.substring(pathStart);
+       
+       // Resolve via protocol handler
+       const handler = protocols[protocol];
+       if (!handler) throw new Error(`Unknown protocol: ${protocol}`);
+       const resolved = await handler(key);
+       
+       // If there's a remaining path, resolve it against the result
+       if (path) {
+           return resolveValue(path, resolved, options);
+       }
+       return resolved;
+   }
+   ```
+
+4. **In `resolveValues`**, when a value is a string and matches a protocol pattern (contains `://`), call `resolveProtocolValue` instead of the normal path resolution.
+
+5. **Make `assignFrom` async** — it already calls `resolveValues`, so it just needs `await`.
+
+6. **Handle `"..."` in `assignFrom`** — after resolving, if any key is `"..."`, spread its value into the result before passing to `assignGingerly`.
+
+### Questions
+
+1. **Should `resolveValue` (singular) also become async?** It's used in `installForwarding` getters, which are synchronous. I'd keep `resolveValue` synchronous and add a separate `resolveProtocolValue` that's async. The getter in `installForwarding` doesn't need protocol support.
+
+2. **Should protocol handlers be allowed to be async?** You said "asynchronous" — so yes, the handler signature should be `(key: string) => any | Promise<any>`. Built-in ones (globalThis, localStorage) are sync but custom ones (IndexedDB, fetch) could be async.
+
+3. **Detection heuristic** — a value is a protocol reference if it's a string containing `://` and the part before `://` matches a key in the `protocols` option. This is safe — normal `?.`-prefixed paths and plain strings don't contain `://`.
+
+Shall I implement?
