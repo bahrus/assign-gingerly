@@ -27,21 +27,97 @@ export interface AssignFromOptions extends IAssignGingerlyOptions, ResolveValues
   from: any;
 }
 
+/**
+ * Interface for assignFrom handler classes.
+ * Handlers are invoked when a LHS key ends with ' =>'.
+ */
+export interface AssignFromHandler {
+    assign(lhsTarget: any, resolvedFrom: any, options: AssignFromOptions): Promise<void> | void;
+}
+
+export interface AssignFromHandlerConstructor {
+    new (config: any): AssignFromHandler;
+}
+
+/**
+ * Registry of assignFrom handlers (keyed by the `do` field value).
+ */
+const handlerRegistry = new Map<string, AssignFromHandlerConstructor>();
+
+/**
+ * Register a handler class for use with the ` =>` operator in assignFrom.
+ * 
+ * @param name - The handler name (referenced via `do: 'name'` in the RHS config)
+ * @param HandlerClass - A class with a constructor(config) and assign(target, data, options) method
+ * 
+ * @example
+ * import { defineHandler } from 'assign-gingerly/assignFrom.js';
+ * 
+ * class MyListHandler {
+ *     constructor(config) { this.config = config; }
+ *     async assign(target, data, options) {
+ *         // Custom assignment logic
+ *     }
+ * }
+ * 
+ * defineHandler('my-list', MyListHandler);
+ */
+export function defineHandler(name: string, HandlerClass: AssignFromHandlerConstructor): void {
+    handlerRegistry.set(name, HandlerClass);
+}
+
+/**
+ * Get a registered handler by name.
+ */
+export function getHandler(name: string): AssignFromHandlerConstructor | undefined {
+    return handlerRegistry.get(name);
+}
+
+/**
+ * Check if a key ends with the handler operator ' =>'.
+ */
+function isHandlerCommand(key: string): boolean {
+    return key.endsWith(' =>');
+}
+
 export async function assignFrom(
   target: any,
   pattern: Record<string, any>,
   options: AssignFromOptions
 ): Promise<any> {
-  const resolved = await resolveValues(pattern, options.from, {
-    withMethods: options.withMethods,
-    aka: options.aka,
-    protocols: options.protocols
-  });
+  // Separate handler commands ( =>) from normal keys
+  const handlerKeys: string[] = [];
+  const normalPattern: Record<string, any> = {};
 
-  // Recursively handle "..." spread keys at all nesting levels
-  handleSpreads(resolved);
+  for (const key of Object.keys(pattern)) {
+    if (isHandlerCommand(key)) {
+      handlerKeys.push(key);
+    } else {
+      normalPattern[key] = pattern[key];
+    }
+  }
 
-  return assignGingerly(target, resolved, options);
+  // Process normal keys via resolveValues + assignGingerly
+  if (Object.keys(normalPattern).length > 0) {
+    const resolved = await resolveValues(normalPattern, options.from, {
+      withMethods: options.withMethods,
+      aka: options.aka,
+      protocols: options.protocols
+    });
+
+    // Recursively handle "..." spread keys at all nesting levels
+    handleSpreads(resolved);
+
+    assignGingerly(target, resolved, options);
+  }
+
+  // Process handler commands ( =>) — dynamically imported only when needed
+  if (handlerKeys.length > 0) {
+    const { processHandlerCommands } = await import('./processHandlerCommands.js');
+    await processHandlerCommands(target, handlerKeys, pattern, options, handlerRegistry);
+  }
+
+  return target;
 }
 
 /**

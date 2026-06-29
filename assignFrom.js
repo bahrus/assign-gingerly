@@ -21,15 +21,72 @@
  */
 import { resolveValues } from './resolveValues.js';
 import assignGingerly from './assignGingerly.js';
+/**
+ * Registry of assignFrom handlers (keyed by the `do` field value).
+ */
+const handlerRegistry = new Map();
+/**
+ * Register a handler class for use with the ` =>` operator in assignFrom.
+ *
+ * @param name - The handler name (referenced via `do: 'name'` in the RHS config)
+ * @param HandlerClass - A class with a constructor(config) and assign(target, data, options) method
+ *
+ * @example
+ * import { defineHandler } from 'assign-gingerly/assignFrom.js';
+ *
+ * class MyListHandler {
+ *     constructor(config) { this.config = config; }
+ *     async assign(target, data, options) {
+ *         // Custom assignment logic
+ *     }
+ * }
+ *
+ * defineHandler('my-list', MyListHandler);
+ */
+export function defineHandler(name, HandlerClass) {
+    handlerRegistry.set(name, HandlerClass);
+}
+/**
+ * Get a registered handler by name.
+ */
+export function getHandler(name) {
+    return handlerRegistry.get(name);
+}
+/**
+ * Check if a key ends with the handler operator ' =>'.
+ */
+function isHandlerCommand(key) {
+    return key.endsWith(' =>');
+}
 export async function assignFrom(target, pattern, options) {
-    const resolved = await resolveValues(pattern, options.from, {
-        withMethods: options.withMethods,
-        aka: options.aka,
-        protocols: options.protocols
-    });
-    // Recursively handle "..." spread keys at all nesting levels
-    handleSpreads(resolved);
-    return assignGingerly(target, resolved, options);
+    // Separate handler commands ( =>) from normal keys
+    const handlerKeys = [];
+    const normalPattern = {};
+    for (const key of Object.keys(pattern)) {
+        if (isHandlerCommand(key)) {
+            handlerKeys.push(key);
+        }
+        else {
+            normalPattern[key] = pattern[key];
+        }
+    }
+    // Process normal keys via resolveValues + assignGingerly
+    if (Object.keys(normalPattern).length > 0) {
+        const resolved = await resolveValues(normalPattern, options.from, {
+            withMethods: options.withMethods,
+            aka: options.aka,
+            protocols: options.protocols
+        });
+        // Recursively handle "..." spread keys at all nesting levels
+        handleSpreads(resolved);
+        assignGingerly(target, resolved, options);
+    }
+    // Process handler commands ( =>) — dynamically imported only when needed
+    if (handlerKeys.length > 0) {
+        const { processHandlerCommands } = await import('./processHandlerCommands.js');
+        await processHandlerCommands(target, handlerKeys, pattern, options, handlerRegistry);
+    }
+    return target;
 }
 /**
  * Recursively walk an object and handle "..." spread keys.

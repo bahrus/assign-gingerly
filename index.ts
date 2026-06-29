@@ -8,7 +8,7 @@ export {buildCSSQuery} from './buildCSSQuery.js';
 export {resolveTemplate} from './resolveTemplate.js';
 export {getHost} from './getHost.js';
 export {resolveValues, resolveValue} from './resolveValues.js';
-export {assignFrom} from './assignFrom.js';
+export {assignFrom, defineHandler} from './assignFrom.js';
 export {assignFeatures, FeaturesRegistry, captureFeatureInitVals, PropertyBag, suggestFeatureInfo, getFeatureInfoSuggestions} from './assignFeatures.js';
 export {installForwarding} from './installForwarding.js';
 export {defineWithFeatures} from './defineWithFeatures.js';

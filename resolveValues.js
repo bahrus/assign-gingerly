@@ -166,7 +166,8 @@ export async function resolveValues(pattern, source, options) {
             const proto = Object.getPrototypeOf(value);
             if (proto === Object.prototype || proto === null) {
                 result[key] = await resolveValues(value, source, options);
-            } else {
+            }
+            else {
                 result[key] = value;
             }
         }
