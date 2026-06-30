@@ -32,7 +32,7 @@ export interface AssignFromOptions extends IAssignGingerlyOptions, ResolveValues
  * Handlers are invoked when a LHS key ends with ' =>'.
  */
 export interface AssignFromHandler {
-    assign(lhsTarget: any, resolvedFrom: any, options: AssignFromOptions): Promise<void> | void;
+    assign(lhsTarget: any, resolvedParams: Record<string, any>, options: AssignFromOptions): Promise<void> | void;
 }
 
 export interface AssignFromHandlerConstructor {

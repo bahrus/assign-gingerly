@@ -3,7 +3,7 @@
  *
  * Dynamically imported only when ` =>` keys are detected in the pattern.
  */
-import { resolveValue } from './resolveValues.js';
+import { resolveValues } from './resolveValues.js';
 import { evaluatePathWithMethods } from './assignGingerly.js';
 /**
  * Process all handler command keys (ending with ' =>') in a pattern.
@@ -58,18 +58,17 @@ export async function processHandlerCommands(target, handlerKeys, pattern, optio
         else {
             lhsTarget = target;
         }
-        // Resolve 'from' field if present
-        let resolvedFrom = undefined;
-        if (config.from) {
-            if (typeof config.from === 'string' && config.from.startsWith('?.')) {
-                resolvedFrom = resolveValue(config.from, options.from);
-            }
-            else {
-                resolvedFrom = config.from;
-            }
+        // Resolve 'resolve' map if present — uses full resolveValues (paths, protocols, literals)
+        let resolvedParams = {};
+        if (config.resolve) {
+            resolvedParams = await resolveValues(config.resolve, options.from, {
+                withMethods: options.withMethods,
+                aka: options.aka,
+                protocols: options.protocols
+            });
         }
         // Instantiate and invoke the handler
         const handler = new HandlerClass(config);
-        await handler.assign(lhsTarget, resolvedFrom, options);
+        await handler.assign(lhsTarget, resolvedParams, options);
     }
 }
