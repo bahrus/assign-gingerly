@@ -3425,6 +3425,94 @@ The `"..."` key causes the resolved object to be merged (spread) into the result
 
 **Note:** Both `resolveValues` and `assignFrom` are async (return Promises) to support async protocol handlers (e.g., IndexedDB, fetch). For patterns without protocols, the async overhead is negligible.
 
+## assignFrom Handlers (` =>` operator)
+
+`assignFrom` supports a plugin system via the ` =>` operator. When a LHS key ends with ` =>`, instead of normal assignment, a registered handler class is invoked to perform custom logic (DOM manipulation, template instantiation, etc.).
+
+### Defining a handler
+
+```JavaScript
+import { defineHandler } from 'assign-gingerly/assignFrom.js';
+
+class MyListHandler {
+    constructor(config) {
+        this.config = config;
+    }
+
+    async assign(lhsTarget, resolvedParams, options) {
+        const { list, template } = resolvedParams;
+        // Custom logic: e.g., clone template for each item in list
+    }
+}
+
+defineHandler('my-list', MyListHandler);
+```
+
+### Using a handler
+
+```JavaScript
+import { assignFrom } from 'assign-gingerly/assignFrom.js';
+
+await assignFrom(myElement, {
+    '?.querySelector?.tbody =>': {
+        do: 'my-list',
+        resolve: {
+            list: '?.rankings',
+            template: 'globalThis://myTemplate'
+        }
+    }
+}, { withMethods: ['querySelector'], from: viewModel, protocols: { globalThis: k => globalThis[k] } });
+```
+
+**How it works:**
+
+1. Keys ending with ` =>` are separated from normal keys.
+2. Normal keys are processed via `resolveValues` + `assignGingerly` as usual.
+3. For handler keys: the LHS path is evaluated (with `withMethods` support) to get the target.
+4. The `resolve` map is processed through `resolveValues` — paths (`?.`), protocols (`globalThis://`), and literals are all resolved.
+5. The handler class (looked up via `do`) is instantiated with the full config, then `assign(target, resolvedParams, options)` is called.
+
+**The `resolve` map supports:**
+- `?.` paths — resolved against `options.from`
+- Protocol strings — resolved via `options.protocols`
+- Plain literals — passed through unchanged
+
+### Built-in handler: `builtIns.lazyLoad`
+
+Conditionally loads (clones) a template into a target element. Uses comment markers to track inserted content and supports show/hide/remove modes.
+
+```JavaScript
+import 'assign-gingerly/handlers/lazyLoad.js';
+
+await assignFrom(document.body, {
+    '?.querySelector?..mainView =>': {
+        do: 'builtIns.lazyLoad',
+        resolve: {
+            if: '?.isVisible',
+            instantiate: 'globalThis://myTemplate',
+        }
+    }
+}, { withMethods: ['querySelector'], from: myVM, protocols: { globalThis: k => globalThis[k] } });
+```
+
+**Resolve parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `if` | boolean | Show content when truthy, hide/remove when falsy |
+| `instantiate` | HTMLTemplateElement | The template to clone (typically resolved via globalThis protocol) |
+| `method` | string | `'appendChild'` (default) or `'prepend'` — where to place markers |
+| `forget` | boolean | If true, removes nodes entirely when `if` is false (default: hides with `hidden` attribute) |
+
+**Behavior:**
+
+- **First load (`if` = true, no existing content):** Clones the template, inserts content between `<!--?start name="X"-->` / `<!--?end-->` comment markers.
+- **Show (content exists but hidden):** Removes `hidden` attribute from elements between markers.
+- **Hide (`if` = false, `forget` = false):** Adds `hidden` attribute to elements between markers.
+- **Remove (`if` = false, `forget` = true):** Removes nodes between markers entirely. Markers persist for re-insertion if `if` becomes true again.
+
+This is useful for conditional rendering, routing, and lazy-loading views.
+
 ## Custom Assignment with `static assignTo` Protocol
 
 Classes can opt into custom assignment behavior by defining a `static assignTo` method. When `assignGingerly` encounters a property whose current value is an instance of such a class, it delegates the assignment to `assignTo` instead of performing the default merge/replace logic.
