@@ -304,3 +304,57 @@ There's a not well-known fact, that this example relies on, that dom elements wi
 Let's make it a separate import, but I think for now each built in handler should be a separate import, so assign-gingerly/handlers/tbd.js
 
 
+
+
+---
+
+## Kiro's Response I
+
+Got it on all points:
+
+1. **`method` and `forget` stay in `resolve`** — makes sense, they could be dynamic.
+2. **`globalThis://happyMood`** — right, I'd forgotten that `id` attributes create named properties on `window`/`globalThis`. So `globalThis['happyMood']` naturally returns the `<template id=happyMood>` element. Clean — no custom protocol handler needed beyond the built-in `globalThis` one.
+3. **Separate import per handler** — `assign-gingerly/handlers/lazyLoad.js`. Each handler self-registers on import.
+
+### Implementation plan
+
+File: `handlers/lazyLoad.ts`
+
+```typescript
+import { defineHandler } from '../assignFrom.js';
+
+class LazyLoadHandler {
+    config: any;
+    constructor(config: any) { this.config = config; }
+
+    async assign(lhsTarget: Element, resolvedParams: Record<string, any>) {
+        const { 
+            if: condition, 
+            instantiate, 
+            method = 'appendChild',
+            forget = false 
+        } = resolvedParams;
+
+        const name = this.getMarkerName(instantiate);
+        const [startMarker, endMarker] = this.findOrCreateMarkers(lhsTarget, name);
+
+        if (condition) {
+            this.show(lhsTarget, startMarker, endMarker, instantiate, method);
+        } else {
+            this.hide(lhsTarget, startMarker, endMarker, forget);
+        }
+    }
+    
+    // ... helper methods
+}
+
+defineHandler('builtIns.lazyLoad', LazyLoadHandler);
+```
+
+Key helpers:
+- `getMarkerName(template)` — derives the marker name from the template's `id`
+- `findOrCreateMarkers(target, name)` — looks for existing `<!--?start name="X"-->` / `<!--?end-->` comment nodes; creates them if not found
+- `show(target, start, end, template, method)` — if no content between markers, clones template and inserts; if content exists (hidden), removes `hidden` attribute
+- `hide(target, start, end, forget)` — if `forget`, removes nodes between markers; otherwise adds `hidden` attribute
+
+Proceeding with implementation.
