@@ -7,11 +7,6 @@ Now that we have a [formal mechanism by which assignFrom](Done/AssignFrom/Assign
     <head>...</head>
     <body>
         <div>
-            <?start name=myTemplateTarget>
-              Not sure what mood is...
-            <?end>
-
-            ...
             <template id=myTemplate>
                 I am happy
             </template>
@@ -27,11 +22,8 @@ const myVM = {
 
 assignFrom(myDomElement, {
     '?.querySelector?.div =>': {
-        do: 'my-macro',
-        from: '?.myList',
-        myCustomData: {
-            ...
-        } 
+        do: 'builtIns.lazyLoad',
+        if: '?.myList',
     }
 }, {
     withMethods: ['querySelector'],
