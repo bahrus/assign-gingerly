@@ -17,7 +17,8 @@ A significant use case for this is routing.
 
 ...
         <template id=happyMood>
-            I am happy
+            <div>I am happy</div>
+            <div>I am healthy</div>
         </template>
     </body>
 </html>
@@ -289,3 +290,17 @@ Should this handler be registered automatically when `assignFrom.js` is imported
 I'd suggest: **separate import** — `import 'assign-gingerly/builtInHandlers.js'` — so the handler code isn't loaded unless needed. Keeps the base `assignFrom.js` lean.
 
 ### Ready to implement when you confirm the approach.
+
+---
+
+## Human Response I
+
+I'd like to leave method and forget in the resolve, because I could see some scenarios where we might want these values to be dynamic.
+
+>  This resolves to what — an `HTMLTemplateElement`? A string ID? The protocol `globalThis://happyMood` suggests looking up `globalThis['happyMood']`... but that would require the template to be stored on `globalThis`. More likely it should be `document.getElementById('happyMood')` or a querySelector.
+
+There's a not well-known fact, that this example relies on, that dom elements with id's outside any ShadowRoot become global constants, available via globalThis.
+
+Let's make it a separate import, but I think for now each built in handler should be a separate import, so assign-gingerly/handlers/tbd.js
+
+
