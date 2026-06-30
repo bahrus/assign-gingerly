@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Template instantiation</title>
+</head>
+<body>
+    <div>
+        <?start name="myTemplateTarget">
+            Not sure what mood is...
+        <?end>
+
+        ...
+        <template id=myTemplate>
+            I am happy
+        </template>
+    </div>
+    <script>
+        function setMood(){
+            myTemplate.setAttribute('for', 'myTemplateTarget');
+            //myTemplate.for = 'myTemplateTarget'
+        }
+        setMood();
+    </script>
+    <button onclick="setMood()">Set Mood</button>
+</body>
+</html>
