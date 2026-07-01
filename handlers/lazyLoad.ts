@@ -26,6 +26,20 @@ const MARKER_START_PREFIX = '?start name="';
 const MARKER_END = '?end';
 
 /**
+ * Context passed to onInstantiated callbacks.
+ */
+export interface LazyLoadInstantiatedContext {
+    /** The inserted child nodes */
+    nodes: Node[];
+    /** The target element containing the markers */
+    target: Element;
+    /** The full handler config */
+    config: any;
+    /** The resolved parameters */
+    resolvedParams: Record<string, any>;
+}
+
+/**
  * Get the marker name from a template element (uses its id).
  */
 function getMarkerName(templateEl: any): string {
@@ -81,7 +95,7 @@ function createMarkers(target: Element, name: string, method: string): [Comment,
 }
 
 /**
- * Get all element nodes between start and end markers.
+ * Get all nodes between start and end markers.
  */
 function getNodesBetweenMarkers(start: Comment, end: Comment): Node[] {
     const nodes: Node[] = [];
@@ -93,7 +107,12 @@ function getNodesBetweenMarkers(start: Comment, end: Comment): Node[] {
     return nodes;
 }
 
-class LazyLoadHandler implements AssignFromHandler {
+/**
+ * LazyLoadHandler — built-in handler for conditional template instantiation.
+ * 
+ * Exported so it can be subclassed for custom behavior.
+ */
+export class LazyLoadHandler implements AssignFromHandler {
     config: any;
 
     constructor(config: any) {
@@ -131,12 +150,12 @@ class LazyLoadHandler implements AssignFromHandler {
                     }
                 } else {
                     // Content was removed (forget mode) — re-clone
-                    this.cloneAndInsert(instantiate, startMarker, endMarker);
+                    await this.cloneAndInsert(instantiate, startMarker, endMarker, lhsTarget, resolvedParams);
                 }
             } else {
                 // No markers — first time. Create markers and clone template.
                 [startMarker, endMarker] = createMarkers(lhsTarget, name, method);
-                this.cloneAndInsert(instantiate, startMarker, endMarker);
+                await this.cloneAndInsert(instantiate, startMarker, endMarker, lhsTarget, resolvedParams);
             }
         } else {
             // HIDE or REMOVE
@@ -162,8 +181,15 @@ class LazyLoadHandler implements AssignFromHandler {
 
     /**
      * Clone a template and insert its content between the markers.
+     * Calls onCloneInserted hook and onInstantiated callback after insertion.
      */
-    private cloneAndInsert(templateEl: any, startMarker: Comment, endMarker: Comment): void {
+    protected async cloneAndInsert(
+        templateEl: any,
+        startMarker: Comment,
+        endMarker: Comment,
+        lhsTarget: Element,
+        resolvedParams: Record<string, any>
+    ): Promise<Node[]> {
         let content: DocumentFragment;
 
         if (templateEl instanceof HTMLTemplateElement) {
@@ -176,8 +202,43 @@ class LazyLoadHandler implements AssignFromHandler {
             );
         }
 
+        // Capture nodes before insertion (childNodes empties after insertBefore)
+        const nodes = Array.from(content.childNodes);
+
         // Insert before endMarker
         endMarker.parentNode!.insertBefore(content, endMarker);
+
+        // Call protected hook (for subclass overrides)
+        await this.onCloneInserted(nodes, lhsTarget, resolvedParams);
+
+        // Call onInstantiated callback if provided (resolved from VM)
+        if (resolvedParams.onInstantiated && typeof resolvedParams.onInstantiated === 'function') {
+            const ctx: LazyLoadInstantiatedContext = {
+                nodes,
+                target: lhsTarget,
+                config: this.config,
+                resolvedParams
+            };
+            await resolvedParams.onInstantiated(ctx);
+        }
+
+        return nodes;
+    }
+
+    /**
+     * Hook called after template content is cloned and inserted.
+     * Override in subclasses for custom post-clone logic.
+     * 
+     * @param nodes - The inserted child nodes
+     * @param lhsTarget - The target element
+     * @param resolvedParams - The resolved parameters
+     */
+    protected async onCloneInserted(
+        nodes: Node[],
+        lhsTarget: Element,
+        resolvedParams: Record<string, any>
+    ): Promise<void> {
+        // No-op by default. Subclasses override.
     }
 }
 
