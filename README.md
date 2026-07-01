@@ -1,4 +1,4 @@
-# assign-gingerly and assign-tentatively
+# assign-gingerly, assign-tentatively, and assign-from
 
 [![Playwright Tests](https://github.com/bahrus/assign-gingerly/actions/workflows/CI.yml/badge.svg?branch=baseline)](https://github.com/bahrus/assign-gingerly/actions/workflows/CI.yml)
 [![NPM version](https://badge.fury.io/js/assign-gingerly.png)](http://badge.fury.io/js/assign-gingerly)
@@ -9,7 +9,7 @@
 
 ## Introduction
 
-This package starts out innocently enough -- it provides two utility functions for carefully merging one object into another.  This is a primitive sorely lacking in the web, and this package is a polyfill for what we (me with a lot of help from AI) would like to see built into the platform.  We make no apologies about adding these features directly to the underlying API's, as it is part of a proposal which is sitting there gathering dust, with no apparent alternatives under consideration.  In particular the reference:
+This package starts out innocently enough -- it provides three utility functions for carefully merging one object into another.  This is a primitive sorely lacking in the web, and this package is a polyfill for what we (me with a lot of help from AI) would like to see built into the platform.  We make no apologies about adding these features directly to the underlying API's, as it is part of a proposal which is sitting there gathering dust, with no apparent alternatives under consideration.  In particular the reference:
 
 ```JavaScript
 import 'assign-gingerly/object-extension.js';
@@ -17,7 +17,7 @@ import 'assign-gingerly/object-extension.js';
 
 has the "side effect" of enhancing the platform API in a way that this proposal can only hope the platform chooses to adopt in the future (or some variation).
 
-One can achieve the same functionality with a little more work, and "playing nicer" with the platform by importing assign-gingerly.js and/or assign-tentatively.js, which has no such side effects.
+One can achieve the same functionality with a little more work, and "playing nicer" with the platform by importing assign-gingerly.js, assign-tentatively.js, and/or assignFrom.js, which has no such side effects.
 
 ## Object Extension Pattern
 
@@ -39,7 +39,7 @@ So in our view this package helps fill the void left by not supporting the "is" 
 
 Anyway, let's start out detailing the more innocent features of this package / polyfill.
 
-The two utility functions are:
+The three utility functions are:
 
 ## assignGingerly
 
@@ -55,6 +55,22 @@ The second fundamental utility function is:
 ## assignTentatively
 
 assignTentatively provides a far more limited subset of functionality compared to assignGingerly.   The tradeoff is that assignTentatively can do something important assignGingerly cannot do -- be "reversed". This can be quite useful for some scenarios.  Think of how css "turns on" visual effects while conditions are met, then reverts to how things were before the conditions were met when the conditions are no longer met, as if nothing happened.  Another example is allowing user edits to be rolled back as they repeatedly hit "ctrl+z".
+
+The third fundamental utility function is:
+
+## assignFrom
+
+assignFrom builds on assignGingerly by adding a resolution step: RHS values that are `?.`-prefixed path strings are resolved against a source object before assignment.  This enables a declarative, data-driven pattern where a view model (or any source) feeds values into a target through path expressions — replacing imperative property lookups with a single configuration object.
+
+assignFrom adds support for:
+
+1.  Resolving RHS path strings against a source object (`from`).
+2.  Protocol resolution (`globalThis://`, `localStorage://`, custom protocols).
+3.  Handler plugins via the ` =>` operator for custom logic (template instantiation, DOM manipulation, etc.).
+4.  Looped substitution with `where_x_in` / `where_y_in` / `where_z_in` for expanding template patterns into multiple concrete assignments.
+5.  Spread merging via the `"..."` key.
+
+All of assignGingerly's features (nested paths, `withMethods`, `aka`, `@each`, `@eachTime`, registry, etc.) are inherited.
 
 ## Example 1 - assignGingerly as a "superset" of Object.assign:
 
@@ -3512,6 +3528,115 @@ await assignFrom(document.body, {
 - **Remove (`if` = false, `forget` = true):** Removes nodes between markers entirely. Markers persist for re-insertion if `if` becomes true again.
 
 This is useful for conditional rendering, routing, and lazy-loading views.
+
+### Multiple Handlers
+
+When the RHS of a ` =>` key is an array, each element is treated as a separate handler config and they are executed sequentially (awaiting each before proceeding to the next). All handlers share the same LHS target.
+
+```JavaScript
+await assignFrom(document.body, {
+    '?.querySelector?..mainView =>': [
+        {
+            do: 'builtIns.lazyLoad',
+            resolve: {
+                if: '?.isVisible',
+                instantiate: 'globalThis://viewTemplate',
+            }
+        },
+        {
+            do: 'applyTheme',
+            resolve: {
+                theme: '?.currentTheme'
+            }
+        }
+    ]
+}, { withMethods: ['querySelector'], from: myVM, protocols: { globalThis: k => globalThis[k] } });
+```
+
+**Behavior:**
+
+- Empty array — silent no-op.
+- Single-element array — identical to passing the object directly.
+- Nested arrays — throws an error (not supported).
+- Mixed `do` values — fully supported, each handler is looked up independently.
+- Error handling — fail-fast. If a handler throws, remaining handlers are skipped.
+
+## Looped Substitution (`where_x_in`, `where_y_in`, `where_z_in`)
+
+`assignFrom` supports expanding template patterns into multiple concrete assignments via variable substitution. Placeholders `${x}`, `${y}`, and `${z}` in pattern keys and string values are replaced with each value from the corresponding option array.
+
+```JavaScript
+const vm = {
+    firstName: 'Monkey',
+    lastName: 'Luffy'
+};
+
+await assignFrom(myForm, {
+    '?.[name="${x}"]': '?.${x}'
+}, {
+    from: vm,
+    withMethods: ['querySelector'],
+    where_x_in: ['firstName', 'lastName']
+});
+
+// Expands to the equivalent of:
+// '?.[name="firstName"]': '?.firstName'   → querySelector('[name="firstName"]').value = 'Monkey'
+// '?.[name="lastName"]':  '?.lastName'    → querySelector('[name="lastName"]').value = 'Luffy'
+```
+
+**How it works:**
+
+1. Before any other processing, `assignFrom` checks for `where_x_in`, `where_y_in`, and `where_z_in` in options.
+2. For each pattern entry whose key or value contains the placeholder (e.g., `${x}`), the entry is expanded — one copy per value in the array.
+3. Substitution applies to both LHS keys and all RHS string values (including nested objects like handler `resolve` maps).
+4. Multiple variables produce a **cartesian product**: x is expanded first, then y, then z. Result count = x.length × y.length × z.length.
+5. Non-string RHS values pass through untouched.
+
+**Cartesian expansion with multiple variables:**
+
+```JavaScript
+await assignFrom(grid, {
+    '?.querySelector?.[data-row="${x}"][data-col="${y}"]?.textContent': '${x}-${y}'
+}, {
+    from: {},
+    withMethods: ['querySelector'],
+    where_x_in: ['1', '2'],
+    where_y_in: ['A', 'B']
+});
+
+// Produces 4 entries (2 × 2):
+// '?.[data-row="1"][data-col="A"]' → '1-A'
+// '?.[data-row="1"][data-col="B"]' → '1-B'
+// '?.[data-row="2"][data-col="A"]' → '2-A'
+// '?.[data-row="2"][data-col="B"]' → '2-B'
+```
+
+**With handler ( =>) keys:**
+
+Substitution applies inside handler `resolve` maps too:
+
+```JavaScript
+await assignFrom(container, {
+    '?.querySelector?..${x}View =>': {
+        do: 'builtIns.lazyLoad',
+        resolve: {
+            if: '?.${x}Visible',
+            instantiate: 'globalThis://${x}Template'
+        }
+    }
+}, {
+    from: vm,
+    withMethods: ['querySelector'],
+    protocols: { globalThis: k => globalThis[k] },
+    where_x_in: ['home', 'settings', 'profile']
+});
+```
+
+**Edge cases:**
+
+- Empty array (`where_x_in: []`) — template entries produce nothing (silent no-op).
+- Missing option — if a pattern contains `${x}` but `where_x_in` is not provided, the literal `${x}` remains in the string.
+- Entries without placeholders — passed through unchanged.
 
 ## Custom Assignment with `static assignTo` Protocol
 

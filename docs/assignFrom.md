@@ -13,7 +13,7 @@ import { assignFrom } from 'assign-gingerly';
 ## Signature
 
 ```TypeScript
-assignFrom(target, pattern, options): any
+assignFrom(target, pattern, options): Promise<any>
 ```
 
 - **target** — Object to merge resolved values into
@@ -22,7 +22,10 @@ assignFrom(target, pattern, options): any
 
 ```TypeScript
 interface AssignFromOptions extends IAssignGingerlyOptions {
-  from: any;  // Source object to resolve RHS paths against
+  from: any;              // Source object to resolve RHS paths against
+  where_x_in?: string[]; // Loop variable bindings — expand entries containing ${x}
+  where_y_in?: string[]; // Loop variable bindings — expand entries containing ${y}
+  where_z_in?: string[]; // Loop variable bindings — expand entries containing ${z}
 }
 ```
 
@@ -150,3 +153,97 @@ target.assignGingerly(resolved);
 | `'literal'` | Passes through as-is (no `?.` prefix) |
 | `42` | Passes through as-is (not a string) |
 | `null` | Passes through as-is |
+
+
+## Looped Substitution
+
+`assignFrom` supports expanding template patterns into multiple concrete assignments. Placeholders `${x}`, `${y}`, and `${z}` in pattern keys and string values are replaced with each value from the corresponding option array.
+
+```TypeScript
+const vm = { firstName: 'Monkey', lastName: 'Luffy' };
+
+await assignFrom(myForm, {
+    '?.[name="${x}"]': '?.${x}'
+}, {
+    from: vm,
+    withMethods: ['querySelector'],
+    where_x_in: ['firstName', 'lastName']
+});
+```
+
+This expands into two concrete entries before resolution:
+- `'?.[name="firstName"]': '?.firstName'`
+- `'?.[name="lastName"]': '?.lastName'`
+
+### Multiple Variables (Cartesian)
+
+Multiple variables produce a cartesian product. Variables are expanded in order: x first, then y, then z.
+
+```TypeScript
+await assignFrom(grid, {
+    '?.querySelector?.[data-row="${x}"][data-col="${y}"]?.textContent': '${x}-${y}'
+}, {
+    from: {},
+    withMethods: ['querySelector'],
+    where_x_in: ['1', '2'],
+    where_y_in: ['A', 'B']
+});
+// Produces 4 entries (2 × 2)
+```
+
+### Substitution in Handler Configs
+
+Placeholders are substituted inside handler `resolve` maps too:
+
+```TypeScript
+await assignFrom(container, {
+    '?.querySelector?..${x}View =>': {
+        do: 'builtIns.lazyLoad',
+        resolve: {
+            if: '?.${x}Visible',
+            instantiate: 'globalThis://${x}Template'
+        }
+    }
+}, {
+    from: vm,
+    withMethods: ['querySelector'],
+    protocols: { globalThis: k => globalThis[k] },
+    where_x_in: ['home', 'settings', 'profile']
+});
+```
+
+### Edge Cases
+
+| Scenario | Behavior |
+|----------|----------|
+| Empty array (`where_x_in: []`) | Template entries produce nothing (no-op) |
+| Missing option | Literal `${x}` remains in the string |
+| Entries without placeholders | Passed through unchanged |
+| Non-string RHS values | Passed through unchanged |
+
+## Multiple Handlers
+
+When the RHS of a ` =>` key is an array, each element is treated as a separate handler config. They execute sequentially, each awaited before the next. All handlers share the same resolved LHS target.
+
+```TypeScript
+await assignFrom(document.body, {
+    '?.querySelector?..mainView =>': [
+        {
+            do: 'builtIns.lazyLoad',
+            resolve: { if: '?.isVisible', instantiate: 'globalThis://viewTemplate' }
+        },
+        {
+            do: 'applyTheme',
+            resolve: { theme: '?.currentTheme' }
+        }
+    ]
+}, { withMethods: ['querySelector'], from: myVM, protocols: { globalThis: k => globalThis[k] } });
+```
+
+### Behavior
+
+- Empty array — silent no-op
+- Single-element array — identical to passing the object directly
+- Nested arrays — throws (not supported)
+- Mixed `do` values — fully supported
+- Errors — fail-fast (remaining handlers skipped)
