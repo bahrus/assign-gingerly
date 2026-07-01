@@ -58,16 +58,107 @@ export function getHandler(name) {
 function isHandlerCommand(key) {
     return key.endsWith(' =>');
 }
+/**
+ * Supported substitution variables and their option keys.
+ */
+const SUBSTITUTION_VARS = [
+    { placeholder: '${x}', optionKey: 'where_x_in' },
+    { placeholder: '${y}', optionKey: 'where_y_in' },
+    { placeholder: '${z}', optionKey: 'where_z_in' },
+];
+/**
+ * Recursively substitute a placeholder in all string values of an object.
+ * Returns a new object (shallow clone at each level) with substitutions applied.
+ */
+function substituteInValue(value, placeholder, replacement) {
+    if (typeof value === 'string') {
+        return value.includes(placeholder) ? value.replaceAll(placeholder, replacement) : value;
+    }
+    if (Array.isArray(value)) {
+        return value.map(item => substituteInValue(item, placeholder, replacement));
+    }
+    if (value && typeof value === 'object') {
+        const proto = Object.getPrototypeOf(value);
+        if (proto === Object.prototype || proto === null) {
+            const result = {};
+            for (const [k, v] of Object.entries(value)) {
+                result[k] = substituteInValue(v, placeholder, replacement);
+            }
+            return result;
+        }
+    }
+    return value;
+}
+/**
+ * Check if a pattern entry (key + value) contains a given placeholder.
+ */
+function entryContainsPlaceholder(key, value, placeholder) {
+    if (key.includes(placeholder))
+        return true;
+    return valueContainsPlaceholder(value, placeholder);
+}
+/**
+ * Check if a value (string, object, or array) contains a placeholder.
+ */
+function valueContainsPlaceholder(value, placeholder) {
+    if (typeof value === 'string')
+        return value.includes(placeholder);
+    if (Array.isArray(value))
+        return value.some(item => valueContainsPlaceholder(item, placeholder));
+    if (value && typeof value === 'object') {
+        const proto = Object.getPrototypeOf(value);
+        if (proto === Object.prototype || proto === null) {
+            return Object.values(value).some(v => valueContainsPlaceholder(v, placeholder));
+        }
+    }
+    return false;
+}
+/**
+ * Expand looped substitution variables in a pattern.
+ * Applies cartesian expansion: x values are expanded first, then y, then z.
+ * Each variable multiplies the entries — result count = x.length × y.length × z.length.
+ *
+ * Returns the expanded pattern (or the original if no substitutions apply).
+ */
+function expandSubstitutions(pattern, options) {
+    let entries = Object.entries(pattern);
+    for (const { placeholder, optionKey } of SUBSTITUTION_VARS) {
+        const values = options[optionKey];
+        if (!values || values.length === 0)
+            continue;
+        const expanded = [];
+        for (const [key, value] of entries) {
+            if (entryContainsPlaceholder(key, value, placeholder)) {
+                // Expand this entry for each value in the variable array
+                for (const replacement of values) {
+                    const newKey = key.includes(placeholder)
+                        ? key.replaceAll(placeholder, replacement)
+                        : key;
+                    const newValue = substituteInValue(value, placeholder, replacement);
+                    expanded.push([newKey, newValue]);
+                }
+            }
+            else {
+                // No placeholder in this entry — pass through
+                expanded.push([key, value]);
+            }
+        }
+        entries = expanded;
+    }
+    return Object.fromEntries(entries);
+}
 export async function assignFrom(target, pattern, options) {
+    // First: expand looped substitution variables (${x}, ${y}, ${z})
+    const expandedPattern = expandSubstitutions(pattern, options);
     // Separate handler commands ( =>) from normal keys
     const handlerKeys = [];
     const normalPattern = {};
-    for (const key of Object.keys(pattern)) {
+    for (const key of Object.keys(expandedPattern)) {
         if (isHandlerCommand(key)) {
             handlerKeys.push(key);
         }
         else {
-            normalPattern[key] = pattern[key];
+            normalPattern[key] = expandedPattern[key];
         }
     }
     // Process normal keys via resolveValues + assignGingerly
@@ -84,7 +175,7 @@ export async function assignFrom(target, pattern, options) {
     // Process handler commands ( =>) — dynamically imported only when needed
     if (handlerKeys.length > 0) {
         const { processHandlerCommands } = await import('./processHandlerCommands.js');
-        await processHandlerCommands(target, handlerKeys, pattern, options, handlerRegistry);
+        await processHandlerCommands(target, handlerKeys, expandedPattern, options, handlerRegistry);
     }
     return target;
 }
