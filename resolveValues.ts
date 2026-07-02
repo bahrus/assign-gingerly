@@ -148,6 +148,43 @@ function navigatePath(
 }
 
 /**
+ * Resolve path strings and protocol references within an array.
+ * Recurses into nested arrays and plain objects. Non-string elements,
+ * class instances, and other non-plain objects pass through unchanged.
+ */
+async function resolveArray(
+  arr: any[],
+  source: any,
+  aliasMap: Map<string, string>,
+  withMethods: Set<string> | undefined,
+  protocols: Record<string, (key: string) => any | Promise<any>> | undefined,
+  options?: ResolveValuesOptions
+): Promise<any[]> {
+  const result: any[] = [];
+  for (const item of arr) {
+    if (typeof item === 'string' && item.startsWith('?.')) {
+      const aliased = applyAliases(item, aliasMap);
+      const parts = parseCachedPath(aliased);
+      result.push(parts.length === 0 ? source : navigatePath(source, parts, withMethods));
+    } else if (typeof item === 'string' && protocols && hasProtocol(item)) {
+      result.push(await resolveProtocolValue(item, protocols, options));
+    } else if (Array.isArray(item)) {
+      result.push(await resolveArray(item, source, aliasMap, withMethods, protocols, options));
+    } else if (item && typeof item === 'object') {
+      const proto = Object.getPrototypeOf(item);
+      if (proto === Object.prototype || proto === null) {
+        result.push(await resolveValues(item, source, options));
+      } else {
+        result.push(item);
+      }
+    } else {
+      result.push(item);
+    }
+  }
+  return result;
+}
+
+/**
  * Resolve RHS path strings in a pattern object against a source object.
  * 
  * Any value that is a string starting with `?.` is treated as a path
@@ -216,7 +253,10 @@ export async function resolveValues(
     } else if (typeof value === 'string' && protocols && hasProtocol(value)) {
       // Protocol-prefixed value — resolve asynchronously
       result[key] = await resolveProtocolValue(value, protocols, options);
-    } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    } else if (Array.isArray(value)) {
+      // Resolve path strings and protocols within arrays (recursing into nested arrays)
+      result[key] = await resolveArray(value, source, aliasMap, withMethods, protocols, options);
+    } else if (typeof value === 'object' && value !== null) {
       // Recursively resolve nested plain objects (e.g., headers: { "...": "globalThis://key" })
       // Only recurse into plain objects — skip DOM elements, class instances, etc.
       const proto = Object.getPrototypeOf(value);
