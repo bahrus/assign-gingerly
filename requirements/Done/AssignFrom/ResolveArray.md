@@ -133,4 +133,7 @@ Agreed
 
 > - **Array containing objects** — recurse into plain objects (already supported by `resolveValues`), or leave as-is?
 
-Let's not for now.  Is that easy to avoid?
+~~Let's not for now.  Is that easy to avoid?~~
+
+Yes, please.
+
