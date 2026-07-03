@@ -11,6 +11,7 @@ import { evaluatePathWithMethods } from './assignGingerly.js';
  */
 const BUILT_IN_MAP = {
     'builtIns.lazyLoad': './handlers/lazyLoad.js',
+    'builtIns.lazyLoadSwitch': './handlers/lazyLoadSwitch.js',
     'builtIns.join': './handlers/join.js',
 };
 /**

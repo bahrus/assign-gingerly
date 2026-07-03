@@ -76,6 +76,10 @@
       "default": "./handlers/lazyLoad.js",
       "types": "./handlers/lazyLoad.ts"
     },
+    "./handlers/lazyLoadSwitch.js": {
+      "default": "./handlers/lazyLoadSwitch.js",
+      "types": "./handlers/lazyLoadSwitch.ts"
+    },
     "./handlers/join.js": {
       "default": "./handlers/join.js",
       "types": "./handlers/join.ts"
