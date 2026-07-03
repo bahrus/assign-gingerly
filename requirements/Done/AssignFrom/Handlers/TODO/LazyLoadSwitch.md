@@ -242,3 +242,18 @@ This seems to be a really good catch.  I think we should revisit the implementat
 
 
 
+
+---
+
+## Response to Human Response I
+
+All clear. Summary of decisions:
+
+- **Operators:** `===` (default), `!==`, `==`, `!=`, `<`, `>`, `<=`, `>=`. Additional operators (`in`, `includes`, `matches`, etc.) noted in a separate [TODO](./AdditionalOperators.md) for future consideration.
+- **Naming:** `builtIns.lazyLoadSwitch` (keeping the `lazyLoad` family name).
+- **Default `forget`:** `false` (hide, don't remove). Matches `lazyLoad` behavior.
+- **Multiple matches:** allowed — no enforced exclusivity.
+- **Subclass approach:** `LazyLoadSwitchHandler extends LazyLoadHandler`.
+- **Looped substitution duplicate key issue:** flagged in a separate [TODO](./LoopedSubstitutionDuplicateKeys.md). Won't block this work.
+
+Ready to implement. Proceeding.
