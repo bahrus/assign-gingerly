@@ -11,6 +11,7 @@ import { evaluatePathWithMethods } from './assignGingerly.js';
  */
 const BUILT_IN_MAP = {
     'builtIns.lazyLoad': './handlers/lazyLoad.js',
+    'builtIns.join': './handlers/join.js',
 };
 /**
  * Dynamically load a built-in handler by name.
@@ -58,8 +59,11 @@ export async function processHandlerCommands(target, handlerKeys, pattern, optio
         // Empty array — skip silently
         if (configs.length === 0)
             continue;
-        // Resolve the LHS target via path evaluation (once for all handlers)
+        // Resolve the LHS path, preserving parent + key for return-value assignment.
+        // lhsParent[lhsKey] === lhsTarget (the current value at the path)
         let lhsTarget;
+        let lhsParent = undefined;
+        let lhsKey = undefined;
         if (lhsPath.startsWith('?.')) {
             const pathParts = lhsPath.split('?.').filter(p => p.length > 0);
             const withMethodsSet = options.withMethods
@@ -69,23 +73,42 @@ export async function processHandlerCommands(target, handlerKeys, pattern, optio
                 : undefined;
             if (withMethodsSet && pathParts.length > 0) {
                 const result = evaluatePathWithMethods(target, pathParts, undefined, withMethodsSet);
+                lhsParent = result.target;
+                lhsKey = result.lastKey;
                 lhsTarget = result.target[result.lastKey];
                 // If last key is a method, call it to get the target
                 if (result.isMethod && typeof result.target[result.lastKey] === 'function') {
                     lhsTarget = result.target[result.lastKey].call(result.target);
+                    lhsParent = undefined; // Can't assign back to a method call result
+                    lhsKey = undefined;
                 }
             }
             else {
-                // Simple path navigation
-                lhsTarget = target;
-                for (const part of pathParts) {
-                    if (lhsTarget == null)
-                        break;
-                    lhsTarget = lhsTarget[part];
+                // Simple path navigation — walk to parent, keep last key
+                if (pathParts.length === 0) {
+                    lhsTarget = target;
+                }
+                else if (pathParts.length === 1) {
+                    lhsParent = target;
+                    lhsKey = pathParts[0];
+                    lhsTarget = target[pathParts[0]];
+                }
+                else {
+                    let current = target;
+                    for (let i = 0; i < pathParts.length - 1; i++) {
+                        if (current == null)
+                            break;
+                        current = current[pathParts[i]];
+                    }
+                    lhsParent = current;
+                    lhsKey = pathParts[pathParts.length - 1];
+                    lhsTarget = current != null ? current[lhsKey] : undefined;
                 }
             }
         }
         else if (lhsPath) {
+            lhsParent = target;
+            lhsKey = lhsPath;
             lhsTarget = target[lhsPath];
         }
         else {
@@ -112,7 +135,12 @@ export async function processHandlerCommands(target, handlerKeys, pattern, optio
             }
             // Instantiate and invoke the handler
             const handler = new HandlerClass(config);
-            await handler.assign(lhsTarget, resolvedParams, options);
+            const result = await handler.assign(lhsTarget, resolvedParams, options);
+            // Return-value protocol: if handler returns a non-undefined value,
+            // assign it back to the LHS path
+            if (result !== undefined && lhsParent != null && lhsKey != null) {
+                lhsParent[lhsKey] = result;
+            }
         }
     }
 }
