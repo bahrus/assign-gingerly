@@ -80,6 +80,10 @@
       "default": "./handlers/join.js",
       "types": "./handlers/join.ts"
     },
+    "./paths.js": {
+      "default": "./paths.js",
+      "types": "./paths.ts"
+    },
     "./assignFrom.js": {
       "default": "./assignFrom.js",
       "types": "./assignFrom.ts"

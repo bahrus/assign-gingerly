@@ -3636,6 +3636,157 @@ await assignFrom(container, {
 - Missing option — if a pattern contains `${x}` but `where_x_in` is not provided, the literal `${x}` remains in the string.
 - Entries without placeholders — passed through unchanged.
 
+### Built-in handler: `builtIns.join`
+
+Joins a resolved array into a single string. Supports nested sub-arrays with "all-or-nothing" semantics for optional segments. Uses the **return-value protocol** — the handler returns the joined string, which `processHandlerCommands` assigns back to the LHS path.
+
+```JavaScript
+const vm = {
+    lastName: 'Targaryen',
+    firstName: 'Helaena'
+};
+
+await assignFrom(oElement, {
+    '?.textContent =>': {
+        do: 'builtIns.join',
+        resolve: {
+            value: ['?.lastName', ', ', '?.firstName']
+        }
+    }
+}, { from: vm });
+
+// oElement.textContent = 'Targaryen, Helaena'
+```
+
+**How it works:**
+
+1. The `resolve.value` array is resolved by `resolveValues` — `?.` path strings are replaced with actual values from `options.from`.
+2. Top-level `null`/`undefined` values are filtered out.
+3. Nested sub-arrays use **all-or-nothing** semantics: if any element in a sub-array resolves to `null`/`undefined`, the entire sub-array is dropped.
+4. Remaining elements are joined with the separator (default: `''`, empty string).
+5. The joined string is returned and assigned to the LHS path.
+
+**Optional segments with nested arrays:**
+
+```JavaScript
+const vm = {
+    lastName: 'Targaryen',
+    middleName: undefined,  // not present
+    firstName: 'Helaena'
+};
+
+await assignFrom(oElement, {
+    '?.textContent =>': {
+        do: 'builtIns.join',
+        resolve: {
+            value: ['?.lastName', [', ', '?.middleName'], ', ', '?.firstName']
+        }
+    }
+}, { from: vm });
+
+// middleName is undefined → sub-array [', ', undefined] is dropped entirely
+// oElement.textContent = 'Targaryen, Helaena'
+
+// If middleName were 'D':
+// oElement.textContent = 'Targaryen, D, Helaena'
+```
+
+**Custom separator:**
+
+```JavaScript
+await assignFrom(oElement, {
+    '?.textContent =>': {
+        do: 'builtIns.join',
+        separator: ' | ',
+        resolve: {
+            value: ['?.firstName', '?.lastName']
+        }
+    }
+}, { from: vm });
+
+// oElement.textContent = 'Helaena | Targaryen'
+```
+
+**Return-value protocol:**
+
+When a handler's `assign()` method returns a non-`undefined` value, `processHandlerCommands` assigns it back to the LHS path. This is how `builtIns.join` sets `textContent` — the handler computes the string and returns it. Existing handlers like `builtIns.lazyLoad` return `undefined` (void) and operate by side effects, so they're unaffected.
+
+## Typed Path Authoring with `paths` and `sp`
+
+For JSON generated confiles generated from TypeScript/`.mts`/`mjs` files during a build or server-side rendering, the `paths` utility provides compile-time autocomplete and type safety for `?.`-prefixed path strings. The `sp` tagged template literal ("split into parts") produces arrays suitable for `builtIns.join`.
+
+```TypeScript
+import { paths, sp } from 'assign-gingerly/paths.js';
+
+interface Person {
+    firstName?: string;
+    middleName?: string;
+    lastName: string;
+    address: { city: string; zip: string };
+}
+
+const $ = paths<Person>();
+
+// sp produces: ['?.lastName', ', ', '?.firstName']
+// with full autocomplete on $.lastName, $.firstName, etc.
+export default {
+    '?.textContent =>': {
+        do: 'builtIns.join',
+        resolve: {
+            value: sp`${$.lastName}, ${$.firstName}`
+        }
+    }
+};
+```
+
+**How `paths` works:**
+
+- `paths<T>()` creates a deeply-proxied object typed as `T`
+- Every property access returns a deeper proxy (e.g., `$.address.city`)
+- `.path` extracts the `?.`-prefixed string: `$.address.city.path` → `'?.address?.city'`
+- Inside `sp` template literals, `.path` is not needed — proxy objects are auto-detected
+
+**How `sp` works:**
+
+- `sp` (split into parts) is a tagged template literal
+- It interleaves static string segments with interpolated values
+- Path proxy objects are automatically converted to `?.`-prefixed strings
+- Arrays passed as interpolations are preserved as nested arrays (for optional segments)
+
+**Optional segments in `sp`:**
+
+```TypeScript
+const $ = paths<Person>();
+
+// Nested array for all-or-nothing segment:
+const value = sp`${$.lastName}${[', ', $.middleName]}, ${$.firstName}`;
+// ['?.lastName', [', ', '?.middleName'], ', ', '?.firstName']
+```
+
+**Using `.path` outside of `sp`:**
+
+When you need the path string in a non-`sp` context (object keys, plain arrays, other expressions):
+
+```TypeScript
+const $ = paths<Person>();
+
+$.lastName.path           // '?.lastName'
+$.address.city.path       // '?.address?.city'
+
+// As an object key:
+const pattern = {
+    [$.textContent.path]: '?.firstName'  // '?.textContent': '?.firstName'
+};
+```
+
+**Benefits:**
+
+- Full IDE autocomplete on property names
+- Compile-time errors for typos (e.g., `$.lasName` → TS error)
+- Template literal syntax reads like a natural string template
+- Output is a plain JSON-serializable array
+- No runtime overhead beyond initial proxy creation
+
 ## Custom Assignment with `static assignTo` Protocol
 
 Classes can opt into custom assignment behavior by defining a `static assignTo` method. When `assignGingerly` encounters a property whose current value is an instance of such a class, it delegates the assignment to `assignTo` instead of performing the default merge/replace logic.

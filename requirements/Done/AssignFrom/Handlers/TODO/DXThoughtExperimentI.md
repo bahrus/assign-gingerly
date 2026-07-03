@@ -561,3 +561,34 @@ export default {
 ```
 
 What feels right to you?
+
+## Human Response III
+
+What do you think of 'sp' for '**s**plit into **p**arts'?
+
+---
+
+## Response to Human Response III
+
+`sp` works well. Two characters, mnemonic ("split into parts"), doesn't collide with anything common, and reads cleanly:
+
+```ts
+import { paths, sp } from 'assign-gingerly/paths.js';
+
+const $ = paths<Person>();
+
+export default {
+    '?.textContent =>': {
+        do: 'builtIns.join',
+        resolve: {
+            value: sp`${$.lastName}, ${$.firstName}`
+        }
+    }
+};
+```
+
+It's distinctive enough that you won't confuse it with other things, short enough to not add noise, and the mnemonic is immediately guessable once someone tells you. I like it.
+
+Let's go with `sp`. I'll implement `paths.ts` / `paths.js` now with:
+- `paths<T>()` — typed proxy factory
+- `sp` — tagged template that interleaves static strings with auto-extracted path strings
