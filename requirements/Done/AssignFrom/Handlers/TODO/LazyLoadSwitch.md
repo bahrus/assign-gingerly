@@ -97,3 +97,122 @@ Results in:
 ```
 
 Support for everything that lazyLoad supports, where it makes sense, like onInstantiated would also be provided.
+
+---
+
+## Feedback / Questions
+
+### The Core Idea
+
+This is `lazyLoad` but with an inline comparison operator instead of a pre-computed boolean `if`. Instead of the consumer evaluating `lhs === rhs` in their VM and passing the result as `if`, the handler evaluates the comparison itself. This enables a pattern where multiple `lazyLoadSwitch` entries in an array represent different "cases" — each with its own condition and template — like a switch/case or router.
+
+Makes sense. The existing `lazyLoad` works for the binary case (one condition, one template). `lazyLoadSwitch` works for the N-ary case (multiple conditions, multiple templates, potentially mutually exclusive).
+
+### Relationship to `lazyLoad`
+
+These two handlers share almost all their DOM logic (markers, clone, hide, remove, `onInstantiated`). The only difference is how the condition is evaluated:
+
+| | `lazyLoad` | `lazyLoadSwitch` |
+|---|---|---|
+| Condition | `resolvedParams.if` (pre-evaluated boolean) | `evaluateOp(resolvedParams.lhs, resolvedParams.op, resolvedParams.rhs)` |
+| Everything else | Same | Same |
+
+**Implementation approach — subclass:**
+
+```ts
+export class LazyLoadSwitchHandler extends LazyLoadHandler {
+    async assign(lhsTarget: any, resolvedParams: Record<string, any>): Promise<void> {
+        const { lhs, op = '===', rhs, ...rest } = resolvedParams;
+        const condition = evaluateOp(lhs, op, rhs);
+        // Delegate to parent with computed condition
+        return super.assign(lhsTarget, { ...rest, if: condition });
+    }
+}
+```
+
+This keeps all the DOM logic in `LazyLoadHandler` and just swaps the condition source. The `LazyLoadHandler` class is already exported for subclassing — this is exactly the pattern it was designed for.
+
+### Supported Operators
+
+What operators should `op` support?
+
+| Operator | Semantics |
+|----------|-----------|
+| `'==='` | Strict equality (default) |
+| `'!=='` | Strict inequality |
+| `'=='` | Loose equality |
+| `'!='` | Loose inequality |
+| `'<'` | Less than |
+| `'>'` | Greater than |
+| `'<='` | Less than or equal |
+| `'>='` | Greater than or equal |
+
+Should it also support:
+- `'in'` — `lhs in rhs` (property existence)?
+- `'instanceof'` — probably not (hard to serialize)
+- `'matches'` — regex match? e.g., `lhs.match(rhs)`?
+- `'includes'` — `rhs.includes(lhs)` for array/string membership?
+
+**My suggestion:** Start with the comparison operators (`===`, `!==`, `<`, `>`, `<=`, `>=`) and maybe loose equality (`==`, `!=`). They cover routing and the switch-case pattern. Others can be added later if needed.
+
+### Naming Thoughts
+
+You mentioned being open to renaming. Some options:
+
+| Current | Rename to | Rationale |
+|---------|-----------|-----------|
+| `builtIns.lazyLoad` | `builtIns.ifThen` | Reads as: if condition, then show template |
+| `builtIns.lazyLoadSwitch` | `builtIns.ifMatch` | Reads as: if lhs matches rhs, show template |
+| — | `builtIns.when` / `builtIns.whenMatch` | Declarative "when" style |
+| — | `builtIns.showIf` / `builtIns.showWhen` | Action-oriented |
+
+Or keep the `lazyLoad` family name since it communicates the lazy-clone behavior:
+- `builtIns.lazyLoad` → unchanged (binary, `if` condition)
+- `builtIns.lazyLoadSwitch` → as proposed (comparison-based condition)
+
+I don't have a strong opinion here — the naming is mostly about discoverability and reading intent in the config.
+
+### The Routing Use Case
+
+The example demonstrates mutual exclusion nicely — `===` for happy, `!==` for sad. For routing, the pattern would be:
+
+```js
+'?.querySelector?..routerOutlet =>': [
+    { do: 'builtIns.lazyLoadSwitch', resolve: { lhs: '?.route', rhs: 'home', instantiate: 'globalThis://homeView' } },
+    { do: 'builtIns.lazyLoadSwitch', resolve: { lhs: '?.route', rhs: 'settings', instantiate: 'globalThis://settingsView' } },
+    { do: 'builtIns.lazyLoadSwitch', resolve: { lhs: '?.route', rhs: 'profile', instantiate: 'globalThis://profileView' } },
+]
+```
+
+This works with the Multiple Handlers feature (sequential execution). When `route === 'settings'`:
+- First handler: `'home' === 'settings'` → false → hide/remove homeView
+- Second handler: `'settings' === 'settings'` → true → show settingsView
+- Third handler: `'profile' === 'settings'` → false → hide/remove profileView
+
+Clean.
+
+### Questions
+
+1. **`forget` behavior** — should the default be `forget: false` (hide with `hidden` attribute) same as `lazyLoad`? For routing, you might want `forget: true` by default (remove inactive views to save memory). Or leave it up to the consumer per-entry.
+
+2. **Should only one match "win"?** — In the example, `===` and `!==` are mutually exclusive by logic. But what if someone writes two entries that could both match? Should `lazyLoadSwitch` enforce at-most-one, or just let multiple matches all show? I'd say let multiple show — it's the consumer's responsibility to make conditions exclusive. Enforcing exclusivity would add complexity without much benefit.
+
+3. **`forget` for the "lost" case** — When a route changes from `home` to `settings`, the `home` handler fires with condition=false. Should it hide or remove? This should probably be a per-handler config decision, not a global one. Keep `forget` in `resolve` as it is.
+
+4. **Looped substitution synergy** — this pairs well with `where_x_in`:
+   ```js
+   '?.querySelector?..routerOutlet =>': {
+       do: 'builtIns.lazyLoadSwitch',
+       resolve: { lhs: '?.route', rhs: '${x}', instantiate: 'globalThis://${x}View' }
+   },
+   where_x_in: ['home', 'settings', 'profile']
+   ```
+   But wait — this produces multiple ` =>` keys with the same LHS, which would overwrite in the object literal. It only works with the array form. Actually no — looped substitution expands before handler/normal split, and identical keys in the expanded entries do overwrite. So for routing with `where_x_in`, you'd need a different pattern (or use the array form manually). Worth noting in docs.
+
+### Ready to Implement
+
+Once you confirm:
+- Operators to support (my suggestion: `===`, `!==`, `==`, `!=`, `<`, `>`, `<=`, `>=`)
+- Naming (`builtIns.lazyLoadSwitch` or something else)
+- Default `forget` behavior (same as `lazyLoad` → `false`)
+- Subclass approach (extend `LazyLoadHandler`)
