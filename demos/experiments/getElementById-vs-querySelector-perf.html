@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>getElementById vs querySelector vs WeakRef Cache — Performance Test</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem; }
+        table { border-collapse: collapse; margin: 1rem 0; }
+        th, td { border: 1px solid #ccc; padding: 0.5rem 1rem; text-align: right; }
+        th { background: #f5f5f5; text-align: left; }
+        .fastest { background: #d4edda; font-weight: bold; }
+        #status { color: #666; margin: 1rem 0; }
+        pre { background: #f8f8f8; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>getElementById vs querySelector vs WeakRef Cache</h1>
+    <p>Tests run inside a Shadow DOM with varying numbers of child elements.</p>
+    <div id="status">Preparing test...</div>
+    <div id="results"></div>
+    <div id="host"></div>
+
+    <script type="module">
+        const ITERATIONS = 100_000;
+        const ELEMENT_COUNTS = [10, 100, 1000, 5000];
+        const TARGET_INDEX_RATIO = 0.75; // target element is at 75% of the way through
+
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const hostEl = document.getElementById('host');
+
+        /**
+         * Create a shadow root with N child elements.
+         * One element has id="target" and class="target-class".
+         */
+        function createShadowWithElements(count) {
+            // Clean up previous
+            hostEl.innerHTML = '';
+            const wrapper = document.createElement('div');
+            hostEl.appendChild(wrapper);
+            const shadow = wrapper.attachShadow({ mode: 'open' });
+
+            const targetIndex = Math.floor(count * TARGET_INDEX_RATIO);
+
+            for (let i = 0; i < count; i++) {
+                const div = document.createElement('div');
+                if (i === targetIndex) {
+                    div.id = 'target';
+                    div.className = 'target-class';
+                    div.textContent = `Element ${i} (TARGET)`;
+                } else {
+                    div.id = `el-${i}`;
+                    div.className = `class-${i % 10}`;
+                    div.textContent = `Element ${i}`;
+                }
+                shadow.appendChild(div);
+            }
+
+            return shadow;
+        }
+
+        /**
+         * Benchmark a function over N iterations.
+         * Returns average time in nanoseconds per call.
+         */
+        function bench(fn, iterations) {
+            // Warmup
+            for (let i = 0; i < 1000; i++) fn();
+
+            const start = performance.now();
+            for (let i = 0; i < iterations; i++) {
+                fn();
+            }
+            const elapsed = performance.now() - start;
+            return (elapsed / iterations) * 1_000_000; // convert ms to ns
+        }
+
+        /**
+         * Run all benchmarks for a given element count.
+         */
+        function runBenchmarks(elementCount) {
+            const shadow = createShadowWithElements(elementCount);
+
+            // --- Test 1: getElementById ---
+            const timeGetById = bench(() => {
+                shadow.getElementById('target');
+            }, ITERATIONS);
+
+            // --- Test 2: querySelector by ID ---
+            const timeQSById = bench(() => {
+                shadow.querySelector('#target');
+            }, ITERATIONS);
+
+            // --- Test 3: querySelector by class ---
+            const timeQSByClass = bench(() => {
+                shadow.querySelector('.target-class');
+            }, ITERATIONS);
+
+            // --- Test 4: WeakRef cached reference ---
+            // Simulate a cache that stores a WeakRef to the element
+            let weakCache = new WeakRef(shadow.getElementById('target'));
+
+            const timeWeakRef = bench(() => {
+                let el = weakCache.deref();
+                if (!el) {
+                    // Cache miss — re-lookup and cache
+                    el = shadow.getElementById('target');
+                    weakCache = new WeakRef(el);
+                }
+                return el;
+            }, ITERATIONS);
+
+            // --- Test 5: Direct reference (baseline — no lookup) ---
+            const directRef = shadow.getElementById('target');
+            const timeDirect = bench(() => {
+                return directRef;
+            }, ITERATIONS);
+
+            // Verify all methods find the same element
+            const verify = [
+                shadow.getElementById('target'),
+                shadow.querySelector('#target'),
+                shadow.querySelector('.target-class'),
+                weakCache.deref(),
+                directRef
+            ];
+            const allSame = verify.every(el => el === verify[0]);
+
+            return {
+                elementCount,
+                getElementById: timeGetById,
+                querySelectorById: timeQSById,
+                querySelectorByClass: timeQSByClass,
+                weakRefCached: timeWeakRef,
+                directReference: timeDirect,
+                allSame
+            };
+        }
+
+        /**
+         * Render results table.
+         */
+        function renderResults(allResults) {
+            let html = `
+                <p><strong>Iterations per test:</strong> ${ITERATIONS.toLocaleString()}</p>
+                <p><strong>Target position:</strong> ${Math.round(TARGET_INDEX_RATIO * 100)}% through the children</p>
+                <table>
+                    <tr>
+                        <th>Method</th>
+                        ${allResults.map(r => `<th>${r.elementCount} elements</th>`).join('')}
+                    </tr>
+            `;
+
+            const methods = [
+                { key: 'getElementById', label: 'shadowRoot.getElementById(id)' },
+                { key: 'querySelectorById', label: 'shadowRoot.querySelector(#id)' },
+                { key: 'querySelectorByClass', label: 'shadowRoot.querySelector(.class)' },
+                { key: 'weakRefCached', label: 'WeakRef.deref() (cached)' },
+                { key: 'directReference', label: 'Direct reference (baseline)' },
+            ];
+
+            for (const method of methods) {
+                const values = allResults.map(r => r[method.key]);
+                const minVal = Math.min(...values);
+
+                html += `<tr><td>${method.label}</td>`;
+                for (const val of values) {
+                    const isFastest = val === minVal && method.key !== 'directReference';
+                    html += `<td class="${isFastest ? 'fastest' : ''}">${val.toFixed(1)} ns</td>`;
+                }
+                html += '</tr>';
+            }
+
+            html += '</table>';
+
+            // Add ratio comparison
+            html += '<h3>Ratios (relative to getElementById)</h3><table>';
+            html += `<tr><th>Method</th>${allResults.map(r => `<th>${r.elementCount} elements</th>`).join('')}</tr>`;
+
+            for (const method of methods) {
+                if (method.key === 'getElementById') continue;
+                html += `<tr><td>${method.label}</td>`;
+                for (const r of allResults) {
+                    const ratio = r[method.key] / r.getElementById;
+                    html += `<td>${ratio.toFixed(2)}x</td>`;
+                }
+                html += '</tr>';
+            }
+            html += '</table>';
+
+            // Verification
+            const allValid = allResults.every(r => r.allSame);
+            html += `<p>✓ All methods return the same element: <strong>${allValid ? 'YES' : 'NO'}</strong></p>`;
+
+            resultsEl.innerHTML = html;
+        }
+
+        // --- Run ---
+        async function run() {
+            const allResults = [];
+
+            for (const count of ELEMENT_COUNTS) {
+                statusEl.textContent = `Running benchmarks with ${count} elements...`;
+                // Yield to let the DOM update
+                await new Promise(r => setTimeout(r, 50));
+                const result = runBenchmarks(count);
+                allResults.push(result);
+            }
+
+            statusEl.textContent = 'Done!';
+            renderResults(allResults);
+        }
+
+        run();
+    </script>
+</body>
+</html>
