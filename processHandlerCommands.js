@@ -6,6 +6,32 @@
 import { resolveValues } from './resolveValues.js';
 import { evaluatePathWithMethods } from './assignGingerly.js';
 /**
+ * Map of built-in handler names to their module paths.
+ * These are auto-loaded on demand — no explicit import required.
+ */
+const BUILT_IN_MAP = {
+    'builtIns.lazyLoad': './handlers/lazyLoad.js',
+};
+/**
+ * Dynamically load a built-in handler by name.
+ * Returns the handler constructor, or undefined if the name isn't a recognized built-in.
+ */
+async function loadBuiltIn(name) {
+    const path = BUILT_IN_MAP[name];
+    if (!path)
+        return undefined;
+    const module = await import(path);
+    // Built-in modules export their handler class by a conventional name (e.g., LazyLoadHandler)
+    // Find the first exported class that looks like a handler constructor
+    for (const key of Object.keys(module)) {
+        const exported = module[key];
+        if (typeof exported === 'function' && exported.prototype && 'assign' in exported.prototype) {
+            return exported;
+        }
+    }
+    return undefined;
+}
+/**
  * Process all handler command keys (ending with ' =>') in a pattern.
  *
  * @param target - The target object being assigned to
@@ -67,7 +93,11 @@ export async function processHandlerCommands(target, handlerKeys, pattern, optio
         }
         // Execute handlers sequentially, sharing the same lhsTarget
         for (const config of configs) {
-            const HandlerClass = handlerRegistry.get(config.do);
+            let HandlerClass = handlerRegistry.get(config.do);
+            // Auto-load built-in handlers on demand
+            if (!HandlerClass && config.do.startsWith('builtIns.')) {
+                HandlerClass = await loadBuiltIn(config.do);
+            }
             if (!HandlerClass) {
                 throw new Error(`assignFrom: unknown handler "${config.do}". Register with defineHandler().`);
             }

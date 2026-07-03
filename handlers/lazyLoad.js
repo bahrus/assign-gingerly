@@ -1,12 +1,12 @@
 /**
  * builtIns.lazyLoad handler for assignFrom.
- * 
+ *
  * Conditionally clones a template into a target element, using comment markers
  * to track the inserted content. Supports show/hide and show/remove modes.
- * 
+ *
  * This handler is auto-loaded by processHandlerCommands when `do: 'builtIns.lazyLoad'`
  * is encountered — no explicit import is needed.
- * 
+ *
  * @example
  * assignFrom(document.body, {
  *     '?.querySelector?..mainView =>': {
@@ -18,30 +18,12 @@
  *     }
  * }, { withMethods: ['querySelector'], from: myVM });
  */
-
-import type { AssignFromHandler } from '../assignFrom.js';
-
 const MARKER_START_PREFIX = '?start name="';
 const MARKER_END = '?end';
-
-/**
- * Context passed to onInstantiated callbacks.
- */
-export interface LazyLoadInstantiatedContext {
-    /** The inserted child nodes */
-    nodes: Node[];
-    /** The target element containing the markers */
-    target: Element;
-    /** The full handler config */
-    config: any;
-    /** The resolved parameters */
-    resolvedParams: Record<string, any>;
-}
-
 /**
  * Get the marker name from a template element (uses its id).
  */
-function getMarkerName(templateEl: any): string {
+function getMarkerName(templateEl) {
     if (templateEl instanceof HTMLTemplateElement) {
         return templateEl.id || 'anonymous';
     }
@@ -50,123 +32,100 @@ function getMarkerName(templateEl: any): string {
     }
     return 'anonymous';
 }
-
 /**
  * Find existing start/end comment markers in a target element.
  * Returns [startMarker, endMarker] or [null, null] if not found.
  */
-function findMarkers(target: Element, name: string): [Comment | null, Comment | null] {
+function findMarkers(target, name) {
     const startText = `${MARKER_START_PREFIX}${name}"`;
-    let startMarker: Comment | null = null;
-    let endMarker: Comment | null = null;
-
+    let startMarker = null;
+    let endMarker = null;
     const walker = document.createTreeWalker(target, NodeFilter.SHOW_COMMENT);
-    let node: Comment | null;
-    while ((node = walker.nextNode() as Comment | null)) {
+    let node;
+    while ((node = walker.nextNode())) {
         if (!startMarker && node.data === startText) {
             startMarker = node;
-        } else if (startMarker && !endMarker && node.data === MARKER_END) {
+        }
+        else if (startMarker && !endMarker && node.data === MARKER_END) {
             endMarker = node;
             break;
         }
     }
-
     return [startMarker, endMarker];
 }
-
 /**
  * Create start/end markers and insert them into the target.
  */
-function createMarkers(target: Element, name: string, method: string): [Comment, Comment] {
+function createMarkers(target, name, method) {
     const startMarker = document.createComment(`${MARKER_START_PREFIX}${name}"`);
     const endMarker = document.createComment(MARKER_END);
-
     if (method === 'prepend') {
         target.prepend(endMarker);
         target.prepend(startMarker);
-    } else {
-        // Default: appendChild
+    }
+    else {
         target.appendChild(startMarker);
         target.appendChild(endMarker);
     }
-
     return [startMarker, endMarker];
 }
-
 /**
  * Get all nodes between start and end markers.
  */
-function getNodesBetweenMarkers(start: Comment, end: Comment): Node[] {
-    const nodes: Node[] = [];
-    let current: Node | null = start.nextSibling;
+function getNodesBetweenMarkers(start, end) {
+    const nodes = [];
+    let current = start.nextSibling;
     while (current && current !== end) {
         nodes.push(current);
         current = current.nextSibling;
     }
     return nodes;
 }
-
 /**
  * LazyLoadHandler — built-in handler for conditional template instantiation.
- * 
+ *
  * Exported so it can be subclassed for custom behavior.
  */
-export class LazyLoadHandler implements AssignFromHandler {
-    config: any;
-
-    constructor(config: any) {
+export class LazyLoadHandler {
+    config;
+    constructor(config) {
         this.config = config;
     }
-
-    async assign(lhsTarget: any, resolvedParams: Record<string, any>): Promise<void> {
-        const {
-            if: condition,
-            instantiate,
-            method = 'appendChild',
-            forget = false
-        } = resolvedParams;
-
+    async assign(lhsTarget, resolvedParams) {
+        const { if: condition, instantiate, method = 'appendChild', forget = false } = resolvedParams;
         if (!(lhsTarget instanceof Element)) {
             throw new Error('builtIns.lazyLoad: lhsTarget must be a DOM Element');
         }
-
         const name = getMarkerName(instantiate);
-
-        // Find or create markers
         let [startMarker, endMarker] = findMarkers(lhsTarget, name);
-
         if (condition) {
-            // SHOW
             if (startMarker && endMarker) {
-                // Markers exist — check if content is hidden or removed
                 const nodes = getNodesBetweenMarkers(startMarker, endMarker);
                 if (nodes.length > 0) {
-                    // Content exists — remove hidden attribute
                     for (const node of nodes) {
                         if (node instanceof Element) {
                             node.removeAttribute('hidden');
                         }
                     }
-                } else {
-                    // Content was removed (forget mode) — re-clone
+                }
+                else {
                     await this.cloneAndInsert(instantiate, startMarker, endMarker, lhsTarget, resolvedParams);
                 }
-            } else {
-                // No markers — first time. Create markers and clone template.
+            }
+            else {
                 [startMarker, endMarker] = createMarkers(lhsTarget, name, method);
                 await this.cloneAndInsert(instantiate, startMarker, endMarker, lhsTarget, resolvedParams);
             }
-        } else {
-            // HIDE or REMOVE
+        }
+        else {
             if (startMarker && endMarker) {
                 const nodes = getNodesBetweenMarkers(startMarker, endMarker);
                 if (forget) {
-                    // Remove nodes entirely (markers persist for re-insertion)
                     for (const node of nodes) {
                         node.parentNode?.removeChild(node);
                     }
-                } else {
-                    // Hide nodes
+                }
+                else {
                     for (const node of nodes) {
                         if (node instanceof Element) {
                             node.setAttribute('hidden', '');
@@ -174,45 +133,24 @@ export class LazyLoadHandler implements AssignFromHandler {
                     }
                 }
             }
-            // If no markers exist and condition is false, do nothing (never loaded)
         }
     }
-
-    /**
-     * Clone a template and insert its content between the markers.
-     * Calls onCloneInserted hook and onInstantiated callback after insertion.
-     */
-    protected async cloneAndInsert(
-        templateEl: any,
-        startMarker: Comment,
-        endMarker: Comment,
-        lhsTarget: Element,
-        resolvedParams: Record<string, any>
-    ): Promise<Node[]> {
-        let content: DocumentFragment;
-
+    async cloneAndInsert(templateEl, startMarker, endMarker, lhsTarget, resolvedParams) {
+        let content;
         if (templateEl instanceof HTMLTemplateElement) {
-            content = templateEl.content.cloneNode(true) as DocumentFragment;
-        } else if (templateEl instanceof DocumentFragment) {
-            content = templateEl.cloneNode(true) as DocumentFragment;
-        } else {
-            throw new Error(
-                `builtIns.lazyLoad: instantiate must resolve to an HTMLTemplateElement or DocumentFragment`
-            );
+            content = templateEl.content.cloneNode(true);
         }
-
-        // Capture nodes before insertion (childNodes empties after insertBefore)
+        else if (templateEl instanceof DocumentFragment) {
+            content = templateEl.cloneNode(true);
+        }
+        else {
+            throw new Error(`builtIns.lazyLoad: instantiate must resolve to an HTMLTemplateElement or DocumentFragment`);
+        }
         const nodes = Array.from(content.childNodes);
-
-        // Insert before endMarker
-        endMarker.parentNode!.insertBefore(content, endMarker);
-
-        // Call protected hook (for subclass overrides)
+        endMarker.parentNode.insertBefore(content, endMarker);
         await this.onCloneInserted(nodes, lhsTarget, resolvedParams);
-
-        // Call onInstantiated callback if provided (resolved from VM)
         if (resolvedParams.onInstantiated && typeof resolvedParams.onInstantiated === 'function') {
-            const ctx: LazyLoadInstantiatedContext = {
+            const ctx = {
                 nodes,
                 target: lhsTarget,
                 config: this.config,
@@ -220,23 +158,9 @@ export class LazyLoadHandler implements AssignFromHandler {
             };
             await resolvedParams.onInstantiated(ctx);
         }
-
         return nodes;
     }
-
-    /**
-     * Hook called after template content is cloned and inserted.
-     * Override in subclasses for custom post-clone logic.
-     * 
-     * @param nodes - The inserted child nodes
-     * @param lhsTarget - The target element
-     * @param resolvedParams - The resolved parameters
-     */
-    protected async onCloneInserted(
-        nodes: Node[],
-        lhsTarget: Element,
-        resolvedParams: Record<string, any>
-    ): Promise<void> {
+    async onCloneInserted(nodes, lhsTarget, resolvedParams) {
         // No-op by default. Subclasses override.
     }
 }

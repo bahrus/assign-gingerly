@@ -3495,11 +3495,9 @@ await assignFrom(myElement, {
 
 ### Built-in handler: `builtIns.lazyLoad`
 
-Conditionally loads (clones) a template into a target element. Uses comment markers to track inserted content and supports show/hide/remove modes.
+Conditionally loads (clones) a template into a target element. Uses comment markers to track inserted content and supports show/hide/remove modes. Built-in handlers are auto-loaded on demand — no explicit import is needed.
 
 ```JavaScript
-import 'assign-gingerly/handlers/lazyLoad.js';
-
 await assignFrom(document.body, {
     '?.querySelector?..mainView =>': {
         do: 'builtIns.lazyLoad',
