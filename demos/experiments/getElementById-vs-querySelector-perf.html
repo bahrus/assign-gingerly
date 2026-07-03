@@ -110,7 +110,23 @@
                 return el;
             }, ITERATIONS);
 
-            // --- Test 5: Direct reference (baseline — no lookup) ---
+            // --- Test 5: Map<id, WeakRef> cache ---
+            // Simulate a registry that maps element IDs to WeakRefs
+            const weakRefMap = new Map();
+            weakRefMap.set('target', new WeakRef(shadow.getElementById('target')));
+
+            const timeMapWeakRef = bench(() => {
+                const ref = weakRefMap.get('target');
+                let el = ref?.deref();
+                if (!el) {
+                    // Cache miss — re-lookup and store
+                    el = shadow.getElementById('target');
+                    weakRefMap.set('target', new WeakRef(el));
+                }
+                return el;
+            }, ITERATIONS);
+
+            // --- Test 6: Direct reference (baseline — no lookup) ---
             const directRef = shadow.getElementById('target');
             const timeDirect = bench(() => {
                 return directRef;
@@ -122,6 +138,7 @@
                 shadow.querySelector('#target'),
                 shadow.querySelector('.target-class'),
                 weakCache.deref(),
+                weakRefMap.get('target')?.deref(),
                 directRef
             ];
             const allSame = verify.every(el => el === verify[0]);
@@ -132,6 +149,7 @@
                 querySelectorById: timeQSById,
                 querySelectorByClass: timeQSByClass,
                 weakRefCached: timeWeakRef,
+                mapWeakRefCached: timeMapWeakRef,
                 directReference: timeDirect,
                 allSame
             };
@@ -155,7 +173,8 @@
                 { key: 'getElementById', label: 'shadowRoot.getElementById(id)' },
                 { key: 'querySelectorById', label: 'shadowRoot.querySelector(#id)' },
                 { key: 'querySelectorByClass', label: 'shadowRoot.querySelector(.class)' },
-                { key: 'weakRefCached', label: 'WeakRef.deref() (cached)' },
+                { key: 'weakRefCached', label: 'WeakRef.deref() (single cached ref)' },
+                { key: 'mapWeakRefCached', label: 'Map&lt;id, WeakRef&gt;.get(id).deref()' },
                 { key: 'directReference', label: 'Direct reference (baseline)' },
             ];
 
