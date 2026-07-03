@@ -216,3 +216,29 @@ Once you confirm:
 - Naming (`builtIns.lazyLoadSwitch` or something else)
 - Default `forget` behavior (same as `lazyLoad` → `false`)
 - Subclass approach (extend `LazyLoadHandler`)
+
+
+---
+
+## Human Response I
+
+
+> Should it also support:
+> `'in'`
+
+These are good ideas.  Please create a TODO document in this file's folder, and I'll mull that over.  Basically, I agree with your suggestion.
+
+> **`forget` behavior**
+
+default behavior should be forget: false.  Pet peeve of mine is how most frameworks dump previously loaded content, often losing the state of where things were, and the added load time to bring it back.  
+
+> **Should only one match "win"?**
+
+I agree.  Let multiple show.
+
+>  **Looped substitution synergy**
+
+This seems to be a really good catch.  I think we should revisit the implementation of how looped substitution was implemented. They should not overwrite somehow.  If that seemingly is opening a can of worms, let's definitely flag that item as a separate TODO document in this folder, which I would like to mull over, and overlook this legitimate concern for a bit.
+
+
+
