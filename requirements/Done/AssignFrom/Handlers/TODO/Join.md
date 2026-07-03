@@ -275,3 +275,183 @@ export class JoinHandler implements AssignFromHandler {
 - Auto-load registration in the `BUILT_IN_MAP`
 - Nested sub-arrays use "all-or-nothing" for null filtering (if confirmed)
 - `j` tag utility in `tags.ts` (if confirmed)
+
+---
+
+## Human Response II
+
+Everything looks good, except the `j` tag utility.  I'm hoping we can provide even better ergonomics.
+
+Instead of:
+
+```js
+// In a .mjs file:
+import { j } from 'assign-gingerly/tags.js';
+
+export default {
+    '?.textContent =>': {
+        do: 'builtIns.join',
+        resolve: {
+            value: j`${'?.lastName'}, ${'?.firstName'}`
+        }
+    }
+};
+
+// j`${'?.lastName'}, ${'?.firstName'}` produces:
+// ['?.lastName', ', ', '?.firstName']
+```
+
+can we do:
+
+```js
+// In a .mts file:
+import { tbd, tbd2 } from 'assign-gingerly/tags.js';
+
+interface Person {
+    firstName?: string,
+    middleName?: string,
+    lastName:  string
+}
+
+const deonstructedValue = (x: Person) => tbd `${x?.lastName}, ${x?.firstName}`;
+
+// not sure if this step is necessary
+const value = tbd2(deonstructedValue);
+
+// produces:
+// ['?.lastName', ', ', '?.firstName']
+
+export default {
+    '?.textContent =>': {
+        do: 'builtIns.join',
+        resolve: {
+            value
+        }
+    }
+};
+
+// j`${'?.lastName'}, ${'?.firstName'}` produces:
+// ['?.lastName', ', ', '?.firstName']
+```
+
+---
+
+## Feedback on `tbd` / `tbd2` Approach
+
+### What You're After
+
+You want:
+- Full TypeScript autocomplete on the interpolated expressions (`x?.lastName` gives you IDE suggestions based on the `Person` interface)
+- Type safety (typos like `x?.lasName` are caught at compile time)
+- The output is still the same JSON-friendly array (`['?.lastName', ', ', '?.firstName']`)
+
+This is a compile-time-to-runtime extraction problem. The challenge is: at runtime, `x?.lastName` is just a property access that returns a value (or `undefined`) — it doesn't produce the string `'?.lastName'`. JavaScript doesn't have reflection over the expression text.
+
+### Why It Can't Work As Written (Runtime)
+
+```ts
+const deconstructedValue = (x: Person) => tbd`${x?.lastName}, ${x?.firstName}`;
+```
+
+When this runs:
+1. `x?.lastName` evaluates to a *value* (e.g., `'Targaryen'` or `undefined`)
+2. The template tag receives the evaluated values, not the source expressions
+3. There's no way to recover that the expression was `x?.lastName` vs a literal `'Targaryen'`
+
+So `tbd` can't produce `'?.lastName'` from `x?.lastName` at runtime — JavaScript doesn't expose expression ASTs to tagged template functions.
+
+### What Could Work: Proxy-Based Path Tracing
+
+Instead of passing a real `Person` object, you pass a **Proxy** that records property accesses and returns path strings:
+
+```ts
+import { trace, extract } from 'assign-gingerly/tags.js';
+
+const value = extract<Person>(x => [x.lastName, ', ', x.firstName]);
+// produces: ['?.lastName', ', ', '?.firstName']
+```
+
+How it works:
+- `extract<Person>(fn)` creates a deeply-proxied object that records every property access
+- Calls `fn(proxy)`
+- Each `proxy.lastName` access returns a special token (or the string `'?.lastName'`) instead of a real value
+- The returned array is already in the right format
+
+```ts
+function extract<T>(fn: (proxy: T) => any[]): (string | any)[] {
+    const paths: string[] = [];
+    const proxy = createPathProxy<T>('');  // returns '?.prop' strings on access
+    return fn(proxy);
+}
+```
+
+This gives you:
+- ✅ Full autocomplete (TypeScript sees `x` as `Person`)
+- ✅ Type-checked property accesses
+- ✅ Runtime path extraction
+- ⚠️ Can't use `?.` optional chaining (the proxy always succeeds, so `?.` is unnecessary and would confuse things)
+- ⚠️ Nested paths work (`x.address.city` → `'?.address?.city'`) but methods don't
+
+### Alternative: Build-Time Extraction (Babel/TS Plugin)
+
+A compiler plugin could transform the source:
+```ts
+// Input:
+const value = j<Person>`${x => x.lastName}, ${x => x.firstName}`;
+
+// Compiled output:
+const value = ['?.lastName', ', ', '?.firstName'];
+```
+
+This is the most ergonomic but requires tooling setup. Probably overkill for now.
+
+### My Recommendation
+
+The Proxy approach is the most practical. Something like:
+
+```ts
+import { paths } from 'assign-gingerly/tags.js';
+
+interface Person {
+    firstName?: string;
+    middleName?: string;
+    lastName: string;
+}
+
+const value = paths<Person>(x => [x.lastName, ', ', x.firstName]);
+// Result: ['?.lastName', ', ', '?.firstName']
+
+// With nested/optional segments:
+const value2 = paths<Person>(x => [x.lastName, [', ', x.middleName], ', ', x.firstName]);
+// Result: ['?.lastName', [', ', '?.middleName'], ', ', '?.firstName']
+```
+
+**Tradeoffs vs the simple `j` tag:**
+- ✅ Autocomplete and type safety on property names
+- ✅ No need to manually type `'?.lastName'` strings
+- ⚠️ Slightly more complex implementation (~20-30 lines for the proxy)
+- ⚠️ `?.` optional chaining syntax can't be used (proxy handles everything) — just use `x.middleName` and the join handler's null filtering takes care of optionality
+- ⚠️ Method calls in paths (like `withMethods`) won't work through the proxy — this is for data property access only
+
+### Questions
+
+1. **Does the Proxy approach match your ergonomic goals?** You get IDE autocomplete on the property names and compile-time typo detection, but you use dot notation (`x.lastName`) rather than optional chaining (`x?.lastName`).
+
+2. **Should this support nested paths?** e.g., `x.address.city` → `'?.address?.city'`? Easy with a recursive proxy.
+
+3. **Is this only for the `join` handler's `value` array, or do you envision using it more broadly** (e.g., for the RHS path strings in normal `assignFrom` patterns)?
+
+## Human Response III
+
+Let's implement:
+
+- Return-value protocol in `processHandlerCommands` (if `assign()` returns non-undefined, assign it to LHS)
+- `builtIns.join` handler in `handlers/join.ts`
+- Auto-load registration in the `BUILT_IN_MAP`
+- Nested sub-arrays use "all-or-nothing" for null filtering (if confirmed)
+
+and hold off on doing anthing about:
+
+- `j` tag utility in `tags.ts` (if confirmed)
+
+for now.  That will be a separate requirement.
