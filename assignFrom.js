@@ -145,7 +145,31 @@ function expandSubstitutions(pattern, options) {
         }
         entries = expanded;
     }
-    return Object.fromEntries(entries);
+    return mergeHandlerDuplicates(entries);
+}
+/**
+ * Convert entries to an object, merging duplicate handler (` =>`) keys into arrays.
+ * For normal (non-handler) keys, later entries overwrite earlier ones (standard object behavior).
+ * For handler keys, duplicate entries are combined into an array (Multiple Handlers pattern).
+ */
+function mergeHandlerDuplicates(entries) {
+    const result = {};
+    for (const [key, value] of entries) {
+        if (key.endsWith(' =>') && key in result) {
+            // Duplicate handler key — merge into array
+            const existing = result[key];
+            if (Array.isArray(existing)) {
+                existing.push(value);
+            }
+            else {
+                result[key] = [existing, value];
+            }
+        }
+        else {
+            result[key] = value;
+        }
+    }
+    return result;
 }
 export async function assignFrom(target, pattern, options) {
     // First: expand looped substitution variables (${x}, ${y}, ${z})
