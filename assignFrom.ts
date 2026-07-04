@@ -32,6 +32,17 @@ export interface AssignFromOptions extends IAssignGingerlyOptions, ResolveValues
   where_y_in?: string[];
   /** Loop variable bindings — expand pattern entries containing ${z} */
   where_z_in?: string[];
+
+  /**
+   * Cached element references by variable name.
+   * Used with `#[varName]` syntax in LHS keys for fast repeated element access.
+   * 
+   * - String value: existing element ID (uses getElementById)
+   * - Object value: { qry: 'selector' } — finds element via querySelector on target, auto-assigns an ID
+   * 
+   * Elements are cached via WeakRef with getElementById fallback on cache miss.
+   */
+  withIds?: Record<string, string | { qry: string }>;
 }
 
 /**

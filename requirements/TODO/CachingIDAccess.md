@@ -444,3 +444,24 @@ Yes, I think the id substitution should have to begin the string, but after that
 
 Let's go with your suggestion:  assignFrom only for now.  Since assignFrom is fundamentally asynchronous, the module can be imported dynamically on demand, ideally.  If use cases for assignGingerly become strong, the same module could be imported synchronously.
 
+
+---
+
+## Kiro's Response I
+
+All clear. Summary of decisions:
+
+| Question | Decision |
+|----------|----------|
+| Initial query scope | Runs against `target` (first argument to `assignFrom`) |
+| Eager vs lazy | **Lazy** — resolve `#[x]` on first encounter during path evaluation |
+| ID generation | `_ag0`, `_ag1`, ... (counter scoped to rootNode) |
+| Shorthand | String = existing ID (`x: 'myUniqueId'`), Object = query + auto-ID (`x: { qry: '.mainView' }`) |
+| Chaining | Yes — `#[x]` anchors the start, `?.` segments continue from there |
+| Scope | `assignFrom` only for now |
+| Cache location | Module-level `WeakMap<rootNode, Map<variable, { id, WeakRef }>>` |
+| Error handling | Let browser throw naturally on non-DOM targets |
+
+This is well-scoped and ready to implement when you're ready to move it out of TODO. The lazy resolution adds a few lines (resolve on first `#[x]` encounter rather than upfront) but fits naturally into the existing path evaluation flow in `processHandlerCommands` and the normal key processing.
+
+Shall I implement this now, or park it for later?
