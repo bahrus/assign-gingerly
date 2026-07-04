@@ -17,7 +17,7 @@ On the other extreme, we have [this use case for assign-from](https://raw.github
 
 with the latter case in mind, here's my proposal:
 
-1.  Remove AssignFrom.define from the code and documentation.  Maybe later we will introduce a registry for it.  For now, it doesn't feel like the right fit.
+1.  Remove AssignFrom.define from the code and documentation.  Maybe later we will introduce a registry for it.  For now, it doesn't feel like the right fit.  No external packages use it yet, so no concerns about backwards compatibility.
 
 2.  Move AssignFromOptions from assignFrom to types/assig-gingerly/types.d.ts
 
