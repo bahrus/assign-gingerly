@@ -358,3 +358,16 @@ This keeps the handler pattern clean (stateless processors + externalized state)
 1. **Does extracting `transitionHelper.ts` as the shared module make sense?** It would be exported from `assign-gingerly/transitionHelper.js`.
 2. **For the hide class name**, should it be `.ag-hide` (generic to this package) or should each consumer get to name it? `be-switched` uses `.be-switched-hide` — if it migrates to the shared utility, does it keep its own class name or switch to `.ag-hide`?
 3. **Ready to implement once you confirm the approach.** I'll create `transitionHelper.ts`, update `lazyLoad` to use it, and build a visual demo page.
+
+---
+## Human Response II
+
+>  **Does extracting `transitionHelper.ts` as the shared module make sense?**
+
+Makes sense.  Let's do it.
+
+> **For the hide class name**
+
+Let's default to that but allow for another optional config setting in addition to "transitional"
+
+If that seems clear, please implement.
