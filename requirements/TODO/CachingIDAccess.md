@@ -159,4 +159,54 @@ assignFrom(document.body, {
 })
 ```
 
-The id will *not* be set to x, that's like a variable.  It will be set to as predictable and small an id as possible, unique within the rootNode.
+The id will *not* be set to x, that's like a variable.  It will be set to as predictable and small an id as possible (not a guid), unique within the rootNode.
+
+### Scenario II ID already present
+
+```html
+<html>
+    <head>...</head>
+    <body>
+        <div .mainView id=myUniqueId>
+            My Mood:
+            <div .mainView>
+                <?start name="happyMood">
+                    <div>I am happy</div>
+                    <div>I am healthy</div>
+                <?end>
+            </div>
+        </div>
+
+...
+        <template id=happyMood>
+            <div>I am happy</div>
+            <div>I am healthy</div>
+        </template>
+    </body>
+</html>
+```
+
+```JavaScript
+const myVM = {
+    isHappy: false
+}
+
+assignFrom(document.body, {
+    '#[x] =>': {
+        do: 'builtIns.lazyLoad',
+        resolve:{
+            if: '?.isHappy',
+            instantiate: 'globalThis://happyMood',
+            method: 'appendChild', //default
+        }
+    }
+}, {
+    withMethods: ['querySelector'],
+    from: myVM
+    withIds: {
+        x: {
+            qry: '#myUniqueId',
+        }
+    }
+})
+```
