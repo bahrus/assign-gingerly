@@ -210,3 +210,168 @@ assignFrom(document.body, {
     }
 })
 ```
+
+---
+
+## Feedback / Questions
+
+### The Core Idea
+
+A `#[x]` syntax in LHS paths that resolves to a cached element reference via `Map<variable, WeakRef>`. On first access, the element is found via a query (defined in `withIds`), assigned an ID if it doesn't have one, cached as a WeakRef, and on subsequent calls resolved via `getElementById` + WeakRef — giving you ~10ns repeated access instead of the querySelector cost.
+
+This is smart. It separates "how to find the element the first time" from "how to reference it cheaply on subsequent calls."
+
+### What I Like
+
+1. **The variable indirection (`#[x]`)** — the pattern references a stable variable name, not a CSS selector or ID string. This means the pattern object stays clean and selector details live in `withIds`.
+
+2. **Auto-ID assignment** — if the element doesn't have an ID, one is generated. This means the caching strategy works regardless of whether the author put IDs on their elements.
+
+3. **WeakRef cache miss → fallback to `getElementById`** — the generated/existing ID provides a stable O(1) lookup path that doesn't degrade.
+
+4. **Scope: rootNode** — the ID uniqueness and lookup are scoped to the rootNode (document or shadowRoot), which aligns with how IDs work natively.
+
+### Questions / Concerns
+
+1. **Where does the initial query run?**  
+   In Scenario I, `qry: '.mainView'` — what is this queried against? The `target` (first argument to `assignFrom`)? The rootNode of the target? It matters because if `target` is `document.body`, `querySelector('.mainView')` on the body is different from `shadowRoot.querySelector('.mainView')`.
+   
+   My assumption: the query runs against the same target that was passed to `assignFrom` (or its rootNode). Worth being explicit.
+
+2. **When does the initial query + ID assignment happen?**  
+   - Eagerly (all `withIds` entries resolved at the start of `assignFrom` before processing patterns)?
+   - Lazily (only when `#[x]` is first encountered during path evaluation)?
+   
+   Eager seems simpler and avoids ordering issues (e.g., a pattern that creates the element before another pattern references it via `#[x]`).
+
+3. **ID generation strategy — "as predictable and small as possible"**  
+   You mentioned not using a GUID, just something unique within the rootNode. Ideas:
+   - Sequential counter per rootNode: `_a0`, `_a1`, `_a2`, ...
+   - Based on the variable name: `_x`, `_y`, `_z` (but what if multiple `assignFrom` calls use the same variable name for different elements?)
+   - Hash of the query string (deterministic, but potentially long)
+   
+   I'd suggest a short prefix + counter scoped to the rootNode: `_ag0`, `_ag1`, etc. (`ag` for assign-gingerly). This is short, predictable, and avoids collisions with author-defined IDs (the underscore prefix is rarely used by humans).
+
+4. **Scenario II — `qry: '#myUniqueId'`**  
+   If the element already has an ID, is the `qry` necessary at all? Could it just be:
+   ```js
+   withIds: {
+       x: '#myUniqueId'  // shorthand: string = ID selector
+   }
+   ```
+   Or even:
+   ```js
+   withIds: {
+       x: 'myUniqueId'  // just the ID, no #
+   }
+   ```
+   The object form (`{ qry: '...' }`) would be for the "find by class/attribute and assign an ID" case. The string form would be for "element already has an ID, just cache it."
+
+5. **Multiple `assignFrom` calls sharing the same cache?**  
+   If `assignFrom` is called repeatedly (e.g., on each reactive update), does the `withIds` cache persist across calls? It should — that's the whole point. Where does the cache live?
+   - On the rootNode itself (e.g., `rootNode.__agIdCache`)?
+   - In a module-level `WeakMap<rootNode, Map<variable, WeakRef>>`?
+   
+   A module-level WeakMap keyed by rootNode makes sense — it's GC-friendly (if the rootNode is removed, the whole cache is collected) and doesn't pollute the DOM object.
+
+6. **Interaction with `withMethods` and `?.` paths**  
+   Currently, `?.querySelector?..mainView` resolves the element inline during path evaluation. With `#[x]`, the path becomes just `#[x]` — the element is pre-resolved. Does this mean `#[x]` replaces the entire LHS path? Or can it be combined:
+   ```js
+   '#[x]?.querySelector?..childElement =>': { ... }
+   ```
+   i.e., `#[x]` resolves the cached element, then further path evaluation continues from there?
+
+   I'd say: `#[x]` is a **root anchor** that replaces the starting point of path evaluation. Further `?.` segments can chain off it. This gives you cached access to a parent, then cheap navigation from there.
+
+7. **Does this belong in `assignFrom` only, or also `assignGingerly`?**  
+   The `withIds` option adds a resolution/caching layer. `assignGingerly` is synchronous and doesn't do resolution — it just merges. So `withIds` feels like an `assignFrom` concern (it resolves references before assignment). But `assignGingerly`'s `withMethods` already does querySelector inline... so there might be a case for it there too.
+   
+   My suggestion: start with `assignFrom` only. If demand arises for `assignGingerly`, the cache layer could be extracted into a shared utility.
+
+### Suggested API Refinement
+
+```js
+assignFrom(document.body, {
+    '#[x] =>': {
+        do: 'builtIns.lazyLoad',
+        resolve: { if: '?.isHappy', instantiate: 'globalThis://happyMood' }
+    },
+    // Can also chain from a cached element:
+    '#[x]?.querySelector?..child?.textContent': '?.message'
+}, {
+    from: myVM,
+    withMethods: ['querySelector'],
+    withIds: {
+        x: { qry: '.mainView' },           // find by class, auto-assign ID, cache
+        y: 'myUniqueId',                    // already has ID, just cache the WeakRef
+        z: { qry: '[data-route="home"]' },  // find by attribute
+    }
+});
+```
+
+### Implementation Sketch
+
+```ts
+// Module-level cache
+const idCacheMap = new WeakMap<Node, Map<string, { id: string; ref: WeakRef<Element> }>>();
+
+function resolveWithIds(
+    target: Element | Document | ShadowRoot,
+    withIds: Record<string, string | { qry: string }>
+): Map<string, Element> {
+    const rootNode = target.getRootNode() as Document | ShadowRoot;
+    let cache = idCacheMap.get(rootNode);
+    if (!cache) {
+        cache = new Map();
+        idCacheMap.set(rootNode, cache);
+    }
+
+    const resolved = new Map<string, Element>();
+
+    for (const [varName, config] of Object.entries(withIds)) {
+        const cached = cache.get(varName);
+        if (cached) {
+            const el = cached.ref.deref();
+            if (el) {
+                resolved.set(varName, el);
+                continue;
+            }
+            // Cache miss — WeakRef was collected, re-lookup by ID
+            const el2 = rootNode.getElementById(cached.id);
+            if (el2) {
+                cache.set(varName, { id: cached.id, ref: new WeakRef(el2) });
+                resolved.set(varName, el2);
+                continue;
+            }
+        }
+
+        // First time — run the query
+        const qry = typeof config === 'string' ? `#${config}` : config.qry;
+        const el = (target as Element).querySelector?.(qry) ?? rootNode.querySelector(qry);
+        if (!el) continue;
+
+        // Ensure it has an ID
+        let id = el.id;
+        if (!id) {
+            id = generateUniqueId(rootNode);
+            el.id = id;
+        }
+
+        cache.set(varName, { id, ref: new WeakRef(el) });
+        resolved.set(varName, el);
+    }
+
+    return resolved;
+}
+```
+
+### Summary
+
+The concept is sound and well-motivated by the perf data. Key decisions needed:
+
+1. Where does the initial query run? (target vs rootNode)
+2. Eager or lazy resolution of `withIds`?
+3. ID generation format (suggest `_ag0`, `_ag1`, ...)
+4. Shorthand for elements that already have IDs?
+5. Can `#[x]` chain with further `?.` path segments?
+6. `assignFrom` only, or shared with `assignGingerly`?
