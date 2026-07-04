@@ -1,5 +1,8 @@
 # Caching ID Access
 
+---
+## Human Ask
+
 The page /demos/experiments/getElementById-vs-querySelector-perf.html largely confirms what we might expect as far how to optimize repeated access to an element, starting from the shadowRoot, say:
 
 Chrome 150:
@@ -102,4 +105,58 @@ Safari is the most dramatic result:
 3. **WeakRef caching is universally optimal** — matches or beats `getElementById` on every engine. The Map lookup overhead is negligible.
 4. **The WeakRef + Map strategy is the clear winner** for any handler that repeatedly resolves elements: ~10-12ns across all engines, with automatic GC cleanup and a cheap `getElementById` fallback on cache miss.
 
-So for this package to be optimal for repeated calls, ideally there would be a way to point to dom elements by id and cache them with weak maps, especially the lhs of all the functions (assign-gingerly, assign-tentatively, and assign-from)
+So for this package to be optimal for repeated calls, ideally there would be a way to point to DOM elements by id and cache them with weak maps, especially the lhs of all the functions (assign-gingerly, assign-tentatively, and assign-from).
+
+## Very Tentative Proposal:
+
+Scenario I.  Element without an ID
+
+```html
+<html>
+    <head>...</head>
+    <body>
+        <div .mainView>
+            My Mood:
+            <div .mainView>
+                <?start name="happyMood">
+                    <div>I am happy</div>
+                    <div>I am healthy</div>
+                <?end>
+            </div>
+        </div>
+
+...
+        <template id=happyMood>
+            <div>I am happy</div>
+            <div>I am healthy</div>
+        </template>
+    </body>
+</html>
+```
+
+```JavaScript
+const myVM = {
+    isHappy: false
+}
+
+assignFrom(document.body, {
+    '#[x] =>': {
+        do: 'builtIns.lazyLoad',
+        resolve:{
+            if: '?.isHappy',
+            instantiate: 'globalThis://happyMood',
+            method: 'appendChild', //default
+        }
+    }
+}, {
+    withMethods: ['querySelector'],
+    from: myVM
+    withIds: {
+        x: {
+            qry: '.mainView',
+        }
+    }
+})
+```
+
+The id will *not* be set to x, that's like a variable.  It will be set to as predictable and small an id as possible, unique within the rootNode.
