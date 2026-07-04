@@ -3443,12 +3443,14 @@ The `"..."` key causes the resolved object to be merged (spread) into the result
 
 ## assignFrom Handlers (` =>` operator)
 
-`assignFrom` supports a plugin system via the ` =>` operator. When a LHS key ends with ` =>`, instead of normal assignment, a registered handler class is invoked to perform custom logic (DOM manipulation, template instantiation, etc.).
+`assignFrom` supports a plugin system via the ` =>` operator. When a LHS key ends with ` =>`, instead of normal assignment, a handler class is invoked to perform custom logic (DOM manipulation, template instantiation, etc.).
 
-### Defining a handler
+### Defining and using a handler
+
+Handlers are provided via the `handlers` option — scoped to each `assignFrom` call:
 
 ```JavaScript
-import { defineHandler } from 'assign-gingerly/assignFrom.js';
+import { assignFrom } from 'assign-gingerly/assignFrom.js';
 
 class MyListHandler {
     constructor(config) {
@@ -3461,14 +3463,6 @@ class MyListHandler {
     }
 }
 
-defineHandler('my-list', MyListHandler);
-```
-
-### Using a handler
-
-```JavaScript
-import { assignFrom } from 'assign-gingerly/assignFrom.js';
-
 await assignFrom(myElement, {
     '?.querySelector?.tbody =>': {
         do: 'my-list',
@@ -3477,8 +3471,38 @@ await assignFrom(myElement, {
             template: 'globalThis://myTemplate'
         }
     }
-}, { withMethods: ['querySelector'], from: viewModel, protocols: { globalThis: k => globalThis[k] } });
+}, {
+    withMethods: ['querySelector'],
+    from: viewModel,
+    protocols: { globalThis: k => globalThis[k] },
+    handlers: {
+        'my-list': MyListHandler,  // class constructor
+    }
+});
 ```
+
+Handlers can also be specified as import paths (dynamically loaded on demand):
+
+```JavaScript
+await assignFrom(myElement, {
+    '?.querySelector?.tbody =>': {
+        do: 'my-list',
+        resolve: { list: '?.rankings', template: 'globalThis://myTemplate' }
+    }
+}, {
+    from: viewModel,
+    withMethods: ['querySelector'],
+    protocols: { globalThis: k => globalThis[k] },
+    handlers: {
+        'my-list': './handlers/my-list.js',         // relative path
+        'vendor-chart': 'chart-package/handler.js', // bare specifier (import map)
+    }
+});
+```
+
+Import paths must be local (relative, absolute, or bare specifiers — no cross-domain URLs). The module's default export is checked first; otherwise the first exported class with an `assign` method is used.
+
+Built-in handlers (`builtIns.lazyLoad`, `builtIns.join`, etc.) auto-load without needing to be listed in `handlers`.
 
 **How it works:**
 
@@ -3486,7 +3510,7 @@ await assignFrom(myElement, {
 2. Normal keys are processed via `resolveValues` + `assignGingerly` as usual.
 3. For handler keys: the LHS path is evaluated (with `withMethods` support) to get the target.
 4. The `resolve` map is processed through `resolveValues` — paths (`?.`), protocols (`globalThis://`), and literals are all resolved.
-5. The handler class (looked up via `do`) is instantiated with the full config, then `assign(target, resolvedParams, options)` is called.
+5. The handler class (looked up via `do` in `options.handlers`, then built-in auto-load) is instantiated with the full config, then `assign(target, resolvedParams, options)` is called.
 
 **The `resolve` map supports:**
 - `?.` paths — resolved against `options.from`

@@ -43,6 +43,26 @@ export interface AssignFromOptions extends IAssignGingerlyOptions, ResolveValues
    * Elements are cached via WeakRef with getElementById fallback on cache miss.
    */
   withIds?: Record<string, string | { qry: string }>;
+
+  /**
+   * Handler implementations scoped to this call.
+   * Key: the `do` name referenced in handler configs.
+   * Value: a class constructor, or an import path to dynamically load one.
+   * 
+   * Import paths must be local (relative, absolute, or bare specifier — no cross-domain URLs).
+   * The module's default export is checked first; otherwise the first exported class
+   * with an `assign` method on its prototype is used.
+   * 
+   * Built-in handlers (builtIns.*) auto-load without needing to be listed here.
+   * 
+   * @example
+   * handlers: {
+   *     'my-list': MyListHandler,                    // class constructor
+   *     'my-chart': './handlers/chart.js',           // dynamic import path
+   *     'vendor-widget': 'some-package/handler.js',  // bare specifier (import map)
+   * }
+   */
+  handlers?: Record<string, AssignFromHandlerConstructor | string>;
 }
 
 /**
@@ -55,40 +75,6 @@ export interface AssignFromHandler {
 
 export interface AssignFromHandlerConstructor {
     new (config: any): AssignFromHandler;
-}
-
-/**
- * Registry of assignFrom handlers (keyed by the `do` field value).
- */
-const handlerRegistry = new Map<string, AssignFromHandlerConstructor>();
-
-/**
- * Register a handler class for use with the ` =>` operator in assignFrom.
- * 
- * @param name - The handler name (referenced via `do: 'name'` in the RHS config)
- * @param HandlerClass - A class with a constructor(config) and assign(target, data, options) method
- * 
- * @example
- * import { defineHandler } from 'assign-gingerly/assignFrom.js';
- * 
- * class MyListHandler {
- *     constructor(config) { this.config = config; }
- *     async assign(target, data, options) {
- *         // Custom assignment logic
- *     }
- * }
- * 
- * defineHandler('my-list', MyListHandler);
- */
-export function defineHandler(name: string, HandlerClass: AssignFromHandlerConstructor): void {
-    handlerRegistry.set(name, HandlerClass);
-}
-
-/**
- * Get a registered handler by name.
- */
-export function getHandler(name: string): AssignFromHandlerConstructor | undefined {
-    return handlerRegistry.get(name);
 }
 
 /**
@@ -296,7 +282,7 @@ export async function assignFrom(
   // Process handler commands ( =>) — dynamically imported only when needed
   if (handlerKeys.length > 0) {
     const { processHandlerCommands } = await import('./processHandlerCommands.js');
-    await processHandlerCommands(target, handlerKeys, expandedPattern, options, handlerRegistry);
+    await processHandlerCommands(target, handlerKeys, expandedPattern, options);
   }
 
   // Process #[x] handler keys — resolve element, then pass to handler processing
@@ -321,7 +307,7 @@ export async function assignFrom(
         [syntheticKey]: expandedPattern[key]
       };
 
-      await processHandlerCommands(el, [syntheticKey], syntheticPattern, options, handlerRegistry);
+      await processHandlerCommands(el, [syntheticKey], syntheticPattern, options);
     }
   }
 

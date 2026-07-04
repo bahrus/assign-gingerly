@@ -15,21 +15,64 @@ const BUILT_IN_MAP = {
     'builtIns.join': './handlers/join.js',
 };
 /**
+ * Check if an import path is allowed (non-cross-domain).
+ */
+function isAllowedImportPath(path) {
+    return path.startsWith('./') || path.startsWith('../') || path.startsWith('/')
+        || (!path.includes('://') && !path.startsWith('//'));
+}
+/**
+ * Find a handler class in a dynamically imported module.
+ * Checks default export first, then searches for the first class with `assign` on prototype.
+ */
+function findHandlerInModule(module) {
+    if (module.default && typeof module.default === 'function'
+        && module.default.prototype && 'assign' in module.default.prototype) {
+        return module.default;
+    }
+    for (const key of Object.keys(module)) {
+        const exported = module[key];
+        if (typeof exported === 'function' && exported.prototype && 'assign' in exported.prototype) {
+            return exported;
+        }
+    }
+    return undefined;
+}
+/**
  * Dynamically load a built-in handler by name.
- * Returns the handler constructor, or undefined if the name isn't a recognized built-in.
  */
 async function loadBuiltIn(name) {
     const path = BUILT_IN_MAP[name];
     if (!path)
         return undefined;
     const module = await import(path);
-    // Built-in modules export their handler class by a conventional name (e.g., LazyLoadHandler)
-    // Find the first exported class that looks like a handler constructor
-    for (const key of Object.keys(module)) {
-        const exported = module[key];
-        if (typeof exported === 'function' && exported.prototype && 'assign' in exported.prototype) {
-            return exported;
+    return findHandlerInModule(module);
+}
+/**
+ * Resolve a handler from options.handlers (class constructor or import path).
+ */
+async function resolveFromHandlers(name, handlers) {
+    if (!handlers || !(name in handlers))
+        return undefined;
+    const entry = handlers[name];
+    if (typeof entry === 'function') {
+        return entry;
+    }
+    if (typeof entry === 'string') {
+        if (!isAllowedImportPath(entry)) {
+            throw new Error(
+                `assignFrom: handler "${name}" has an invalid import path "${entry}". ` +
+                `Only relative, absolute, or bare specifier paths are allowed (no cross-domain URLs).`
+            );
         }
+        const module = await import(entry);
+        const HandlerClass = findHandlerInModule(module);
+        if (!HandlerClass) {
+            throw new Error(
+                `assignFrom: handler "${name}" — module "${entry}" does not export a valid handler class.`
+            );
+        }
+        return HandlerClass;
     }
     return undefined;
 }
@@ -40,9 +83,8 @@ async function loadBuiltIn(name) {
  * @param handlerKeys - Array of keys ending with ' =>'
  * @param pattern - The original pattern object
  * @param options - The assignFrom options
- * @param handlerRegistry - The registry of handler classes
  */
-export async function processHandlerCommands(target, handlerKeys, pattern, options, handlerRegistry) {
+export async function processHandlerCommands(target, handlerKeys, pattern, options) {
     for (const key of handlerKeys) {
         const lhsPath = key.substring(0, key.length - 3); // Remove ' =>'
         const rhs = pattern[key];
@@ -61,7 +103,6 @@ export async function processHandlerCommands(target, handlerKeys, pattern, optio
         if (configs.length === 0)
             continue;
         // Resolve the LHS path, preserving parent + key for return-value assignment.
-        // lhsParent[lhsKey] === lhsTarget (the current value at the path)
         let lhsTarget;
         let lhsParent = undefined;
         let lhsKey = undefined;
@@ -77,15 +118,13 @@ export async function processHandlerCommands(target, handlerKeys, pattern, optio
                 lhsParent = result.target;
                 lhsKey = result.lastKey;
                 lhsTarget = result.target[result.lastKey];
-                // If last key is a method, call it to get the target
                 if (result.isMethod && typeof result.target[result.lastKey] === 'function') {
                     lhsTarget = result.target[result.lastKey].call(result.target);
-                    lhsParent = undefined; // Can't assign back to a method call result
+                    lhsParent = undefined;
                     lhsKey = undefined;
                 }
             }
             else {
-                // Simple path navigation — walk to parent, keep last key
                 if (pathParts.length === 0) {
                     lhsTarget = target;
                 }
@@ -117,13 +156,14 @@ export async function processHandlerCommands(target, handlerKeys, pattern, optio
         }
         // Execute handlers sequentially, sharing the same lhsTarget
         for (const config of configs) {
-            let HandlerClass = handlerRegistry.get(config.do);
-            // Auto-load built-in handlers on demand
+            // 1. Check options.handlers (local, per-call)
+            let HandlerClass = await resolveFromHandlers(config.do, options.handlers);
+            // 2. Fallback to built-in auto-load
             if (!HandlerClass && config.do.startsWith('builtIns.')) {
                 HandlerClass = await loadBuiltIn(config.do);
             }
             if (!HandlerClass) {
-                throw new Error(`assignFrom: unknown handler "${config.do}". Register with defineHandler().`);
+                throw new Error(`assignFrom: unknown handler "${config.do}". Provide it in options.handlers.`);
             }
             // Resolve 'resolve' map if present — uses full resolveValues (paths, protocols, literals)
             let resolvedParams = {};

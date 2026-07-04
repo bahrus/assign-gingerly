@@ -19,6 +19,34 @@ const BUILT_IN_MAP: Record<string, string> = {
 };
 
 /**
+ * Check if an import path is allowed (non-cross-domain).
+ */
+function isAllowedImportPath(path: string): boolean {
+    return path.startsWith('./') || path.startsWith('../') || path.startsWith('/')
+        || (!path.includes('://') && !path.startsWith('//'));
+}
+
+/**
+ * Find a handler class in a dynamically imported module.
+ * Checks default export first, then searches for the first class with `assign` on prototype.
+ */
+function findHandlerInModule(module: any): AssignFromHandlerConstructor | undefined {
+    // Check default export first
+    if (module.default && typeof module.default === 'function'
+        && module.default.prototype && 'assign' in module.default.prototype) {
+        return module.default;
+    }
+    // Search other exports
+    for (const key of Object.keys(module)) {
+        const exported = module[key];
+        if (typeof exported === 'function' && exported.prototype && 'assign' in exported.prototype) {
+            return exported as AssignFromHandlerConstructor;
+        }
+    }
+    return undefined;
+}
+
+/**
  * Dynamically load a built-in handler by name.
  * Returns the handler constructor, or undefined if the name isn't a recognized built-in.
  */
@@ -26,14 +54,43 @@ async function loadBuiltIn(name: string): Promise<AssignFromHandlerConstructor |
     const path = BUILT_IN_MAP[name];
     if (!path) return undefined;
     const module = await import(path);
-    // Built-in modules export their handler class by a conventional name (e.g., LazyLoadHandler)
-    // Find the first exported class that looks like a handler constructor
-    for (const key of Object.keys(module)) {
-        const exported = module[key];
-        if (typeof exported === 'function' && exported.prototype && 'assign' in exported.prototype) {
-            return exported as AssignFromHandlerConstructor;
-        }
+    return findHandlerInModule(module);
+}
+
+/**
+ * Resolve a handler from options.handlers (class constructor or import path).
+ */
+async function resolveFromHandlers(
+    name: string,
+    handlers: Record<string, AssignFromHandlerConstructor | string> | undefined
+): Promise<AssignFromHandlerConstructor | undefined> {
+    if (!handlers || !(name in handlers)) return undefined;
+
+    const entry = handlers[name];
+
+    // Class constructor — use directly
+    if (typeof entry === 'function') {
+        return entry as AssignFromHandlerConstructor;
     }
+
+    // Import path string — validate and dynamically import
+    if (typeof entry === 'string') {
+        if (!isAllowedImportPath(entry)) {
+            throw new Error(
+                `assignFrom: handler "${name}" has an invalid import path "${entry}". ` +
+                `Only relative, absolute, or bare specifier paths are allowed (no cross-domain URLs).`
+            );
+        }
+        const module = await import(entry);
+        const HandlerClass = findHandlerInModule(module);
+        if (!HandlerClass) {
+            throw new Error(
+                `assignFrom: handler "${name}" — module "${entry}" does not export a valid handler class.`
+            );
+        }
+        return HandlerClass;
+    }
+
     return undefined;
 }
 
@@ -50,8 +107,7 @@ export async function processHandlerCommands(
     target: any,
     handlerKeys: string[],
     pattern: Record<string, any>,
-    options: AssignFromOptions,
-    handlerRegistry: Map<string, AssignFromHandlerConstructor>
+    options: AssignFromOptions
 ): Promise<void> {
     for (const key of handlerKeys) {
         const lhsPath = key.substring(0, key.length - 3); // Remove ' =>'
@@ -127,15 +183,16 @@ export async function processHandlerCommands(
 
         // Execute handlers sequentially, sharing the same lhsTarget
         for (const config of configs) {
-            let HandlerClass = handlerRegistry.get(config.do);
+            // 1. Check options.handlers (local, per-call)
+            let HandlerClass = await resolveFromHandlers(config.do, options.handlers);
 
-            // Auto-load built-in handlers on demand
+            // 2. Fallback to built-in auto-load
             if (!HandlerClass && config.do.startsWith('builtIns.')) {
                 HandlerClass = await loadBuiltIn(config.do);
             }
 
             if (!HandlerClass) {
-                throw new Error(`assignFrom: unknown handler "${config.do}". Register with defineHandler().`);
+                throw new Error(`assignFrom: unknown handler "${config.do}". Provide it in options.handlers.`);
             }
 
             // Resolve 'resolve' map if present — uses full resolveValues (paths, protocols, literals)

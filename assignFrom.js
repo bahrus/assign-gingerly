@@ -22,37 +22,6 @@
 import { resolveValues } from './resolveValues.js';
 import assignGingerly from './assignGingerly.js';
 /**
- * Registry of assignFrom handlers (keyed by the `do` field value).
- */
-const handlerRegistry = new Map();
-/**
- * Register a handler class for use with the ` =>` operator in assignFrom.
- *
- * @param name - The handler name (referenced via `do: 'name'` in the RHS config)
- * @param HandlerClass - A class with a constructor(config) and assign(target, data, options) method
- *
- * @example
- * import { defineHandler } from 'assign-gingerly/assignFrom.js';
- *
- * class MyListHandler {
- *     constructor(config) { this.config = config; }
- *     async assign(target, data, options) {
- *         // Custom assignment logic
- *     }
- * }
- *
- * defineHandler('my-list', MyListHandler);
- */
-export function defineHandler(name, HandlerClass) {
-    handlerRegistry.set(name, HandlerClass);
-}
-/**
- * Get a registered handler by name.
- */
-export function getHandler(name) {
-    return handlerRegistry.get(name);
-}
-/**
  * Check if a key ends with the handler operator ' =>'.
  */
 function isHandlerCommand(key) {
@@ -240,7 +209,7 @@ export async function assignFrom(target, pattern, options) {
     // Process handler commands ( =>) — dynamically imported only when needed
     if (handlerKeys.length > 0) {
         const { processHandlerCommands } = await import('./processHandlerCommands.js');
-        await processHandlerCommands(target, handlerKeys, expandedPattern, options, handlerRegistry);
+        await processHandlerCommands(target, handlerKeys, expandedPattern, options);
     }
     // Process #[x] handler keys — resolve element, then pass to handler processing
     if (idRefHandlerKeys.length > 0 && options.withIds) {
@@ -258,7 +227,7 @@ export async function assignFrom(target, pattern, options) {
             const syntheticPattern = {
                 [syntheticKey]: expandedPattern[key]
             };
-            await processHandlerCommands(el, [syntheticKey], syntheticPattern, options, handlerRegistry);
+            await processHandlerCommands(el, [syntheticKey], syntheticPattern, options);
         }
     }
     return target;
