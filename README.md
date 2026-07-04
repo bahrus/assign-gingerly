@@ -3787,6 +3787,96 @@ const pattern = {
 - Output is a plain JSON-serializable array
 - No runtime overhead beyond initial proxy creation
 
+## Cached Element Resolution with `#[x]` and `withIds`
+
+`assignFrom` supports cached element references via the `#[x]` syntax in LHS keys. This provides near-zero-cost repeated access to DOM elements (~10ns via WeakRef) instead of expensive `querySelector` calls (~3,000-17,000ns for class selectors at scale).
+
+```TypeScript
+import { assignFrom } from 'assign-gingerly/assignFrom.js';
+
+await assignFrom(document.body, {
+    '#[main]?.textContent': '?.greeting',
+    '#[main] =>': {
+        do: 'builtIns.lazyLoad',
+        resolve: { if: '?.showContent', instantiate: 'globalThis://myTemplate' }
+    }
+}, {
+    from: viewModel,
+    withIds: {
+        main: { qry: '.mainView' }  // find by class, auto-assign ID, cache
+    }
+});
+```
+
+**How it works:**
+
+1. On first encounter of `#[main]`, the element is found via `querySelector('.mainView')` against the target.
+2. If the element doesn't have an `id` attribute, one is auto-generated (`_ag0`, `_ag1`, etc.).
+3. A `WeakRef` to the element is cached in a module-level `WeakMap` keyed by rootNode.
+4. On subsequent calls, the cached `WeakRef.deref()` returns the element in ~10ns.
+5. If the WeakRef is collected (element was GC'd), falls back to `getElementById` (~10-100ns).
+
+**Two forms of `withIds` configuration:**
+
+```TypeScript
+withIds: {
+    x: { qry: '.mainView' },    // Object form: querySelector on target, auto-assign ID
+    y: 'existingId',             // String form: element already has an ID, just cache it
+}
+```
+
+**Chaining with `?.` paths:**
+
+`#[x]` anchors the start of the path. Further `?.` segments chain from the resolved element:
+
+```TypeScript
+await assignFrom(document.body, {
+    '#[form]?.querySelector?..username?.value': '?.username',
+    '#[form]?.querySelector?..email?.value': '?.email',
+    '#[header]?.style?.color': '?.themeColor',
+}, {
+    from: viewModel,
+    withMethods: ['querySelector'],
+    withIds: {
+        form: { qry: '.registration-form' },
+        header: 'page-header'
+    }
+});
+```
+
+**With handlers (` =>`):**
+
+```TypeScript
+await assignFrom(container, {
+    '#[outlet] =>': {
+        do: 'builtIns.lazyLoadSwitch',
+        resolve: { lhs: '?.route', rhs: 'home', instantiate: 'globalThis://homeView' }
+    }
+}, {
+    from: router,
+    withIds: { outlet: { qry: '.router-outlet' } },
+    protocols: { globalThis: k => globalThis[k] }
+});
+```
+
+**Performance context (from benchmarks at 5000 elements):**
+
+| Method | Chrome | Firefox | Safari |
+|--------|--------|---------|--------|
+| `querySelector('.class')` | 9,660ns | 6,810ns | 17,770ns |
+| `getElementById(id)` | 100ns | 20ns | 10ns |
+| `Map<id, WeakRef>.deref()` | 12ns | 40ns | 10ns |
+
+The `#[x]` + `withIds` pattern gives you the Map+WeakRef speed tier automatically.
+
+**Key behaviors:**
+
+- **Lazy resolution** — elements are resolved on first encounter, not eagerly at the start.
+- **Auto-ID generation** — IDs are short and predictable (`_ag0`, `_ag1`, ...), unique within the rootNode.
+- **GC-safe** — WeakRef cache doesn't prevent element garbage collection.
+- **Scoped to rootNode** — works correctly inside Shadow DOM (IDs are scoped per shadow root).
+- **`assignFrom` only** — this feature is not available in `assignGingerly` or `assignTentatively`.
+
 ## Custom Assignment with `static assignTo` Protocol
 
 Classes can opt into custom assignment behavior by defining a `static assignTo` method. When `assignGingerly` encounters a property whose current value is an instance of such a class, it delegates the assignment to `assignTo` instead of performing the default merge/replace logic.
