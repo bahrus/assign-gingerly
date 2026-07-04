@@ -18,6 +18,7 @@
  *     }
  * }, { withMethods: ['querySelector'], from: myVM });
  */
+import { withTransition, ensureHideStyle, DEFAULT_HIDE_CLASS } from '../transitionHelper.js';
 const MARKER_START_PREFIX = '?start name="';
 const MARKER_END = '?end';
 /**
@@ -92,7 +93,7 @@ export class LazyLoadHandler {
         this.config = config;
     }
     async assign(lhsTarget, resolvedParams) {
-        const { if: condition, instantiate, method = 'appendChild', forget = false } = resolvedParams;
+        const { if: condition, instantiate, method = 'appendChild', forget = false, transitional = false, hideClass = DEFAULT_HIDE_CLASS } = resolvedParams;
         if (!(lhsTarget instanceof Element)) {
             throw new Error('builtIns.lazyLoad: lhsTarget must be a DOM Element');
         }
@@ -102,38 +103,83 @@ export class LazyLoadHandler {
             if (startMarker && endMarker) {
                 const nodes = getNodesBetweenMarkers(startMarker, endMarker);
                 if (nodes.length > 0) {
-                    for (const node of nodes) {
-                        if (node instanceof Element) {
-                            node.removeAttribute('hidden');
+                    withTransition(startMarker, 'show', transitional, () => {
+                        for (const node of nodes) {
+                            if (node instanceof Element) {
+                                if (transitional) {
+                                    node.classList.remove(hideClass);
+                                } else {
+                                    node.removeAttribute('hidden');
+                                }
+                            }
                         }
-                    }
+                    });
                 }
                 else {
-                    await this.cloneAndInsert(instantiate, startMarker, endMarker, lhsTarget, resolvedParams);
+                    if (transitional) {
+                        ensureHideStyle(lhsTarget.getRootNode());
+                        withTransition(startMarker, 'show', true, () => {
+                            this.cloneAndInsertSync(instantiate, startMarker, endMarker, lhsTarget, resolvedParams);
+                        });
+                    } else {
+                        await this.cloneAndInsert(instantiate, startMarker, endMarker, lhsTarget, resolvedParams);
+                    }
                 }
             }
             else {
                 [startMarker, endMarker] = createMarkers(lhsTarget, name, method);
-                await this.cloneAndInsert(instantiate, startMarker, endMarker, lhsTarget, resolvedParams);
+                if (transitional) {
+                    ensureHideStyle(lhsTarget.getRootNode());
+                    withTransition(startMarker, 'show', true, () => {
+                        this.cloneAndInsertSync(instantiate, startMarker, endMarker, lhsTarget, resolvedParams);
+                    });
+                } else {
+                    await this.cloneAndInsert(instantiate, startMarker, endMarker, lhsTarget, resolvedParams);
+                }
             }
         }
         else {
             if (startMarker && endMarker) {
                 const nodes = getNodesBetweenMarkers(startMarker, endMarker);
+                if (nodes.length === 0) return;
                 if (forget) {
-                    for (const node of nodes) {
-                        node.parentNode?.removeChild(node);
-                    }
+                    withTransition(startMarker, 'hide', transitional, () => {
+                        for (const node of nodes) {
+                            node.parentNode?.removeChild(node);
+                        }
+                    });
                 }
                 else {
-                    for (const node of nodes) {
-                        if (node instanceof Element) {
-                            node.setAttribute('hidden', '');
+                    withTransition(startMarker, 'hide', transitional, () => {
+                        for (const node of nodes) {
+                            if (node instanceof Element) {
+                                if (transitional) {
+                                    ensureHideStyle(lhsTarget.getRootNode(), hideClass);
+                                    node.classList.add(hideClass);
+                                } else {
+                                    node.setAttribute('hidden', '');
+                                }
+                            }
                         }
-                    }
+                    });
                 }
             }
         }
+    }
+    cloneAndInsertSync(templateEl, startMarker, endMarker, lhsTarget, resolvedParams) {
+        let content;
+        if (templateEl instanceof HTMLTemplateElement) {
+            content = templateEl.content.cloneNode(true);
+        }
+        else if (templateEl instanceof DocumentFragment) {
+            content = templateEl.cloneNode(true);
+        }
+        else {
+            throw new Error(`builtIns.lazyLoad: instantiate must resolve to an HTMLTemplateElement or DocumentFragment`);
+        }
+        const nodes = Array.from(content.childNodes);
+        endMarker.parentNode.insertBefore(content, endMarker);
+        return nodes;
     }
     async cloneAndInsert(templateEl, startMarker, endMarker, lhsTarget, resolvedParams) {
         let content;

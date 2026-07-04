@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>View Transition Demo — builtIns.lazyLoad + builtIns.lazyLoadSwitch</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 2rem;
+            max-width: 800px;
+        }
+        h1 { margin-bottom: 0.5rem; }
+        .controls { margin: 1rem 0; display: flex; gap: 1rem; flex-wrap: wrap; }
+        button {
+            padding: 0.5rem 1rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #f8f8f8;
+        }
+        button:hover { background: #e8e8e8; }
+        button.active { background: #4a9eff; color: white; border-color: #3a8eef; }
+        .demo-container {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 1.5rem;
+            min-height: 150px;
+            position: relative;
+        }
+        .demo-container h3 { margin-top: 0; }
+
+        /* View transition animations via CSS */
+        .ag-hide {
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+
+        /* Custom view-transition animations */
+        ::view-transition-old(root) {
+            animation: fade-out 0.5s ease;
+        }
+        ::view-transition-new(root) {
+            animation: fade-in 0.5s ease;
+        }
+        @keyframes fade-out {
+            from { opacity: 1; transform: scale(1); }
+            to { opacity: 0; transform: scale(0.95); }
+        }
+        @keyframes fade-in {
+            from { opacity: 0; transform: scale(1.05); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .mood-card {
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 0.5rem 0;
+        }
+        .happy { background: #d4edda; border: 1px solid #c3e6cb; }
+        .sad { background: #f8d7da; border: 1px solid #f5c6cb; }
+        .neutral { background: #fff3cd; border: 1px solid #ffeeba; }
+
+        .route-view {
+            padding: 1rem;
+            border-radius: 8px;
+            background: #e8f4fd;
+            border: 1px solid #b8daff;
+        }
+    </style>
+</head>
+<body>
+    <h1>View Transition Demo</h1>
+    <p>Tests <code>builtIns.lazyLoad</code> and <code>builtIns.lazyLoadSwitch</code> with <code>transitional: true</code>.</p>
+    <p><strong>Note:</strong> View transitions require Chrome 111+ or a browser that supports <code>document.startViewTransition</code>.
+       Without support, DOM changes happen instantly (graceful fallback).</p>
+
+    <hr>
+
+    <h2>Demo 1: Binary Toggle (lazyLoad)</h2>
+    <div class="controls">
+        <button id="toggleBtn">Toggle Visibility</button>
+        <span id="stateLabel">State: <strong>visible</strong></span>
+    </div>
+    <div class="demo-container" id="demo1-container">
+        <h3>Content Area:</h3>
+        <div id="demo1-target"></div>
+    </div>
+
+    <hr>
+
+    <h2>Demo 2: Route Switch (lazyLoadSwitch)</h2>
+    <div class="controls">
+        <button class="active" data-route="home">Home</button>
+        <button data-route="settings">Settings</button>
+        <button data-route="profile">Profile</button>
+    </div>
+    <div class="demo-container">
+        <h3>Router Outlet:</h3>
+        <div id="demo2-target"></div>
+    </div>
+
+    <!-- Templates -->
+    <template id="happyMood">
+        <div class="mood-card happy">
+            <h4>😊 Happy Mood</h4>
+            <p>Everything is going great!</p>
+        </div>
+    </template>
+
+    <template id="homeView">
+        <div class="route-view">
+            <h4>🏠 Home</h4>
+            <p>Welcome to the home page. Navigate using the buttons above.</p>
+        </div>
+    </template>
+
+    <template id="settingsView">
+        <div class="route-view">
+            <h4>⚙️ Settings</h4>
+            <p>Adjust your preferences here.</p>
+        </div>
+    </template>
+
+    <template id="profileView">
+        <div class="route-view">
+            <h4>👤 Profile</h4>
+            <p>View and edit your profile information.</p>
+        </div>
+    </template>
+
+    <script type="module">
+        import { assignFrom } from '../assignFrom.js';
+
+        // --- Demo 1: Binary Toggle ---
+        const demo1VM = { isVisible: true };
+        const demo1Target = document.getElementById('demo1-target');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const stateLabel = document.getElementById('stateLabel');
+
+        async function updateDemo1() {
+            await assignFrom(demo1Target, {
+                '?. =>': {
+                    do: 'builtIns.lazyLoad',
+                    resolve: {
+                        if: '?.isVisible',
+                        instantiate: 'globalThis://happyMood',
+                        transitional: true,
+                    }
+                }
+            }, {
+                from: demo1VM,
+                protocols: { globalThis: k => globalThis[k] }
+            });
+            stateLabel.innerHTML = `State: <strong>${demo1VM.isVisible ? 'visible' : 'hidden'}</strong>`;
+        }
+
+        toggleBtn.addEventListener('click', () => {
+            demo1VM.isVisible = !demo1VM.isVisible;
+            updateDemo1();
+        });
+
+        // Initial render
+        updateDemo1();
+
+        // --- Demo 2: Route Switch ---
+        const demo2VM = { route: 'home' };
+        const demo2Target = document.getElementById('demo2-target');
+        const routeButtons = document.querySelectorAll('[data-route]');
+
+        async function updateDemo2() {
+            await assignFrom(demo2Target, {
+                '?. =>': [
+                    {
+                        do: 'builtIns.lazyLoadSwitch',
+                        resolve: {
+                            lhs: '?.route',
+                            rhs: 'home',
+                            instantiate: 'globalThis://homeView',
+                            transitional: true,
+                        }
+                    },
+                    {
+                        do: 'builtIns.lazyLoadSwitch',
+                        resolve: {
+                            lhs: '?.route',
+                            rhs: 'settings',
+                            instantiate: 'globalThis://settingsView',
+                            transitional: true,
+                        }
+                    },
+                    {
+                        do: 'builtIns.lazyLoadSwitch',
+                        resolve: {
+                            lhs: '?.route',
+                            rhs: 'profile',
+                            instantiate: 'globalThis://profileView',
+                            transitional: true,
+                        }
+                    },
+                ]
+            }, {
+                from: demo2VM,
+                protocols: { globalThis: k => globalThis[k] }
+            });
+
+            // Update active button
+            routeButtons.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.route === demo2VM.route);
+            });
+        }
+
+        routeButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                demo2VM.route = btn.dataset.route;
+                updateDemo2();
+            });
+        });
+
+        // Initial render
+        updateDemo2();
+    </script>
+</body>
+</html>

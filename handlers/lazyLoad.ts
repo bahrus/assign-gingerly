@@ -20,6 +20,7 @@
  */
 
 import type { AssignFromHandler } from '../assignFrom.js';
+import { withTransition, ensureHideStyle, DEFAULT_HIDE_CLASS } from '../transitionHelper.js';
 
 const MARKER_START_PREFIX = '?start name="';
 const MARKER_END = '?end';
@@ -123,7 +124,9 @@ export class LazyLoadHandler implements AssignFromHandler {
             if: condition,
             instantiate,
             method = 'appendChild',
-            forget = false
+            forget = false,
+            transitional = false,
+            hideClass = DEFAULT_HIDE_CLASS,
         } = resolvedParams;
 
         if (!(lhsTarget instanceof Element)) {
@@ -141,41 +144,103 @@ export class LazyLoadHandler implements AssignFromHandler {
                 // Markers exist — check if content is hidden or removed
                 const nodes = getNodesBetweenMarkers(startMarker, endMarker);
                 if (nodes.length > 0) {
-                    // Content exists — remove hidden attribute
-                    for (const node of nodes) {
-                        if (node instanceof Element) {
-                            node.removeAttribute('hidden');
+                    // Content exists — show it
+                    withTransition(startMarker, 'show', transitional, () => {
+                        for (const node of nodes) {
+                            if (node instanceof Element) {
+                                if (transitional) {
+                                    node.classList.remove(hideClass);
+                                } else {
+                                    node.removeAttribute('hidden');
+                                }
+                            }
                         }
-                    }
+                    });
                 } else {
                     // Content was removed (forget mode) — re-clone
-                    await this.cloneAndInsert(instantiate, startMarker, endMarker, lhsTarget, resolvedParams);
+                    if (transitional) {
+                        ensureHideStyle(lhsTarget.getRootNode());
+                        withTransition(startMarker, 'show', true, () => {
+                            // cloneAndInsert is async but the transition callback is sync
+                            // For transitions with clone, we insert synchronously
+                            this.cloneAndInsertSync(instantiate, startMarker!, endMarker!, lhsTarget, resolvedParams);
+                        });
+                    } else {
+                        await this.cloneAndInsert(instantiate, startMarker, endMarker, lhsTarget, resolvedParams);
+                    }
                 }
             } else {
                 // No markers — first time. Create markers and clone template.
                 [startMarker, endMarker] = createMarkers(lhsTarget, name, method);
-                await this.cloneAndInsert(instantiate, startMarker, endMarker, lhsTarget, resolvedParams);
+                if (transitional) {
+                    ensureHideStyle(lhsTarget.getRootNode());
+                    withTransition(startMarker, 'show', true, () => {
+                        this.cloneAndInsertSync(instantiate, startMarker!, endMarker!, lhsTarget, resolvedParams);
+                    });
+                } else {
+                    await this.cloneAndInsert(instantiate, startMarker, endMarker, lhsTarget, resolvedParams);
+                }
             }
         } else {
             // HIDE or REMOVE
             if (startMarker && endMarker) {
                 const nodes = getNodesBetweenMarkers(startMarker, endMarker);
+                if (nodes.length === 0) return;
+
                 if (forget) {
                     // Remove nodes entirely (markers persist for re-insertion)
-                    for (const node of nodes) {
-                        node.parentNode?.removeChild(node);
-                    }
+                    withTransition(startMarker, 'hide', transitional, () => {
+                        for (const node of nodes) {
+                            node.parentNode?.removeChild(node);
+                        }
+                    });
                 } else {
                     // Hide nodes
-                    for (const node of nodes) {
-                        if (node instanceof Element) {
-                            node.setAttribute('hidden', '');
+                    withTransition(startMarker, 'hide', transitional, () => {
+                        for (const node of nodes) {
+                            if (node instanceof Element) {
+                                if (transitional) {
+                                    ensureHideStyle(lhsTarget.getRootNode(), hideClass);
+                                    node.classList.add(hideClass);
+                                } else {
+                                    node.setAttribute('hidden', '');
+                                }
+                            }
                         }
-                    }
+                    });
                 }
             }
             // If no markers exist and condition is false, do nothing (never loaded)
         }
+    }
+
+    /**
+     * Clone a template and insert its content between the markers (synchronous version).
+     * Used inside view transition callbacks which must be synchronous.
+     * Does not call async hooks (onCloneInserted, onInstantiated).
+     */
+    protected cloneAndInsertSync(
+        templateEl: any,
+        startMarker: Comment,
+        endMarker: Comment,
+        lhsTarget: Element,
+        resolvedParams: Record<string, any>
+    ): Node[] {
+        let content: DocumentFragment;
+
+        if (templateEl instanceof HTMLTemplateElement) {
+            content = templateEl.content.cloneNode(true) as DocumentFragment;
+        } else if (templateEl instanceof DocumentFragment) {
+            content = templateEl.cloneNode(true) as DocumentFragment;
+        } else {
+            throw new Error(
+                `builtIns.lazyLoad: instantiate must resolve to an HTMLTemplateElement or DocumentFragment`
+            );
+        }
+
+        const nodes = Array.from(content.childNodes);
+        endMarker.parentNode!.insertBefore(content, endMarker);
+        return nodes;
     }
 
     /**

@@ -64,6 +64,10 @@
       "default": "./resolveIdRef.js",
       "types": "./resolveIdRef.ts"
     },
+    "./transitionHelper.js": {
+      "default": "./transitionHelper.js",
+      "types": "./transitionHelper.ts"
+    },
     "./installForwarding.js": {
       "default": "./installForwarding.js",
       "types": "./installForwarding.ts"
