@@ -160,3 +160,13 @@ Where `resolveFromHandlersOption` handles both class constructors and dynamic im
 | README / docs | Update examples to show `handlers` option instead of `defineHandler` import |
 
 ### Ready to implement once confirmed.
+
+---
+
+## Human Response I
+
+1-5.  Agree with your recommendations.
+6.  Remove both.
+
+Please implement
+
