@@ -382,7 +382,7 @@ The concept is sound and well-motivated by the perf data. Key decisions needed:
 
 > Where does the initial query run?
 
-Good question.  Actually, on thinking about this question, I would like to propose an amendment:
+Good question.  Actually, on thinking about this question, I would like to propose an amendment.  Scratch that, on reading further, you provided a better idea, which I endorse:
 
 ### Scenario I - no id on the element in question:
 
@@ -409,9 +409,7 @@ assignFrom(oElement, {...}
 , {
     ...
     withIds: {
-        x: {
-            fromID: 'myUniqueId',
-        }
+        x: 'myUniqueId',
     }
 })
 ```
@@ -422,4 +420,27 @@ Here I'm more torn where the query should run from.  I think it is more in keepi
 
 If that argument isn't a DOM element, we could just let the browser throw an error when it tries to invoke the search for now.  Hopefully, the developer will understand why the error occurred from the context.  Maybe later we can throw a more explanatory error.  But regardless, the assign function should fail.
 
+> **When does the initial query + ID assignment happen?** 
+
+Another good question.  I agree eagerly seems easier, but if I squint my eyes, I could see scenarios where a developer would want a chain of processing, creating an element with one pattern, referencing it in the next.  Let's go with lazily if that doesn't add many lines of code.
+
+> **ID generation strategy — "as predictable and small as possible"** 
+
+`_ag0`, `_ag1`, etc. sounds good to me.
+
+> Where does the cache live?
+
+I agree:  a module-level `WeakMap<rootNode, Map<variable, WeakRef>>`
+
+> **Interaction with `withMethods` and `?.` paths** 
+
+Yes, I think the id substitution should have to begin the string, but after that, support for these would be great:
+
+```js
+'#[x]?.querySelector?..childElement =>': { ... }
+```
+
+**Does this belong in `assignFrom` only, or also `assignGingerly`?**
+
+Let's go with your suggestion:  assignFrom only for now.  Since assignFrom is fundamentally asynchronous, the module can be imported dynamically on demand, ideally.  If use cases for assignGingerly become strong, the same module could be imported synchronously.
 
