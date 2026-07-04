@@ -386,4 +386,40 @@ Good question.  Actually, on thinking about this question, I would like to propo
 
 ### Scenario I - no id on the element in question:
 
+Same as before
+
+```JS
+assignFrom(oElement, {...}
+, {
+    ...
+    withIds: {
+        x: {
+            qry: '.mainView',
+        }
+    }
+})
+```
+
+Definitely, qry should be run from the target, passed in argument, oElement in this case.
+
+### Scenario II ID already present
+
+```JS
+assignFrom(oElement, {...}
+, {
+    ...
+    withIds: {
+        x: {
+            fromID: 'myUniqueId',
+        }
+    }
+})
+```
+
+That way there's no ambuity that we can use the faster getElementById to find the element that has the id.  Our performance tests show that's faster.
+
+Here I'm more torn where the query should run from.  I think it is more in keeping with the concept of "assign" that we are only assigning things on the first argument, and within the first argument, with no side effects outside.  So I think still from oElement, the first assed in argument target.
+
+If that argument isn't a DOM element, we could just let the browser throw an error when it tries to invoke the search for now.  Hopefully, the developer will understand why the error occurred from the context.  Maybe later we can throw a more explanatory error.  But regardless, the assign function should fail.
+
 
