@@ -60,6 +60,10 @@
       "default": "./resolveValues.js",
       "types": "./resolveValues.ts"
     },
+    "./resolveIdRef.js": {
+      "default": "./resolveIdRef.js",
+      "types": "./resolveIdRef.ts"
+    },
     "./installForwarding.js": {
       "default": "./installForwarding.js",
       "types": "./installForwarding.ts"
