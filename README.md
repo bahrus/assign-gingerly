@@ -3527,6 +3527,104 @@ await assignFrom(document.body, {
 
 This is useful for conditional rendering, routing, and lazy-loading views.
 
+### View Transitions
+
+Both `builtIns.lazyLoad` and `builtIns.lazyLoadSwitch` support animated transitions via the [View Transition API](https://developer.mozilla.org/docs/Web/API/View_Transition_API). Enable with `transitional: true` in the resolve map:
+
+```JavaScript
+await assignFrom(container, {
+    '?.querySelector?..outlet =>': {
+        do: 'builtIns.lazyLoad',
+        resolve: {
+            if: '?.isVisible',
+            instantiate: 'globalThis://myTemplate',
+            transitional: true,
+        }
+    }
+}, { withMethods: ['querySelector'], from: vm, protocols: { globalThis: k => globalThis[k] } });
+```
+
+**How it works:**
+
+1. When `transitional: true`, DOM mutations (show/hide/clone) are wrapped in `document.startViewTransition()`.
+2. Instead of the `hidden` attribute, a CSS class (`.ag-hide` by default) is toggled for visibility.
+3. The actual animation is entirely CSS-driven — you control timing, easing, and effects via your own styles.
+4. If `document.startViewTransition` is unavailable (older browsers), the handler falls back to direct DOM mutation with no animation.
+
+**CSS customization:**
+
+The handler injects a minimal default style (`.ag-hide { display: none }`) once per rootNode. Override it with your own for animated transitions:
+
+```css
+/* Fade + slide transition */
+.ag-hide {
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+/* View transition keyframes (for cross-fade between old/new states) */
+::view-transition-old(root) {
+    animation: fade-out 0.5s ease;
+}
+::view-transition-new(root) {
+    animation: fade-in 0.5s ease;
+}
+```
+
+**Custom hide class:**
+
+Use the `hideClass` resolve parameter to use a different CSS class name:
+
+```JavaScript
+resolve: {
+    if: '?.isVisible',
+    instantiate: 'globalThis://myTemplate',
+    transitional: true,
+    hideClass: 'my-custom-hide',  // default: 'ag-hide'
+}
+```
+
+**Concurrency handling:**
+
+- Rapid toggling (e.g., clicking a button repeatedly) is handled gracefully.
+- An in-flight transition is cancelled (`skipTransition()`) before starting a new one.
+- Duplicate show/hide requests while one is pending are ignored (re-entry protection).
+
+**Routing example with transitions:**
+
+```JavaScript
+await assignFrom(container, {
+    '?.querySelector?..routerOutlet =>': [
+        { do: 'builtIns.lazyLoadSwitch', resolve: { lhs: '?.route', rhs: 'home', instantiate: 'globalThis://homeView', transitional: true } },
+        { do: 'builtIns.lazyLoadSwitch', resolve: { lhs: '?.route', rhs: 'settings', instantiate: 'globalThis://settingsView', transitional: true } },
+        { do: 'builtIns.lazyLoadSwitch', resolve: { lhs: '?.route', rhs: 'profile', instantiate: 'globalThis://profileView', transitional: true } },
+    ]
+}, { withMethods: ['querySelector'], from: router, protocols: { globalThis: k => globalThis[k] } });
+```
+
+**Shared utility for external consumers (`be-switched`, etc.):**
+
+The transition coordination logic is exported as a reusable utility:
+
+```JavaScript
+import { withTransition, ensureHideStyle } from 'assign-gingerly/transitionHelper.js';
+
+// Inject the hide class style once per rootNode
+ensureHideStyle(myShadowRoot);
+
+// Wrap any DOM mutation with view transition coordination
+withTransition(markerNode, 'show', true, () => {
+    element.classList.remove('ag-hide');
+});
+
+withTransition(markerNode, 'hide', true, () => {
+    element.classList.add('ag-hide');
+});
+```
+
+See the visual demo at `demos/view-transition-demo.html`.
+
 ### Multiple Handlers
 
 When the RHS of a ` =>` key is an array, each element is treated as a separate handler config and they are executed sequentially (awaiting each before proceeding to the next). All handlers share the same LHS target.
