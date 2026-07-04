@@ -375,3 +375,15 @@ The concept is sound and well-motivated by the perf data. Key decisions needed:
 4. Shorthand for elements that already have IDs?
 5. Can `#[x]` chain with further `?.` path segments?
 6. `assignFrom` only, or shared with `assignGingerly`?
+
+---
+
+## Human Response I
+
+> Where does the initial query run?
+
+Good question.  Actually, on thinking about this question, I would like to propose an amendment:
+
+### Scenario I - no id on the element in question:
+
+
