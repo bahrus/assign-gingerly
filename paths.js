@@ -1,82 +1,111 @@
 /**
- * paths.js — Typed path proxy and template tag for assignFrom authoring.
+ * paths.js — Typed path proxy and template tags for assignFrom authoring.
  *
  * Provides compile-time autocomplete and type safety for `?.`-prefixed path strings.
- *
- * @example
- * import { paths, sp } from 'assign-gingerly/paths.js';
- *
- * const $ = paths();
- *
- * // Use sp (split into parts) to create arrays for builtIns.join:
- * const value = sp`${$.lastName}, ${$.firstName}`;
- * // ['?.lastName', ', ', '?.firstName']
- *
- * // Use .path for raw string contexts (object keys, plain arrays):
- * const key = $.textContent.path;  // '?.textContent'
+ * Supports method call syntax, alias reversal, and batch proxy extraction.
  */
 
 /**
  * Symbol used internally to detect path proxy objects.
- * The sp tag function uses this to auto-extract path strings from proxies.
  */
 const PATH_SYMBOL = Symbol('assign-gingerly-path');
 
 /**
  * Create a recursive proxy that records property access paths.
- * Each property access returns a new proxy with the accumulated path.
- * `.path` (or the internal PATH_SYMBOL) returns the `?.`-prefixed path string.
+ * Supports both property access and method call syntax (via apply trap on function target).
  */
-function createPathProxy(prefix) {
-    return new Proxy({}, {
+function createPathProxy(prefix, options) {
+    const aliasMap = options?.aka;
+
+    function handler() {}
+
+    return new Proxy(handler, {
         get(_, prop) {
             if (prop === 'path' || prop === PATH_SYMBOL) {
                 return prefix.length > 0 ? `?.${prefix}` : '?.';
             }
-            // Ignore symbol access (Symbol.iterator, Symbol.toPrimitive, etc.)
             if (typeof prop === 'symbol') return undefined;
-            const newPath = prefix ? `${prefix}?.${prop}` : String(prop);
-            return createPathProxy(newPath);
+
+            let segment = String(prop);
+            if (aliasMap) {
+                for (const [alias, target] of Object.entries(aliasMap)) {
+                    if (target === segment) { segment = alias; break; }
+                }
+            }
+
+            const newPath = prefix ? `${prefix}?.${segment}` : segment;
+            return createPathProxy(newPath, options);
+        },
+        apply(_, __, args) {
+            if (args.length > 0) {
+                const arg = args[0];
+                let argStr;
+                if (arg === true) argStr = 'true';
+                else if (arg === false) argStr = 'false';
+                else if (arg && typeof arg === 'object' && PATH_SYMBOL in arg) {
+                    const fullPath = arg[PATH_SYMBOL];
+                    argStr = fullPath.startsWith('?.') ? fullPath.substring(2) : fullPath;
+                }
+                else argStr = String(arg);
+
+                const newPath = prefix ? `${prefix}?.${argStr}` : argStr;
+                return createPathProxy(newPath, options);
+            }
+            return createPathProxy(prefix, options);
         }
     });
 }
 
 /**
- * Create a typed path proxy for a given interface/type.
- * Property accesses on the returned proxy produce `?.`-prefixed path strings.
- *
- * @example
- * const $ = paths();
- * $.lastName.path          // '?.lastName'
- * $.address.city.path      // '?.address?.city'
- *
- * // Inside sp template literals, .path is not needed:
- * sp`${$.lastName}, ${$.firstName}`  // ['?.lastName', ', ', '?.firstName']
+ * Create a typed path proxy.
  */
-export function paths() {
-    return createPathProxy('');
+export function paths(options) {
+    return createPathProxy('', options);
+}
+
+/**
+ * Create an assignment pair: { [lhs.path]: rhs.path }.
+ */
+export function set(lhs) {
+    const lhsStr = lhs && typeof lhs === 'object' && PATH_SYMBOL in lhs
+        ? lhs[PATH_SYMBOL]
+        : String(lhs);
+    return {
+        to(rhs) {
+            const rhsStr = rhs && typeof rhs === 'object' && PATH_SYMBOL in rhs
+                ? rhs[PATH_SYMBOL]
+                : rhs;
+            return { [lhsStr]: rhsStr };
+        }
+    };
+}
+
+/**
+ * Recursively walk a value and convert any path proxy objects to path strings.
+ */
+export function smoothOver(value) {
+    if (value && typeof value === 'object' && PATH_SYMBOL in value) {
+        return value[PATH_SYMBOL];
+    }
+    if (Array.isArray(value)) {
+        return value.map(smoothOver);
+    }
+    if (value && typeof value === 'object') {
+        const proto = Object.getPrototypeOf(value);
+        if (proto === Object.prototype || proto === null) {
+            const result = {};
+            for (const [k, v] of Object.entries(value)) {
+                result[k] = smoothOver(v);
+            }
+            return result;
+        }
+    }
+    return value;
 }
 
 /**
  * Tagged template literal that splits a template into an array of parts.
- * Interleaves static string segments with interpolated values.
- *
- * Path proxy objects are auto-detected and converted to their `?.`-prefixed
- * string representation — no `.path` call needed inside sp template literals.
- *
- * Arrays passed as interpolations are preserved as nested arrays (for
- * all-or-nothing optional segments in builtIns.join).
- *
- * @example
- * const $ = paths();
- *
- * // Basic usage:
- * sp`${$.lastName}, ${$.firstName}`
- * // ['?.lastName', ', ', '?.firstName']
- *
- * // With optional segment (nested array, all-or-nothing in join):
- * sp`${$.lastName}${[', ', $.middleName]}, ${$.firstName}`
- * // ['?.lastName', [', ', '?.middleName'], ', ', '?.firstName']
+ * Path proxy objects are auto-detected and converted to path strings.
  */
 export function sp(strings, ...values) {
     const result = [];
@@ -85,11 +114,9 @@ export function sp(strings, ...values) {
         if (i < values.length) {
             const v = values[i];
             if (v && typeof v === 'object' && PATH_SYMBOL in v) {
-                // Auto-extract path from proxy object
                 result.push(v[PATH_SYMBOL]);
             }
             else if (Array.isArray(v)) {
-                // Nested array — recursively extract paths from proxy elements
                 result.push(v.map(el =>
                     el && typeof el === 'object' && PATH_SYMBOL in el ? el[PATH_SYMBOL] : el
                 ));
@@ -104,7 +131,6 @@ export function sp(strings, ...values) {
 
 /**
  * Extract the last segment from a `?.`-prefixed path string.
- * e.g., '?.address?.city' → 'city', '?.firstName' → 'firstName'
  */
 function extractPropName(pathStr) {
     const parts = pathStr.split('?.');
@@ -112,16 +138,7 @@ function extractPropName(pathStr) {
 }
 
 /**
- * Tagged template literal that produces an array of {prop, val} objects + literal strings.
- * Designed for `builtIns.microDataJoin` — provides both the property name (for itemprop)
- * and the path string (for resolution).
- *
- * @example
- * const $ = paths();
- *
- * // Basic usage:
- * md`${$.firstName} ${$.lastName}`
- * // [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'lastName', val: '?.lastName' }]
+ * Tagged template literal that produces {prop, val} objects for microDataJoin.
  */
 export function md(strings, ...values) {
     const result = [];
@@ -130,12 +147,10 @@ export function md(strings, ...values) {
         if (i < values.length) {
             const v = values[i];
             if (v && typeof v === 'object' && PATH_SYMBOL in v) {
-                // Proxy object → {prop, val}
                 const pathStr = v[PATH_SYMBOL];
                 result.push({ prop: extractPropName(pathStr), val: pathStr });
             }
             else if (Array.isArray(v)) {
-                // Nested array — recursively convert proxy elements to {prop, val}
                 result.push(v.map(el => {
                     if (el && typeof el === 'object' && PATH_SYMBOL in el) {
                         const pathStr = el[PATH_SYMBOL];
@@ -145,7 +160,6 @@ export function md(strings, ...values) {
                 }));
             }
             else if (v && typeof v === 'object' && 'prop' in v) {
-                // Developer override object — extract val from proxy if present
                 const processed = { ...v };
                 if (processed.val && typeof processed.val === 'object' && PATH_SYMBOL in processed.val) {
                     processed.val = processed.val[PATH_SYMBOL];

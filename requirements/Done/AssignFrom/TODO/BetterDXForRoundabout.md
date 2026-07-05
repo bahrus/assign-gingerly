@@ -944,3 +944,31 @@ would work.  Actually, would it?  A keyword clash seems quite likely.  Syntax hi
 > **Does `smoothOver` as the name work?**
 
 I'm glad you proposed some alternatives.  I'm still on the fence.  It's just a name, let's go ahead and implement, and I'll mull that name over for a while.
+
+---
+
+## Response to Human Response III
+
+### On `do`/`of` as aliases
+
+You're right — `do` is a reserved keyword in JavaScript (`do...while`). Can't use it as a variable name. `of` is also a contextual keyword (used in `for...of`), though it technically works as a variable name in most contexts — but it'll confuse syntax highlighters and linters.
+
+Alternatives for the method-call alias pair:
+
+| LHS name | RHS name | Reads as |
+|----------|----------|----------|
+| `invoke` | `with_` | "invoke appendChild with clone" |
+| `run` | `on` | "run appendChild on clone" |
+| `exec` | `using` | awkward |
+| `apply_` | `to_` | "apply appendChild to clone" |
+
+Honestly, `set(...).to(...)` works fine for both cases — the mental model of "set the method's target" is close enough. I wouldn't overthink the alias. Document it as a pattern if someone wants to destructure differently, but don't ship it.
+
+### Implementation Plan
+
+Proceeding with:
+1. **Enhanced `paths<T>(opts?)`** — function-target proxy with `apply` trap, alias reversal, `withMethods` awareness
+2. **`set(lhs).to(rhs)`** — returns `{ [lhs.path]: rhs.path }`, spreadable
+3. **`smoothOver(value)`** — recursive proxy→string extraction (name TBD, implementing as `smoothOver` for now)
+
+These replace the current simple `createPathProxy` in `paths.ts`. The existing `sp` and `md` continue to work unchanged (they use `PATH_SYMBOL` which the enhanced proxy still supports).
