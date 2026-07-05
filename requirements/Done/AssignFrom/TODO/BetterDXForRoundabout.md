@@ -430,3 +430,336 @@ const raConfig = {
 ```
 
 which would result in the same exact JSON as at the top of this document?
+
+---
+
+## Response to Human Response I
+
+This is ambitious — you want the proxy to support method calls (`.querySelector('.increment')`) and property chains (`.content.cloneNode(true)`) at the authoring level, producing the `?.`-delimited path strings with aliases applied. Let me analyze what's feasible.
+
+### What Would Need to Work
+
+| Expression | Desired Output |
+|------------|---------------|
+| `$.template.content.cloneNode(true)` | `'?.template?.content?.cloneNode?.true'` |
+| `$.clone.querySelector('.increment')` | `'?.clone?.q?..increment'` (with aka) |
+| `$.clone.querySelector('.username').textContent` | `'?.clone?.q?..username?.textContent'` |
+| `$.appendChild($.clone)` | LHS: `'?.appendChild'`, RHS: `'?.clone'` |
+| `$.username` | `'?.username'` |
+| `$` (bare) | `'?.'` |
+
+### Can a Proxy Do This?
+
+**Property access** — yes, already works: `$.clone.textContent` → `'?.clone?.textContent'`.
+
+**Method calls** — this is where it gets interesting. When you write `$.querySelector('.increment')`:
+1. `$.querySelector` → proxy get trap fires, returns a new proxy for path `'querySelector'`
+2. `(...)` → the returned proxy is called as a function (apply trap)
+3. The argument `'.increment'` needs to be appended to the path
+
+This is doable with a Proxy that has both a `get` trap and an `apply` trap (using `Proxy` on a function target):
+
+```ts
+function createPathProxy(prefix: string, options?: { aka?: Record<string, string> }): any {
+    const aliasMap = options?.aka;
+    
+    function handler() {} // Function target enables apply trap
+    
+    return new Proxy(handler, {
+        get(_, prop: string | symbol) {
+            if (prop === PATH_SYMBOL || prop === 'path') {
+                return prefix.length > 0 ? `?.${prefix}` : '?.';
+            }
+            if (typeof prop === 'symbol') return undefined;
+            
+            // Apply reverse alias: if prop matches an alias value, use the alias key
+            let segment = prop;
+            if (aliasMap) {
+                for (const [alias, target] of Object.entries(aliasMap)) {
+                    if (target === prop) { segment = alias; break; }
+                }
+            }
+            
+            const newPath = prefix ? `${prefix}?.${segment}` : segment;
+            return createPathProxy(newPath, options);
+        },
+        apply(_, __, args) {
+            // Method call — append argument as next path segment
+            // e.g., querySelector('.username') → '?.q?..username'
+            if (args.length > 0) {
+                const arg = args[0];
+                let argStr: string;
+                if (arg === true) argStr = 'true';
+                else if (arg === false) argStr = 'false';
+                else if (arg && typeof arg === 'object' && PATH_SYMBOL in arg) argStr = arg[PATH_SYMBOL].substring(2); // strip '?.'
+                else argStr = String(arg);
+                
+                const newPath = prefix ? `${prefix}?.${argStr}` : argStr;
+                return createPathProxy(newPath, options);
+            }
+            // No args — just return self (method called with no args)
+            return createPathProxy(prefix, options);
+        }
+    });
+}
+```
+
+With this:
+- `$.querySelector('.increment')` → get `querySelector`, apply alias → `q`, apply with arg `.increment` → path `'q?..increment'`
+- `$.template.content.cloneNode(true)` → chain properties → `'template?.content?.cloneNode'`, apply with `true` → `'template?.content?.cloneNode?.true'`
+- `$.clone.querySelector('.username').textContent` → `'clone?.q?..username?.textContent'`
+
+**This works!**
+
+### The `tbd(set, to)` Pattern
+
+For expressing LHS/RHS pairs:
+
+```ts
+tbd(set = $.clone.querySelector('.username').textContent, to = $.username)
+```
+
+JavaScript doesn't support named parameters like this. But we can get close with:
+
+```ts
+// Option A: Two-arg function
+assign($.clone.querySelector('.username').textContent, $.username)
+// Returns: { '?.clone?.q?..username?.textContent': '?.username' }
+
+// Option B: Object with set/to
+assign({ set: $.clone.querySelector('.username').textContent, to: $.username })
+```
+
+The `assign` helper extracts paths from both arguments:
+
+```ts
+function assign(lhs: any, rhs: any): Record<string, string> {
+    const lhsStr = lhs && typeof lhs === 'object' && PATH_SYMBOL in lhs ? lhs[PATH_SYMBOL] : String(lhs);
+    const rhsStr = rhs && typeof rhs === 'object' && PATH_SYMBOL in rhs ? rhs[PATH_SYMBOL] : rhs;
+    return { [lhsStr]: rhsStr };
+}
+```
+
+Usage:
+
+```ts
+assign: {
+    ...assign($.clone.querySelector('.username').textContent, $.username),
+    ...assign($.clone.querySelector('.status').className, $.statusClassName),
+    renderCount: 1
+}
+```
+
+### The Method Call Case: `$.appendChild($.clone)`
+
+This one is the "tough one" you flagged. It's expressing: "call appendChild on the target with clone as argument." In assignGingerly terms: `{ '?.appendChild': '?.clone' }`.
+
+With the proxy:
+- `$.appendChild` → path `'appendChild'`
+- `$.appendChild($.clone)` → apply trap, arg is a proxy → extract its path `'clone'`
+
+But the apply trap currently produces a *path string* (extending the chain). For this case, we need it to produce a `{ lhs: rhs }` pair instead.
+
+**The ambiguity:** Does `$.appendChild($.clone)` mean:
+1. "Navigate path: `appendChild?.clone`" (extending the chain, like `cloneNode(true)`)
+2. "Call method `appendChild` with argument from `$.clone`" (produce a key-value pair)
+
+In assignGingerly's model, interpretation depends on whether `appendChild` is in `withMethods`. But at proxy-creation time, we *have* the `withMethods` list! So the proxy could know:
+
+```ts
+apply(_, __, args) {
+    if (withMethods.has(currentSegment) && args[0] && PATH_SYMBOL in args[0]) {
+        // Method call with a proxy arg → this is an assignment, not path extension
+        // Return a special "assignment pair" object
+        return { [currentFullPath]: args[0][PATH_SYMBOL] };
+    }
+    // Otherwise: path extension (like cloneNode(true))
+    ...
+}
+```
+
+But this makes the proxy return *different types* depending on context — sometimes a proxy (for chaining), sometimes an object (for assignments). That's fragile.
+
+**Alternative:** A separate function for the method-call-as-assignment pattern:
+
+```ts
+// Explicit: "call this method with this value"
+call($.appendChild, $.clone)
+// → { '?.appendChild': '?.clone' }
+```
+
+### Putting It All Together — Realistic Version
+
+```ts
+import { paths, assign, call } from 'assign-gingerly/paths.js';
+
+interface MyVM extends HTMLElement { /* ... */ }
+const aka = { q: 'querySelector' };
+const withMethods = ['querySelector', 'appendChild', 'add', 'cloneNode'];
+const $ = paths<MyVM>({ aka, withMethods });
+
+const raConfig = {
+    merges: [
+        { ifAllOf: ['template'], assign: { clone: $.template.content.cloneNode(true) } },
+        {
+            ifAllOf: ['clone'],
+            assign: {
+                incrementButton: $.clone.querySelector('.increment'),
+                decrementButton: $.clone.querySelector('.decrement'),
+                resetButton: $.clone.querySelector('.reset'),
+            }
+        },
+        {
+            ifKeyIn: ['username'],
+            ifAllOf: ['clone'],
+            assign: assign($.clone.querySelector('.username').textContent, $.username)
+        },
+        {
+            ifKeyIn: ['statusClassName', 'statusMessageText'],
+            ifAllOf: ['clone'],
+            assign: {
+                ...assign($.clone.querySelector('.status').className, $.statusClassName),
+                ...assign($.clone.querySelector('.status-text').textContent, $.statusMessageText),
+            }
+        },
+        {
+            ifKeyIn: ['count'],
+            ifAllOf: ['clone'],
+            assign: {
+                ...assign($.clone.querySelector('.count-value').textContent, $.count),
+                renderCount: 1
+            }
+        },
+        {
+            ifAllOf: ['renderCount'],
+            assign: {
+                ...call($.appendChild, $.clone),  // { '?.appendChild': '?.clone' }
+                clone: $                           // { clone: '?.' }
+            }
+        },
+    ],
+    assignGingerlyOptions: { withMethods, aka },
+};
+```
+
+### What's Different from Your Proposal
+
+1. **`assign(lhs, rhs)` instead of `tbd(set=, to=)`** — JS doesn't have named params, so a two-arg function is the closest equivalent. Returns `{ [lhs.path]: rhs.path }`.
+2. **`call(method, arg)` for method-with-proxy-arg** — disambiguates "extend path" from "produce assignment pair."
+3. **Simple property RHS (`incrementButton: $.clone.querySelector('.increment')`)** — works because when a proxy is used as a value in an object literal, roundabout/assignFrom would need to call `.path` or `String()` on it to get the string. This requires roundabout to be proxy-aware, OR we use `.path` explicitly here.
+
+### The Remaining Gap
+
+In your proposal, `incrementButton: $.clone.querySelector('.increment')` would need to produce the *string* `'?.clone?.q?..increment'` as the value. But in a plain object literal, the value is the proxy object itself — not the string.
+
+**Options:**
+A. Roundabout calls `String()` or `.path` on proxy values before passing to assignFrom (roundabout becomes proxy-aware).
+B. Use `.path` at the terminal: `incrementButton: $.clone.querySelector('.increment').path`
+C. A wrapper function processes the entire `assign` object, extracting paths from any proxy values.
+
+Option C is cleanest — a `resolve()` helper:
+
+```ts
+function resolve(obj: Record<string, any>): Record<string, any> {
+    const result: Record<string, any> = {};
+    for (const [k, v] of Object.entries(obj)) {
+        result[k] = v && typeof v === 'object' && PATH_SYMBOL in v ? v[PATH_SYMBOL] : v;
+    }
+    return result;
+}
+
+// Usage:
+assign: resolve({
+    incrementButton: $.clone.querySelector('.increment'),
+    decrementButton: $.clone.querySelector('.decrement'),
+    resetButton: $.clone.querySelector('.reset'),
+})
+// → { incrementButton: '?.clone?.q?..increment', ... }
+```
+
+### Summary of Proposed Exports
+
+| Utility | Signature | Purpose |
+|---------|-----------|---------|
+| `paths<T>(opts?)` | Enhanced with `aka` + `withMethods` + apply trap | Full proxy with method call support |
+| `assign(lhs, rhs)` | Two proxies → `{ [lhs.path]: rhs.path }` | LHS=RHS pair |
+| `call(method, arg)` | Proxy method + proxy arg → assignment pair | Method invocation expression |
+| `resolve(obj)` | Object with proxy values → object with path strings | Batch extract paths from values |
+
+### Questions
+
+1. **Does this level of proxy sophistication (apply trap, alias reversal, withMethods awareness) feel right?** It's ~40 lines more than the current simple proxy.
+2. **Is `assign` + `call` + `resolve` the right API surface?** Or do you prefer fewer helpers with more `.path` usage?
+3. **Should this be implemented now, or parked as a future enhancement?** It's a meaningful change to `paths.ts` (adding function-target proxies with apply trap).
+
+## Human Response II
+
+I was going to say that somehow using the function name "assign" feels like it is assigning the first argument to the second.  Then I remembered that's how Object.assign and all these variations supported by this package work, so I guess that makes sense.  And assign is probably the most descriptive name.  Ironically, "assignFrom" seems like it would be clearer, but it is long.
+
+On the remaining gap, I agree option C seems to be the best.  Could it wrap everything?  Also, I'm not sold on resolve as I feel like we are overloading that term too much.
+
+```JS
+const raConfig = {
+    merges: smoothOver([
+        ...
+    ])
+```
+
+Any other suggestions?
+
+Actually, back to the assign(...) which admittedly is quite good, maybe this feels better to me:
+
+Instead of:
+
+```js
+assign: assign($.clone.querySelector('.username').textContent, $.username)
+```
+
+we do this:
+
+```js
+{
+    assign: assign($.clone.querySelector('.username').textContent).from($.username),
+}
+```
+
+or
+
+```js
+{
+    assign: set($.clone.querySelector('.username').textContent).to($.username),
+}
+```
+
+Other suggestions?
+
+I'm not convinced that the call solution:
+
+```js
+assign: {
+    ...call($.appendChild, $.clone),  // { '?.appendChild': '?.clone' }
+    clone: $                           // { clone: '?.' }
+}
+```
+
+is any clearer than:
+
+```js
+assign: {
+    ...set($.appendChild).to($.clone),  // { '?.appendChild': '?.clone' }
+    clone: $                           // { clone: '?.' }
+}
+```
+
+Maybe in this context we could use some convenient aliases for set and to:
+
+```js
+assign: {
+    ...do($.appendChild).of($.clone),  // { '?.appendChild': '?.clone' }
+    clone: $                           // { clone: '?.' }
+}
+```
+
+???
+
+
