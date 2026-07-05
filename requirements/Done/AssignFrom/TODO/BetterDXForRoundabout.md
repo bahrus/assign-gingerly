@@ -922,3 +922,25 @@ const raConfig = {
 1. **Does `set(...).to(...)` feel right?**
 2. **Does `smoothOver` as the name work?** Or prefer something shorter?
 3. **Ready to implement, or further refinement needed?**
+
+## Human Response III
+
+> **Does `set(...).to(...)` feel right?**
+
+Yes.
+
+Maybe we can document that for the method case:
+
+```js
+const do = set;
+const of = to;
+
+do(...).of(...)
+```
+
+would work.  Actually, would it?  A keyword clash seems quite likely.  Syntax highlighting is showing of like it is a keyword   If not, is there a better suggestion that would? I don't think this should block implementing.
+
+
+> **Does `smoothOver` as the name work?**
+
+I'm glad you proposed some alternatives.  I'm still on the fence.  It's just a name, let's go ahead and implement, and I'll mull that name over for a while.
