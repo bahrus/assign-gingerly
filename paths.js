@@ -101,3 +101,61 @@ export function sp(strings, ...values) {
     }
     return result;
 }
+
+/**
+ * Extract the last segment from a `?.`-prefixed path string.
+ * e.g., '?.address?.city' → 'city', '?.firstName' → 'firstName'
+ */
+function extractPropName(pathStr) {
+    const parts = pathStr.split('?.');
+    return parts[parts.length - 1];
+}
+
+/**
+ * Tagged template literal that produces an array of {prop, val} objects + literal strings.
+ * Designed for `builtIns.microDataJoin` — provides both the property name (for itemprop)
+ * and the path string (for resolution).
+ *
+ * @example
+ * const $ = paths();
+ *
+ * // Basic usage:
+ * md`${$.firstName} ${$.lastName}`
+ * // [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'lastName', val: '?.lastName' }]
+ */
+export function md(strings, ...values) {
+    const result = [];
+    for (let i = 0; i < strings.length; i++) {
+        if (strings[i]) result.push(strings[i]);
+        if (i < values.length) {
+            const v = values[i];
+            if (v && typeof v === 'object' && PATH_SYMBOL in v) {
+                // Proxy object → {prop, val}
+                const pathStr = v[PATH_SYMBOL];
+                result.push({ prop: extractPropName(pathStr), val: pathStr });
+            }
+            else if (Array.isArray(v)) {
+                // Nested array — recursively convert proxy elements to {prop, val}
+                result.push(v.map(el => {
+                    if (el && typeof el === 'object' && PATH_SYMBOL in el) {
+                        const pathStr = el[PATH_SYMBOL];
+                        return { prop: extractPropName(pathStr), val: pathStr };
+                    }
+                    return el;
+                }));
+            }
+            else if (v && typeof v === 'object' && 'prop' in v) {
+                // Developer override object — extract val from proxy if present
+                const processed = { ...v };
+                if (processed.val && typeof processed.val === 'object' && PATH_SYMBOL in processed.val) {
+                    processed.val = processed.val[PATH_SYMBOL];
+                }
+                result.push(processed);
+            }
+            else {
+                result.push(v);
+            }
+        }
+    }
+    return result;
+}

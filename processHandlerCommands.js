@@ -13,6 +13,7 @@ const BUILT_IN_MAP = {
     'builtIns.lazyLoad': './handlers/lazyLoad.js',
     'builtIns.lazyLoadSwitch': './handlers/lazyLoadSwitch.js',
     'builtIns.join': './handlers/join.js',
+    'builtIns.microDataJoin': './handlers/microDataJoin.js',
 };
 /**
  * Check if an import path is allowed (non-cross-domain).

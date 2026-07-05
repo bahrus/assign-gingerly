@@ -92,6 +92,10 @@
       "default": "./handlers/join.js",
       "types": "./handlers/join.ts"
     },
+    "./handlers/microDataJoin.js": {
+      "default": "./handlers/microDataJoin.js",
+      "types": "./handlers/microDataJoin.ts"
+    },
     "./paths.js": {
       "default": "./paths.js",
       "types": "./paths.ts"

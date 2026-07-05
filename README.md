@@ -3833,9 +3833,106 @@ await assignFrom(oElement, {
 
 When a handler's `assign()` method returns a non-`undefined` value, `processHandlerCommands` assigns it back to the LHS path. This is how `builtIns.join` sets `textContent` — the handler computes the string and returns it. Existing handlers like `builtIns.lazyLoad` return `undefined` (void) and operate by side effects, so they're unaffected.
 
-## Typed Path Authoring with `paths` and `sp`
+### Built-in handler: `builtIns.microDataJoin`
 
-For JSON generated confiles generated from TypeScript/`.mts`/`mjs` files during a build or server-side rendering, the `paths` utility provides compile-time autocomplete and type safety for `?.`-prefixed path strings. The `sp` tagged template literal ("split into parts") produces arrays suitable for `builtIns.join`.
+Renders a template array as semantic microdata-annotated DOM. Each dynamic value gets an appropriate HTML element based on its JavaScript type, with `itemprop` set to the property name.
+
+```JavaScript
+const vm = {
+    lastName: 'Targaryen',
+    firstName: 'Helaena',
+    birthDT: new Date('July 1, 109'),
+    age: 21,
+    isHappy: false
+};
+
+await assignFrom(oSection, {
+    '?.querySelector?.div =>': {
+        do: 'builtIns.microDataJoin',
+        resolve: {
+            template: [
+                { prop: 'firstName', val: '?.firstName' },
+                ' ',
+                { prop: 'lastName', val: '?.lastName' },
+                ' who was born on ',
+                { prop: 'birthDT', val: '?.birthDT' },
+                ' is ',
+                { prop: 'age', val: '?.age' },
+                ' years old'
+            ]
+        }
+    }
+}, { from: vm, withMethods: ['querySelector'] });
+```
+
+Produces:
+
+```html
+<div itemscope>
+    <!--?start name="microDataJoin"-->
+    <span itemprop="firstName">Helaena</span>
+     
+    <span itemprop="lastName">Targaryen</span>
+     who was born on 
+    <time itemprop="birthDT" datetime="0109-07-01T...">7/1/0109</time>
+     is 
+    <data itemprop="age" value="21">21</data>
+     years old
+    <!--?end-->
+</div>
+```
+
+**Type → element mapping:**
+
+| JS Type | HTML Element | Attributes | textContent |
+|---------|-------------|------------|-------------|
+| `string` | `<span>` | `itemprop` | the value |
+| `number` | `<data>` | `itemprop`, `value` (raw) | locale-formatted |
+| `boolean` | `<data>` | `itemprop`, `value` (true/false) | empty |
+| `Date` | `<time>` | `itemprop`, `datetime` (ISO) | locale-formatted |
+
+**Optional segments (nested arrays):**
+
+Same all-or-nothing semantics as `builtIns.join` — if any `val` in a nested sub-array is null/undefined, the entire sub-array is dropped:
+
+```JavaScript
+resolve: {
+    template: [
+        { prop: 'firstName', val: '?.firstName' },
+        [' ', { prop: 'middleName', val: '?.middleName' }],  // dropped if middleName is undefined
+        ' ',
+        { prop: 'lastName', val: '?.lastName' }
+    ]
+}
+```
+
+**Idempotent updates:**
+
+Uses comment markers (`<!--?start name="microDataJoin"-->` / `<!--?end-->`) to track rendered content. On first call, creates all elements. On subsequent calls, updates existing elements in place (no re-creation) — `textContent`, `value`, and `datetime` attributes are updated without touching the DOM structure.
+
+**Authoring with `md` tag:**
+
+The `md` tagged template literal produces the `{prop, val}` structure from proxy objects — full autocomplete and type safety:
+
+```TypeScript
+import { paths, md } from 'assign-gingerly/paths.js';
+
+interface Person { firstName: string; lastName: string; birthDT: Date; age: number; }
+const $ = paths<Person>();
+
+const template = md`${$.firstName} ${$.lastName} who was born on ${$.birthDT} is ${$.age} years old`;
+// Produces: [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'lastName', val: '?.lastName' }, ...]
+```
+
+For custom property names or per-segment formatting, pass an explicit object:
+
+```TypeScript
+const template = md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, format: 'long' }}`;
+```
+
+## Typed Path Authoring with `paths`, `sp`, and `md`
+
+For JSON generated config files generated from TypeScript/`.mts`/`mjs` files during a build or server-side rendering, the `paths` utility provides compile-time autocomplete and type safety for `?.`-prefixed path strings. The `sp` tagged template literal ("split into parts") produces arrays suitable for `builtIns.join`. The `md` tagged template literal produces `{prop, val}` objects suitable for `builtIns.microDataJoin`.
 
 ```TypeScript
 import { paths, sp } from 'assign-gingerly/paths.js';
@@ -3908,6 +4005,36 @@ const pattern = {
 - Template literal syntax reads like a natural string template
 - Output is a plain JSON-serializable array
 - No runtime overhead beyond initial proxy creation
+
+**`md` — microdata template tag:**
+
+The `md` tag produces `{prop, val}` objects for `builtIns.microDataJoin`:
+
+```TypeScript
+import { paths, md } from 'assign-gingerly/paths.js';
+
+interface Person { firstName: string; lastName: string; birthDT: Date; age: number; }
+const $ = paths<Person>();
+
+const template = md`${$.firstName} ${$.lastName} born ${$.birthDT}, age ${$.age}`;
+// [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'lastName', val: '?.lastName' }, ' born ', { prop: 'birthDT', val: '?.birthDT' }, ', age ', { prop: 'age', val: '?.age' }]
+```
+
+For custom property names or per-segment config, pass an explicit object:
+
+```TypeScript
+md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, format: 'long' }}`
+// [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'birthDate', val: '?.birthDT', format: 'long' }]
+```
+
+**Difference between `sp` and `md`:**
+
+| Tag | Output for proxy interpolation | Use with |
+|-----|-------------------------------|----------|
+| `sp` | `'?.firstName'` (path string) | `builtIns.join` |
+| `md` | `{ prop: 'firstName', val: '?.firstName' }` | `builtIns.microDataJoin` |
+
+Both auto-detect path proxies (no `.path` needed inside template literals) and preserve nested arrays for optional segments.
 
 ## Cached Element Resolution with `#[x]` and `withIds`
 
