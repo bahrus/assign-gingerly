@@ -199,6 +199,30 @@ export function smoothOver(value: any): any {
 }
 
 /**
+ * Merge multiple set(...).to(...) pairs (and/or plain objects) into an `{ assign: {...} }` object.
+ * Spread the result into a merge config to avoid repeated `...` per entry.
+ * 
+ * @example
+ * {
+ *     ifKeyIn: ['statusClassName', 'statusMessageText'],
+ *     ifAllOf: ['clone'],
+ *     ...doAssign(
+ *         set($.clone.querySelector('.status').className).to($.statusClassName),
+ *         set($.clone.querySelector('.status-text').textContent).to($.statusMessageText),
+ *     )
+ * }
+ * // Equivalent to: { ifKeyIn: [...], ifAllOf: [...], assign: { '?.clone?.q?..status?.className': '?.statusClassName', ... } }
+ * 
+ * // Mix with literal values:
+ * ...doAssign(
+ *     set($.clone.querySelector('.count-value').textContent).to($.count),
+ *     { renderCount: 1 },
+ * )
+ */
+export function doAssign(...pairs: Record<string, any>[]): { assign: Record<string, any> } {
+    return { assign: Object.assign({}, ...pairs) };
+}
+/**
  * Tagged template literal that splits a template into an array of parts.
  * Interleaves static string segments with interpolated values.
  * 

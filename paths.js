@@ -104,6 +104,14 @@ export function smoothOver(value) {
 }
 
 /**
+ * Merge multiple set(...).to(...) pairs into an { assign: {...} } object.
+ * Spread the result into a merge config.
+ */
+export function doAssign(...pairs) {
+    return { assign: Object.assign({}, ...pairs) };
+}
+
+/**
  * Tagged template literal that splits a template into an array of parts.
  * Path proxy objects are auto-detected and converted to path strings.
  */
