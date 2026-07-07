@@ -11,8 +11,40 @@
 const PATH_SYMBOL = Symbol('assign-gingerly-path');
 
 /**
+ * Create a proxy for id-ref paths (#[varName]).
+ */
+function createIdRefProxy(idRef, options) {
+    function handler() {}
+    return new Proxy(handler, {
+        get(_, prop) {
+            if (prop === 'path' || prop === PATH_SYMBOL) {
+                return idRef;
+            }
+            if (typeof prop === 'symbol') return undefined;
+            const chained = `${idRef}?.${String(prop)}`;
+            return createIdRefProxy(chained, options);
+        },
+        apply(_, __, args) {
+            if (args.length > 0) {
+                const arg = args[0];
+                let argStr;
+                if (arg === true) argStr = 'true';
+                else if (arg === false) argStr = 'false';
+                else if (arg && typeof arg === 'object' && PATH_SYMBOL in arg) {
+                    const fullPath = arg[PATH_SYMBOL];
+                    argStr = fullPath.startsWith('?.') ? fullPath.substring(2) : fullPath;
+                }
+                else argStr = String(arg);
+                const chained = `${idRef}?.${argStr}`;
+                return createIdRefProxy(chained, options);
+            }
+            return createIdRefProxy(idRef, options);
+        }
+    });
+}
+
+/**
  * Create a recursive proxy that records property access paths.
- * Supports both property access and method call syntax (via apply trap on function target).
  */
 function createPathProxy(prefix, options) {
     const aliasMap = options?.aka;
@@ -27,6 +59,14 @@ function createPathProxy(prefix, options) {
             if (typeof prop === 'symbol') return undefined;
 
             let segment = String(prop);
+
+            // #-prefix: $['#firstName'] → '#[firstName]' (cached element ref)
+            if (segment.startsWith('#')) {
+                const varName = segment.substring(1);
+                const idRef = `#[${varName}]`;
+                return createIdRefProxy(idRef, options);
+            }
+
             if (aliasMap) {
                 for (const [alias, target] of Object.entries(aliasMap)) {
                     if (target === segment) { segment = alias; break; }
@@ -109,6 +149,14 @@ export function smoothOver(value) {
  */
 export function doAssign(...pairs) {
     return { assign: Object.assign({}, ...pairs) };
+}
+
+/**
+ * Compile-time loop expansion: generates one entry per key from a factory function.
+ */
+export function forEachKeyIn(keys, factory, options) {
+    const $ = paths(options);
+    return keys.map(key => factory(key, $));
 }
 
 /**

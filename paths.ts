@@ -54,6 +54,44 @@ export interface PathsOptions {
 }
 
 /**
+ * Create a proxy for id-ref paths (#[varName]).
+ * After the initial #[varName], further property access chains with ?. from the resolved element.
+ * .path returns the #[varName] prefix (optionally with further ?. path).
+ */
+function createIdRefProxy(idRef: string, options?: PathsOptions): any {
+    function handler() {}
+    return new Proxy(handler, {
+        get(_, prop: string | symbol) {
+            if (prop === 'path' || prop === PATH_SYMBOL) {
+                return idRef;
+            }
+            if (typeof prop === 'symbol') return undefined;
+
+            // Chain further path segments after the id ref
+            const chained = `${idRef}?.${String(prop)}`;
+            return createIdRefProxy(chained, options);
+        },
+        apply(_, __, args) {
+            if (args.length > 0) {
+                const arg = args[0];
+                let argStr: string;
+                if (arg === true) argStr = 'true';
+                else if (arg === false) argStr = 'false';
+                else if (arg && typeof arg === 'object' && PATH_SYMBOL in arg) {
+                    const fullPath = arg[PATH_SYMBOL] as string;
+                    argStr = fullPath.startsWith('?.') ? fullPath.substring(2) : fullPath;
+                }
+                else argStr = String(arg);
+
+                const chained = `${idRef}?.${argStr}`;
+                return createIdRefProxy(chained, options);
+            }
+            return createIdRefProxy(idRef, options);
+        }
+    });
+}
+
+/**
  * Create a recursive proxy that records property access paths.
  * Supports both property access and method call syntax (via apply trap on function target).
  * 
@@ -74,8 +112,17 @@ function createPathProxy(prefix: string, options?: PathsOptions): any {
             // Ignore symbol access (Symbol.iterator, Symbol.toPrimitive, etc.)
             if (typeof prop === 'symbol') return undefined;
 
-            // Apply reverse alias: if prop matches an alias value, use the alias key
             let segment = String(prop);
+
+            // #-prefix: $['#firstName'] → '#[firstName]' (cached element ref)
+            if (segment.startsWith('#')) {
+                const varName = segment.substring(1);
+                const idRef = `#[${varName}]`;
+                // Return a proxy that starts from this id ref (can chain further with ?.)
+                return createIdRefProxy(idRef, options);
+            }
+
+            // Apply reverse alias: if prop matches an alias value, use the alias key
             if (aliasMap) {
                 for (const [alias, target] of Object.entries(aliasMap)) {
                     if (target === segment) { segment = alias; break; }
@@ -222,6 +269,38 @@ export function smoothOver(value: any): any {
 export function doAssign(...pairs: Record<string, any>[]): { assign: Record<string, any> } {
     return { assign: Object.assign({}, ...pairs) };
 }
+
+/**
+ * Compile-time loop expansion: generates one entry per key from a factory function.
+ * Creates a typed proxy internally — the factory receives both the key and the proxy.
+ * 
+ * @param keys - Array of property names to iterate (type-checked against T)
+ * @param factory - Function that produces a config entry for each key
+ * @param options - Optional PathsOptions (aka, withMethods) for the internal proxy
+ * @returns Array of factory results (one per key) — spread into merges array
+ * 
+ * @example
+ * import { forEachKeyIn, set, doAssign } from 'assign-gingerly/paths.js';
+ * 
+ * interface Person extends HTMLElement { firstName: string; lastName: string; }
+ * 
+ * const merges = [
+ *     ...forEachKeyIn<Person>(['firstName', 'lastName'], (key, $) => ({
+ *         ifKeyIn: [key],
+ *         assignOptions: { withIds: { [key]: { qry: `[name="${key}"]` } } },
+ *         ...doAssign(set($['#' + key]).to($[key]))
+ *     })),
+ * ];
+ */
+export function forEachKeyIn<T>(
+    keys: (keyof T & string)[],
+    factory: (key: keyof T & string, proxy: PathProxy<T>) => any,
+    options?: PathsOptions
+): any[] {
+    const $ = paths<T>(options);
+    return keys.map(key => factory(key, $));
+}
+
 /**
  * Tagged template literal that splits a template into an array of parts.
  * Interleaves static string segments with interpolated values.
