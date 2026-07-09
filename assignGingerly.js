@@ -42,6 +42,21 @@ export class EnhancementRegistry extends EventTarget {
         }
         // Dispatch event after adding items
         this.dispatchEvent(new EnhancementRegisteredEvent(items));
+        // Process features if present (fire-and-forget)
+        const itemsArr = Array.isArray(items) ? items : [items];
+        for (const item of itemsArr) {
+            if (item.features) {
+                this.#assignFeatures(item.spawn, item.features);
+            }
+        }
+    }
+    async #assignFeatures(spawn, features) {
+        const { assignFeatures } = await import('./assignFeatures.js');
+        const featuresRegistry = this._featuresRegistry
+            ?? (typeof customElements !== 'undefined' ? customElements.featuresRegistry : undefined);
+        if (featuresRegistry) {
+            assignFeatures(spawn, features, featuresRegistry);
+        }
     }
     getItems() {
         return Array.from(this.#items);
@@ -89,6 +104,18 @@ export class ItemscopeRegistry extends EventTarget {
         }
         this.#configs.set(name, config);
         this.dispatchEvent(new Event(name));
+        // Process features if present (fire-and-forget)
+        if (config.features) {
+            this.#assignFeatures(config.manager, config.features);
+        }
+    }
+    async #assignFeatures(manager, features) {
+        const { assignFeatures } = await import('./assignFeatures.js');
+        const featuresRegistry = this._featuresRegistry
+            ?? (typeof customElements !== 'undefined' ? customElements.featuresRegistry : undefined);
+        if (featuresRegistry) {
+            assignFeatures(manager, features, featuresRegistry);
+        }
     }
     /**
      * Get a manager configuration by name

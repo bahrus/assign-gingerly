@@ -1,6 +1,7 @@
 
 
 import { EnhancementConfig } from "./types/assign-gingerly/types";
+import type { FeatureConfigsMap } from "./types/assign-gingerly/types";
 
 /**
  * Constructor signature for ItemScope Manager classes
@@ -167,6 +168,23 @@ export class EnhancementRegistry extends EventTarget {
     
     // Dispatch event after adding items
     this.dispatchEvent(new EnhancementRegisteredEvent(items));
+
+    // Process features if present (fire-and-forget, uses shared featuresRegistry)
+    const itemsArr = Array.isArray(items) ? items : [items];
+    for (const item of itemsArr) {
+      if (item.features) {
+        this.#assignFeatures(item.spawn, item.features);
+      }
+    }
+  }
+
+  async #assignFeatures(spawn: any, features: FeatureConfigsMap): Promise<void> {
+    const { assignFeatures } = await import('./assignFeatures.js');
+    const featuresRegistry = (this as any)._featuresRegistry
+      ?? (typeof customElements !== 'undefined' ? (customElements as any).featuresRegistry : undefined);
+    if (featuresRegistry) {
+      assignFeatures(spawn, features, featuresRegistry);
+    }
   }
 
   getItems(): EnhancementConfig[] {
@@ -218,6 +236,20 @@ export class ItemscopeRegistry extends EventTarget {
     }
     this.#configs.set(name, config);
     this.dispatchEvent(new Event(name));
+
+    // Process features if present (fire-and-forget, uses shared featuresRegistry)
+    if ((config as any).features) {
+      this.#assignFeatures(config.manager, (config as any).features);
+    }
+  }
+
+  async #assignFeatures(manager: any, features: FeatureConfigsMap): Promise<void> {
+    const { assignFeatures } = await import('./assignFeatures.js');
+    const featuresRegistry = (this as any)._featuresRegistry
+      ?? (typeof customElements !== 'undefined' ? (customElements as any).featuresRegistry : undefined);
+    if (featuresRegistry) {
+      assignFeatures(manager, features, featuresRegistry);
+    }
   }
 
   /**

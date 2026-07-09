@@ -4788,6 +4788,33 @@ This is useful for:
 4. On first access, the getter spawns the feature instance, validates it (optionally), caches it, and returns it.
 5. Because the property is getter-only (no setter), `assignGingerly` automatically merges into the spawned instance when assigning object values to that property.
 
+### Features at Registration Time
+
+Features can also be bundled directly into enhancement and itemscope manager registration configs — no separate `assignFeatures` call needed:
+
+```TypeScript
+// Enhancement with features
+enhancementRegistry.push({
+    spawn: MyEnhancement,
+    enhKey: 'myEnh',
+    features: {
+        photoTaker: { spawn: PhotoTakerImpl },
+        badgeMaker: { spawn: BadgeMakerImpl },
+    }
+});
+
+// Itemscope manager with features
+customElements.itemscopeRegistry.define('my-manager', {
+    manager: MyManagerClass,
+    lifecycleKeys: { dispose: 'cleanup', resolved: 'isReady' },
+    features: {
+        roundabout: { customData: { /* ... */ } },
+    }
+});
+```
+
+This calls `assignFeatures` automatically under the hood using the shared `customElements.featuresRegistry`. The standalone `assignFeatures` call remains available for cases where you need to associate features with a class you don't own or after initial registration.
+
 ### Basic example
 
 ```JavaScript
