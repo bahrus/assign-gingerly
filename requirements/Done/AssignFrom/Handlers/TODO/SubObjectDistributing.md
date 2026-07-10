@@ -409,3 +409,62 @@ for(const oItempropMatch of itemPropMatches){
     input.set[value] = from[prop];
 }
 ```
+
+---
+
+## Response to Human Response II
+
+### Understood — Inferencer Handles `ish` Too
+
+So the model is:
+
+1. Inferencer already knows how to map element types to the right "value" property (`value`, `checked`, `textContent`, `dateTime`, etc.)
+2. We **extend** inferencer to also recognize: if an element has a non-empty `itemscope` attribute → the inferred property is `ish`
+3. `inferredAssignments.byItemprop` then becomes a straightforward loop: find matching elements (scoped), use inferencer to determine *how* to set the value, and set it
+
+This means the inferencer is the single source of truth for "given an element, what property do I assign to?" — and `ish` is just another case in that mapping.
+
+### The Flow
+
+```
+inferredAssignments.byItemprop: ['user', 'name', 'email']
+```
+
+For each key:
+1. Find `[itemprop="${key}"]` elements within scope (filtered by `withScopePerimeter`)
+2. For each matched element, ask inferencer: "what property?"
+   - Has non-empty `itemscope` → `ish`
+   - Is `<input type="text">` → `value`
+   - Is `<input type="checkbox">` → `checked`
+   - Is `<time>` → `dateTime`
+   - Is `<span>`, `<div>`, etc. → `textContent`
+3. Set `element[inferredProperty] = from[key]`
+
+No branching logic in `assignFrom` — inferencer handles everything uniformly.
+
+### Steering Note
+
+I'll add a steering document entry to ensure the `inferencer/` folder stays self-contained (no imports from outside that folder). Let me do that.
+
+### What Needs to Happen in Inferencer
+
+The inferencer currently maps element types to `value`, `display`, and `eventType`. It needs a new case:
+
+```ts
+// In inferencer's value inference logic:
+if (element.hasAttribute('itemscope') && element.getAttribute('itemscope') !== '') {
+    return 'ish';  // route through itemscope manager
+}
+```
+
+This is a small addition to the existing inference logic.
+
+### Questions Before Implementing
+
+1. **Should inferencer return the *string* `'ish'` (property name), or should it return the actual assignment strategy (e.g., a function)?** Currently inferencer returns property names as strings. Keeping it as `'ish'` string is consistent.
+
+2. **For the `set[value]` symbol path vs direct property assignment:** In the current `inferredAssignments` flow, would we use inferencer's `value` symbol (going through the enhancement system: `element.set[value] = ...`) or directly set the inferred property (`element[inferredProp] = ...`)? The former triggers the full enhancement lifecycle; the latter is direct.
+
+3. **Is `inferredAssignments` processing synchronous or async?** Setting `ish` is async (the manager may not be registered yet — it waits for the event). Should `inferredAssignments` handling be async (fitting naturally into `assignFrom` which is already async)?
+
+4. **Should I update the inferencer submodule first (add itemscope → ish inference), then build `inferredAssignments` on top?**
