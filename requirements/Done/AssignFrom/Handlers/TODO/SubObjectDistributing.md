@@ -260,7 +260,9 @@ If you want something more general, **Suggestion 4** (itemprop shorthand in `wit
 
 ## Human Response I
 
-I like where you are going with Suggestion 5
+I like where you are going with Suggestion 5, and I'm taking the warning "But it's quite specialized" to heart.
 
 I am thinking of including the [inferencer](https://raw.githubusercontent.com/bahrus/inferencer/refs/heads/baseline/README.md) package as a submodule git inclusion, with strict instructions to avoid that project from referencing assign-gingerly, so that it can also stand as a stand alone package.
+
+The first thing that imported sumbmodule will need to add is support for inferring when oElement.ish should be applied.
 
