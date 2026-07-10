@@ -5687,3 +5687,19 @@ See [time-ticker/wireFeatures.js](https://github.com/bahrus/time-ticker/blob/bas
 
 - **Nested features**: Support `?.path?.notation` keys directly in `assignFeatures` (without requiring `PropertyBag`).
 - **`@each` + async interaction**: Combine async methods with iteration.
+
+
+## Viewing Locally
+
+Any web server that serves static files with server-side includes will do but...
+
+1. Install git
+2. Fork/clone this repo
+3. Install node.js
+4. Open command window to folder where you cloned this repo
+5. > git submodule add https://github.com/bahrus/types.git types
+6. > git submodule add https://github.com/bahrus/inferencer.git inferencer
+7. > git submodule update --init --recursive
+8. > npm install
+9. > npm run serve
+10. Open http://localhost:8000/demo/ in a modern browser
