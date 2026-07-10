@@ -255,3 +255,12 @@ If you want something more general, **Suggestion 4** (itemprop shorthand in `wit
 1. Is the pattern always `itemprop` + `itemscope` + `ish`? Or should this work for non-itemscope elements too?
 2. Should the route always be through `ish`, or could it assign directly to a property on the element?
 3. Is the performance concern about the first call (querySelector) or repeated calls? If repeated, `withIds` caching already handles it.
+
+---
+
+## Human Response I
+
+I like where you are going with Suggestion 5
+
+I am thinking of including the [inferencer](https://raw.githubusercontent.com/bahrus/inferencer/refs/heads/baseline/README.md) package as a submodule git inclusion, with strict instructions to avoid that project from referencing assign-gingerly, so that it can also stand as a stand alone package.
+
