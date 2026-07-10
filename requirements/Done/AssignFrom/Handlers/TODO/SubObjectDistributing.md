@@ -391,3 +391,21 @@ inferredAssignments: {
 }
 ```
 
+means, to amend your description:
+
+I see where this is going — you're building toward a system where:
+1. **Inferencer** handles the "what property to set" question (value, display, eventType, **ish**) based on element type **and presence of itemscope attribute with a value**.
+2. **`inferredAssignments`** handles the "find the right elements and route values" question based on DOM structure (itemprop, name, etc.)
+
+So basically,
+
+```JS
+import { value, display, registryItem } from 'inferencer/inferencer.js';
+import 'assign-gingerly/object-extension.js';
+
+// Use the value symbol - automatically sets the right property
+const itemPropMatches = getItemPropMatchesOutsideOrIncludinfItemscope(container);
+for(const oItempropMatch of itemPropMatches){
+    input.set[value] = from[prop];
+}
+```
