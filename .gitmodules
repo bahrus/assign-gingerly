@@ -1,3 +1,6 @@
 [submodule "types"]
 	path = types
 	url = https://github.com/bahrus/types.git
+[submodule "inferencer"]
+	path = inferencer
+	url = https://github.com/bahrus/inferencer.git
