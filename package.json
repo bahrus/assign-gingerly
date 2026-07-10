@@ -111,6 +111,10 @@
     "./evaluatePathWithAsyncMethods.js": {
       "default": "./evaluatePathWithAsyncMethods.js",
       "types": "./evaluatePathWithAsyncMethods.ts"
+    },
+    "./withScopePerimeter.js": {
+      "default": "./withScopePerimeter.js",
+      "types": "./withScopePerimeter.ts"
     }
   },
   "main": "index.js",
