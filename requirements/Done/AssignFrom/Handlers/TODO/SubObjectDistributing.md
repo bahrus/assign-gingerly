@@ -262,7 +262,30 @@ If you want something more general, **Suggestion 4** (itemprop shorthand in `wit
 
 I like where you are going with Suggestion 5, and I'm taking the warning "But it's quite specialized" to heart.
 
-I am thinking of including the [inferencer](https://raw.githubusercontent.com/bahrus/inferencer/refs/heads/baseline/README.md) package as a submodule git inclusion, with strict instructions to avoid that project from referencing assign-gingerly, so that it can also stand as a stand alone package.
+I am thinking of including the [inferencer](https://raw.githubusercontent.com/bahrus/inferencer/refs/heads/baseline/README.md) package as a submodule git inclusion, with strict instructions to avoid that project/folder from referencing assign-gingerly, so that it can also stand as a stand alone package (it currently depends on this package, but only for some test scenarios, not the actual runtime library).
 
 The first thing that imported sumbmodule will need to add is support for inferring when oElement.ish should be applied.
+
+Next, I'm thinking we should take another look at microDataJoin handler and see if it could leverage the inferencer folder.
+
+Then I'm thinking the suggestion 5 could be:
+
+```ts
+assignFrom(outerDiv, {
+    // other assignments...
+}, {
+    from: vm,
+    inferredAssignments: {
+      byItemprop: ['user'] // or true for all matching keys,
+      byName: // phase II
+    },
+    beVigilant: false, //phase II -- add a mutation observer for new matching elements.  
+});
+```
+
+Note that in the case of itemprop, the search should be kept outside an inner itemscope.  For this, we can port over the utility module [withScopePerimeter](https://raw.githubusercontent.com/bahrus/mount-observer/refs/heads/baseline/withScopePerimeter.ts) from the downstream package (and remove from that package).
+
+There can be multiple elements with the same itemprops, so the weakKey mapping should take that into account.
+
+
 
