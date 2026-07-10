@@ -380,4 +380,14 @@ Makes sense architecturally — inferencer knows which property to set on which 
 
 I went ahead and ported in withScopePerimeter.  I also added the inferencer submodule.  Please make sure the steering documents for this project indicates to avoid having the inferencer folder referencing anything from outside the folder.
 
-> **For phase 1, should I start with just the `byItemprop` + `itemscope` → `ish` case?**
+> **For phase 1, should I start with just the `byItemprop` + `itemscope` → `ish` case?**  That doesn't need inferencer and gives immediate value.
+
+Hmm, I was thinking that the inferencer be enhanced to consider if there's a non-empty itemscope attribute, and:
+
+```JS
+inferredAssignments: {
+    byItemprop: ['user'],
+    ...
+}
+```
+
