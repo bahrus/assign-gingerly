@@ -376,4 +376,8 @@ Makes sense architecturally — inferencer knows which property to set on which 
 
 ## Human Response II
 
-1.  I went ahead and ported in withScopePerimeter.  I also added the inferencer submodule.
+> **Should `withScopePerimeter` live in a shared utility module (e.g., `domUtils.ts`)?**
+
+I went ahead and ported in withScopePerimeter.  I also added the inferencer submodule.  Please make sure the steering documents for this project indicates to avoid having the inferencer folder referencing anything from outside the folder.
+
+> **For phase 1, should I start with just the `byItemprop` + `itemscope` → `ish` case?**
