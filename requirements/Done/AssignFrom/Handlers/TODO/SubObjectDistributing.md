@@ -371,3 +371,9 @@ Makes sense architecturally — inferencer knows which property to set on which 
 2. **For phase 1, should I start with just the `byItemprop` + `itemscope` → `ish` case?** That doesn't need inferencer and gives immediate value.
 3. **For the WeakRef cache with multiple elements — broadcast to all, or distribute array elements 1:1?**
 4. **Should I port `withScopePerimeter` now as a first step?**
+
+---
+
+## Human Response II
+
+1.  I went ahead and ported in withScopePerimeter.  I also added the inferencer submodule.
