@@ -289,3 +289,85 @@ There can be multiple elements with the same itemprops, so the weakKey mapping s
 
 
 
+
+---
+
+## Response to Human Response I
+
+### The Expanded Vision
+
+I see where this is going — you're building toward a system where:
+1. **Inferencer** handles the "what property to set" question (value, display, eventType) based on element type
+2. **`inferredAssignments`** handles the "find the right elements and route values" question based on DOM structure (itemprop, name, etc.)
+3. **microDataJoin** could use inferencer to know which element type + attributes to use when rendering
+4. **`beVigilant`** adds reactivity for dynamically added elements
+
+This is a coherent layered architecture.
+
+### On `inferredAssignments`
+
+```ts
+inferredAssignments: {
+    byItemprop: ['user'],  // or true
+    byName: ['firstName', 'lastName'],  // phase II
+}
+```
+
+**`byItemprop` semantics:**
+
+For each key in the list:
+1. Find `[itemprop="${key}"]` within the target, but **outside any inner `[itemscope]`** (donut-hole scoping via `withScopePerimeter`)
+2. Multiple elements with the same `itemprop` are valid (e.g., `<span itemprop="author">` repeated in a list)
+3. For each matched element:
+   - If it has `itemscope` → route through `.ish` (manager instantiation/update)
+   - If it doesn't have `itemscope` → use inferencer logic (set `value`, `textContent`, `dateTime`, etc. based on element type)
+4. Cache matched elements via WeakRef (keyed by itemprop name, supports multiple refs per name)
+
+**`byName` (phase II):**
+
+Same pattern but queries `[name="${key}"]` — for form elements. Uses inferencer to set the right property (`value`, `checked`, etc.).
+
+### On `withScopePerimeter`
+
+Good call — this is essential for itemprop queries. Without it, `querySelector('[itemprop="name"]')` from an outer `itemscope` would reach into inner itemscopes and grab the wrong element.
+
+The utility is small (~15 lines) and general-purpose. Porting it here makes sense. It'd be used as:
+
+```ts
+// Find all [itemprop="user"] that aren't inside a nested [itemscope]
+const candidates = target.querySelectorAll(`[itemprop="${key}"]`);
+const matches = Array.from(candidates).filter(el => 
+    withScopePerimeter(target, el, '[itemscope]')
+);
+```
+
+### On Multiple Elements Per Itemprop
+
+The WeakRef cache would be `Map<string, WeakRef<Element>[]>` rather than `Map<string, WeakRef<Element>>`. When assigning:
+- If the value is a primitive (string, number, etc.) → set it on all matched elements (broadcast)
+- If the value is an object and the element has `itemscope` → route through `.ish` on each
+- If the value is an array → possibly distribute one item per element (1:1 mapping)?
+
+Or keep it simple: always broadcast the same value to all elements with that itemprop. The microdata spec allows multiple elements with the same itemprop (they represent multiple values for that property), but in practice for display-binding, broadcasting makes sense.
+
+### On Inferencer as a Submodule
+
+Makes sense architecturally — inferencer knows which property to set on which element type. The `inferredAssignments` feature would import from it to handle the non-itemscope case (plain elements without managers). The dependency direction stays clean: inferencer has no runtime dependency on assign-gingerly.
+
+### Implementation Phases
+
+| Phase | Feature | Depends On |
+|-------|---------|-----------|
+| 1 | Port `withScopePerimeter` into this package | — |
+| 2 | `inferredAssignments.byItemprop` with `itemscope` → `ish` routing | withScopePerimeter |
+| 3 | Include inferencer as submodule | — |
+| 4 | `inferredAssignments.byItemprop` without `itemscope` → inferencer routing | inferencer |
+| 5 | `inferredAssignments.byName` (form elements) | inferencer |
+| 6 | `beVigilant` (MutationObserver for new elements) | phase 2+ |
+
+### Questions
+
+1. **Should `withScopePerimeter` live in a shared utility module (e.g., `domUtils.ts`)?** It's useful for both this feature and potentially other DOM-walking logic in the package.
+2. **For phase 1, should I start with just the `byItemprop` + `itemscope` → `ish` case?** That doesn't need inferencer and gives immediate value.
+3. **For the WeakRef cache with multiple elements — broadcast to all, or distribute array elements 1:1?**
+4. **Should I port `withScopePerimeter` now as a first step?**
