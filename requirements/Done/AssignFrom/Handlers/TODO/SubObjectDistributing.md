@@ -468,3 +468,22 @@ This is a small addition to the existing inference logic.
 3. **Is `inferredAssignments` processing synchronous or async?** Setting `ish` is async (the manager may not be registered yet — it waits for the event). Should `inferredAssignments` handling be async (fitting naturally into `assignFrom` which is already async)?
 
 4. **Should I update the inferencer submodule first (add itemscope → ish inference), then build `inferredAssignments` on top?**
+
+---
+
+## Human Response III
+
+> **Should inferencer return...*
+
+I'm not sure what you mean by "inferencer return"?
+
+> **For the `set[value]` symbol path vs direct property assignment:**
+
+Direct sounds much better.
+
+> **Is `inferredAssignments` processing synchronous or async?**
+
+Async, and only load conditional code dynamically on demand.
+
+
+
