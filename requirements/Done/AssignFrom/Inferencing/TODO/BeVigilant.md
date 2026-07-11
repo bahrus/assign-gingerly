@@ -160,3 +160,126 @@ Actually, yes, I was thinking that newly discovered elements would need to be ad
 > **Should this be implemented now or parked?**
 
 I think because it is an optional parameter, and it defaults to false, and hopefully loads 98% of the needed code only on demand, I think if the usage documentation features enough caveats about only use it if it is needed might be enough deterrence to overuse?
+
+---
+
+## Response to Human Response I
+
+### On Reading `from` at Observation Time + Roundabout
+
+The scenario is:
+1. `assignFrom` is called with `beVigilant: true`
+2. Time passes, `from` (the live VM) is mutated by user interaction or other logic
+3. A new `[itemprop]` element is added to the DOM
+4. `beVigilant` assigns `from[key]` to the new element — which is the *current* VM value, not the value at the time `assignFrom` was called
+
+Without roundabout, this means:
+- Existing elements (from the initial pass) have the *original* values
+- Newly observed elements have the *current* values
+- The DOM is temporarily inconsistent until roundabout's merge cycle re-syncs everything
+
+With roundabout, the merge cycle will re-assign all values (including the existing elements) on the next property change — so the inconsistency is transient and self-correcting.
+
+**My take:** This is fine. The `beVigilant` feature is designed to work *within* a reactive system (roundabout). It ensures new elements get populated immediately with the current state rather than remaining empty until the next merge cycle. The brief inconsistency window (between new element appearing and roundabout's next cycle) is acceptable — `beVigilant` fills the gap.
+
+**On adding roundabout-lib as a submodule:** I'd lean against it for this specific feature. `beVigilant` doesn't *need* roundabout — it just reads `from[key]` at observation time. Roundabout is the thing that ensures repeated re-application. Adding it as a submodule here would tightly couple the two packages. Better to keep the relationship as "roundabout calls assignFrom with beVigilant" rather than "assignFrom hosts roundabout internally."
+
+The `from` reference is already captured in the closure when `setupVigilantObserver` is called. Since `from` is a live object (same reference), reading `from[key]` at observation time naturally gives the latest value. No special plumbing needed.
+
+### On WeakRef Caching for Newly Discovered Elements
+
+Makes sense — newly observed elements should be added to the same cache that `#[x]`/`withIds` uses, so subsequent `assignFrom` calls (from roundabout merge cycles) can resolve them via `getElementById` / WeakRef rather than re-querying.
+
+Implementation: when `beVigilant` discovers a new matching element:
+1. Ensure it has an ID (auto-generate if needed, same `_ag0` pattern)
+2. Add it to the `withIds` WeakRef cache
+
+This means `beVigilant` needs access to the id cache (from `resolveIdRef.ts`). The observer callback would import and use `resolveIdVariable` or a lower-level cache API.
+
+### Revised Implementation Plan
+
+```ts
+// beVigilant.ts
+
+import { Infer } from './inferencer/inferencer.js';
+import { withScopePerimeter } from './inferencer/withScopePerimeter.js';
+
+export function setupVigilantObserver(
+    target: Element,
+    from: any,
+    config: { byItemprop?: string[] | true },
+    signal: AbortSignal,
+    cacheNewElements?: (element: Element, varName: string) => void
+): void {
+    const keys = config.byItemprop === true ? null : new Set(config.byItemprop);
+
+    const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            // Handle added nodes
+            for (const node of mutation.addedNodes) {
+                if (!(node instanceof Element)) continue;
+                processElement(node, from, keys, target, cacheNewElements);
+                // Also process children of added nodes (respecting scope)
+                const nested = node.querySelectorAll('[itemprop]');
+                for (const el of nested) {
+                    processElement(el as Element, from, keys, target, cacheNewElements);
+                }
+            }
+            // Handle attribute changes (itemprop added/changed)
+            if (mutation.type === 'attributes' && mutation.target instanceof Element) {
+                processElement(mutation.target, from, keys, target, cacheNewElements);
+            }
+        }
+    });
+
+    observer.observe(target, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['itemprop']
+    });
+
+    signal.addEventListener('abort', () => observer.disconnect(), { once: true });
+}
+
+function processElement(
+    element: Element,
+    from: any,
+    keys: Set<string> | null,
+    scopeRoot: Element,
+    cacheNewElements?: (element: Element, varName: string) => void
+): void {
+    const itemprop = element.getAttribute('itemprop');
+    if (!itemprop) return;
+    if (keys && !keys.has(itemprop)) return;
+    if (!(itemprop in from)) return;
+    if (!withScopePerimeter(scopeRoot, element, '[itemscope]')) return;
+
+    // Set value via inferencer
+    const infer = new Infer(element, itemprop);
+    infer.value = from[itemprop];
+
+    // Cache for future fast access
+    if (cacheNewElements) {
+        cacheNewElements(element, itemprop);
+    }
+}
+```
+
+### Summary of Decisions
+
+| Question | Answer |
+|----------|--------|
+| Observe attribute changes | Yes (`attributeFilter: ['itemprop']`) |
+| Process children of added nodes | Yes (querySelectorAll, respecting scope perimeter) |
+| Read `from` at observation time | Yes (live reference, current value) |
+| Add roundabout-lib submodule | No — keep decoupled |
+| Cache new elements | Yes — add to WeakRef cache for future fast access |
+| Signal required | Yes — throw if missing when `beVigilant: true` |
+| Dynamic loading | Yes — entire module imported only when `beVigilant: true` |
+
+### Questions
+
+1. **For the cache integration:** should `beVigilant` call into `resolveIdRef`'s internal cache directly, or should we expose a small public API for registering elements in the cache? I'd suggest a small `registerInCache(rootNode, varName, element)` export from `resolveIdRef.ts`.
+
+2. **Ready to implement?**
