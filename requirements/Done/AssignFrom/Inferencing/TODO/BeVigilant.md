@@ -134,3 +134,29 @@ controller.abort();
 4. **Does this need to integrate with the WeakRef caching from `#[x]`/`withIds`?** Probably not — `beVigilant` is about *new* elements, not repeated access to existing ones.
 
 5. **Should this be implemented now or parked?** It's a clean feature with clear semantics, but it adds a MutationObserver which has performance implications for large/frequently-mutating DOMs.
+
+---
+
+## Human Response I
+
+> **Should `beVigilant` also observe attribute changes?**
+
+Yes, I guess it should, even if I can't think of a good use case, but I think that would be the expectation.  Good point
+
+> **Should the observer also process child elements of added nodes?**
+
+Yes, outside of inner itemscope attributed elements.
+
+>  **Should `from` be read at observation time or captured at setup time?**
+
+This is an interesting question, and my answer could raise eyebrows.  The ability to reapply changes to the live object is supported by the [roundabout package](https://raw.githubusercontent.com/bahrus/roundabout/refs/heads/baseline/README.md), which builds on this package..  So without the roundabout package usage, there could end up being newly added itemprop elements which have a later value of the live object.  The round about package would "smooth/even things out".  Maybe that's strange?
+
+The question is making me wonder if I should do something similar to what we did with inferencer -- add a git submodule folder for roundabut lib, and make beVigilant use that reference.  I'm very open to your thoughts on that.
+
+>  **Does this need to integrate with the WeakRef caching from `#[x]`/`withIds`?**
+
+Actually, yes, I was thinking that newly discovered elements would need to be added to the cache, so that later updates to the vm could more speedily propagate to all the dependent elements.
+
+> **Should this be implemented now or parked?**
+
+I think because it is an optional parameter, and it defaults to false, and hopefully loads 98% of the needed code only on demand, I think if the usage documentation features enough caveats about only use it if it is needed might be enough deterrence to overuse?
