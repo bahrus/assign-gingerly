@@ -117,6 +117,18 @@ export interface IAssignGingerlyOptions {
    * // Calls: (await el.whenFeatureReady('photoTaker')).someProp = 'hello'
    */
   withAsyncMethods?: string[] | Set<string>;
+
+  /**
+   * Bulk enhancement application via EMC JSON configs.
+   * Finds matching elements and spawns enhancements on them.
+   * Fire-and-forget (async) — assignGingerly remains synchronous.
+   * 
+   * @example
+   * enhance: [
+   *     { emc: 'be-bound/emc.json', matching: '[name]' },
+   * ]
+   */
+  enhance?: Array<{ emc: string; matching?: string; parse?: boolean }>;
 }
 
 /**
@@ -1303,6 +1315,13 @@ export function assignGingerly(
         );
       },
       configurable: true,
+    });
+  }
+
+  // Fire-and-forget bulk enhancements (async, non-blocking)
+  if (options?.enhance && options.enhance.length > 0 && typeof target === 'object' && target instanceof Element) {
+    import('./enhanceAll.js').then(({ enhanceAll }) => {
+      enhanceAll(target, options!.enhance!);
     });
   }
 

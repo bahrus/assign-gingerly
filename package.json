@@ -100,6 +100,10 @@
       "default": "./paths.js",
       "types": "./paths.ts"
     },
+    "./enhanceAll.js": {
+      "default": "./enhanceAll.js",
+      "types": "./enhanceAll.ts"
+    },
     "./assignFrom.js": {
       "default": "./assignFrom.js",
       "types": "./assignFrom.ts"

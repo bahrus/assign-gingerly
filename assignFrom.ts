@@ -82,6 +82,23 @@ export interface AssignFromOptions extends IAssignGingerlyOptions, ResolveValues
     /** Watch for new matching elements via MutationObserver. Requires options.signal for cleanup. */
     beVigilant?: boolean;
   };
+
+  /**
+   * Bulk enhancement application via EMC JSON configs.
+   * Finds matching elements and spawns enhancements on them.
+   * 
+   * Each entry specifies an EMC JSON path and optionally overrides the matching selector.
+   * Enhancements are auto-registered if not already present in the enhancement registry.
+   * 
+   * No scope perimeter is applied — use mount-observer for reactive/scoped enhancement.
+   * 
+   * @example
+   * enhance: [
+   *     { emc: 'be-bound/emc.json', matching: '[name]' },
+   *     { emc: 'be-observant/emc.json', matching: '[itemprop]' },
+   * ]
+   */
+  enhance?: Array<{ emc: string; matching?: string; parse?: boolean }>;
 }
 
 /**
@@ -343,6 +360,12 @@ export async function assignFrom(
       const { setupVigilantObserver } = await import('./beVigilant.js');
       setupVigilantObserver(target, options.from, options.inferredAssignments, options.signal);
     }
+  }
+
+  // Process bulk enhancements — dynamically imported only when option is present
+  if (options.enhance && options.enhance.length > 0) {
+    const { enhanceAll } = await import('./enhanceAll.js');
+    await enhanceAll(target, options.enhance);
   }
 
   return target;

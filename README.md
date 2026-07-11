@@ -1131,7 +1131,7 @@ const result = assignGingerly({}, {
     "[Symbol.for('BqnnTPWRHkWdVGWcGQoAiw')]": true,
     style: {
       height: '40px'
-    }
+    },
     enh: {
       mellowYellow?.madAboutFourteen': true
     }

@@ -243,6 +243,11 @@ export async function assignFrom(target, pattern, options) {
             setupVigilantObserver(target, options.from, options.inferredAssignments, options.signal);
         }
     }
+    // Process bulk enhancements — dynamically imported only when option is present
+    if (options.enhance && options.enhance.length > 0) {
+        const { enhanceAll } = await import('./enhanceAll.js');
+        await enhanceAll(target, options.enhance);
+    }
     return target;
 }
 /**

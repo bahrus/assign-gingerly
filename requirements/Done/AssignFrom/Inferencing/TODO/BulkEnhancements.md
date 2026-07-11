@@ -12,7 +12,7 @@ const result = assignGingerly({}, {
     "[Symbol.for('BqnnTPWRHkWdVGWcGQoAiw')]": true,
     style: {
       height: '40px'
-    }
+    },
     enh: {
       mellowYellow?.madAboutFourteen': true
     }
@@ -193,3 +193,295 @@ Agree that this should work beyond `assignFrom`. The `enhance` option on `IAssig
 2. **For auto-loading: should the enhKey be sufficient to find the enhancement (assuming it's registered)?** Or should `enhance` also support an import path for lazy-loading the enhancement module?
 3. **Scope perimeter:** Should `enhance` respect itemscope boundaries by default, or only when explicitly requested?
 4. **Should I hold off and hear your ideas first?** You mentioned having some — happy to compare approaches.
+
+---
+
+## Human Response I
+
+I think Idea 1 is definitely going in the right direction, and some of the questions you raise are quite apt.  
+
+In fact, it made me realize that to some degree, we (I blame myself) are "reinventing the wheel" of [mount-observer's emc scripts](https://github.com/bahrus/mount-observer#element-mount-configuration-emc-scripts):
+
+```html
+<!-- Define enhancement configuration -->
+<script type="emc">
+{
+    "matching": ".interactive",
+    "enhConfig": {
+        "spawn": "./my-enhancement.js",
+        "enhKey": "myEnhancement"
+    }
+}
+</script>
+
+<!-- Elements matching the selector get enhanced -->
+<div class="interactive">This will be enhanced</div>
+<div class="interactive">This too</div>
+```
+
+Each enhancement package I define includes one or more such "emc" json files.  For example, [this is an emc for be-bound](https://raw.githubusercontent.com/bahrus/be-bound/refs/heads/baseline/emc.json).
+
+Those emc files can do much, much more than css matching.  They can observe browser media queries, for example, and observe viewport "intersections" so that the enhancement is only loaded when it scrolls into view.
+
+I'm thinking that assignFrom could support a tiny fraction of what mount-observer supports, basically, the exact features exhibited above (including withAttr support within the enhConfig). But allow for overriding the "match", and only consider the withAttrs if "parse" is specified, maybe allow for other overrides as well (phase II?).   
+
+```ts
+await assignFrom(shadowRoot, {}, {
+    from: vm,
+    enhance: [
+        {
+            EMCImportJSON: 'be-bound/emc.json',
+            matching: '[name]' //overrides matching in the emc.json
+            parse: false,//default -- don't parse attributes. true is Phase II
+        },
+        {
+            EMCImportJSON: 'be-observant/emc.json',
+            matching: '[itemprop]',
+            
+        }
+    ]
+});
+```
+
+
+
+
+
+---
+
+## Response to Human Response I
+
+### The EMC JSON Approach — Good Direction
+
+This is smart. Rather than inventing a new config format, you're reusing the existing EMC (Element Mount Configuration) structure that enhancement packages already publish. `assignFrom` just needs to:
+
+1. Dynamically import the EMC JSON
+2. Extract the `enhConfig` (spawn path, enhKey, withAttrs)
+3. Find matching elements (using `matching` override or the EMC's own selector)
+4. Spawn the enhancement on each matched element
+
+This means every enhancement that already has an `emc.json` works out of the box — no new registration step needed.
+
+### How I'd Implement It
+
+```ts
+interface EnhanceConfig {
+    /** Path to the EMC JSON file (dynamic import) */
+    EMCImportJSON: string;
+    /** Override the CSS selector from the EMC (optional) */
+    matching?: string;
+    /** Whether to parse attributes via withAttrs (default: false) */
+    parse?: boolean;
+}
+```
+
+Processing:
+
+```ts
+async function processEnhance(
+    target: Element,
+    enhance: EnhanceConfig[]
+): Promise<void> {
+    for (const entry of enhance) {
+        // 1. Import the EMC JSON
+        const emc = (await import(entry.EMCImportJSON, { with: { type: 'json' } })).default;
+        const { enhConfig } = emc;
+
+        // 2. Determine the selector
+        const selector = entry.matching ?? enhConfig.matching ?? '*';
+
+        // 3. Find matching elements
+        const elements = target.querySelectorAll(selector);
+
+        // 4. For each element, spawn the enhancement
+        for (const el of elements) {
+            // Get or create the enhancement instance
+            const registryItem = await resolveRegistryItem(enhConfig, target);
+            (el as any).enh.get(registryItem);
+
+            // If parse: true, also parse attributes via withAttrs
+            if (entry.parse && enhConfig.withAttrs) {
+                // Parse attributes into initVals and apply
+                // (reuse existing parseWithAttrs infrastructure)
+            }
+        }
+    }
+}
+```
+
+### Key Design Points
+
+1. **Dynamic JSON import:** `import('be-bound/emc.json', { with: { type: 'json' } })` uses import assertions. This requires the environment to support JSON modules (modern browsers do, Node 18+ does). If not available, a `fetch` fallback could work.
+
+2. **Enhancement registration:** The EMC's `enhConfig.spawn` is a bare specifier path to the enhancement module. The system would need to:
+   - Check if the enhKey is already registered in the element's enhancement registry
+   - If not, dynamically import the spawn module and register it
+   
+   This mirrors what mount-observer does — lazy load + register on first encounter.
+
+3. **Scope perimeter:** Should `matching` respect itemscope boundaries? For `be-bound` with `[name]`, you probably want all matching elements regardless of nesting (form elements don't have the same scoping concept as itemprop). I'd say: **no scope perimeter by default** for `enhance`. Let the selector do the filtering.
+
+4. **`parse: false` (default):** Most parameterless enhancements don't need attribute parsing — they infer everything. `parse: true` would trigger the full `withAttrs` parsing pipeline from the EMC config. Good phase II boundary.
+
+### On `assignGingerly` Support
+
+For `enhance` to work with `assignGingerly`, the enhancement spawning would need to be synchronous (or fire-and-forget async). Since `enh.get(registryItem)` triggers lazy spawn which may be async (dynamic import of the enhancement module), this is inherently async.
+
+Options:
+- **`assignGingerly`:** Fire-and-forget the enhancement. `assignGingerly` stays synchronous, but the enhancements are applied asynchronously in the background.
+- **`assignFrom`:** `await` the enhancement processing (already async).
+
+This matches how `assignGingerly` currently handles the `ish` property — fire-and-forget async setup.
+
+### On Import Assertions for JSON
+
+One concern: `import('be-bound/emc.json', { with: { type: 'json' } })` might not work in all environments. Alternatives:
+- `fetch` the JSON and parse it (works everywhere but requires the file to be served)
+- Have the EMC as a `.js` module that exports the object (no import assertion needed)
+
+Many of your packages might already have both formats. If not, a small wrapper works:
+```js
+// be-bound/emc.js
+export default { "enhConfig": { ... }, "customData": { ... } };
+```
+
+### Questions
+
+1. **JSON import or `.js` module?** Should `EMCImportJSON` support both, or should we recommend `.js` wrappers for broader compatibility?
+2. **How to resolve the enhancement's registry item from the EMC?** Should `assignFrom` register it in the element's enhancementRegistry if not already present?
+3. **Should `enhance` apply scope perimeter, or just use the raw querySelectorAll?**
+4. **Ready to implement, or more discussion needed?**
+
+---
+
+## Human Response II
+
+First, I think it would make sense to also adopt your Idea 3, I think:
+
+Define a separate module / function:
+
+```JS
+await enhanceAll(shadowRoot, [
+    {
+        EMCImportJSON: 'be-bound/emc.json',
+        matching: '[name]' //overrides matching in the emc.json
+        parse: false,//default -- don't parse attributes. true is Phase II
+    },
+    {
+        EMCImportJSON: 'be-observant/emc.json',
+        matching: '[itemprop]',
+        
+    }
+]);
+```
+
+assignFrom would call out to it.
+
+Maybe we can consider alternative names.  First, EMCImportJSON is a bit long but descriptive.  Any better alternatives?
+
+> **JSON import or `.js` module?**
+
+Let's continue to treat this as a forward looking library, and assume and require that JSON import is supported, (it's fine to fail in an ugly way if it isn't), and not support any js alternative.
+
+> Should `assignFrom` register it in the element's enhancementRegistry if not already present?
+
+Yes (and enanceAll).  Perhaps if a use case arises, we can introduce another override like (noRegister).
+
+> **Should `enhance` apply scope perimeter, or just use the raw querySelectorAll?**
+
+querySelectorAll.  We should spell out no support for "beVigilant", and point to mount-observer for such support.
+
+---
+
+## Response to Human Response II
+
+### On `EMCImportJSON` Naming
+
+It is descriptive but long. Alternatives:
+
+| Name | Meaning | Feel |
+|------|---------|------|
+| `EMCImportJSON` | Full description | Clear but verbose |
+| `emc` | Short for Element Mount Configuration | Very short, might be unclear to newcomers |
+| `emcPath` | The path to the EMC file | Shorter, hints at it being a path |
+| `from` | "Enhance from this config" | Collides with `options.from` |
+| `config` | Generic | Too generic |
+| `src` | Source path (like `<script src>`) | Short, familiar HTML concept |
+| `import` | "Import this EMC" | Reserved word (but fine as object key) |
+| `emcSrc` | EMC source path | Short enough, descriptive |
+
+**My pick: `emc`**
+
+It's the established term in your ecosystem. Anyone using mount-observer already knows what EMC means. And it's 3 characters:
+
+```ts
+await enhanceAll(shadowRoot, [
+    { emc: 'be-bound/emc.json', matching: '[name]' },
+    { emc: 'be-observant/emc.json', matching: '[itemprop]' },
+]);
+```
+
+If you want slightly more clarity without full verbosity, `emcSrc` works too.
+
+### On the Function Name: `enhanceAll`
+
+`enhanceAll` is clear and action-oriented. Alternatives considered:
+
+| Name | Feel |
+|------|------|
+| `enhanceAll` | "Enhance all matching elements" — clear |
+| `applyEnhancements` | More formal, slightly long |
+| `enhance` | Too generic as a standalone export |
+| `mount` | Collides with mount-observer concept |
+| `bulkEnhance` | Emphasizes the bulk aspect |
+
+I'd stick with **`enhanceAll`**.
+
+### On the `enhance` Option Name in `assignFrom`
+
+When it's an option on `assignFrom`, should it also be called `enhance`?
+
+```ts
+await assignFrom(shadowRoot, {}, {
+    from: vm,
+    enhance: [...]  // calls enhanceAll internally
+});
+```
+
+`enhance` as an option name is short and clear. It parallels `inferredAssignments` as a "post-processing" step.
+
+### Summary — Final Naming Proposal
+
+| Thing | Name |
+|-------|------|
+| Standalone function | `enhanceAll` |
+| Option on assignFrom/assignGingerly | `enhance` |
+| Config field for EMC path | `emc` |
+| Config field for selector override | `matching` |
+| Config field for attribute parsing | `parse` (default: `false`) |
+
+```ts
+// Standalone:
+import { enhanceAll } from 'assign-gingerly/enhanceAll.js';
+await enhanceAll(shadowRoot, [
+    { emc: 'be-bound/emc.json', matching: '[name]' },
+]);
+
+// As assignFrom option:
+await assignFrom(shadowRoot, {}, {
+    from: vm,
+    enhance: [
+        { emc: 'be-bound/emc.json', matching: '[name]' },
+    ]
+});
+```
+
+Does `emc` work as the field name, or do you prefer something else?
+
+---
+
+## Human Response III
+
+I agree with all your recommendations.  emc and enhanceAll for function, enhance within assignFrom.
+
+
