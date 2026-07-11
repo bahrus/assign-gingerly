@@ -123,3 +123,25 @@ export function parseIdRef(key) {
 
     return { varName, remainingPath };
 }
+
+/**
+ * Register an element in the WeakRef cache for fast subsequent access.
+ * Auto-assigns an ID if the element doesn't have one.
+ */
+export function registerInCache(target, varName, element) {
+    const rootNode = target.getRootNode?.() ?? target;
+
+    let cache = idCacheMap.get(rootNode);
+    if (!cache) {
+        cache = new Map();
+        idCacheMap.set(rootNode, cache);
+    }
+
+    let id = element.id;
+    if (!id) {
+        id = generateUniqueId(rootNode);
+        element.id = id;
+    }
+
+    cache.set(varName, { id, ref: new WeakRef(element) });
+}

@@ -74,10 +74,13 @@ export interface AssignFromOptions extends IAssignGingerlyOptions, ResolveValues
    * @example
    * inferredAssignments: {
    *     byItemprop: ['user', 'name', 'email'],  // or true for all source keys
+   *     beVigilant: true,  // watch for new matching elements (requires signal)
    * }
    */
   inferredAssignments?: {
     byItemprop?: string[] | true;
+    /** Watch for new matching elements via MutationObserver. Requires options.signal for cleanup. */
+    beVigilant?: boolean;
   };
 }
 
@@ -331,6 +334,15 @@ export async function assignFrom(
   if (options.inferredAssignments) {
     const { processInferredAssignments } = await import('./inferredAssignments.js');
     await processInferredAssignments(target, options.from, options.inferredAssignments);
+
+    // Set up MutationObserver for new matching elements if beVigilant
+    if (options.inferredAssignments.beVigilant) {
+      if (!options.signal) {
+        throw new Error('assignFrom: inferredAssignments.beVigilant requires options.signal (AbortSignal) for cleanup');
+      }
+      const { setupVigilantObserver } = await import('./beVigilant.js');
+      setupVigilantObserver(target, options.from, options.inferredAssignments, options.signal);
+    }
   }
 
   return target;
