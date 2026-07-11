@@ -500,3 +500,82 @@ Actually, looking at the inreferencer code, I wonder if we should be enhancing:
 
 and use that?  That would mean we need to move the newly ported in withScopePerimeter into the inferencer folder.
 
+
+---
+
+## Response to Human Response III
+
+### On Enhancing the `['|']` Method and Moving `withScopePerimeter`
+
+Looking at the inferencer code, the `['|']` method currently does:
+
+```ts
+['|'](itempropAttr: string){
+    return Array.from(this.enhancedElement.querySelectorAll(`[itemprop="${itempropAttr}"]`))
+        .map(x => new Infer(x, itempropAttr));
+}
+```
+
+It returns all `[itemprop]` elements regardless of nesting depth. To respect itemscope boundaries, it needs `withScopePerimeter` filtering:
+
+```ts
+['|'](itempropAttr: string){
+    const candidates = this.enhancedElement.querySelectorAll(`[itemprop="${itempropAttr}"]`);
+    return Array.from(candidates)
+        .filter(el => withScopePerimeter(this.enhancedElement, el, '[itemscope]'))
+        .map(x => new Infer(x, itempropAttr));
+}
+```
+
+**Moving `withScopePerimeter` into inferencer makes sense** because:
+- Inferencer needs it directly (for the `['|']`, `['@']` etc. methods)
+- It's ~15 lines, no dependencies
+- The steering rule says inferencer must be self-contained — so it can't import from a parent utility module anyway
+- Other code in assign-gingerly that needs it can import from the inferencer folder (that direction is fine)
+
+### On Adding `ish` to `inferValueProperty`
+
+The current `inferValueProperty` maps element → property name. Adding `ish`:
+
+```ts
+export function inferValueProperty(element: Element): string {
+    // Check for itemscope with a value → ish (manager routing)
+    const itemscope = element.getAttribute('itemscope');
+    if (itemscope !== null && itemscope !== '') {
+        return 'ish';
+    }
+    
+    const {localName} = element;
+    switch (localName) {
+        // ... existing cases
+    }
+}
+```
+
+**Note:** `itemscope` as a boolean attribute can be present with empty value (`<div itemscope>`). Your spec says "non-empty itemscope" means manager routing. So `<div itemscope="user-card">` → `ish`, but `<div itemscope>` (empty) → falls through to normal inference. That distinction is important.
+
+### The Plan
+
+1. Move `withScopePerimeter` into `inferencer/` (e.g., `inferencer/withScopePerimeter.ts`)
+2. Update `['|']` (and likely `['@']`, `['#']`, `['.']`) to filter with scope perimeter
+3. Add the `itemscope` → `ish` case to `inferValueProperty`
+4. Then build `inferredAssignments.byItemprop` in `assignFrom` using inferencer's enhanced `['|']` method
+
+### Questions
+
+1. **Should `withScopePerimeter` apply to all the query methods (`['@']` for name, `['#']` for id, `['.']` for class)?** Or only `['|']` (itemprop)? The itemprop case is the clearest need (nested itemscopes), but name/class/id could also benefit from scoping.
+
+2. **The `['|']` method currently doesn't accept a scope boundary selector as a parameter — should it?** Or should it always use `[itemscope]` as the boundary? I'd say always `[itemscope]` for the `['|']` method since that's the semantic boundary for itemprop.
+
+3. **For `inferredAssignments`: should assign-gingerly import `Infer` from the submodule and call `['|']` directly?** That would mean:
+   ```ts
+   import { Infer } from './inferencer/inferencer.js';
+   const infer = new Infer(targetElement);
+   const matches = infer['|']('user');  // scoped itemprop query → Infer[]
+   for (const match of matches) {
+       match.value = from['user'];  // uses inferValueProperty internally
+   }
+   ```
+   This keeps all the inference logic in the submodule and `inferredAssignments` just orchestrates.
+
+4. **Ready to implement once you confirm the approach.** I'll start with moving `withScopePerimeter` into inferencer and enhancing `inferValueProperty`.
