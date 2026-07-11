@@ -63,6 +63,22 @@ export interface AssignFromOptions extends IAssignGingerlyOptions, ResolveValues
    * }
    */
   handlers?: Record<string, AssignFromHandlerConstructor | string>;
+
+  /**
+   * Inferred assignments — automatically distribute source values to matching
+   * DOM elements based on structural conventions (itemprop, name, etc.).
+   * 
+   * Uses the inferencer submodule to determine the correct property for each
+   * matched element (textContent, value, checked, dateTime, ish, etc.).
+   * 
+   * @example
+   * inferredAssignments: {
+   *     byItemprop: ['user', 'name', 'email'],  // or true for all source keys
+   * }
+   */
+  inferredAssignments?: {
+    byItemprop?: string[] | true;
+  };
 }
 
 /**
@@ -309,6 +325,12 @@ export async function assignFrom(
 
       await processHandlerCommands(el, [syntheticKey], syntheticPattern, options);
     }
+  }
+
+  // Process inferred assignments — dynamically imported only when option is present
+  if (options.inferredAssignments) {
+    const { processInferredAssignments } = await import('./inferredAssignments.js');
+    await processInferredAssignments(target, options.from, options.inferredAssignments);
   }
 
   return target;

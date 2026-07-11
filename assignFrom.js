@@ -230,6 +230,11 @@ export async function assignFrom(target, pattern, options) {
             await processHandlerCommands(el, [syntheticKey], syntheticPattern, options);
         }
     }
+    // Process inferred assignments — dynamically imported only when option is present
+    if (options.inferredAssignments) {
+        const { processInferredAssignments } = await import('./inferredAssignments.js');
+        await processInferredAssignments(target, options.from, options.inferredAssignments);
+    }
     return target;
 }
 /**
