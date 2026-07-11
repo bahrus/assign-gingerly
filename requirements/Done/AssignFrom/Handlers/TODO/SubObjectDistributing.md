@@ -579,3 +579,17 @@ export function inferValueProperty(element: Element): string {
    This keeps all the inference logic in the submodule and `inferredAssignments` just orchestrates.
 
 4. **Ready to implement once you confirm the approach.** I'll start with moving `withScopePerimeter` into inferencer and enhancing `inferValueProperty`.
+
+---
+
+## Human Response IV
+
+> **Should `withScopePerimeter` apply to all the query methods (`['@']` for name, `['#']` for id, `['.']` for class)?** 
+
+> **The `['|']` method currently doesn't accept a scope boundary selector as a parameter — should it?**
+
+Maybe let's add an option scoping boundary selector to all the methods, but only ['|'] would default to 'itemscope'.
+
+> **For `inferredAssignments`: should assign-gingerly import `Infer` from the submodule and call `['|']` directly?**
+
+Yes.
