@@ -4126,6 +4126,45 @@ The `#[x]` + `withIds` pattern gives you the Map+WeakRef speed tier automaticall
 - **Scoped to rootNode** — works correctly inside Shadow DOM (IDs are scoped per shadow root).
 - **`assignFrom` only** — this feature is not available in `assignGingerly` or `assignTentatively`.
 
+## Inferred Assignments
+
+`assignFrom` can automatically distribute source values to matching DOM elements based on structural conventions — no manual path strings needed. The [inferencer](./inferencer/) submodule determines the correct property for each element type.
+
+```TypeScript
+const vm = {
+    name: 'Alice',
+    email: 'alice@example.com',
+    user: { role: 'admin', avatar: '/img/alice.png' }
+};
+
+await assignFrom(outerDiv, {}, {
+    from: vm,
+    inferredAssignments: {
+        byItemprop: ['name', 'email', 'user']
+    }
+});
+```
+
+For each key in `byItemprop`, this finds `[itemprop="${key}"]` elements within the target (respecting itemscope boundaries) and sets the value using the inferred property:
+
+| Element | Inferred Property |
+|---------|------------------|
+| `<span itemprop="name">` | `textContent` |
+| `<input itemprop="email">` | `value` |
+| `<time itemprop="date">` | `dateTime` |
+| `<data itemprop="count">` | `value` |
+| `<div itemprop="user" itemscope="user-card">` | `ish` (manager routing) |
+
+**Scope perimeter:** Queries respect itemscope boundaries — `[itemprop="name"]` inside a nested `[itemscope]` won't be matched from the outer scope (donut-hole scoping).
+
+**Pass `true` to infer all source keys:**
+
+```TypeScript
+inferredAssignments: { byItemprop: true }
+```
+
+For full details, see [docs/inferred-assignments.md](docs/inferred-assignments.md).
+
 ## Custom Assignment with `static assignTo` Protocol
 
 Classes can opt into custom assignment behavior by defining a `static assignTo` method. When `assignGingerly` encounters a property whose current value is an instance of such a class, it delegates the assignment to `assignTo` instead of performing the default merge/replace logic.
