@@ -157,3 +157,49 @@ inferredAssignments: {
     byName: ['firstName', 'lastName']  // finds [name="firstName"], etc.
 }
 ```
+
+## Reactive Observation with `beVigilant`
+
+When `beVigilant: true`, a `MutationObserver` watches the target for newly added `[itemprop]` elements and applies inferred assignments automatically. This covers lazily-loaded content (e.g., cloned templates, dynamically rendered views) that appears after the initial `assignFrom` call.
+
+```TypeScript
+const controller = new AbortController();
+
+await assignFrom(container, {}, {
+    from: vm,
+    signal: controller.signal,  // Required for cleanup
+    inferredAssignments: {
+        byItemprop: ['name', 'email', 'user'],
+        beVigilant: true,
+    }
+});
+
+// Later, a template is cloned into the container:
+// <span itemprop="name"></span> appears → automatically gets vm.name
+
+// Cleanup (disconnects the observer):
+controller.abort();
+```
+
+**How it works:**
+
+1. A `MutationObserver` watches the target with `childList: true`, `subtree: true`, and `attributes: true` (filtered to `itemprop`).
+2. When new elements are added, the observer scans them (and their descendants) for `[itemprop]` matches.
+3. When an existing element's `itemprop` attribute is added or changed, it's also processed.
+4. Matching elements are assigned via the inferencer (same logic as the initial pass).
+5. Scope perimeter is respected — elements inside nested `[itemscope]` boundaries are excluded.
+6. Newly discovered elements are added to the WeakRef cache for fast subsequent access.
+7. The observer reads `from[key]` at observation time (the live current value, not a snapshot).
+
+**Requirements:**
+
+- `options.signal` (AbortSignal) is **required** when `beVigilant: true` — throws if missing. This ensures the observer is always cleaned up.
+- The `beVigilant` module is loaded dynamically on demand — no cost when not used.
+
+**Use with a reactive system (roundabout):**
+
+`beVigilant` is designed to work within reactive merge cycles. When roundabout re-calls `assignFrom` on property changes, existing elements are updated normally. `beVigilant` fills the gap for elements that appear *between* merge cycles — ensuring they're populated immediately with the current VM state rather than remaining empty until the next cycle.
+
+**Performance note:**
+
+MutationObservers have overhead for large or frequently-mutating DOMs. Use `beVigilant` only when content is genuinely added dynamically after the initial render. For static DOM structures, the initial `inferredAssignments` pass is sufficient.
