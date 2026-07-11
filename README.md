@@ -4165,6 +4165,65 @@ inferredAssignments: { byItemprop: true }
 
 For full details, see [docs/inferred-assignments.md](docs/inferred-assignments.md).
 
+## Bulk Enhancement with `enhance` and `enhanceAll`
+
+Apply enhancements in bulk to matching elements using EMC (Element Mount Configuration) JSON files that enhancement packages already publish. No manual registration step needed — enhancements are auto-loaded and registered on demand.
+
+```TypeScript
+import { assignFrom } from 'assign-gingerly/assignFrom.js';
+
+await assignFrom(shadowRoot, { /* normal assignments */ }, {
+    from: vm,
+    enhance: [
+        { emc: 'be-bound/emc.json', matching: '[name]' },
+        { emc: 'be-observant/emc.json', matching: '[itemprop]' },
+    ]
+});
+```
+
+**How it works:**
+
+1. Dynamically imports each EMC JSON file
+2. Extracts the `enhConfig` (spawn path, enhKey)
+3. Finds matching elements via `querySelectorAll` (using `matching` override, or the EMC's own selector)
+4. Registers the enhancement in the element's `enhancementRegistry` if not already present
+5. Spawns the enhancement on each matched element via `element.enh.get(registryItem)`
+
+**Standalone usage (without `assignFrom`):**
+
+```TypeScript
+import { enhanceAll } from 'assign-gingerly/enhanceAll.js';
+
+await enhanceAll(shadowRoot, [
+    { emc: 'be-bound/emc.json', matching: '[name]' },
+]);
+```
+
+**With `assignGingerly` (fire-and-forget):**
+
+```TypeScript
+assignGingerly(shadowRoot, {
+    '?.someProperty': 'value'
+}, {
+    enhance: [{ emc: 'be-bound/emc.json', matching: '[name]' }]
+});
+// Enhancements apply asynchronously in the background
+```
+
+**Configuration:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `emc` | `string` | Path to EMC JSON file (dynamically imported) |
+| `matching` | `string?` | CSS selector override (defaults to EMC's own selector) |
+| `parse` | `boolean?` | Parse attributes via withAttrs (default: `false`, Phase II) |
+
+**Notes:**
+
+- No scope perimeter is applied — the selector does all filtering. For reactive observation of new elements, use [mount-observer](https://github.com/bahrus/mount-observer) instead.
+- Requires JSON module import support (`import ... with { type: 'json' }`).
+- Enhancement modules are loaded lazily — zero cost until `enhance` is used.
+
 ## Custom Assignment with `static assignTo` Protocol
 
 Classes can opt into custom assignment behavior by defining a `static assignTo` method. When `assignGingerly` encounters a property whose current value is an instance of such a class, it delegates the assignment to `assignTo` instead of performing the default merge/replace logic.
