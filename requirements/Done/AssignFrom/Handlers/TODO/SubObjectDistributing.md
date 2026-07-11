@@ -485,5 +485,18 @@ Direct sounds much better.
 
 Async, and only load conditional code dynamically on demand.
 
+> **Should I update the inferencer submodule first (add itemscope → ish inference), then build `inferredAssignments` on top?**
 
+Yes.
+
+Actually, looking at the inreferencer code, I wonder if we should be enhancing:
+
+```JS
+['|'](itempropAttr: string){
+    return Array.from(this.enhancedElement.querySelectorAll(`[itemprop="${itempropAttr}"]`))
+        .map(x => new Infer(x, itempropAttr));
+}
+```
+
+and use that?  That would mean we need to move the newly ported in withScopePerimeter into the inferencer folder.
 
