@@ -145,3 +145,142 @@ Would you like me to write up those changes as a more detailed spec you can hand
 ## Me again
 
 Before proceeding down this road, I would like to please add more typing to the resolve object used by lazyLoad.ts and lazyLoadSwitch.ts.  I see "any" where I want to see the supported structure of resolve.  Maybe we already have a way of specify the insertion point?
+
+---
+
+## Response — Typing First
+
+Good instinct to type things before adding features. Let's look at what exists and what's missing.
+
+### What Already Exists (in `types/assign-gingerly/types.d.ts`)
+
+There's a `LazyLoadConfig` interface that types the *config object* (the thing you write in the pattern):
+
+```ts
+export interface LazyLoadConfig extends HandlerConfig {
+    do: 'builtIns.lazyLoad';
+    resolve: {
+        if: string;
+        instantiate: string;
+        method?: string;
+        forget?: boolean | string;
+        onInstantiated?: string;
+    };
+}
+```
+
+This types the JSON config (pre-resolution). The `resolve` values are strings (path expressions or protocols) because they haven't been resolved yet.
+
+### What's Missing
+
+1. **The *resolved* params interface** — what the handler's `assign()` method actually receives after `resolveValues` processes the `resolve` map. Currently it's `Record<string, any>`. Should be:
+
+```ts
+export interface LazyLoadResolvedParams {
+    /** Condition — resolved to actual boolean/truthy value */
+    if: any;
+    /** Template element — resolved to HTMLTemplateElement or DocumentFragment */
+    instantiate: HTMLTemplateElement | DocumentFragment;
+    /** Insertion method (default: 'appendChild') */
+    method?: 'appendChild' | 'prepend';
+    /** Remove nodes on hide instead of using hidden attribute */
+    forget?: boolean;
+    /** Enable view transitions */
+    transitional?: boolean;
+    /** CSS class for hiding (default: 'ag-hide', only used when transitional: true) */
+    hideClass?: string;
+    /** Callback after clone+insert */
+    onInstantiated?: (ctx: LazyLoadInstantiatedContext) => void | Promise<void>;
+}
+```
+
+2. **The `LazyLoadConfig.resolve` is out of date** — missing `transitional`, `hideClass` (added recently).
+
+3. **`LazyLoadSwitchHandler` has no typed params** — it adds `lhs`, `op`, `rhs`.
+
+4. **The handler class itself uses `any` everywhere** — `config: any`, `resolvedParams: Record<string, any>`.
+
+### What I'd Suggest
+
+**Step 1: Define `LazyLoadResolvedParams`** in the types file (the post-resolution shape):
+
+```ts
+export interface LazyLoadResolvedParams {
+    if: any;
+    instantiate: HTMLTemplateElement | DocumentFragment;
+    method?: 'appendChild' | 'prepend';
+    forget?: boolean;
+    transitional?: boolean;
+    hideClass?: string;
+    onInstantiated?: (ctx: LazyLoadInstantiatedContext) => void | Promise<void>;
+}
+```
+
+**Step 2: Update `LazyLoadConfig.resolve`** to include the new fields:
+
+```ts
+export interface LazyLoadConfig extends HandlerConfig {
+    do: 'builtIns.lazyLoad';
+    resolve: {
+        if: string;
+        instantiate: string;
+        method?: string;
+        forget?: boolean | string;
+        transitional?: boolean | string;
+        hideClass?: string;
+        onInstantiated?: string;
+    };
+}
+```
+
+**Step 3: Add `LazyLoadSwitchConfig`** and `LazyLoadSwitchResolvedParams`:
+
+```ts
+export interface LazyLoadSwitchConfig extends HandlerConfig {
+    do: 'builtIns.lazyLoadSwitch';
+    resolve: {
+        lhs: string;
+        op?: '===' | '!==' | '==' | '!=' | '<' | '>' | '<=' | '>=';
+        rhs: string;
+        instantiate: string;
+        method?: string;
+        forget?: boolean | string;
+        transitional?: boolean | string;
+        hideClass?: string;
+        onInstantiated?: string;
+    };
+}
+
+export interface LazyLoadSwitchResolvedParams extends Omit<LazyLoadResolvedParams, 'if'> {
+    lhs: any;
+    op?: '===' | '!==' | '==' | '!=' | '<' | '>' | '<=' | '>=';
+    rhs: any;
+}
+```
+
+**Step 4: Update handler classes** to use the typed params:
+
+```ts
+// In lazyLoad.ts:
+async assign(lhsTarget: any, resolvedParams: LazyLoadResolvedParams): Promise<void> {
+
+// In lazyLoadSwitch.ts:
+async assign(lhsTarget: any, resolvedParams: LazyLoadSwitchResolvedParams): Promise<void> {
+```
+
+### On Whether We Already Have a Way to Specify Insertion Point
+
+Looking at the current `method` param:
+- `'appendChild'` — inserts at the end of `lhsTarget` (inside it)
+- `'prepend'` — inserts at the beginning of `lhsTarget` (inside it)
+
+There's **no** existing way to say "insert as a sibling after element X." That's the new capability needed for `be-switched` reuse (`insertionMode: 'sibling'` + `anchor`).
+
+### Recommendation
+
+Let's do typing first (Steps 1-4), then revisit the `be-switched` reuse topic with proper types in place. The typing exercise will also reveal whether adding `insertionMode` / `anchor` / `onShow` / `onHide` to the resolved params makes the interface too heavy — or whether a subclass approach (where `be-switched` extends `LazyLoadHandler` and overrides specific methods) is cleaner.
+
+### Questions
+
+1. **Should I implement the typing now (Steps 1-4)?** It's non-breaking — just adds types that match existing runtime behavior.
+2. **Should `LazyLoadResolvedParams` be exported from `handlers/lazyLoad.ts` directly, or only from `types.d.ts`?** I'd say both — the handler module exports it for direct consumers, the types file for ambient/declaration consumers.
