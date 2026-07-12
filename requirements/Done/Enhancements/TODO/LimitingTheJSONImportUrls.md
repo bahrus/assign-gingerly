@@ -130,3 +130,129 @@ await assignFrom(el, {}, { from: vm, enhance: [...] }, {crossDomainImport: true}
 ```
 
 
+
+---
+
+## Response
+
+### On the 4th Parameter Approach
+
+Makes sense — separating "what to do" (options, potentially from untrusted HTML attributes) from "what's allowed" (permissions, only settable by trusted script) is a solid security boundary.
+
+```ts
+// Signature:
+assignFrom(target, pattern, options, permissions?)
+assignGingerly(target, source, options, permissions?)
+enhanceAll(target, configs, permissions?)
+```
+
+Where `permissions`:
+```ts
+interface AssignPermissions {
+    crossDomainImports?: boolean;  // default: false
+}
+```
+
+The key insight: `options` can come from parsed HTML attributes (untrusted). `permissions` can only come from the JavaScript that calls the function (trusted). An attacker who controls HTML attributes can't escalate to cross-domain imports because they can't set the 4th argument.
+
+### On the Name `TBD`
+
+For the interface name, some options:
+
+| Name | Feel |
+|------|------|
+| `AssignPermissions` | Clear, descriptive |
+| `SecurityOptions` | Generic |
+| `AllowList` | Implies more granularity than we have |
+| `Permissions` | Short, clear |
+| `TrustLevel` | Hmm |
+
+I'd go with **`AssignPermissions`** — it's specific to this package and clearly communicates "these are permissions the caller grants."
+
+### On Inferencer Exports
+
+The `files` field in `package.json`:
+```json
+"files": ["*.js", "*.ts", "README.md", "LICENSE", "types/assign-gingerly/types.d.ts"]
+```
+
+This glob (`*.js`, `*.ts`) only matches files in the root — not `inferencer/` subdirectory. To publish inferencer files, you'd need to add:
+```json
+"files": ["*.js", "*.ts", "inferencer/**", "README.md", "LICENSE", "types/assign-gingerly/types.d.ts"]
+```
+
+And for the exports map, re-exporting inferencer's modules with the prefix:
+```json
+"./inferencer/inferencer.js": {
+    "default": "./inferencer/inferencer.js",
+    "types": "./inferencer/inferencer.ts"
+},
+"./inferencer/withScopePerimeter.js": {
+    "default": "./inferencer/withScopePerimeter.js",
+    "types": "./inferencer/withScopePerimeter.ts"
+}
+```
+
+This way consumers can:
+```ts
+import { Infer } from 'assign-gingerly/inferencer/inferencer.js';
+import { withScopePerimeter } from 'assign-gingerly/inferencer/withScopePerimeter.js';
+```
+
+Without needing `inferencer` as a separate dependency in their `package.json`.
+
+### Implementation Plan
+
+1. Create `isAllowedImportPath.ts/.js` — standalone exported module
+2. Add `AssignPermissions` interface
+3. Update function signatures: `assignGingerly`, `assignFrom`, `enhanceAll` get optional 4th/3rd `permissions` parameter
+4. Wire `isAllowedImportPath` check into `enhanceAll` and `processHandlerCommands`, gated by `permissions.crossDomainImports`
+5. Fix `package.json`:
+   - Add `"inferencer/**"` to `files`
+   - Remove stale `./withScopePerimeter.js` export
+   - Add inferencer exports, `isAllowedImportPath`, `inferredAssignments`, `beVigilant`
+6. Pass `permissions` through from `assignFrom` → `enhanceAll` and → `processHandlerCommands`
+
+### One Consideration
+
+Adding a 4th parameter to `assignGingerly` is a signature change. Currently:
+```ts
+assignGingerly(target, source, options?)
+```
+Becomes:
+```ts
+assignGingerly(target, source, options?, permissions?)
+```
+
+Since `options` is already optional and `permissions` is also optional, this is backward-compatible. No existing callers break.
+
+Same for `assignFrom`:
+```ts
+assignFrom(target, pattern, options)  // options is required (has `from`)
+```
+Becomes:
+```ts
+assignFrom(target, pattern, options, permissions?)
+```
+
+And `enhanceAll`:
+```ts
+enhanceAll(target, configs)
+```
+Becomes:
+```ts
+enhanceAll(target, configs, permissions?)
+```
+
+All backward-compatible.
+
+### Ready to implement if you confirm:
+- Interface name: `AssignPermissions`
+- Field: `crossDomainImports: boolean` (default `false`)
+- Position: last parameter on all three functions
+
+---
+
+## Human Response II
+
+We are in agreement.  Please proceed implementing.
