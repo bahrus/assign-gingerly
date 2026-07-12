@@ -42,7 +42,7 @@ export class EnhancementRegistry extends EventTarget {
         }
         // Dispatch event after adding items
         this.dispatchEvent(new EnhancementRegisteredEvent(items));
-        // Process features if present (fire-and-forget)
+        // Process features if present (fire-and-forget, uses shared featuresRegistry)
         const itemsArr = Array.isArray(items) ? items : [items];
         for (const item of itemsArr) {
             if (item.features) {
@@ -104,7 +104,7 @@ export class ItemscopeRegistry extends EventTarget {
         }
         this.#configs.set(name, config);
         this.dispatchEvent(new Event(name));
-        // Process features if present (fire-and-forget)
+        // Process features if present (fire-and-forget, uses shared featuresRegistry)
         if (config.features) {
             this.#assignFeatures(config.manager, config.features);
         }
@@ -542,7 +542,7 @@ function applyAliases(key, aliasMap) {
 /**
  * Main assignGingerly function
  */
-export function assignGingerly(target, source, options) {
+export function assignGingerly(target, source, options, permissions) {
     if (!target || typeof target !== 'object') {
         return target;
     }
@@ -1084,6 +1084,12 @@ export function assignGingerly(target, source, options) {
                 });
             },
             configurable: true,
+        });
+    }
+    // Fire-and-forget bulk enhancements (async, non-blocking)
+    if (options?.enhance && options.enhance.length > 0 && typeof target === 'object' && target instanceof Element) {
+        import('./enhanceAll.js').then(({ enhanceAll }) => {
+            enhanceAll(target, options.enhance, permissions);
         });
     }
     return target;

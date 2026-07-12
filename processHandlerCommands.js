@@ -5,6 +5,7 @@
  */
 import { resolveValues } from './resolveValues.js';
 import { evaluatePathWithMethods } from './assignGingerly.js';
+import { isAllowedImportPath } from './isAllowedImportPath.js';
 /**
  * Map of built-in handler names to their module paths.
  * These are auto-loaded on demand — no explicit import required.
@@ -16,21 +17,16 @@ const BUILT_IN_MAP = {
     'builtIns.microDataJoin': './handlers/microDataJoin.js',
 };
 /**
- * Check if an import path is allowed (non-cross-domain).
- */
-function isAllowedImportPath(path) {
-    return path.startsWith('./') || path.startsWith('../') || path.startsWith('/')
-        || (!path.includes('://') && !path.startsWith('//'));
-}
-/**
  * Find a handler class in a dynamically imported module.
  * Checks default export first, then searches for the first class with `assign` on prototype.
  */
 function findHandlerInModule(module) {
+    // Check default export first
     if (module.default && typeof module.default === 'function'
         && module.default.prototype && 'assign' in module.default.prototype) {
         return module.default;
     }
+    // Search other exports
     for (const key of Object.keys(module)) {
         const exported = module[key];
         if (typeof exported === 'function' && exported.prototype && 'assign' in exported.prototype) {
@@ -41,6 +37,7 @@ function findHandlerInModule(module) {
 }
 /**
  * Dynamically load a built-in handler by name.
+ * Returns the handler constructor, or undefined if the name isn't a recognized built-in.
  */
 async function loadBuiltIn(name) {
     const path = BUILT_IN_MAP[name];
@@ -52,26 +49,25 @@ async function loadBuiltIn(name) {
 /**
  * Resolve a handler from options.handlers (class constructor or import path).
  */
-async function resolveFromHandlers(name, handlers) {
+async function resolveFromHandlers(name, handlers, permissions) {
     if (!handlers || !(name in handlers))
         return undefined;
     const entry = handlers[name];
+    // Class constructor — use directly
     if (typeof entry === 'function') {
         return entry;
     }
+    // Import path string — validate and dynamically import
     if (typeof entry === 'string') {
-        if (!isAllowedImportPath(entry)) {
-            throw new Error(
-                `assignFrom: handler "${name}" has an invalid import path "${entry}". ` +
-                `Only relative, absolute, or bare specifier paths are allowed (no cross-domain URLs).`
-            );
+        if (!permissions?.crossDomainImports && !isAllowedImportPath(entry)) {
+            throw new Error(`assignFrom: handler "${name}" has an invalid import path "${entry}". ` +
+                `Only relative, absolute, or bare specifier paths are allowed (no cross-domain URLs). ` +
+                `Pass { crossDomainImports: true } in permissions to override.`);
         }
         const module = await import(entry);
         const HandlerClass = findHandlerInModule(module);
         if (!HandlerClass) {
-            throw new Error(
-                `assignFrom: handler "${name}" — module "${entry}" does not export a valid handler class.`
-            );
+            throw new Error(`assignFrom: handler "${name}" — module "${entry}" does not export a valid handler class.`);
         }
         return HandlerClass;
     }
@@ -84,8 +80,9 @@ async function resolveFromHandlers(name, handlers) {
  * @param handlerKeys - Array of keys ending with ' =>'
  * @param pattern - The original pattern object
  * @param options - The assignFrom options
+ * @param handlerRegistry - The registry of handler classes
  */
-export async function processHandlerCommands(target, handlerKeys, pattern, options) {
+export async function processHandlerCommands(target, handlerKeys, pattern, options, permissions) {
     for (const key of handlerKeys) {
         const lhsPath = key.substring(0, key.length - 3); // Remove ' =>'
         const rhs = pattern[key];
@@ -104,6 +101,7 @@ export async function processHandlerCommands(target, handlerKeys, pattern, optio
         if (configs.length === 0)
             continue;
         // Resolve the LHS path, preserving parent + key for return-value assignment.
+        // lhsParent[lhsKey] === lhsTarget (the current value at the path)
         let lhsTarget;
         let lhsParent = undefined;
         let lhsKey = undefined;
@@ -119,13 +117,15 @@ export async function processHandlerCommands(target, handlerKeys, pattern, optio
                 lhsParent = result.target;
                 lhsKey = result.lastKey;
                 lhsTarget = result.target[result.lastKey];
+                // If last key is a method, call it to get the target
                 if (result.isMethod && typeof result.target[result.lastKey] === 'function') {
                     lhsTarget = result.target[result.lastKey].call(result.target);
-                    lhsParent = undefined;
+                    lhsParent = undefined; // Can't assign back to a method call result
                     lhsKey = undefined;
                 }
             }
             else {
+                // Simple path navigation — walk to parent, keep last key
                 if (pathParts.length === 0) {
                     lhsTarget = target;
                 }
@@ -158,7 +158,7 @@ export async function processHandlerCommands(target, handlerKeys, pattern, optio
         // Execute handlers sequentially, sharing the same lhsTarget
         for (const config of configs) {
             // 1. Check options.handlers (local, per-call)
-            let HandlerClass = await resolveFromHandlers(config.do, options.handlers);
+            let HandlerClass = await resolveFromHandlers(config.do, options.handlers, permissions);
             // 2. Fallback to built-in auto-load
             if (!HandlerClass && config.do.startsWith('builtIns.')) {
                 HandlerClass = await loadBuiltIn(config.do);

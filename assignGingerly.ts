@@ -2,6 +2,7 @@
 
 import { EnhancementConfig } from "./types/assign-gingerly/types";
 import type { FeatureConfigsMap } from "./types/assign-gingerly/types";
+import type { AssignPermissions } from "./isAllowedImportPath.js";
 
 /**
  * Constructor signature for ItemScope Manager classes
@@ -735,7 +736,8 @@ function applyAliases(key: string, aliasMap: Map<string, string>): string {
 export function assignGingerly(
   target: any,
   source: Record<string | symbol, any>,
-  options?: IAssignGingerlyOptions
+  options?: IAssignGingerlyOptions,
+  permissions?: AssignPermissions
 ): any {
   if (!target || typeof target !== 'object') {
     return target;
@@ -1321,7 +1323,7 @@ export function assignGingerly(
   // Fire-and-forget bulk enhancements (async, non-blocking)
   if (options?.enhance && options.enhance.length > 0 && typeof target === 'object' && target instanceof Element) {
     import('./enhanceAll.js').then(({ enhanceAll }) => {
-      enhanceAll(target, options!.enhance!);
+      enhanceAll(target, options!.enhance!, permissions);
     });
   }
 

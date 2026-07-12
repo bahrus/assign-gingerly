@@ -140,7 +140,7 @@ function mergeHandlerDuplicates(entries) {
     }
     return result;
 }
-export async function assignFrom(target, pattern, options) {
+export async function assignFrom(target, pattern, options, permissions) {
     // First: expand looped substitution variables (${x}, ${y}, ${z})
     const expandedPattern = expandSubstitutions(pattern, options);
     // Separate handler commands ( =>), #[x] keys, and normal keys
@@ -180,27 +180,25 @@ export async function assignFrom(target, pattern, options) {
         const { resolveIdVariable, parseIdRef } = await import('./resolveIdRef.js');
         for (const key of idRefNormalKeys) {
             const parsed = parseIdRef(key);
-            if (!parsed) continue;
+            if (!parsed)
+                continue;
             const el = resolveIdVariable(parsed.varName, target, options.withIds);
-            if (!el) continue;
+            if (!el)
+                continue;
             const value = expandedPattern[key];
             if (parsed.remainingPath) {
                 // Resolve the RHS value
-                const resolvedValue = await resolveValues(
-                    { __v: value }, options.from,
-                    { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols }
-                );
+                const resolvedValue = await resolveValues({ __v: value }, options.from, { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols });
                 // Apply remaining path on the resolved element
                 assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options);
             }
             else {
                 // No remaining path — resolve and assign directly to the element
-                const resolvedValue = await resolveValues(
-                    typeof value === 'object' && value !== null ? value : { __v: value },
-                    options.from,
-                    { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols }
-                );
-                if (!('__v' in resolvedValue)) {
+                const resolvedValue = await resolveValues(typeof value === 'object' && value !== null ? value : { __v: value }, options.from, { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols });
+                if ('__v' in resolvedValue) {
+                    // Single value — can't assign to element root without a path
+                }
+                else {
                     assignGingerly(el, resolvedValue, options);
                 }
             }
@@ -209,7 +207,7 @@ export async function assignFrom(target, pattern, options) {
     // Process handler commands ( =>) — dynamically imported only when needed
     if (handlerKeys.length > 0) {
         const { processHandlerCommands } = await import('./processHandlerCommands.js');
-        await processHandlerCommands(target, handlerKeys, expandedPattern, options);
+        await processHandlerCommands(target, handlerKeys, expandedPattern, options, permissions);
     }
     // Process #[x] handler keys — resolve element, then pass to handler processing
     if (idRefHandlerKeys.length > 0 && options.withIds) {
@@ -217,17 +215,20 @@ export async function assignFrom(target, pattern, options) {
         const { processHandlerCommands } = await import('./processHandlerCommands.js');
         for (const key of idRefHandlerKeys) {
             const parsed = parseIdRef(key);
-            if (!parsed) continue;
+            if (!parsed)
+                continue;
             const el = resolveIdVariable(parsed.varName, target, options.withIds);
-            if (!el) continue;
-            // Build a synthetic key for processHandlerCommands
+            if (!el)
+                continue;
+            // Build a synthetic key for processHandlerCommands:
+            // The resolved element becomes the target, remaining path is the LHS
             const syntheticKey = parsed.remainingPath
                 ? `${parsed.remainingPath} =>`
                 : ' =>';
             const syntheticPattern = {
                 [syntheticKey]: expandedPattern[key]
             };
-            await processHandlerCommands(el, [syntheticKey], syntheticPattern, options);
+            await processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissions);
         }
     }
     // Process inferred assignments — dynamically imported only when option is present
@@ -246,7 +247,7 @@ export async function assignFrom(target, pattern, options) {
     // Process bulk enhancements — dynamically imported only when option is present
     if (options.enhance && options.enhance.length > 0) {
         const { enhanceAll } = await import('./enhanceAll.js');
-        await enhanceAll(target, options.enhance);
+        await enhanceAll(target, options.enhance, permissions);
     }
     return target;
 }

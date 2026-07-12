@@ -21,6 +21,7 @@
  */
 import { resolveValues, ResolveValuesOptions } from './resolveValues.js';
 import assignGingerly, { IAssignGingerlyOptions } from './assignGingerly.js';
+import type { AssignPermissions } from './isAllowedImportPath.js';
 
 export interface AssignFromOptions extends IAssignGingerlyOptions, ResolveValuesOptions {
   /** Source object to resolve RHS path strings against */
@@ -241,7 +242,8 @@ function mergeHandlerDuplicates(entries: [string, any][]): Record<string, any> {
 export async function assignFrom(
   target: any,
   pattern: Record<string, any>,
-  options: AssignFromOptions
+  options: AssignFromOptions,
+  permissions?: AssignPermissions
 ): Promise<any> {
   // First: expand looped substitution variables (${x}, ${y}, ${z})
   const expandedPattern = expandSubstitutions(pattern, options);
@@ -318,7 +320,7 @@ export async function assignFrom(
   // Process handler commands ( =>) — dynamically imported only when needed
   if (handlerKeys.length > 0) {
     const { processHandlerCommands } = await import('./processHandlerCommands.js');
-    await processHandlerCommands(target, handlerKeys, expandedPattern, options);
+    await processHandlerCommands(target, handlerKeys, expandedPattern, options, permissions);
   }
 
   // Process #[x] handler keys — resolve element, then pass to handler processing
@@ -343,7 +345,7 @@ export async function assignFrom(
         [syntheticKey]: expandedPattern[key]
       };
 
-      await processHandlerCommands(el, [syntheticKey], syntheticPattern, options);
+      await processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissions);
     }
   }
 
@@ -365,7 +367,7 @@ export async function assignFrom(
   // Process bulk enhancements — dynamically imported only when option is present
   if (options.enhance && options.enhance.length > 0) {
     const { enhanceAll } = await import('./enhanceAll.js');
-    await enhanceAll(target, options.enhance);
+    await enhanceAll(target, options.enhance, permissions);
   }
 
   return target;

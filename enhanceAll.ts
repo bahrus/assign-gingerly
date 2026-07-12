@@ -16,6 +16,9 @@
  * ]);
  */
 
+import { isAllowedImportPath } from './isAllowedImportPath.js';
+import type { AssignPermissions } from './isAllowedImportPath.js';
+
 /**
  * Configuration for a single enhancement to apply in bulk.
  */
@@ -46,9 +49,19 @@ export interface EnhanceConfig {
  */
 export async function enhanceAll(
     target: Element,
-    configs: EnhanceConfig[]
+    configs: EnhanceConfig[],
+    permissions?: AssignPermissions
 ): Promise<void> {
     for (const config of configs) {
+        // Validate EMC path unless cross-domain imports are explicitly permitted
+        if (!permissions?.crossDomainImports && !isAllowedImportPath(config.emc)) {
+            throw new Error(
+                `enhanceAll: EMC path "${config.emc}" is a cross-domain URL. ` +
+                `Only relative, absolute, or bare specifier paths are allowed by default. ` +
+                `Pass { crossDomainImports: true } in permissions to override.`
+            );
+        }
+
         // 1. Import the EMC JSON
         const emcModule = await import(config.emc, { with: { type: 'json' } });
         const emc = emcModule.default ?? emcModule;

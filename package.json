@@ -17,6 +17,8 @@
   "files": [
     "*.js",
     "*.ts",
+    "handlers/**",
+    "inferencer/**",
     "README.md",
     "LICENSE",
     "types/assign-gingerly/types.d.ts"
@@ -104,6 +106,26 @@
       "default": "./enhanceAll.js",
       "types": "./enhanceAll.ts"
     },
+    "./isAllowedImportPath.js": {
+      "default": "./isAllowedImportPath.js",
+      "types": "./isAllowedImportPath.ts"
+    },
+    "./inferredAssignments.js": {
+      "default": "./inferredAssignments.js",
+      "types": "./inferredAssignments.ts"
+    },
+    "./beVigilant.js": {
+      "default": "./beVigilant.js",
+      "types": "./beVigilant.ts"
+    },
+    "./inferencer/inferencer.js": {
+      "default": "./inferencer/inferencer.js",
+      "types": "./inferencer/inferencer.ts"
+    },
+    "./inferencer/withScopePerimeter.js": {
+      "default": "./inferencer/withScopePerimeter.js",
+      "types": "./inferencer/withScopePerimeter.ts"
+    },
     "./assignFrom.js": {
       "default": "./assignFrom.js",
       "types": "./assignFrom.ts"
@@ -115,10 +137,6 @@
     "./evaluatePathWithAsyncMethods.js": {
       "default": "./evaluatePathWithAsyncMethods.js",
       "types": "./evaluatePathWithAsyncMethods.ts"
-    },
-    "./withScopePerimeter.js": {
-      "default": "./withScopePerimeter.js",
-      "types": "./withScopePerimeter.ts"
     }
   },
   "main": "index.js",

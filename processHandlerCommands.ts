@@ -6,6 +6,8 @@
 
 import { resolveValues } from './resolveValues.js';
 import { evaluatePathWithMethods } from './assignGingerly.js';
+import { isAllowedImportPath } from './isAllowedImportPath.js';
+import type { AssignPermissions } from './isAllowedImportPath.js';
 import type { AssignFromOptions, AssignFromHandlerConstructor } from './assignFrom.js';
 
 /**
@@ -18,14 +20,6 @@ const BUILT_IN_MAP: Record<string, string> = {
     'builtIns.join': './handlers/join.js',
     'builtIns.microDataJoin': './handlers/microDataJoin.js',
 };
-
-/**
- * Check if an import path is allowed (non-cross-domain).
- */
-function isAllowedImportPath(path: string): boolean {
-    return path.startsWith('./') || path.startsWith('../') || path.startsWith('/')
-        || (!path.includes('://') && !path.startsWith('//'));
-}
 
 /**
  * Find a handler class in a dynamically imported module.
@@ -63,7 +57,8 @@ async function loadBuiltIn(name: string): Promise<AssignFromHandlerConstructor |
  */
 async function resolveFromHandlers(
     name: string,
-    handlers: Record<string, AssignFromHandlerConstructor | string> | undefined
+    handlers: Record<string, AssignFromHandlerConstructor | string> | undefined,
+    permissions?: AssignPermissions
 ): Promise<AssignFromHandlerConstructor | undefined> {
     if (!handlers || !(name in handlers)) return undefined;
 
@@ -76,10 +71,11 @@ async function resolveFromHandlers(
 
     // Import path string — validate and dynamically import
     if (typeof entry === 'string') {
-        if (!isAllowedImportPath(entry)) {
+        if (!permissions?.crossDomainImports && !isAllowedImportPath(entry)) {
             throw new Error(
                 `assignFrom: handler "${name}" has an invalid import path "${entry}". ` +
-                `Only relative, absolute, or bare specifier paths are allowed (no cross-domain URLs).`
+                `Only relative, absolute, or bare specifier paths are allowed (no cross-domain URLs). ` +
+                `Pass { crossDomainImports: true } in permissions to override.`
             );
         }
         const module = await import(entry);
@@ -108,7 +104,8 @@ export async function processHandlerCommands(
     target: any,
     handlerKeys: string[],
     pattern: Record<string, any>,
-    options: AssignFromOptions
+    options: AssignFromOptions,
+    permissions?: AssignPermissions
 ): Promise<void> {
     for (const key of handlerKeys) {
         const lhsPath = key.substring(0, key.length - 3); // Remove ' =>'
@@ -185,7 +182,7 @@ export async function processHandlerCommands(
         // Execute handlers sequentially, sharing the same lhsTarget
         for (const config of configs) {
             // 1. Check options.handlers (local, per-call)
-            let HandlerClass = await resolveFromHandlers(config.do, options.handlers);
+            let HandlerClass = await resolveFromHandlers(config.do, options.handlers, permissions);
 
             // 2. Fallback to built-in auto-load
             if (!HandlerClass && config.do.startsWith('builtIns.')) {
