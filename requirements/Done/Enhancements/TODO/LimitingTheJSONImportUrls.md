@@ -87,6 +87,10 @@ Looking at `package.json` exports, I spotted issues:
 
 ## Human Response I
 
+> **Extract to a standalone, exported module** (`isAllowedImportPath.ts/.js`) so it's reusable across `processHandlerCommands`, `enhanceAll`, and by downstream packages.
+
+Total agreement.
+
 I'm not convinced ./beVigilant.js should be exportable.  Other than that, the missing ones should be.
 
 Is:
@@ -103,10 +107,26 @@ Is:
 
 going to allow the inferencer files to be published?
 
-I guess this ties in to your further inquiry?
+I guess this ties in to your further inquiry.
 
-I think it would be convenient to export the same files the inferencer package expoerts (but with the extra inferencer in the path) so libraries can import fewer packages and keep import maps a bit smaller.
+I think it would be convenient to export the same files the inferencer package exports, and certainly withScopePerimeter (but with the extra inferencer in the path) so libraries can import fewer packages and keep import maps a bit smaller.
 
+As far as the security limitation, I think I'd like to suggest the following approach:
 
+We add an entirely additional optional parameter to assignGingerly, assignFrom, enhanceAll, called allow: TBD
+
+```TS
+interface TBD {
+    crossDomainImports: boolean
+}
+```
+
+We should not allow the enhance setting to specify this, because that is precisely the configuration I would like to allow HTML attributes to specify.
+
+So signatures would look like:
+
+```TS
+await assignFrom(el, {}, { from: vm, enhance: [...] }, {crossDomainImport: true});
+```
 
 
