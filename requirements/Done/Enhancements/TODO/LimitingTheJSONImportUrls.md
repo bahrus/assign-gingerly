@@ -82,3 +82,31 @@ Looking at `package.json` exports, I spotted issues:
 1. **Per-entry `allowCrossDomain` or global on the options object?** I suggest per-entry.
 2. **Should `inferencer/inferencer.js` be in this package's exports map?** Or rely on consumers importing inferencer as its own package?
 3. **Should `beVigilant.js` and `inferredAssignments.js` be exported?** They're dynamically imported internally — exporting them would let advanced consumers use them standalone.
+
+---
+
+## Human Response I
+
+I'm not convinced ./beVigilant.js should be exportable.  Other than that, the missing ones should be.
+
+Is:
+
+```JSON
+  "files": [
+    "*.js",
+    "*.ts",
+    "README.md",
+    "LICENSE",
+    "types/assign-gingerly/types.d.ts"
+  ],
+```
+
+going to allow the inferencer files to be published?
+
+I guess this ties in to your further inquiry?
+
+I think it would be convenient to export the same files the inferencer package expoerts (but with the extra inferencer in the path) so libraries can import fewer packages and keep import maps a bit smaller.
+
+
+
+
