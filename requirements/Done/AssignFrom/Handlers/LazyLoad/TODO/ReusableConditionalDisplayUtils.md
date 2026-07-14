@@ -429,3 +429,25 @@ Want me to make this fix now?
 ## Human Response II
 
 Yes, please.
+
+---
+
+## Implementation Notes II
+
+Now update `LazyLoadConfig.resolve` to remove `insertionMode` and expand `method`:
+
+Now update `lazyLoad.ts` — remove `insertionMode` and use `method === 'after'`:
+
+Now update the JS file:
+
+All passing. Fixed — `insertionMode` is gone. Now `method` handles everything:
+
+```ts
+method?: 'appendChild' | 'prepend' | 'after';
+```
+
+- `'appendChild'` (default) — markers inside target, at end
+- `'prepend'` — markers inside target, at beginning  
+- `'after'` — markers as siblings after target (for `be-switched`)
+
+One parameter, no overlap.
