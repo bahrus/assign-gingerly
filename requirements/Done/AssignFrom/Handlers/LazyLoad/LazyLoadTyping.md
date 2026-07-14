@@ -1,4 +1,4 @@
-# Template Logic Reuse
+# Lazy Load Typing
 
 I raised this topic after successfully incorporating the reusable transition logic that you documented [here](../SupportForTransitionWithLazyLoad.md) into be-switched.
 
@@ -284,3 +284,16 @@ Let's do typing first (Steps 1-4), then revisit the `be-switched` reuse topic wi
 
 1. **Should I implement the typing now (Steps 1-4)?** It's non-breaking — just adds types that match existing runtime behavior.
 2. **Should `LazyLoadResolvedParams` be exported from `handlers/lazyLoad.ts` directly, or only from `types.d.ts`?** I'd say both — the handler module exports it for direct consumers, the types file for ambient/declaration consumers.
+
+---
+
+## Human Response I
+
+> **Should I implement the typing now (Steps 1-4)?**
+
+Yes, definitely
+
+> **Should `LazyLoadResolvedParams` be exported from `handlers/lazyLoad.ts` directly, or only from `types.d.ts`?**
+
+I think the source of truth should be in types.d.ts, but exporting a reference from LazyLoad.ts could be convenient.  I could go either way.
+

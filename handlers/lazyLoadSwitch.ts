@@ -22,6 +22,7 @@
 
 import { LazyLoadHandler } from './lazyLoad.js';
 import type { AssignFromHandler } from '../assignFrom.js';
+import type { LazyLoadSwitchResolvedParams } from '../types/assign-gingerly/types.js';
 
 /**
  * Evaluate a comparison operation.
@@ -54,7 +55,7 @@ function evaluateOp(lhs: any, op: string, rhs: any): boolean {
  */
 export class LazyLoadSwitchHandler extends LazyLoadHandler implements AssignFromHandler {
 
-    async assign(lhsTarget: any, resolvedParams: Record<string, any>): Promise<void> {
+    async assign(lhsTarget: any, resolvedParams: LazyLoadSwitchResolvedParams): Promise<void> {
         const { lhs, op = '===', rhs, ...rest } = resolvedParams;
         const condition = evaluateOp(lhs, op, rhs);
         // Delegate to parent with computed condition

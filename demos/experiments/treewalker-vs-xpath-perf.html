@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>TreeWalker vs XPath — Comment Marker Finding Performance</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem; }
+        table { border-collapse: collapse; margin: 1rem 0; }
+        th, td { border: 1px solid #ccc; padding: 0.5rem 1rem; text-align: right; }
+        th { background: #f5f5f5; text-align: left; }
+        .fastest { background: #d4edda; font-weight: bold; }
+        #status { color: #666; margin: 1rem 0; }
+    </style>
+</head>
+<body>
+    <h1>TreeWalker vs XPath — Comment Marker Finding</h1>
+    <p>Benchmarks finding comment marker pairs in DOM trees of varying sizes.</p>
+    <div id="status">Preparing test...</div>
+    <div id="results"></div>
+    <div id="host" style="display:none"></div>
+
+    <script type="module">
+        const ITERATIONS = 50_000;
+        const ELEMENT_COUNTS = [10, 50, 200, 1000, 5000];
+        const MARKER_NAME = 'targetMarker';
+        const MARKER_START = `?start name="${MARKER_NAME}"`;
+        const MARKER_END = '?end';
+
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const hostEl = document.getElementById('host');
+
+        /**
+         * Create a container with N elements, comment noise, and one target marker pair.
+         * The target markers are placed at ~75% through the children.
+         */
+        function createTestDOM(elementCount) {
+            hostEl.innerHTML = '';
+            const container = document.createElement('div');
+            hostEl.appendChild(container);
+
+            const targetIndex = Math.floor(elementCount * 0.75);
+            let commentCount = 0;
+
+            for (let i = 0; i < elementCount; i++) {
+                // Add some noise comments (every 5th element)
+                if (i % 5 === 0) {
+                    container.appendChild(document.createComment(`noise comment ${commentCount++}`));
+                }
+
+                if (i === targetIndex) {
+                    // Insert the target marker pair
+                    container.appendChild(document.createComment(MARKER_START));
+                    container.appendChild(document.createElement('div')); // content between markers
+                    container.appendChild(document.createElement('span'));
+                    container.appendChild(document.createComment(MARKER_END));
+                }
+
+                const div = document.createElement('div');
+                div.textContent = `Element ${i}`;
+                container.appendChild(div);
+            }
+
+            return container;
+        }
+
+        /**
+         * TreeWalker approach (current implementation)
+         */
+        function findMarkersTreeWalker(target, name) {
+            const startText = `?start name="${name}"`;
+            let startMarker = null;
+            let endMarker = null;
+
+            const walker = document.createTreeWalker(target, NodeFilter.SHOW_COMMENT);
+            let node;
+            while ((node = walker.nextNode())) {
+                if (!startMarker && node.data === startText) {
+                    startMarker = node;
+                } else if (startMarker && !endMarker && node.data === '?end') {
+                    endMarker = node;
+                    break;
+                }
+            }
+            return [startMarker, endMarker];
+        }
+
+        /**
+         * XPath approach
+         */
+        function findMarkersXPath(target, name) {
+            const startText = `?start name="${name}"`;
+
+            const startResult = document.evaluate(
+                `.//comment()[. = '${startText}']`,
+                target,
+                null,
+                XPathResult.FIRST_ORDERED_NODE_TYPE,
+                null
+            );
+            const startMarker = startResult.singleNodeValue;
+            if (!startMarker) return [null, null];
+
+            const endResult = document.evaluate(
+                `following-sibling::comment()[. = '?end'][1]`,
+                startMarker,
+                null,
+                XPathResult.FIRST_ORDERED_NODE_TYPE,
+                null
+            );
+            const endMarker = endResult.singleNodeValue;
+            return [startMarker, endMarker];
+        }
+
+        /**
+         * XPath with pre-compiled expression
+         */
+        function createCompiledXPathFinder(name) {
+            const startText = `?start name="${name}"`;
+            const startExpr = document.createExpression(`.//comment()[. = '${startText}']`);
+            const endExpr = document.createExpression(`following-sibling::comment()[. = '?end'][1]`);
+
+            return function findMarkersXPathCompiled(target) {
+                const startResult = startExpr.evaluate(target, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                const startMarker = startResult.singleNodeValue;
+                if (!startMarker) return [null, null];
+
+                const endResult = endExpr.evaluate(startMarker, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                const endMarker = endResult.singleNodeValue;
+                return [startMarker, endMarker];
+            };
+        }
+
+        /**
+         * Benchmark a function
+         */
+        function bench(fn, iterations) {
+            // Warmup
+            for (let i = 0; i < 500; i++) fn();
+
+            const start = performance.now();
+            for (let i = 0; i < iterations; i++) {
+                fn();
+            }
+            const elapsed = performance.now() - start;
+            return (elapsed / iterations) * 1_000_000; // ns per call
+        }
+
+        /**
+         * Run benchmarks for a given element count
+         */
+        function runBenchmarks(elementCount) {
+            const container = createTestDOM(elementCount);
+
+            const timeTreeWalker = bench(() => {
+                findMarkersTreeWalker(container, MARKER_NAME);
+            }, ITERATIONS);
+
+            const timeXPath = bench(() => {
+                findMarkersXPath(container, MARKER_NAME);
+            }, ITERATIONS);
+
+            const compiledFinder = createCompiledXPathFinder(MARKER_NAME);
+            const timeXPathCompiled = bench(() => {
+                compiledFinder(container);
+            }, ITERATIONS);
+
+            // Verify all find the same markers
+            const [tw1, tw2] = findMarkersTreeWalker(container, MARKER_NAME);
+            const [xp1, xp2] = findMarkersXPath(container, MARKER_NAME);
+            const [xc1, xc2] = compiledFinder(container);
+            const allSame = tw1 === xp1 && tw1 === xc1 && tw2 === xp2 && tw2 === xc2;
+
+            return {
+                elementCount,
+                treeWalker: timeTreeWalker,
+                xPath: timeXPath,
+                xPathCompiled: timeXPathCompiled,
+                allSame
+            };
+        }
+
+        /**
+         * Render results
+         */
+        function renderResults(allResults) {
+            let html = `
+                <p><strong>Iterations per test:</strong> ${ITERATIONS.toLocaleString()}</p>
+                <p><strong>Marker position:</strong> 75% through children</p>
+                <p><strong>Comment noise:</strong> 1 noise comment per 5 elements</p>
+                <table>
+                    <tr>
+                        <th>Method</th>
+                        ${allResults.map(r => `<th>${r.elementCount} elements</th>`).join('')}
+                    </tr>
+            `;
+
+            const methods = [
+                { key: 'treeWalker', label: 'TreeWalker (current)' },
+                { key: 'xPath', label: 'XPath (per-call evaluate)' },
+                { key: 'xPathCompiled', label: 'XPath (pre-compiled expression)' },
+            ];
+
+            for (const method of methods) {
+                html += `<tr><td>${method.label}</td>`;
+                for (const r of allResults) {
+                    const values = methods.map(m => r[m.key]);
+                    const minVal = Math.min(...values);
+                    const isFastest = r[method.key] === minVal;
+                    html += `<td class="${isFastest ? 'fastest' : ''}">${r[method.key].toFixed(0)} ns</td>`;
+                }
+                html += '</tr>';
+            }
+            html += '</table>';
+
+            // Ratios
+            html += '<h3>Ratios (relative to TreeWalker)</h3><table>';
+            html += `<tr><th>Method</th>${allResults.map(r => `<th>${r.elementCount} elements</th>`).join('')}</tr>`;
+            for (const method of methods) {
+                if (method.key === 'treeWalker') continue;
+                html += `<tr><td>${method.label}</td>`;
+                for (const r of allResults) {
+                    const ratio = r[method.key] / r.treeWalker;
+                    html += `<td>${ratio.toFixed(2)}x</td>`;
+                }
+                html += '</tr>';
+            }
+            html += '</table>';
+
+            const allValid = allResults.every(r => r.allSame);
+            html += `<p>✓ All methods find the same markers: <strong>${allValid ? 'YES' : 'NO'}</strong></p>`;
+
+            resultsEl.innerHTML = html;
+        }
+
+        // Run
+        async function run() {
+            const allResults = [];
+            for (const count of ELEMENT_COUNTS) {
+                statusEl.textContent = `Running with ${count} elements...`;
+                await new Promise(r => setTimeout(r, 50));
+                allResults.push(runBenchmarks(count));
+            }
+            statusEl.textContent = 'Done!';
+            renderResults(allResults);
+        }
+
+        run();
+    </script>
+</body>
+</html>

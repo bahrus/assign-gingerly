@@ -20,24 +20,11 @@
  */
 
 import type { AssignFromHandler } from '../assignFrom.js';
+import type { LazyLoadResolvedParams, LazyLoadInstantiatedContext } from '../types/assign-gingerly/types.js';
 import { withTransition, ensureHideStyle, DEFAULT_HIDE_CLASS } from '../transitionHelper.js';
+import { findMarkers, createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 
-const MARKER_START_PREFIX = '?start name="';
-const MARKER_END = '?end';
-
-/**
- * Context passed to onInstantiated callbacks.
- */
-export interface LazyLoadInstantiatedContext {
-    /** The inserted child nodes */
-    nodes: Node[];
-    /** The target element containing the markers */
-    target: Element;
-    /** The full handler config */
-    config: any;
-    /** The resolved parameters */
-    resolvedParams: Record<string, any>;
-}
+export type { LazyLoadResolvedParams, LazyLoadInstantiatedContext };
 
 /**
  * Get the marker name from a template element (uses its id).
@@ -53,61 +40,6 @@ function getMarkerName(templateEl: any): string {
 }
 
 /**
- * Find existing start/end comment markers in a target element.
- * Returns [startMarker, endMarker] or [null, null] if not found.
- */
-function findMarkers(target: Element, name: string): [Comment | null, Comment | null] {
-    const startText = `${MARKER_START_PREFIX}${name}"`;
-    let startMarker: Comment | null = null;
-    let endMarker: Comment | null = null;
-
-    const walker = document.createTreeWalker(target, NodeFilter.SHOW_COMMENT);
-    let node: Comment | null;
-    while ((node = walker.nextNode() as Comment | null)) {
-        if (!startMarker && node.data === startText) {
-            startMarker = node;
-        } else if (startMarker && !endMarker && node.data === MARKER_END) {
-            endMarker = node;
-            break;
-        }
-    }
-
-    return [startMarker, endMarker];
-}
-
-/**
- * Create start/end markers and insert them into the target.
- */
-function createMarkers(target: Element, name: string, method: string): [Comment, Comment] {
-    const startMarker = document.createComment(`${MARKER_START_PREFIX}${name}"`);
-    const endMarker = document.createComment(MARKER_END);
-
-    if (method === 'prepend') {
-        target.prepend(endMarker);
-        target.prepend(startMarker);
-    } else {
-        // Default: appendChild
-        target.appendChild(startMarker);
-        target.appendChild(endMarker);
-    }
-
-    return [startMarker, endMarker];
-}
-
-/**
- * Get all nodes between start and end markers.
- */
-function getNodesBetweenMarkers(start: Comment, end: Comment): Node[] {
-    const nodes: Node[] = [];
-    let current: Node | null = start.nextSibling;
-    while (current && current !== end) {
-        nodes.push(current);
-        current = current.nextSibling;
-    }
-    return nodes;
-}
-
-/**
  * LazyLoadHandler — built-in handler for conditional template instantiation.
  * 
  * Exported so it can be subclassed for custom behavior.
@@ -119,7 +51,7 @@ export class LazyLoadHandler implements AssignFromHandler {
         this.config = config;
     }
 
-    async assign(lhsTarget: any, resolvedParams: Record<string, any>): Promise<void> {
+    async assign(lhsTarget: any, resolvedParams: LazyLoadResolvedParams): Promise<void> {
         const {
             if: condition,
             instantiate,
@@ -224,7 +156,7 @@ export class LazyLoadHandler implements AssignFromHandler {
         startMarker: Comment,
         endMarker: Comment,
         lhsTarget: Element,
-        resolvedParams: Record<string, any>
+        resolvedParams: LazyLoadResolvedParams
     ): Node[] {
         let content: DocumentFragment;
 
@@ -252,7 +184,7 @@ export class LazyLoadHandler implements AssignFromHandler {
         startMarker: Comment,
         endMarker: Comment,
         lhsTarget: Element,
-        resolvedParams: Record<string, any>
+        resolvedParams: LazyLoadResolvedParams
     ): Promise<Node[]> {
         let content: DocumentFragment;
 
@@ -300,7 +232,7 @@ export class LazyLoadHandler implements AssignFromHandler {
     protected async onCloneInserted(
         nodes: Node[],
         lhsTarget: Element,
-        resolvedParams: Record<string, any>
+        resolvedParams: LazyLoadResolvedParams
     ): Promise<void> {
         // No-op by default. Subclasses override.
     }

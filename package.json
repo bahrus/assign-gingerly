@@ -110,6 +110,10 @@
       "default": "./isAllowedImportPath.js",
       "types": "./isAllowedImportPath.ts"
     },
+    "./markerUtils.js": {
+      "default": "./markerUtils.js",
+      "types": "./markerUtils.ts"
+    },
     "./inferredAssignments.js": {
       "default": "./inferredAssignments.js",
       "types": "./inferredAssignments.ts"
