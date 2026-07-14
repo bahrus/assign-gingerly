@@ -303,6 +303,12 @@ function changeVisibility(children, toggleInert, verb) {
 
 I definitely think we should instead make the toggleInert option use the actual inert property.
 
-I'm having a harder time seeing the use case for disabling, but it should be a separate option, toggleDisabled.
+I'm having a harder time seeing the use case for disabling, but it should be a separate option, toggleDisabled.  I could see it being more useful if we an option to not set the hidden property, which would make the most sense if hideClass is specified.
+
+>  **For `'after'` mode, should `lhsTarget` serve as the anchor, or should there be a separate `anchor` param?** Using `lhsTarget` as anchor simplifies the API (no new param needed — you just pass the template element as the target).
+
+Yes, I agree.
+
+If there is no more doubts, then please implement.
 
 
