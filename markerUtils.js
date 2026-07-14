@@ -87,3 +87,41 @@ export function getNodesBetweenMarkers(start, end) {
     }
     return nodes;
 }
+
+/**
+ * Find existing start/end comment markers among siblings of an anchor element.
+ * Used for 'after' insertion mode.
+ */
+export function findMarkersSibling(anchor, name) {
+    const startText = `${MARKER_START_PREFIX}${name}"`;
+    let startMarker = null;
+    let endMarker = null;
+
+    let current = anchor.nextSibling;
+    while (current) {
+        if (current.nodeType === Node.COMMENT_NODE) {
+            if (!startMarker && current.data === startText) {
+                startMarker = current;
+            } else if (startMarker && !endMarker && current.data === MARKER_END) {
+                endMarker = current;
+                break;
+            }
+        }
+        current = current.nextSibling;
+    }
+
+    return [startMarker, endMarker];
+}
+
+/**
+ * Create start/end markers as siblings after an anchor element.
+ * Used for 'after' insertion mode.
+ */
+export function createMarkersSibling(anchor, name) {
+    const startMarker = document.createComment(`${MARKER_START_PREFIX}${name}"`);
+    const endMarker = document.createComment(MARKER_END);
+
+    anchor.after(startMarker, endMarker);
+
+    return [startMarker, endMarker];
+}

@@ -112,3 +112,51 @@ export function getNodesBetweenMarkers(start: Comment, end: Comment): Node[] {
     }
     return nodes;
 }
+
+/**
+ * Find existing start/end comment markers among siblings of an anchor element.
+ * Used for 'after' insertion mode where markers are siblings, not children.
+ * 
+ * @param anchor - The element after which markers were inserted
+ * @param name - The marker name to find
+ * @returns [startMarker, endMarker] or [null, null] if not found
+ */
+export function findMarkersSibling(anchor: Element | Node, name: string): [Comment | null, Comment | null] {
+    const startText = `${MARKER_START_PREFIX}${name}"`;
+    let startMarker: Comment | null = null;
+    let endMarker: Comment | null = null;
+
+    let current: Node | null = anchor.nextSibling;
+    while (current) {
+        if (current.nodeType === Node.COMMENT_NODE) {
+            const comment = current as Comment;
+            if (!startMarker && comment.data === startText) {
+                startMarker = comment;
+            } else if (startMarker && !endMarker && comment.data === MARKER_END) {
+                endMarker = comment;
+                break;
+            }
+        }
+        current = current.nextSibling;
+    }
+
+    return [startMarker, endMarker];
+}
+
+/**
+ * Create start/end markers as siblings after an anchor element.
+ * Used for 'after' insertion mode.
+ * 
+ * @param anchor - The element to insert markers after
+ * @param name - The marker name
+ * @returns [startMarker, endMarker]
+ */
+export function createMarkersSibling(anchor: Element | Node, name: string): [Comment, Comment] {
+    const startMarker = document.createComment(`${MARKER_START_PREFIX}${name}"`);
+    const endMarker = document.createComment(MARKER_END);
+
+    // Insert after the anchor: anchor → startMarker → endMarker
+    (anchor as ChildNode).after(startMarker, endMarker);
+
+    return [startMarker, endMarker];
+}

@@ -22,7 +22,7 @@
 import type { AssignFromHandler } from '../assignFrom.js';
 import type { LazyLoadResolvedParams, LazyLoadInstantiatedContext } from '../types/assign-gingerly/types.js';
 import { withTransition, ensureHideStyle, DEFAULT_HIDE_CLASS } from '../transitionHelper.js';
-import { findMarkers, createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
+import { findMarkers, createMarkers, getNodesBetweenMarkers, findMarkersSibling, createMarkersSibling, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 
 export type { LazyLoadResolvedParams, LazyLoadInstantiatedContext };
 
@@ -59,42 +59,36 @@ export class LazyLoadHandler implements AssignFromHandler {
             forget = false,
             transitional = false,
             hideClass = DEFAULT_HIDE_CLASS,
+            markerName,
+            toggleInert = false,
+            toggleDisabled = false,
         } = resolvedParams;
 
         if (!(lhsTarget instanceof Element)) {
             throw new Error('builtIns.lazyLoad: lhsTarget must be a DOM Element');
         }
 
-        const name = getMarkerName(instantiate);
+        const name = markerName ?? getMarkerName(instantiate) ?? (lhsTarget.id || 'anonymous');
 
-        // Find or create markers
-        let [startMarker, endMarker] = findMarkers(lhsTarget, name);
+        // Find or create markers based on method
+        let [startMarker, endMarker] = method === 'after'
+            ? findMarkersSibling(lhsTarget, name)
+            : findMarkers(lhsTarget, name);
 
         if (condition) {
             // SHOW
             if (startMarker && endMarker) {
-                // Markers exist — check if content is hidden or removed
                 const nodes = getNodesBetweenMarkers(startMarker, endMarker);
                 if (nodes.length > 0) {
                     // Content exists — show it
                     withTransition(startMarker, 'show', transitional, () => {
-                        for (const node of nodes) {
-                            if (node instanceof Element) {
-                                if (transitional) {
-                                    node.classList.remove(hideClass);
-                                } else {
-                                    node.removeAttribute('hidden');
-                                }
-                            }
-                        }
+                        this.showNodes(nodes, transitional, hideClass, toggleInert, toggleDisabled);
                     });
                 } else {
                     // Content was removed (forget mode) — re-clone
                     if (transitional) {
                         ensureHideStyle(lhsTarget.getRootNode());
                         withTransition(startMarker, 'show', true, () => {
-                            // cloneAndInsert is async but the transition callback is sync
-                            // For transitions with clone, we insert synchronously
                             this.cloneAndInsertSync(instantiate, startMarker!, endMarker!, lhsTarget, resolvedParams);
                         });
                     } else {
@@ -103,7 +97,11 @@ export class LazyLoadHandler implements AssignFromHandler {
                 }
             } else {
                 // No markers — first time. Create markers and clone template.
-                [startMarker, endMarker] = createMarkers(lhsTarget, name, method);
+                if (method === 'after') {
+                    [startMarker, endMarker] = createMarkersSibling(lhsTarget, name);
+                } else {
+                    [startMarker, endMarker] = createMarkers(lhsTarget, name, method);
+                }
                 if (transitional) {
                     ensureHideStyle(lhsTarget.getRootNode());
                     withTransition(startMarker, 'show', true, () => {
@@ -120,29 +118,73 @@ export class LazyLoadHandler implements AssignFromHandler {
                 if (nodes.length === 0) return;
 
                 if (forget) {
-                    // Remove nodes entirely (markers persist for re-insertion)
                     withTransition(startMarker, 'hide', transitional, () => {
                         for (const node of nodes) {
                             node.parentNode?.removeChild(node);
                         }
                     });
                 } else {
-                    // Hide nodes
                     withTransition(startMarker, 'hide', transitional, () => {
-                        for (const node of nodes) {
-                            if (node instanceof Element) {
-                                if (transitional) {
-                                    ensureHideStyle(lhsTarget.getRootNode(), hideClass);
-                                    node.classList.add(hideClass);
-                                } else {
-                                    node.setAttribute('hidden', '');
-                                }
-                            }
-                        }
+                        this.hideNodes(nodes, lhsTarget, transitional, hideClass, toggleInert, toggleDisabled);
                     });
                 }
             }
-            // If no markers exist and condition is false, do nothing (never loaded)
+        }
+    }
+
+    /**
+     * Show nodes — remove hidden/class and restore inert/disabled state.
+     */
+    protected showNodes(
+        nodes: Node[],
+        transitional: boolean,
+        hideClass: string,
+        toggleInert: boolean,
+        toggleDisabled: boolean
+    ): void {
+        for (const node of nodes) {
+            if (node instanceof Element) {
+                if (transitional) {
+                    node.classList.remove(hideClass);
+                } else {
+                    node.removeAttribute('hidden');
+                }
+                if (toggleInert) {
+                    node.removeAttribute('inert');
+                }
+                if (toggleDisabled && 'disabled' in node) {
+                    (node as any).disabled = false;
+                }
+            }
+        }
+    }
+
+    /**
+     * Hide nodes — add hidden/class and set inert/disabled state.
+     */
+    protected hideNodes(
+        nodes: Node[],
+        lhsTarget: Element,
+        transitional: boolean,
+        hideClass: string,
+        toggleInert: boolean,
+        toggleDisabled: boolean
+    ): void {
+        for (const node of nodes) {
+            if (node instanceof Element) {
+                if (transitional) {
+                    ensureHideStyle(lhsTarget.getRootNode(), hideClass);
+                    node.classList.add(hideClass);
+                } else {
+                    node.setAttribute('hidden', '');
+                }
+                if (toggleInert) {
+                    node.setAttribute('inert', '');
+                }
+                if (toggleDisabled && 'disabled' in node) {
+                    (node as any).disabled = true;
+                }
+            }
         }
     }
 

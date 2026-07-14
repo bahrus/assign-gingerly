@@ -311,4 +311,121 @@ Yes, I agree.
 
 If there is no more doubts, then please implement.
 
+---
 
+## Implementation Notes
+
+All clear. Let me implement. The decisions:
+
+1. `toggleInert` → sets the HTML5 `inert` attribute (not `disabled`)
+2. `toggleDisabled` → separate option for `disabled` property
+3. `lhsTarget` serves as the anchor in `'after'` mode (no separate `anchor` param)
+4. `insertionMode: 'after'` inserts markers + content as siblings after `lhsTarget`
+
+Let me update the types, `markerUtils`, and `lazyLoad.ts`:
+
+**Step 1: Update types**
+
+Also update `LazyLoadConfig.resolve` to include the new fields:
+
+**Step 2: Add sibling-mode marker functions to `markerUtils.ts`**
+
+**Step 3: Update `lazyLoad.ts` to support `insertionMode: 'after'`, `toggleInert`, and `toggleDisabled`**
+
+Now I need to update the `assign` method to handle the new params. Let me read the current method:
+
+Now let me replace the entire `assign` method with the updated version that handles `insertionMode`, `toggleInert`, and `toggleDisabled`:
+
+Let me check diagnostics:
+
+Fix the type issue in `markerUtils.ts` — `after` is on `ChildNode`/`Element`:
+
+Now update the JS file for `lazyLoad.js` — update the import and the assign method:
+
+Now replace the assign method in the JS file:
+
+Let me run tests:
+
+All passing. Here's what was implemented:
+
+**`markerUtils.ts/.js` — new sibling-mode functions:**
+- `findMarkersSibling(anchor, name)` — searches next-siblings of the anchor for marker pairs
+- `createMarkersSibling(anchor, name)` — inserts markers as siblings after the anchor via `.after()`
+
+**`handlers/lazyLoad.ts/.js` — new features:**
+
+- **`insertionMode: 'child' | 'after'`** (default: `'child'`)
+  - `'child'`: markers inside `lhsTarget` (existing behavior)
+  - `'after'`: markers as siblings after `lhsTarget` (for `be-switched`)
+
+- **`markerName?: string`** — override auto-derived name. Falls back to template ID → anchor element ID → `'anonymous'`
+
+- **`toggleInert?: boolean`** — when hiding, sets `inert` attribute on elements (removes from a11y tree + interaction). When showing, removes it.
+
+- **`toggleDisabled?: boolean`** — when hiding, sets `disabled = true` on form elements. When showing, sets `disabled = false`.
+
+- **Extracted `showNodes` / `hideNodes` methods** — protected, overridable by subclasses. Clean separation of visibility logic.
+
+**How `be-switched` would use it:**
+```js
+import { LazyLoadHandler } from 'assign-gingerly/handlers/lazyLoad.js';
+
+const handler = new LazyLoadHandler({});
+await handler.assign(templateElement, {
+    if: condition,
+    instantiate: templateElement.content,
+    insertionMode: 'after',
+    transitional: true,
+    hideClass: 'be-switched-hide',
+    toggleInert: true,
+});
+```
+
+---
+
+## Human Confusion
+
+I'm a bit confused now when I look at the changes to types,ts.  It seems like we have significant overlap between what method specifies vs insertionMode.  I was thinking that we would keep one parameter, "method", and just add "after" to it.  What am I missing?
+
+
+
+
+
+---
+
+## Response to Human Confusion
+
+You're right — there IS overlap, and combining them into one parameter is cleaner. Let me clarify what each currently does:
+
+| Param | Current Meaning |
+|-------|----------------|
+| `method: 'appendChild'` | Insert markers as last children of `lhsTarget` |
+| `method: 'prepend'` | Insert markers as first children of `lhsTarget` |
+| `insertionMode: 'child'` | Same as above (redundant with method) |
+| `insertionMode: 'after'` | Insert markers as next-siblings of `lhsTarget` |
+
+You're absolutely right — `method` and `insertionMode` are really the same concept: "where to put the markers relative to the target." We should unify them:
+
+```ts
+method?: 'appendChild' | 'prepend' | 'after';
+```
+
+- `'appendChild'` (default) — markers inside target, at end
+- `'prepend'` — markers inside target, at beginning
+- `'after'` — markers as siblings after target
+
+That eliminates `insertionMode` entirely. One parameter, three options, no ambiguity.
+
+### What I'll Change
+
+1. Remove `insertionMode` from `LazyLoadResolvedParams` and `LazyLoadConfig`
+2. Expand `method` to include `'after'`
+3. Update the handler logic to check `method === 'after'` instead of `insertionMode === 'after'`
+
+Want me to make this fix now?
+
+---
+
+## Human Response II
+
+Yes, please.

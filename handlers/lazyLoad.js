@@ -19,7 +19,7 @@
  * }, { withMethods: ['querySelector'], from: myVM });
  */
 import { withTransition, ensureHideStyle, DEFAULT_HIDE_CLASS } from '../transitionHelper.js';
-import { findMarkers, createMarkers, getNodesBetweenMarkers } from '../markerUtils.js';
+import { findMarkers, createMarkers, getNodesBetweenMarkers, findMarkersSibling, createMarkersSibling } from '../markerUtils.js';
 /**
  * Get the marker name from a template element (uses its id).
  */
@@ -43,26 +43,20 @@ export class LazyLoadHandler {
         this.config = config;
     }
     async assign(lhsTarget, resolvedParams) {
-        const { if: condition, instantiate, method = 'appendChild', forget = false, transitional = false, hideClass = DEFAULT_HIDE_CLASS } = resolvedParams;
+        const { if: condition, instantiate, method = 'appendChild', forget = false, transitional = false, hideClass = DEFAULT_HIDE_CLASS, markerName, toggleInert = false, toggleDisabled = false } = resolvedParams;
         if (!(lhsTarget instanceof Element)) {
             throw new Error('builtIns.lazyLoad: lhsTarget must be a DOM Element');
         }
-        const name = getMarkerName(instantiate);
-        let [startMarker, endMarker] = findMarkers(lhsTarget, name);
+        const name = markerName ?? getMarkerName(instantiate) ?? (lhsTarget.id || 'anonymous');
+        let [startMarker, endMarker] = method === 'after'
+            ? findMarkersSibling(lhsTarget, name)
+            : findMarkers(lhsTarget, name);
         if (condition) {
             if (startMarker && endMarker) {
                 const nodes = getNodesBetweenMarkers(startMarker, endMarker);
                 if (nodes.length > 0) {
                     withTransition(startMarker, 'show', transitional, () => {
-                        for (const node of nodes) {
-                            if (node instanceof Element) {
-                                if (transitional) {
-                                    node.classList.remove(hideClass);
-                                } else {
-                                    node.removeAttribute('hidden');
-                                }
-                            }
-                        }
+                        this.showNodes(nodes, transitional, hideClass, toggleInert, toggleDisabled);
                     });
                 }
                 else {
@@ -77,7 +71,11 @@ export class LazyLoadHandler {
                 }
             }
             else {
-                [startMarker, endMarker] = createMarkers(lhsTarget, name, method);
+                if (method === 'after') {
+                    [startMarker, endMarker] = createMarkersSibling(lhsTarget, name);
+                } else {
+                    [startMarker, endMarker] = createMarkers(lhsTarget, name, method);
+                }
                 if (transitional) {
                     ensureHideStyle(lhsTarget.getRootNode());
                     withTransition(startMarker, 'show', true, () => {
@@ -101,17 +99,43 @@ export class LazyLoadHandler {
                 }
                 else {
                     withTransition(startMarker, 'hide', transitional, () => {
-                        for (const node of nodes) {
-                            if (node instanceof Element) {
-                                if (transitional) {
-                                    ensureHideStyle(lhsTarget.getRootNode(), hideClass);
-                                    node.classList.add(hideClass);
-                                } else {
-                                    node.setAttribute('hidden', '');
-                                }
-                            }
-                        }
+                        this.hideNodes(nodes, lhsTarget, transitional, hideClass, toggleInert, toggleDisabled);
                     });
+                }
+            }
+        }
+    }
+    showNodes(nodes, transitional, hideClass, toggleInert, toggleDisabled) {
+        for (const node of nodes) {
+            if (node instanceof Element) {
+                if (transitional) {
+                    node.classList.remove(hideClass);
+                } else {
+                    node.removeAttribute('hidden');
+                }
+                if (toggleInert) {
+                    node.removeAttribute('inert');
+                }
+                if (toggleDisabled && 'disabled' in node) {
+                    node.disabled = false;
+                }
+            }
+        }
+    }
+    hideNodes(nodes, lhsTarget, transitional, hideClass, toggleInert, toggleDisabled) {
+        for (const node of nodes) {
+            if (node instanceof Element) {
+                if (transitional) {
+                    ensureHideStyle(lhsTarget.getRootNode(), hideClass);
+                    node.classList.add(hideClass);
+                } else {
+                    node.setAttribute('hidden', '');
+                }
+                if (toggleInert) {
+                    node.setAttribute('inert', '');
+                }
+                if (toggleDisabled && 'disabled' in node) {
+                    node.disabled = true;
                 }
             }
         }
