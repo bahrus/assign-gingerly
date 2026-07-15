@@ -46,6 +46,7 @@ function getMarkerName(templateEl: any): string {
  */
 export class LazyLoadHandler implements AssignFromHandler {
     config: any;
+    static #markerCounter = 0;
 
     constructor(config: any) {
         this.config = config;
@@ -59,6 +60,7 @@ export class LazyLoadHandler implements AssignFromHandler {
             forget = false,
             transitional = false,
             hideClass = DEFAULT_HIDE_CLASS,
+            hideCss,
             markerName,
             toggleInert = false,
             toggleDisabled = false,
@@ -68,7 +70,20 @@ export class LazyLoadHandler implements AssignFromHandler {
             throw new Error('builtIns.lazyLoad: lhsTarget must be a DOM Element');
         }
 
-        const name = markerName ?? getMarkerName(instantiate) ?? (lhsTarget.id || 'anonymous');
+        // Determine marker name — auto-generate for 'after' mode if would be 'anonymous'
+        let name = markerName ?? getMarkerName(instantiate) ?? (lhsTarget.id || 'anonymous');
+        if (name === 'anonymous' && method === 'after') {
+            // Check for previously stored name on the anchor
+            const stored = (lhsTarget as HTMLElement).dataset?.agMarker;
+            if (stored) {
+                name = stored;
+            } else {
+                name = `_ag_${LazyLoadHandler.#markerCounter++}`;
+                if ((lhsTarget as HTMLElement).dataset) {
+                    (lhsTarget as HTMLElement).dataset.agMarker = name;
+                }
+            }
+        }
 
         // Find or create markers based on method
         let [startMarker, endMarker] = method === 'after'
@@ -125,7 +140,7 @@ export class LazyLoadHandler implements AssignFromHandler {
                     });
                 } else {
                     withTransition(startMarker, 'hide', transitional, () => {
-                        this.hideNodes(nodes, lhsTarget, transitional, hideClass, toggleInert, toggleDisabled);
+                        this.hideNodes(nodes, lhsTarget, transitional, hideClass, hideCss, toggleInert, toggleDisabled);
                     });
                 }
             }
@@ -167,13 +182,14 @@ export class LazyLoadHandler implements AssignFromHandler {
         lhsTarget: Element,
         transitional: boolean,
         hideClass: string,
+        hideCss: string | undefined,
         toggleInert: boolean,
         toggleDisabled: boolean
     ): void {
         for (const node of nodes) {
             if (node instanceof Element) {
                 if (transitional) {
-                    ensureHideStyle(lhsTarget.getRootNode(), hideClass);
+                    ensureHideStyle(lhsTarget.getRootNode(), hideClass, hideCss);
                     node.classList.add(hideClass);
                 } else {
                     node.setAttribute('hidden', '');

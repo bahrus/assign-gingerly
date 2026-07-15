@@ -176,3 +176,104 @@ Want me to hold on the `be-switched` refactoring until those two changes are don
 ## Human Ask, continued
 
 Do these requests make sense?  Any concerns?
+
+---
+
+## Response
+
+Both requests make sense and are straightforward. No concerns.
+
+### Change 1: `hideCss` param
+
+Trivial — just thread a new optional string through from `resolvedParams` to `ensureHideStyle`. Currently `hideNodes` calls:
+
+```ts
+ensureHideStyle(lhsTarget.getRootNode(), hideClass);
+```
+
+It becomes:
+
+```ts
+ensureHideStyle(lhsTarget.getRootNode(), hideClass, hideCss);
+```
+
+`ensureHideStyle` already accepts `hideCss` as a third parameter (defaults to `'display: none'`). So the only change is extracting `hideCss` from `resolvedParams` and passing it through. ~2 lines.
+
+### Change 2: Auto-generate unique marker names in `'after'` mode
+
+Also clean. The `data-ag-marker` approach is solid:
+- First call: generate name, store on anchor element, use for markers
+- Subsequent calls: read from `data-ag-marker`, find existing markers
+
+This is self-healing (no external state to manage) and debuggable (you can inspect the attribute in DevTools).
+
+One minor concern: if multiple different templates are inserted after the *same* anchor element (rare but possible), a single `data-ag-marker` attribute would collide. But for `be-switched`'s use case (one template per template element), it's 1:1. If the multi-template case ever arises, `markerName` provides the explicit escape hatch.
+
+### Ready to implement?
+
+These are small, clean changes. Shall I proceed?
+
+---
+
+## Human Response I
+
+Yes, please.
+
+---
+
+## Implementation Notes
+
+**Change 1 & 2:** Update the `assign` method to extract `hideCss` and auto-generate marker names:
+
+Now add the static counter to the class and update `hideNodes` to pass `hideCss`:
+
+Now update the `hideNodes` call to pass `hideCss` and update the method signature:
+
+Now update the `hideNodes` method signature and body:
+
+Now update the types to include `hideCss`:
+
+Also add `hideCss` to the `LazyLoadConfig.resolve`:
+
+Now do the same for `LazyLoadSwitchConfig`:
+
+Now update the JS file:
+
+Now add the static counter and update hideNodes in the JS file:
+
+Now update the hideNodes call and method in JS:
+
+Let me verify diagnostics:
+
+Run tests:
+
+All passing. Both changes implemented:
+
+**Change 1: `hideCss` param**
+- Added to `LazyLoadResolvedParams`, `LazyLoadConfig.resolve`, and `LazyLoadSwitchConfig.resolve` in types
+- Extracted from `resolvedParams` in the handler
+- Passed through to `ensureHideStyle` in `hideNodes`
+- Allows consumers like `be-switched` to specify custom CSS (e.g., `hideCss: 'opacity: 0; height: 0'`)
+
+**Change 2: Auto-generate unique marker names in `'after'` mode**
+- When computed name is `'anonymous'` and `method === 'after'`:
+  - Checks `lhsTarget.dataset.agMarker` for a previously stored name
+  - If none, generates `_ag_0`, `_ag_1`, ... via a static counter and stores on `data-ag-marker`
+- Ensures repeated `assign()` calls for the same anchor find the same markers
+- Static counter on the class (`LazyLoadHandler.#markerCounter`)
+
+`be-switched` can now fully delegate:
+```js
+const handler = new LazyLoadHandler({});
+await handler.assign(enhancedElement, {
+    if: condition,
+    instantiate: contentToClone,
+    method: 'after',
+    transitional: true,
+    hideClass: 'be-switched-hide',
+    hideCss: hiddenStyle,
+    toggleInert: !!toggleInert,
+});
+```
+
+
