@@ -135,3 +135,76 @@ This is the "repeater" pattern — the declarative equivalent of `for (const ite
 ### Summary
 
 The concept is sound and builds naturally on the existing infrastructure (markers, inferredAssignments, templates, protocols). The main design decisions are around update semantics (keying, reorder, in-place update vs recreate) — but those can be phase II. A first pass that just clones N times and infer-assigns would already be useful.
+
+---
+
+## Human Response
+
+>  Is forEachItem processed once per cloned item? And does forEachItem.assign use assignFrom semantics (paths resolved against each array item as from)
+
+Yes to both.  Maybe a different name would make it clearer.  I will try below with a clearer now (probably too verbose).  Maybe we can find a way to make it more concise without loosing meaning.
+
+> Where does protocols live?
+
+I misplaced it unintentionally.  I will provide the corrected syntax below.
+
+>  The withOptions inside forEachItem — is this the per-item assignFrom options?
+
+Yes
+
+>  Updated Semantics
+
+This is an area where I will definitely want to lean the most on your expertise, especially on how libraries like lit and solidjs manage such things.  I think solidjs put a lot of effort into optimizing this, and may be one of the fast performing, so any lessons learned from those libraries could be beneficial.
+
+One aspect I'm quite confident of is that we want to buffer / merge multiple cloned rows into a "buffering fragment", then append that fragment to the target.
+
+And I think we may want an optional setting to allow the fragment to "settle" before adding to the live DOM tree, especially when asynchronous processing takes place.  Phase II. 
+
+Syntax, take two, based on your feedback:
+
+
+```JavaScript
+assignFrom(document.body, {
+    '?.querySelector?.tbody =>': {
+        do: 'builtIns.manageTemplateList',
+        resolve: {
+            //must support iterables, not just arrays
+            forEach: "?.rankings",
+            instantiate: 'globalThis://country-ranking',
+            //same meaning as with lazyLoad
+            forget: false, // default
+            /** Override auto-derived marker name */
+            /** Pseudo code, just specifying what is supported: **/
+
+            /** Insert method: 'appendChild' (default), 'prepend', or 'after' (sibling after target) */
+            method?: string,
+            
+            /** Optional async callback invoked after cloning, resolved from the VM */
+            onInstantiated?: string,
+            
+            /** Override auto-derived marker name */
+            markerName?: string;
+        },
+        //uses assignFrom where from is each ranking item from the vm
+        fromEachItem: {
+            assignToFragment:{
+                //I think we settled what this should be on the rhs, but
+                //I can't remember if it should just be '.'.
+                '?.tr?.ish': '?.' 
+            },
+            withOptions: {
+                inferredAssignments: true
+            }
+        },
+        //itemscopeMgr: 'CountryMedalsCount',
+
+    }
+}, {
+    withMethods: ['querySelector'],
+    from: olympics2024Summary,
+    protocols: { 
+        globalThis: k => globalThis[k] 
+    }
+});
+```
+
