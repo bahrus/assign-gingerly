@@ -185,6 +185,7 @@ assignFrom(document.body, {
             /** Override auto-derived marker name */
             markerName?: string;
         },
+        
         //uses assignFrom where from is each ranking item from the vm
         fromEachItem: {
             assignToFragment:{
@@ -194,6 +195,10 @@ assignFrom(document.body, {
             },
             withOptions: {
                 inferredAssignments: true
+            },
+            //optional?
+            resolve: {
+                key: '?.rank'
             }
         },
         //itemscopeMgr: 'CountryMedalsCount',
@@ -208,3 +213,68 @@ assignFrom(document.body, {
 });
 ```
 
+
+---
+
+## Response to Updated Proposal
+
+### On the Key
+
+`resolve: { key: '?.rank' }` inside `fromEachItem` — this makes sense. The key is resolved per-item (against each array element), producing a stable identity value. The handler uses it to match existing clones to items across updates.
+
+**It reads well.** "From each item, resolve the key from `item.rank`." Clean.
+
+**One thought on placement:** Since `key` is really a list-management concern (how to reconcile old vs new items), it could arguably live in the outer `resolve` block (alongside `forEach`, `instantiate`, `forget`) rather than inside `fromEachItem`. It's not something you "do to each item" — it's something the handler uses to *identify* each item.
+
+Compare:
+```js
+// Option A: key in fromEachItem.resolve (your proposal)
+fromEachItem: {
+    resolve: { key: '?.rank' }
+}
+
+// Option B: key in the outer resolve
+resolve: {
+    forEach: '?.rankings',
+    instantiate: 'globalThis://country-ranking',
+    key: '?.rank',  // resolved per-item, but declared at the list level
+}
+```
+
+Option B reads as "the key for this list is `rank`" which is how most frameworks express it (React's `key`, Lit's `repeat(items, item => item.rank, ...)`). Option A reads as "for each item, resolve a key" — more explicit but slightly unusual.
+
+I could go either way. If you prefer A (keeps `resolve` blocks self-contained per scope), that works.
+
+### On `assignToFragment`
+
+The name `assignToFragment` communicates that assignments target the buffered fragment (not the live DOM). That's good — it sets the expectation that work happens off-screen.
+
+The `'?.tr?.ish': '?.'` pattern — this navigates into the cloned fragment's `<tr>` element and sets its `ish` to the entire item object. Combined with `inferredAssignments: true` in `withOptions`, the itemscope manager (or direct inference) handles distributing the item's properties.
+
+**Quick note on `'?.'`:** Yes, we settled that `'?.'` resolves to the source object itself (the item in this case). That's the right RHS.
+
+### On `fromEachItem` as the Name
+
+I think `fromEachItem` reads clearly — "from each item in the iterable, do this." It's more explicit than the previous `forEachItem`. The "from" prefix connects to the `assignFrom` semantics (each item becomes the `from` source).
+
+### Remaining High-Level Thoughts
+
+1. **Buffering into a fragment before appending** — good default. Clone all items into a `DocumentFragment`, then insert the fragment once. Minimizes reflows.
+
+2. **The `key` enables** three operations on update:
+   - New key appeared → clone + append
+   - Key disappeared → hide/remove (based on `forget`)
+   - Key still present → update in place (re-run `assignToFragment` on existing clone)
+   - Key moved position → reorder DOM nodes (phase II — can skip initially and just update in place regardless of position)
+
+3. **Without `key`** — positional matching (item[i] → clone[i]). Simpler but breaks on insert/remove in the middle.
+
+4. **SolidJS lessons** (since you asked):
+   - SolidJS's `<For>` uses keyed reconciliation by reference equality (or explicit key function)
+   - It diffs the key list to produce a minimal set of DOM operations (move, insert, remove)
+   - It avoids touching DOM nodes whose key+value haven't changed
+   - The key insight: separate "which nodes exist" (structural diff) from "what values they show" (reactive update). Your architecture already does this — the handler manages structure, `inferredAssignments` manages values.
+
+### Summary
+
+The proposal is coherent. I'd say the main decision remaining is whether `key` lives in `fromEachItem.resolve` or the outer `resolve`. Both work — it's a readability preference. Everything else is clear enough to move toward implementation when you're ready.
