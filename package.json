@@ -98,6 +98,10 @@
       "default": "./handlers/microDataJoin.js",
       "types": "./handlers/microDataJoin.ts"
     },
+    "./handlers/manageTemplateList.js": {
+      "default": "./handlers/manageTemplateList.js",
+      "types": "./handlers/manageTemplateList.ts"
+    },
     "./paths.js": {
       "default": "./paths.js",
       "types": "./paths.ts"

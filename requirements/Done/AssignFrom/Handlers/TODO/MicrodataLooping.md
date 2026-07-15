@@ -392,3 +392,57 @@ What I'll build:
 4. **Fragment buffering** — batch all clones into a DocumentFragment before inserting
 
 Shall I proceed?
+
+## Human Response III
+
+Yes, please
+
+---
+
+## Implementation Notes
+
+Now register in `BUILT_IN_MAP`:
+
+Add to `package.json` exports:
+
+Let me verify diagnostics:
+
+Run tests:
+
+All passing. Here's what was implemented:
+
+**`handlers/manageTemplateList.ts/.js`** — new built-in handler:
+
+**Core flow:**
+1. Resolves `forEach` (iterable) and `instantiate` (template) from the handler's `resolve` block
+2. Finds or creates comment markers in the target using `markerUtils`
+3. Resolves per-item `key` (from `fromEachItem.resolve.key`) using `resolveValue` — falls back to positional index if no key specified
+4. **Reconciliation by key:**
+   - Keys that disappeared → hide (or remove if `forget: true`)
+   - Keys that already exist → update in place via `assignFrom(existingClone, assignToFragment, { from: item, ...withOptions })`
+   - New keys → clone template, apply `assignFrom`, buffer into fragment
+5. **Fragment buffering** — all new clones are batched into a `DocumentFragment` before a single DOM insertion
+6. Tracks state via `WeakMap<startMarker, { keyToNodes, keyOrder }>` for efficient subsequent updates
+
+**Config structure:**
+```js
+{
+    do: 'builtIns.manageTemplateList',
+    resolve: {
+        forEach: '?.rankings',
+        instantiate: 'globalThis://country-ranking',
+        method: 'appendChild',
+        forget: false,
+        markerName: 'rankings',
+    },
+    fromEachItem: {
+        assignToFragment: { '?.querySelector?.tr?.ish': '?.' },
+        withOptions: { withMethods: ['querySelector'], inferredAssignments: true },
+        resolve: { key: '?.rank' }
+    }
+}
+```
+
+**Registered in `BUILT_IN_MAP`** and `package.json` exports.
+
+
