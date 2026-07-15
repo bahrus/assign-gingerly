@@ -102,7 +102,7 @@ export class LazyLoadHandler implements AssignFromHandler {
                 } else {
                     // Content was removed (forget mode) — re-clone
                     if (transitional) {
-                        ensureHideStyle(lhsTarget.getRootNode());
+                        ensureHideStyle(lhsTarget.getRootNode(), hideClass, hideCss);
                         withTransition(startMarker, 'show', true, () => {
                             this.cloneAndInsertSync(instantiate, startMarker!, endMarker!, lhsTarget, resolvedParams);
                         });
@@ -118,7 +118,7 @@ export class LazyLoadHandler implements AssignFromHandler {
                     [startMarker, endMarker] = createMarkers(lhsTarget, name, method);
                 }
                 if (transitional) {
-                    ensureHideStyle(lhsTarget.getRootNode());
+                    ensureHideStyle(lhsTarget.getRootNode(), hideClass, hideCss);
                     withTransition(startMarker, 'show', true, () => {
                         this.cloneAndInsertSync(instantiate, startMarker!, endMarker!, lhsTarget, resolvedParams);
                     });

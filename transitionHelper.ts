@@ -91,9 +91,9 @@ export function withTransition(
 }
 
 /**
- * Track which rootNodes already have the hide style injected.
+ * Track which (rootNode, className) combos already have styles injected.
  */
-const styleInjected = new WeakSet<object>();
+const styleInjected = new WeakMap<object, Set<string>>();
 
 /**
  * Default CSS class name for hidden elements during transitions.
@@ -106,7 +106,7 @@ export const DEFAULT_HIDE_CLASS = 'ag-hide';
 const DEFAULT_HIDE_CSS = `display: none`;
 
 /**
- * Ensure the hide class style is injected into the rootNode (once per rootNode).
+ * Ensure the hide class style is injected into the rootNode (once per rootNode + className combo).
  * 
  * @param rootNode - The Document, ShadowRoot, or element root to inject into
  * @param hideClass - CSS class name (default: 'ag-hide')
@@ -123,8 +123,14 @@ export function ensureHideStyle(
         target = document.head;
     }
 
-    if (styleInjected.has(target)) return;
-    styleInjected.add(target);
+    let injectedClasses = styleInjected.get(target);
+    if (!injectedClasses) {
+        injectedClasses = new Set();
+        styleInjected.set(target, injectedClasses);
+    }
+
+    if (injectedClasses.has(hideClass)) return;
+    injectedClasses.add(hideClass);
 
     const style = document.createElement('style');
     style.textContent = `.${hideClass} { ${hideCss} }`;
