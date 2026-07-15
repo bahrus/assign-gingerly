@@ -323,3 +323,72 @@ But I do wonder how we can support assigning from the parent assign into the fra
 
 
 
+
+---
+
+## Response to Human Response II
+
+### All Clear — Ready to Implement
+
+The corrected example makes sense:
+
+```js
+fromEachItem: {
+    assignToFragment: {
+        '?.querySelector?.tr?.ish': '?.'
+    },
+    withOptions: {
+        withMethods: ['querySelector'],
+        inferredAssignments: true
+    },
+    resolve: {
+        key: '?.rank'
+    }
+}
+```
+
+Key decisions confirmed:
+- **No option inheritance** from outer → inner. `fromEachItem.withOptions` is self-contained.
+- **`key` stays in `fromEachItem.resolve`** — resolved per-item. Makes sense because the key *comes from* each item.
+- **`resolve` as the name** — fine. It's the established pattern for "these paths get resolved against the source."
+- **`assignToFragment`** — the pattern object where `from` = the current item, applied to the cloned fragment.
+
+### Preliminary Thoughts on Parent-to-Fragment Assignment (Phase II)
+
+The question: how does `totalMedalCount` from the *parent VM* get into each cloned row?
+
+Current model: `fromEachItem` uses each array item as `from`. But some values come from the parent scope (e.g., aggregate totals, shared config).
+
+**Options I can see:**
+
+1. **Explicit `fromParent` block** — a second assignment pass that uses the outer `from` (the full VM):
+   ```js
+   fromEachItem: {
+       assignToFragment: { ... },  // from = each item
+       assignFromParent: {          // from = outer vm
+           '?.querySelector?.[part~="totalMedalCount"]?.textContent': '?.totalMedalCount'
+       }
+   }
+   ```
+
+2. **Merge contexts** — the item inherits/shadows the parent VM. Each item's `from` is `{ ...parentVM, ...item }`. This means `'?.totalMedalCount'` resolves from the parent when not on the item. Simple but implicit.
+
+3. **Protocol-based** — a `parent://totalMedalCount` protocol that resolves against the outer VM from within the inner context.
+
+I'd lean toward option 1 (explicit `fromParent` block) for clarity — you see exactly what comes from where. But this is Phase II territory.
+
+### Implementation Plan (Phase I)
+
+What I'll build:
+
+1. **`handlers/manageTemplateList.ts/.js`** — new built-in handler
+2. **Core flow:**
+   - Resolve `forEach` (iterable) and `instantiate` (template)
+   - Find or create markers (reusing `markerUtils`)
+   - On first call: clone template per item → fragment → insert between markers
+   - On subsequent calls: reconcile by `key` (add new, remove missing, update existing in place)
+   - For each item: call `assignFrom(clonedElement, assignToFragment, { from: item, ...withOptions })`
+3. **Register in `BUILT_IN_MAP`**
+4. **Fragment buffering** — batch all clones into a DocumentFragment before inserting
+
+Shall I proceed?
