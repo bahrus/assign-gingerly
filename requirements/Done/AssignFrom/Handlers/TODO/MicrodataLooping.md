@@ -1,5 +1,9 @@
 # Microdata Looping
 
+---
+
+## Human Ask
+
 ```html
 <template id=country-ranking>
     <tr 
@@ -278,3 +282,44 @@ I think `fromEachItem` reads clearly — "from each item in the iterable, do thi
 ### Summary
 
 The proposal is coherent. I'd say the main decision remaining is whether `key` lives in `fromEachItem.resolve` or the outer `resolve`. Both work — it's a readability preference. Everything else is clear enough to move toward implementation when you're ready.
+
+---
+
+## Human Response II
+
+First, just to be clear, my previous example still had some mistakes:
+
+```JS
+//uses assignFrom where from is each ranking item from the vm
+fromEachItem: {
+    assignToFragment:{
+        //I think we settled what this should be on the rhs, but
+        //I can't remember if it should just be '.'.
+        '?.querySelector?.tr?.ish': '?.' 
+    },
+    withOptions: {
+        withMethods: ['querySelector'],
+        inferredAssignments: true
+    },
+    //optional?
+    resolve: {
+        key: '?.rank'
+    }
+},
+...
+```
+
+I don't think the inner assign (assignToFragment) should inherit any options from the outer assign.
+
+I think it would be confusing to include "?.key" in the outer assign, because I think the context of where resolve resolves from is from the vm, not from each item.
+
+If anything, a more viable alternative in my mind, would be to make it a top level parameter of the outer assign.  But I think where I've placed it will make a bit more sense to developers.  I'm open to changing the name from "resolve" to something else, but nothing jumps out at me, and I think resolve sounds "warm and fuzzy" to my sensibility due to our previous use.
+
+Don't worry about  -o=totalMedalCount for now.
+
+But I do wonder how we can support assigning from the parent assign into the fragment.  Let's address that in Phase II.  Feel free to add your preliminary thoughts.
+
+
+
+
+
