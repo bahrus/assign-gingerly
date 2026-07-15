@@ -84,3 +84,54 @@ assignFrom(document.body, {
     from: olympics2024Summary
 })
 ```
+
+---
+
+## High-Level Feedback
+
+### What I Understand the Goal to Be
+
+A handler that:
+1. Takes an iterable (`forEach`) and a template (`instantiate`)
+2. Clones the template once per item in the iterable
+3. For each cloned instance, distributes the item's properties into the clone using inferred assignments (itemprop matching)
+4. Manages the list over time — add/remove/reorder clones as the iterable changes
+
+This is the "repeater" pattern — the declarative equivalent of `for (const item of list) { clone template, fill in values, append }`.
+
+### What Reads Clearly
+
+- `forEach: '?.rankings'` — the source iterable (resolved path)
+- `instantiate: 'globalThis://country-ranking'` — the template to clone
+- `forget`, `method`, `markerName` — reuse of lazyLoad semantics for where/how content is placed
+- `inferredAssignments: true` inside `forEachItem` — each cloned item's properties are distributed by itemprop automatically
+
+### Questions / Areas of Uncertainty
+
+1. **`forEachItem` vs `resolve`** — the config has both a `resolve` block (for the list-level params) and a `forEachItem` block (for per-item behavior). Is `forEachItem` processed once per cloned item? And does `forEachItem.assign` use `assignFrom` semantics (paths resolved against each array item as `from`)?
+
+2. **Where does `protocols` live?** In your example it's a sibling of `resolve` and `forEachItem` inside the handler config. Currently, `protocols` lives in `AssignFromOptions` (the outer options), not in the handler config. Is this intentional — should the handler have its own protocol map, or should it inherit from the outer `assignFrom` options?
+
+3. **The `withOptions` inside `forEachItem`** — is this the per-item `assignFrom` options? If so, `inferredAssignments: true` there would mean "for each cloned row, find `[itemprop]` elements and set values from the item object." That's elegant and leverages existing infrastructure.
+
+4. **Update semantics** — when `assignFrom` is called again with a new/modified `rankings` array, what happens?
+   - Items added → new clones appended
+   - Items removed → clones hidden/removed (based on `forget`)
+   - Items reordered → reorder clones? Or destroy + recreate?
+   - Items modified (same position, different values) → update in place via inferredAssignments?
+
+   This is the most complex part of a repeater. A keying strategy (like React's `key` prop) would help identify which items are the same across updates.
+
+5. **The commented-out `itemscopeMgr: 'CountryMedalsCount'`** — is this an alternative to `inferredAssignments`? i.e., instead of distributing values via itemprop inference, route the whole item through the itemscope manager's `ish` property? If so, it's another mode: "clone template, set clone.ish = item" vs "clone template, infer-assign item properties."
+
+### Suggestions
+
+- **Keep the handler focused on cloning + list management.** Let `inferredAssignments` (or `ish`) handle the per-item value distribution. The handler's job: clone N times, track which clones map to which items, add/remove as needed.
+
+- **Consider a `key` field** for stable identity across updates: `key: 'rank'` (or `key: '?.noc'`). Without it, the handler can only do positional matching (item[0] → clone[0]) which breaks on reordering.
+
+- **The `-o=totalMedalCount` attribute in the template** — this looks like a different binding mechanism (maybe from a different enhancement?). Should the handler ignore attributes it doesn't understand and let other enhancements handle them?
+
+### Summary
+
+The concept is sound and builds naturally on the existing infrastructure (markers, inferredAssignments, templates, protocols). The main design decisions are around update semantics (keying, reorder, in-place update vs recreate) — but those can be phase II. A first pass that just clones N times and infer-assigns would already be useful.
