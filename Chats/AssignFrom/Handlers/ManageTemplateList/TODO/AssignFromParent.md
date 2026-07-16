@@ -119,3 +119,78 @@ Can you suggest a better name than fromFrom, which is admittedly a bit silly sou
 
 
 
+
+---
+
+## Response
+
+### The Concept is Clear
+
+A second assignment pass on each cloned fragment, but sourced from the *outer* VM (the `from` object passed to `assignFrom`) rather than from the individual array item. This gives each row access to aggregate/shared data (like `totalMedalCount`) that doesn't live on the item itself.
+
+### On the Name `fromFrom`
+
+Yeah, it's a bit recursive. The challenge is communicating "from the outer `from`" — which is inherently self-referential.
+
+Here are some alternatives:
+
+| Name | Reads as... | Feel |
+|------|-------------|------|
+| `fromFrom` | "From the from" | Silly but accurate |
+| `fromParent` | "From the parent scope" | Clear, but "parent" could confuse with DOM parent |
+| `fromSource` | "From the source object" | Neutral, avoids "parent" ambiguity |
+| `fromContext` | "From the surrounding context" | Broad, slightly vague |
+| `fromScope` | "From the enclosing scope" | JavaScript-y, clear to developers |
+| `fromOuter` | "From the outer source" | Direct, no ambiguity |
+| `withShared` | "With shared data" | Describes intent rather than mechanism |
+| `sharedAssign` | "Shared assignment" | Clear intent |
+| `perClone` | "Per clone from outer" | Hmm, doesn't say where from |
+| `fromVM` | "From the view model" | Assumes the source is a VM (not always) |
+
+### My Pick: `fromSource`
+
+It reads naturally in context:
+
+```js
+fromEachItem: { ... },   // "from each item" — source is the array element
+fromSource: { ... },      // "from source" — source is the outer `from` object
+```
+
+The word "source" maps directly to `options.from` — which is the source object. No ambiguity about DOM parents or scope chains.
+
+Runner-up: `fromOuter` — more explicit about the "outer" relationship, but slightly more jargon-y.
+
+### Alternative Framing
+
+If the name should describe *what it does* rather than *where data comes from*:
+
+| Name | Reads as... |
+|------|-------------|
+| `applyShared` | "Apply shared data to each clone" |
+| `injectShared` | "Inject shared data" |
+
+But these break the `from___` naming pattern established by `fromEachItem`.
+
+### My Recommendation
+
+**`fromSource`** — keeps the `from___` pattern, is descriptive, and reads well alongside `fromEachItem`.
+
+```js
+fromEachItem: {
+    assignToFragment: { '?.querySelector?.tr?.ish': '?.' },
+    withOptions: { withMethods: ['querySelector'], inferredAssignments: true },
+    resolve: { key: '?.rank' }
+},
+fromSource: {
+    assignToFragment: {
+        '?.querySelector?.[part~="totalMedalCount"]?.textContent': '?.totalMedalCount'
+    },
+    withOptions: { withMethods: ['querySelector'] }
+}
+```
+
+Does `fromSource` work for you?
+
+## Human Response I
+
+Yes, let's go with fromSource
