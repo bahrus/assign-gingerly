@@ -25,6 +25,8 @@
  * }, { from: vm, withMethods: ['querySelector'], protocols: { globalThis: k => globalThis[k] } });
  */
 import { findMarkers, createMarkers } from '../markerUtils.js';
+import { resolveValue } from '../resolveValues.js';
+import { assignFrom } from '../assignFrom.js';
 const listStateMap = new WeakMap();
 /**
  * ManageTemplateListHandler — clones a template per iterable item with keyed reconciliation.
@@ -35,6 +37,7 @@ export class ManageTemplateListHandler {
         this.config = config;
     }
     async assign(lhsTarget, resolvedParams, options) {
+        //return;
         const { forEach: items, instantiate, method = 'appendChild', forget = false, markerName, } = resolvedParams;
         if (!(lhsTarget instanceof Element)) {
             throw new Error('builtIns.manageTemplateList: lhsTarget must be a DOM Element');
@@ -69,9 +72,6 @@ export class ManageTemplateListHandler {
         }
         // Convert iterable to array
         const itemsArray = Array.from(items);
-        // Resolve keys for each item
-        const { resolveValue } = await import('../resolveValues.js');
-        const { assignFrom } = await import('../assignFrom.js');
         // Fast path: import inferredAssignments directly
         const processInferred = useFastPath
             ? (await import('../inferredAssignments.js')).processInferredAssignments

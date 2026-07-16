@@ -27,6 +27,8 @@
 
 import type { AssignFromHandler } from '../assignFrom.js';
 import { findMarkers, createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
+import { resolveValue } from '../resolveValues.js';
+import { assignFrom } from '../assignFrom.js';
 
 /**
  * State stored per list instance (keyed by start marker).
@@ -52,6 +54,7 @@ export class ManageTemplateListHandler implements AssignFromHandler {
     }
 
     async assign(lhsTarget: any, resolvedParams: Record<string, any>, options?: any): Promise<void> {
+        //return;
         const {
             forEach: items,
             instantiate,
@@ -102,14 +105,10 @@ export class ManageTemplateListHandler implements AssignFromHandler {
         // Convert iterable to array
         const itemsArray = Array.from(items);
 
-        // Resolve keys for each item
-        const { resolveValue } = await import('../resolveValues.js');
-        const { assignFrom } = await import('../assignFrom.js');
         // Fast path: import inferredAssignments directly
         const processInferred = useFastPath
             ? (await import('../inferredAssignments.js')).processInferredAssignments
             : null;
-
         const newKeys: any[] = itemsArray.map((item, index) => {
             if (keyPath) {
                 return resolveValue(keyPath, item);
