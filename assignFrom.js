@@ -27,6 +27,8 @@ import assignGingerly from './assignGingerly.js';
 function isHandlerCommand(key) {
     return key.endsWith(' =>');
 }
+// Module cache for processHandlerCommands — avoids await on dynamic import after first call
+let _processHandlerCommands;
 /**
  * Supported substitution variables and their option keys.
  */
@@ -204,15 +206,15 @@ export async function assignFrom(target, pattern, options, permissions) {
             }
         }
     }
-    // Process handler commands ( =>) — dynamically imported only when needed
+    // Process handler commands ( =>) — cached after first load to avoid await overhead
     if (handlerKeys.length > 0) {
-        const { processHandlerCommands } = await import('./processHandlerCommands.js');
-        await processHandlerCommands(target, handlerKeys, expandedPattern, options, permissions);
+        _processHandlerCommands ??= (await import('./processHandlerCommands.js')).processHandlerCommands;
+        await _processHandlerCommands(target, handlerKeys, expandedPattern, options, permissions);
     }
     // Process #[x] handler keys — resolve element, then pass to handler processing
     if (idRefHandlerKeys.length > 0 && options.withIds) {
         const { resolveIdVariable, parseIdRef } = await import('./resolveIdRef.js');
-        const { processHandlerCommands } = await import('./processHandlerCommands.js');
+        _processHandlerCommands ??= (await import('./processHandlerCommands.js')).processHandlerCommands;
         for (const key of idRefHandlerKeys) {
             const parsed = parseIdRef(key);
             if (!parsed)
@@ -228,7 +230,7 @@ export async function assignFrom(target, pattern, options, permissions) {
             const syntheticPattern = {
                 [syntheticKey]: expandedPattern[key]
             };
-            await processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissions);
+            await _processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissions);
         }
     }
     // Process inferred assignments — dynamically imported only when option is present

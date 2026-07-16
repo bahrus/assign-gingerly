@@ -43,14 +43,24 @@ function findHandlerInModule(module: any): AssignFromHandlerConstructor | undefi
 }
 
 /**
+ * Cache for loaded built-in handler classes — avoids await on subsequent calls.
+ */
+const handlerCache = new Map<string, AssignFromHandlerConstructor>();
+
+/**
  * Dynamically load a built-in handler by name.
  * Returns the handler constructor, or undefined if the name isn't a recognized built-in.
+ * Cached after first load — subsequent calls are synchronous.
  */
 async function loadBuiltIn(name: string): Promise<AssignFromHandlerConstructor | undefined> {
+    const cached = handlerCache.get(name);
+    if (cached) return cached;
     const path = BUILT_IN_MAP[name];
     if (!path) return undefined;
     const module = await import(path);
-    return findHandlerInModule(module);
+    const cls = findHandlerInModule(module);
+    if (cls) handlerCache.set(name, cls);
+    return cls;
 }
 
 /**
@@ -108,6 +118,7 @@ export async function processHandlerCommands(
     options: AssignFromOptions,
     permissions?: AssignPermissions
 ): Promise<void> {
+    
     for (const key of handlerKeys) {
         const lhsPath = key.substring(0, key.length - 3); // Remove ' =>'
         const rhs = pattern[key];
@@ -179,16 +190,17 @@ export async function processHandlerCommands(
         } else {
             lhsTarget = target;
         }
-
         // Execute handlers sequentially, sharing the same lhsTarget
         for (const config of configs) {
+            //return; //1.3ms
             // 1. Check options.handlers (local, per-call)
             let HandlerClass = await resolveFromHandlers(config.do, options.handlers, permissions);
-
+            //return; // 1.4
             // 2. Fallback to built-in auto-load
             if (!HandlerClass && config.do.startsWith('builtIns.')) {
                 HandlerClass = await loadBuiltIn(config.do);
             }
+            //return; //1.4
 
             if (!HandlerClass) {
                 throw new Error(`assignFrom: unknown handler "${config.do}". Provide it in options.handlers.`);
@@ -196,6 +208,7 @@ export async function processHandlerCommands(
 
             // Resolve 'resolve' map if present — uses full resolveValues (paths, protocols, literals)
             let resolvedParams: Record<string, any> = {};
+            //return; //1.8 ms
             if (config.resolve) {
                 resolvedParams = await resolveValues(config.resolve, options.from, {
                     withMethods: options.withMethods,
@@ -206,8 +219,9 @@ export async function processHandlerCommands(
 
             // Instantiate and invoke the handler
             const handler = new HandlerClass(config);
+            //return; //1.5ms
             const result = await handler.assign(lhsTarget, resolvedParams, options);
-
+            //return; //1.5ms
             // Return-value protocol: if handler returns a non-undefined value,
             // assign it back to the LHS path
             if (result !== undefined && lhsParent != null && lhsKey != null) {
