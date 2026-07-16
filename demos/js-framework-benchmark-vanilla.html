@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>manageTemplateList — JS Framework Benchmark (Local)</title>
+    <title>Vanilla JS — JS Framework Benchmark (Baseline)</title>
     <style>
         body { font-family: system-ui, sans-serif; margin: 1rem; }
         .controls { margin: 1rem 0; display: flex; gap: 0.5rem; flex-wrap: wrap; }
@@ -10,12 +10,11 @@
         #results { margin: 1rem 0; font-family: monospace; white-space: pre-wrap; background: #f8f8f8; padding: 1rem; border-radius: 4px; }
         table { border-collapse: collapse; width: 100%; }
         td, th { padding: 0.25rem 0.5rem; border: 1px solid #ddd; }
-        tr.selected td { background: #d4edda; }
     </style>
 </head>
 <body>
-    <h1>manageTemplateList — Benchmark</h1>
-    <p>Approximates the <a href="https://github.com/nicholaskajoh/js-framework-benchmark">js-framework-benchmark</a> operations.</p>
+    <h1>Vanilla JS — Benchmark (Baseline)</h1>
+    <p>Pure DOM manipulation — no framework, no assignFrom. Use as a performance floor.</p>
 
     <div class="controls">
         <button id="btn-create">Create 1,000</button>
@@ -28,22 +27,12 @@
 
     <pre id="results">Click a button to run a benchmark operation...</pre>
 
-    <template id="row-tpl">
-        <tr>
-            <td itemprop="id"></td>
-            <td itemprop="label"></td>
-            <td><button class="remove">×</button></td>
-        </tr>
-    </template>
-
     <table>
         <thead><tr><th>ID</th><th>Label</th><th></th></tr></thead>
         <tbody id="tbody"></tbody>
     </table>
 
-    <script type="module">
-        import { assignFrom } from '../assignFrom.js';
-
+    <script>
         // --- Data generation (same as js-framework-benchmark) ---
         const adjectives = ['pretty', 'large', 'big', 'small', 'tall', 'short', 'long', 'handsome', 'plain', 'quaint', 'clean', 'elegant', 'easy', 'angry', 'crazy', 'helpful', 'mushy', 'odd', 'unsightly', 'adorable', 'important', 'inexpensive', 'cheap', 'expensive', 'fancy'];
         const colours = ['red', 'yellow', 'blue', 'green', 'pink', 'brown', 'purple', 'brown', 'white', 'black', 'orange'];
@@ -67,42 +56,70 @@
         const resultsEl = document.getElementById('results');
         let timings = [];
 
-        // --- Render ---
-        async function render() {
-            await assignFrom(tbody, {
-                '?. =>': {
-                    do: 'builtIns.manageTemplateList',
-                    resolve: {
-                        forEach: '?.data',
-                        instantiate: 'globalThis://row-tpl',
-                        forget: true,
-                    },
-                    fromEachItem: {
-                        assignToFragment: {},
-                        withOptions: {
-                            inferredAssignments: { byItemprop: true }
-                        },
-                        resolve: { key: '?.id' }
-                    }
+        // --- Vanilla render (keyed by data-id) ---
+        function render() {
+            const existingRows = new Map();
+            for (const row of tbody.children) {
+                existingRows.set(parseInt(row.dataset.id), row);
+            }
+
+            const fragment = document.createDocumentFragment();
+            const newRows = [];
+
+            for (const item of data) {
+                let row = existingRows.get(item.id);
+                if (row) {
+                    // Update existing
+                    row.cells[1].textContent = item.label;
+                    existingRows.delete(item.id);
+                } else {
+                    // Create new
+                    row = document.createElement('tr');
+                    row.dataset.id = item.id;
+                    const td1 = document.createElement('td');
+                    td1.textContent = item.id;
+                    const td2 = document.createElement('td');
+                    td2.textContent = item.label;
+                    const td3 = document.createElement('td');
+                    const btn = document.createElement('button');
+                    btn.textContent = '×';
+                    btn.className = 'remove';
+                    td3.appendChild(btn);
+                    row.appendChild(td1);
+                    row.appendChild(td2);
+                    row.appendChild(td3);
                 }
-            }, {
-                from: { data },
-                protocols: { globalThis: k => globalThis[k] }
-            });
+                newRows.push(row);
+            }
+
+            // Remove old rows
+            for (const row of existingRows.values()) {
+                row.remove();
+            }
+
+            // Rebuild order — append all in correct order
+            // (detach from DOM first if needed, then append in order)
+            tbody.textContent = '';
+            for (const row of newRows) {
+                fragment.appendChild(row);
+            }
+            tbody.appendChild(fragment);
         }
 
         // --- Benchmark helper ---
-        async function benchmark(name, fn) {
+        function benchmark(name, fn) {
             const start = performance.now();
             fn();
-            await render();
-            // Wait for idle (requestAnimationFrame + setTimeout flush)
-            await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
-            const elapsed = performance.now() - start;
-            timings.push({ name, elapsed, rows: data.length });
-            resultsEl.textContent = timings.map(t =>
-                `${t.name.padEnd(25)} ${t.elapsed.toFixed(1).padStart(8)}ms  (${t.rows} rows)`
-            ).join('\n');
+            render();
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    const elapsed = performance.now() - start;
+                    timings.push({ name, elapsed, rows: data.length });
+                    resultsEl.textContent = timings.map(t =>
+                        `${t.name.padEnd(25)} ${t.elapsed.toFixed(1).padStart(8)}ms  (${t.rows} rows)`
+                    ).join('\n');
+                }, 0);
+            });
         }
 
         // --- Operations ---
@@ -123,8 +140,6 @@
                 for (let i = 0; i < data.length; i += 10) {
                     data[i] = { ...data[i], label: data[i].label + ' !!!' };
                 }
-                // New array reference to trigger reconciliation
-                data = [...data];
             });
         });
 
@@ -134,7 +149,6 @@
                     const tmp = data[1];
                     data[1] = data[998];
                     data[998] = tmp;
-                    data = [...data];
                 }
             });
         });

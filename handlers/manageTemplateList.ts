@@ -79,6 +79,11 @@ export class ManageTemplateListHandler implements AssignFromHandler {
         const sourceAssignToFragment = fromSource?.assignToFragment;
         const sourceWithOptions = fromSource?.withOptions ?? {};
 
+        // Detect fast path: no assignToFragment patterns, just inferredAssignments
+        const hasAssignPatterns = Object.keys(assignToFragment).length > 0;
+        const inferredConfig = withOptions.inferredAssignments;
+        const useFastPath = !hasAssignPatterns && inferredConfig && !sourceAssignToFragment;
+
         const name = markerName ?? getMarkerName(instantiate) ?? 'templateList';
 
         // Find or create markers
@@ -99,6 +104,12 @@ export class ManageTemplateListHandler implements AssignFromHandler {
 
         // Resolve keys for each item
         const { resolveValue } = await import('../resolveValues.js');
+        const { assignFrom } = await import('../assignFrom.js');
+        // Fast path: import inferredAssignments directly
+        const processInferred = useFastPath
+            ? (await import('../inferredAssignments.js')).processInferredAssignments
+            : null;
+
         const newKeys: any[] = itemsArray.map((item, index) => {
             if (keyPath) {
                 return resolveValue(keyPath, item);
@@ -128,10 +139,8 @@ export class ManageTemplateListHandler implements AssignFromHandler {
         }
 
         // Process items — clone new ones, update existing
-        const { assignFrom } = await import('../assignFrom.js');
         const fragment = document.createDocumentFragment();
         const newKeyToNodes = new Map<any, Node[]>();
-        const orderedNodes: Node[] = [];
 
         for (let i = 0; i < itemsArray.length; i++) {
             const item = itemsArray[i];
@@ -140,17 +149,18 @@ export class ManageTemplateListHandler implements AssignFromHandler {
             if (state.keyToNodes.has(key) && oldKeys.has(key)) {
                 // Existing item — update in place
                 const existingNodes = state.keyToNodes.get(key)!;
-                // Find the root element for assignFrom
                 const rootEl = existingNodes.find(n => n instanceof Element) as Element | undefined;
                 if (rootEl) {
-                    await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
-                    // Apply fromSource (outer VM) assignments if configured
+                    if (processInferred) {
+                        await processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
+                    } else {
+                        await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                    }
                     if (sourceAssignToFragment && options?.from) {
                         await assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
                     }
                 }
                 newKeyToNodes.set(key, existingNodes);
-                // Unhide if was hidden
                 for (const node of existingNodes) {
                     if (node instanceof Element) node.removeAttribute('hidden');
                 }
@@ -170,25 +180,26 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                 // Apply per-item assignments to the cloned fragment
                 const rootEl = clonedNodes.find(n => n instanceof Element) as Element | undefined;
                 if (rootEl) {
-                    // Append to a temporary container so DOM queries work
                     const tempContainer = document.createDocumentFragment();
                     tempContainer.appendChild(content);
-                    await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
-                    // Apply fromSource (outer VM) assignments if configured
+
+                    if (processInferred) {
+                        await processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
+                    } else {
+                        await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                    }
+
                     if (sourceAssignToFragment && options?.from) {
                         await assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
                     }
                 }
 
-                // Add cloned nodes to the batch fragment
                 for (const node of clonedNodes) {
                     fragment.appendChild(node);
                 }
                 newKeyToNodes.set(key, clonedNodes);
             }
         }
-
-        // Remove old clones that weren't reused (already handled above via forget/hide)
 
         // Wait for async rendering in the fragment to settle before committing
         if (fragment.childNodes.length > 0) {
@@ -200,7 +211,6 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                 try {
                     await waitForSettled(fragment, idleMs, timeout);
                 } catch (e) {
-                    // Timeout exceeded — insert anyway (best-effort), log warning
                     console.warn('builtIns.manageTemplateList:', (e as Error).message, '— inserting fragment anyway');
                 }
             }

@@ -38,10 +38,14 @@ export class ManageTemplateListHandler {
         const perItemResolve = fromEachItem?.resolve ?? {};
         const keyPath = perItemResolve.key;
 
-        // fromSource config — assigns from the outer `from` (parent VM) to each clone
         const fromSource = this.config.fromSource;
         const sourceAssignToFragment = fromSource?.assignToFragment;
         const sourceWithOptions = fromSource?.withOptions ?? {};
+
+        // Detect fast path: no assignToFragment patterns, just inferredAssignments
+        const hasAssignPatterns = Object.keys(assignToFragment).length > 0;
+        const inferredConfig = withOptions.inferredAssignments;
+        const useFastPath = !hasAssignPatterns && inferredConfig && !sourceAssignToFragment;
 
         const name = markerName ?? getMarkerName(instantiate) ?? 'templateList';
 
@@ -59,6 +63,11 @@ export class ManageTemplateListHandler {
         const itemsArray = Array.from(items);
 
         const { resolveValue } = await import('../resolveValues.js');
+        const { assignFrom } = await import('../assignFrom.js');
+        const processInferred = useFastPath
+            ? (await import('../inferredAssignments.js')).processInferredAssignments
+            : null;
+
         const newKeys = itemsArray.map((item, index) => {
             if (keyPath) {
                 return resolveValue(keyPath, item);
@@ -86,7 +95,6 @@ export class ManageTemplateListHandler {
             }
         }
 
-        const { assignFrom } = await import('../assignFrom.js');
         const fragment = document.createDocumentFragment();
         const newKeyToNodes = new Map();
 
@@ -99,7 +107,11 @@ export class ManageTemplateListHandler {
                 const existingNodes = state.keyToNodes.get(key);
                 const rootEl = existingNodes.find(n => n instanceof Element);
                 if (rootEl) {
-                    await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                    if (processInferred) {
+                        await processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
+                    } else {
+                        await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                    }
                     if (sourceAssignToFragment && options?.from) {
                         await assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
                     }
@@ -124,7 +136,13 @@ export class ManageTemplateListHandler {
                 if (rootEl) {
                     const tempContainer = document.createDocumentFragment();
                     tempContainer.appendChild(content);
-                    await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+
+                    if (processInferred) {
+                        await processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
+                    } else {
+                        await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                    }
+
                     if (sourceAssignToFragment && options?.from) {
                         await assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
                     }
@@ -137,6 +155,7 @@ export class ManageTemplateListHandler {
             }
         }
 
+        // Wait for async rendering in the fragment to settle before committing
         if (fragment.childNodes.length > 0) {
             const waitOpt = resolvedParams.waitForSettled;
             if (waitOpt) {
@@ -149,9 +168,11 @@ export class ManageTemplateListHandler {
                     console.warn('builtIns.manageTemplateList:', e.message, '— inserting fragment anyway');
                 }
             }
+
             endMarker.parentNode.insertBefore(fragment, endMarker);
         }
 
+        // Update state
         state.keyToNodes = newKeyToNodes;
         state.keyOrder = newKeys;
     }
