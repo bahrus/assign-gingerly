@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>manageTemplateList — JS Framework Benchmark (Local)</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 1rem; }
+        .controls { margin: 1rem 0; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        button { padding: 0.4rem 0.8rem; cursor: pointer; }
+        #results { margin: 1rem 0; font-family: monospace; white-space: pre-wrap; background: #f8f8f8; padding: 1rem; border-radius: 4px; }
+        table { border-collapse: collapse; width: 100%; }
+        td, th { padding: 0.25rem 0.5rem; border: 1px solid #ddd; }
+        tr.selected td { background: #d4edda; }
+    </style>
+</head>
+<body>
+    <h1>manageTemplateList — Benchmark</h1>
+    <p>Approximates the <a href="https://github.com/nicholaskajoh/js-framework-benchmark">js-framework-benchmark</a> operations.</p>
+
+    <div class="controls">
+        <button id="btn-create">Create 1,000</button>
+        <button id="btn-create10k">Create 10,000</button>
+        <button id="btn-append">Append 1,000</button>
+        <button id="btn-update">Update every 10th</button>
+        <button id="btn-swap">Swap rows</button>
+        <button id="btn-clear">Clear</button>
+    </div>
+
+    <pre id="results">Click a button to run a benchmark operation...</pre>
+
+    <template id="row-tpl">
+        <tr>
+            <td itemprop="id"></td>
+            <td itemprop="label"></td>
+            <td><button class="remove">×</button></td>
+        </tr>
+    </template>
+
+    <table>
+        <thead><tr><th>ID</th><th>Label</th><th></th></tr></thead>
+        <tbody id="tbody"></tbody>
+    </table>
+
+    <script type="module">
+        import { assignFrom } from '../assignFrom.js';
+
+        // --- Data generation (same as js-framework-benchmark) ---
+        const adjectives = ['pretty', 'large', 'big', 'small', 'tall', 'short', 'long', 'handsome', 'plain', 'quaint', 'clean', 'elegant', 'easy', 'angry', 'crazy', 'helpful', 'mushy', 'odd', 'unsightly', 'adorable', 'important', 'inexpensive', 'cheap', 'expensive', 'fancy'];
+        const colours = ['red', 'yellow', 'blue', 'green', 'pink', 'brown', 'purple', 'brown', 'white', 'black', 'orange'];
+        const nouns = ['table', 'chair', 'house', 'bbq', 'desk', 'car', 'pony', 'cookie', 'sandwich', 'burger', 'pizza', 'mouse', 'keyboard'];
+
+        let nextId = 1;
+        function buildData(count) {
+            const data = [];
+            for (let i = 0; i < count; i++) {
+                data.push({
+                    id: nextId++,
+                    label: `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${colours[Math.floor(Math.random() * colours.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`
+                });
+            }
+            return data;
+        }
+
+        // --- State ---
+        let data = [];
+        const tbody = document.getElementById('tbody');
+        const resultsEl = document.getElementById('results');
+        let timings = [];
+
+        // --- Render ---
+        async function render() {
+            await assignFrom(tbody, {
+                '?. =>': {
+                    do: 'builtIns.manageTemplateList',
+                    resolve: {
+                        forEach: '?.data',
+                        instantiate: 'globalThis://row-tpl',
+                    },
+                    fromEachItem: {
+                        assignToFragment: {},
+                        withOptions: {
+                            inferredAssignments: { byItemprop: true }
+                        },
+                        resolve: { key: '?.id' }
+                    }
+                }
+            }, {
+                from: { data },
+                protocols: { globalThis: k => globalThis[k] }
+            });
+        }
+
+        // --- Benchmark helper ---
+        async function benchmark(name, fn) {
+            const start = performance.now();
+            fn();
+            await render();
+            // Wait for idle (requestAnimationFrame + setTimeout flush)
+            await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+            const elapsed = performance.now() - start;
+            timings.push({ name, elapsed, rows: data.length });
+            resultsEl.textContent = timings.map(t =>
+                `${t.name.padEnd(25)} ${t.elapsed.toFixed(1).padStart(8)}ms  (${t.rows} rows)`
+            ).join('\n');
+        }
+
+        // --- Operations ---
+        document.getElementById('btn-create').addEventListener('click', () => {
+            benchmark('Create 1,000', () => { data = buildData(1000); });
+        });
+
+        document.getElementById('btn-create10k').addEventListener('click', () => {
+            benchmark('Create 10,000', () => { data = buildData(10000); });
+        });
+
+        document.getElementById('btn-append').addEventListener('click', () => {
+            benchmark('Append 1,000', () => { data = data.concat(buildData(1000)); });
+        });
+
+        document.getElementById('btn-update').addEventListener('click', () => {
+            benchmark('Update every 10th', () => {
+                for (let i = 0; i < data.length; i += 10) {
+                    data[i] = { ...data[i], label: data[i].label + ' !!!' };
+                }
+                // New array reference to trigger reconciliation
+                data = [...data];
+            });
+        });
+
+        document.getElementById('btn-swap').addEventListener('click', () => {
+            benchmark('Swap rows 1↔998', () => {
+                if (data.length > 998) {
+                    const tmp = data[1];
+                    data[1] = data[998];
+                    data[998] = tmp;
+                    data = [...data];
+                }
+            });
+        });
+
+        document.getElementById('btn-clear').addEventListener('click', () => {
+            benchmark('Clear', () => { data = []; });
+        });
+    </script>
+</body>
+</html>
