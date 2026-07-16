@@ -29,6 +29,7 @@ import type { AssignFromHandler } from '../assignFrom.js';
 import { findMarkers, createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 import { resolveValue } from '../resolveValues.js';
 import { assignFrom } from '../assignFrom.js';
+import { processInferredAssignments } from '../inferredAssignments.js';
 
 /**
  * State stored per list instance (keyed by start marker).
@@ -105,10 +106,8 @@ export class ManageTemplateListHandler implements AssignFromHandler {
         // Convert iterable to array
         const itemsArray = Array.from(items);
 
-        // Fast path: import inferredAssignments directly
-        const processInferred = useFastPath
-            ? (await import('../inferredAssignments.js')).processInferredAssignments
-            : null;
+        // Fast path: use processInferredAssignments directly when possible
+        const processInferred = useFastPath ? processInferredAssignments : null;
         const newKeys: any[] = itemsArray.map((item, index) => {
             if (keyPath) {
                 return resolveValue(keyPath, item);
@@ -151,7 +150,7 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                 const rootEl = existingNodes.find(n => n instanceof Element) as Element | undefined;
                 if (rootEl) {
                     if (processInferred) {
-                        await processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
+                        processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                     } else {
                         await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
                     }
@@ -183,7 +182,7 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                     tempContainer.appendChild(content);
 
                     if (processInferred) {
-                        await processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
+                        processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                     } else {
                         await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
                     }

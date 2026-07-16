@@ -31,11 +31,11 @@ export interface InferredAssignmentsConfig {
  * @param from - The source object containing values to distribute
  * @param config - The inferredAssignments configuration
  */
-export async function processInferredAssignments(
+export function processInferredAssignments(
     target: any,
     from: any,
     config: InferredAssignmentsConfig
-): Promise<void> {
+): void {
     if (!(target instanceof Element)) return;
     if (!from || typeof from !== 'object') return;
 

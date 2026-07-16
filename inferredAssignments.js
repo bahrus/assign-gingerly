@@ -12,7 +12,7 @@ import { Infer } from './inferencer/inferencer.js';
  * @param from - The source object containing values to distribute
  * @param config - The inferredAssignments configuration
  */
-export async function processInferredAssignments(target, from, config) {
+export function processInferredAssignments(target, from, config) {
     if (!(target instanceof Element))
         return;
     if (!from || typeof from !== 'object')
