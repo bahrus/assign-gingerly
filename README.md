@@ -3930,6 +3930,75 @@ For custom property names or per-segment formatting, pass an explicit object:
 const template = md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, format: 'long' }}`;
 ```
 
+### Built-in handler: `builtIns.manageTemplateList`
+
+Clones a template once per item in an iterable, with keyed reconciliation for efficient updates. Each clone receives its item's data via `assignFrom`, and optionally shared data from the parent source.
+
+```JavaScript
+await assignFrom(document.body, {
+    '?.querySelector?.tbody =>': {
+        do: 'builtIns.manageTemplateList',
+        resolve: {
+            forEach: '?.rankings',
+            instantiate: 'globalThis://country-ranking',
+        },
+        fromEachItem: {
+            assignToFragment: { '?.querySelector?.tr?.ish': '?.' },
+            withOptions: { withMethods: ['querySelector'], inferredAssignments: true },
+            resolve: { key: '?.rank' }
+        }
+    }
+}, {
+    from: olympics2024Summary,
+    withMethods: ['querySelector'],
+    protocols: { globalThis: k => globalThis[k] }
+});
+```
+
+**How it works:**
+
+1. Resolves `forEach` (iterable) and `instantiate` (template) from the `resolve` block
+2. Clones the template once per item, buffering all clones into a `DocumentFragment`
+3. For each clone, calls `assignFrom(clone, assignToFragment, { from: item, ...withOptions })` — distributing the item's data
+4. Inserts the fragment between comment markers in one DOM operation
+5. On subsequent calls, reconciles by `key` — adds new items, removes missing ones, updates existing clones in place
+
+**Keyed reconciliation:**
+
+The `key` field (in `fromEachItem.resolve`) identifies each item for stable identity across updates:
+- New key → clone + append
+- Key removed → hide (or remove if `forget: true`)
+- Key still present → update clone in place (no re-cloning)
+
+Without `key`, positional matching is used (item[i] → clone[i]).
+
+**Shared parent data (`fromSource`):**
+
+Pass data from the outer VM into each clone (e.g., aggregate totals):
+
+```JavaScript
+fromSource: {
+    assignToFragment: {
+        '?.querySelector?.[part~="totalMedalCount"]?.textContent': '?.totalMedalCount'
+    },
+    withOptions: { withMethods: ['querySelector'] }
+}
+```
+
+**Wait for async rendering (`waitForSettled`):**
+
+Optionally wait for async operations inside the fragment to complete before committing to the live DOM:
+
+```JavaScript
+resolve: {
+    forEach: '?.rankings',
+    instantiate: 'globalThis://country-ranking',
+    waitForSettled: true,  // or { idleMs: 50, timeout: 2000 }
+}
+```
+
+For full details, see [docs/manage-template-list.md](docs/manage-template-list.md).
+
 ## Typed Path Authoring with `paths`, `sp`, and `md`
 
 For JSON generated config files generated from TypeScript/`.mts`/`mjs` files during a build or server-side rendering, the `paths` utility provides compile-time autocomplete and type safety for `?.`-prefixed path strings. The `sp` tagged template literal ("split into parts") produces arrays suitable for `builtIns.join`. The `md` tagged template literal produces `{prop, val}` objects suitable for `builtIns.microDataJoin`.
