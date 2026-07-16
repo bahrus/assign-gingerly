@@ -51,7 +51,7 @@ export class ManageTemplateListHandler implements AssignFromHandler {
         this.config = config;
     }
 
-    async assign(lhsTarget: any, resolvedParams: Record<string, any>): Promise<void> {
+    async assign(lhsTarget: any, resolvedParams: Record<string, any>, options?: any): Promise<void> {
         const {
             forEach: items,
             instantiate,
@@ -73,6 +73,11 @@ export class ManageTemplateListHandler implements AssignFromHandler {
         const withOptions = fromEachItem?.withOptions ?? {};
         const perItemResolve = fromEachItem?.resolve ?? {};
         const keyPath = perItemResolve.key; // e.g., '?.rank'
+
+        // fromSource config — assigns from the outer `from` (parent VM) to each clone
+        const fromSource = this.config.fromSource;
+        const sourceAssignToFragment = fromSource?.assignToFragment;
+        const sourceWithOptions = fromSource?.withOptions ?? {};
 
         const name = markerName ?? getMarkerName(instantiate) ?? 'templateList';
 
@@ -139,6 +144,10 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                 const rootEl = existingNodes.find(n => n instanceof Element) as Element | undefined;
                 if (rootEl) {
                     await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                    // Apply fromSource (outer VM) assignments if configured
+                    if (sourceAssignToFragment && options?.from) {
+                        await assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                    }
                 }
                 newKeyToNodes.set(key, existingNodes);
                 // Unhide if was hidden
@@ -165,6 +174,10 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                     const tempContainer = document.createDocumentFragment();
                     tempContainer.appendChild(content);
                     await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                    // Apply fromSource (outer VM) assignments if configured
+                    if (sourceAssignToFragment && options?.from) {
+                        await assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                    }
                 }
 
                 // Add cloned nodes to the batch fragment

@@ -15,7 +15,7 @@ export class ManageTemplateListHandler {
         this.config = config;
     }
 
-    async assign(lhsTarget, resolvedParams) {
+    async assign(lhsTarget, resolvedParams, options) {
         const {
             forEach: items,
             instantiate,
@@ -37,6 +37,11 @@ export class ManageTemplateListHandler {
         const withOptions = fromEachItem?.withOptions ?? {};
         const perItemResolve = fromEachItem?.resolve ?? {};
         const keyPath = perItemResolve.key;
+
+        // fromSource config — assigns from the outer `from` (parent VM) to each clone
+        const fromSource = this.config.fromSource;
+        const sourceAssignToFragment = fromSource?.assignToFragment;
+        const sourceWithOptions = fromSource?.withOptions ?? {};
 
         const name = markerName ?? getMarkerName(instantiate) ?? 'templateList';
 
@@ -95,6 +100,9 @@ export class ManageTemplateListHandler {
                 const rootEl = existingNodes.find(n => n instanceof Element);
                 if (rootEl) {
                     await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                    if (sourceAssignToFragment && options?.from) {
+                        await assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                    }
                 }
                 newKeyToNodes.set(key, existingNodes);
                 for (const node of existingNodes) {
@@ -117,6 +125,9 @@ export class ManageTemplateListHandler {
                     const tempContainer = document.createDocumentFragment();
                     tempContainer.appendChild(content);
                     await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                    if (sourceAssignToFragment && options?.from) {
+                        await assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                    }
                 }
 
                 for (const node of clonedNodes) {

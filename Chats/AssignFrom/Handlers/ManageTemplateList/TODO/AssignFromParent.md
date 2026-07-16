@@ -194,3 +194,54 @@ Does `fromSource` work for you?
 ## Human Response I
 
 Yes, let's go with fromSource
+
+## Implementation Notes
+
+Let me implement `fromSource` in the `manageTemplateList` handler. The change: after processing each item's `fromEachItem` assignments, run a second `assignFrom` pass on each clone using the outer `from` (the parent VM) with `fromSource`'s config.
+
+The handler's `assign` method receives `resolvedParams` and has access to `this.config`. The outer `from` is passed via the third parameter to `assign` — let me check:
+
+Good — `options` (which contains `from`) is passed as the third argument. Let me update the handler to use it:
+
+Now I need to add the `fromSource` assignment after each clone's `fromEachItem` assignment. Let me find where existing items are updated and new items are cloned:
+
+I need to add `fromSource` assignment after both the existing-item update and the new-item clone:
+
+Now update the JS file similarly:
+
+Now update the reconciliation loop in the JS file:
+
+Let me verify diagnostics:
+
+Run tests:
+
+All passing. Implemented:
+
+**`fromSource` in `manageTemplateList.ts/.js`:**
+
+- Reads `this.config.fromSource` config block (same shape as `fromEachItem`: `assignToFragment` + `withOptions`)
+- After each clone's per-item assignment (`fromEachItem`), runs a second `assignFrom` pass using `options.from` (the outer parent VM) as the source
+- Applied to both new clones and existing items being updated in place
+- Only runs if `fromSource.assignToFragment` is defined and `options.from` exists
+- Handler signature updated to accept the `options` third parameter
+
+**Usage:**
+```js
+{
+    do: 'builtIns.manageTemplateList',
+    resolve: { forEach: '?.rankings', instantiate: 'globalThis://country-ranking' },
+    fromEachItem: {
+        assignToFragment: { '?.querySelector?.tr?.ish': '?.' },
+        withOptions: { withMethods: ['querySelector'], inferredAssignments: true },
+        resolve: { key: '?.rank' }
+    },
+    fromSource: {
+        assignToFragment: {
+            '?.querySelector?.[part~="totalMedalCount"]?.textContent': '?.totalMedalCount'
+        },
+        withOptions: { withMethods: ['querySelector'] }
+    }
+}
+```
+
+Each cloned row gets both its item data (via `fromEachItem`) AND shared parent data like `totalMedalCount` (via `fromSource`).
