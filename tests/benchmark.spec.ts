@@ -12,6 +12,12 @@ async function runBenchmarkPage(page: any, url: string, label: string): Promise<
     await page.goto(url);
     await page.waitForSelector('#btn-create');
 
+    // Wait for warmup to complete (if applicable)
+    await page.waitForFunction(() => {
+        const el = document.getElementById('results');
+        return el && (el.textContent!.includes('Warmup complete') || el.textContent!.includes('Click a button'));
+    }, { timeout: 30000 });
+
     const results: BenchResult[] = [];
 
     async function runOp(buttonId: string, expectedName: string) {

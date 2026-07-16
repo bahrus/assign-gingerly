@@ -145,6 +145,15 @@
         document.getElementById('btn-clear').addEventListener('click', () => {
             benchmark('Clear', () => { data = []; });
         });
+
+        // --- Warmup (preload all dynamic modules, no timing) ---
+        (async () => {
+            data = buildData(1);
+            await render();
+            data = [];
+            await render();
+            resultsEl.textContent = 'Warmup complete. Click a button to run a benchmark operation...';
+        })();
     </script>
 </body>
 </html>
