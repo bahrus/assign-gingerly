@@ -84,11 +84,13 @@
                 }
             };
 
+        const protocols = { globalThis: k => globalThis[k] };
+
         // --- Render ---
         async function render() {
             await assignFrom(tbody, assignValues, {
                 from: { data },
-                protocols: { globalThis: k => globalThis[k] }
+                protocols 
             });
         }
 
