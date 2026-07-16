@@ -69,7 +69,7 @@
         let rowMap = new Map();
 
         // --- Clone template and populate ---
-        function createRow(item) {
+        async function createRow(item) {
             const clone = template.content.cloneNode(true);
             const tr = clone.firstElementChild;
             tr.dataset.id = item.id;
@@ -80,7 +80,7 @@
         }
 
         // --- Keyed render ---
-        function render() {
+        async function render() {
             const newRowMap = new Map();
             const fragment = document.createDocumentFragment();
             let needsRebuild = false;
@@ -93,7 +93,7 @@
                     rowMap.delete(item.id);
                 } else {
                     // New row — clone template
-                    row = createRow(item);
+                    row = await createRow(item);
                     needsRebuild = true;
                 }
                 newRowMap.set(item.id, row);

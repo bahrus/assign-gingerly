@@ -2,22 +2,17 @@ import { test, expect } from '@playwright/test';
 
 /**
  * JS Framework Benchmark — local approximation.
- * Measures manageTemplateList performance and vanilla JS baseline.
- * Reports timing in test output (informational).
+ * Measures manageTemplateList, vanilla JS (createElement), and vanilla JS (template clone).
+ * Reports timing comparison in test output (informational).
  */
 
-async function runBenchmarkPage(page: any, url: string, label: string) {
-    const consoleMessages: string[] = [];
-    page.on('console', (msg: any) => {
-        if (msg.text().includes('[manageTemplateList perf]') || msg.text().includes('mtl:')) {
-            consoleMessages.push(msg.text());
-        }
-    });
+interface BenchResult { name: string; elapsed: number; rows: number }
 
+async function runBenchmarkPage(page: any, url: string, label: string): Promise<BenchResult[]> {
     await page.goto(url);
     await page.waitForSelector('#btn-create');
 
-    const results: { name: string; elapsed: number; rows: number }[] = [];
+    const results: BenchResult[] = [];
 
     async function runOp(buttonId: string, expectedName: string) {
         await page.click(`#${buttonId}`);
@@ -51,54 +46,59 @@ async function runBenchmarkPage(page: any, url: string, label: string) {
     await runOp('btn-create10k', 'Create 10,000');
     await runOp('btn-clear', 'Clear');
 
-    console.log(`\n=== ${label} ===`);
-    console.log('─'.repeat(50));
-    for (const r of results) {
-        console.log(`${r.name.padEnd(25)} ${r.elapsed.toFixed(1).padStart(8)}ms  (${r.rows} rows)`);
-    }
-    console.log('─'.repeat(50));
-
-    if (consoleMessages.length > 0) {
-        console.log(`\n--- Profiling (${label}) ---`);
-        for (const msg of consoleMessages) {
-            console.log(msg);
-        }
-    }
-
     return results;
 }
 
 test.describe('manageTemplateList Benchmark', () => {
-    test('should benchmark manageTemplateList vs vanilla', async ({ page }) => {
-        // Run manageTemplateList benchmark
+    test('should benchmark manageTemplateList vs vanilla vs vanilla-template', async ({ page }) => {
         const mtlResults = await runBenchmarkPage(
             page,
             'http://localhost:8000/demos/js-framework-benchmark.html',
             'manageTemplateList'
         );
 
-        // Run vanilla baseline
         const vanillaResults = await runBenchmarkPage(
             page,
             'http://localhost:8000/demos/js-framework-benchmark-vanilla.html',
-            'Vanilla JS (baseline)'
+            'Vanilla (createElement)'
         );
 
-        // Comparison
-        console.log('\n=== Comparison (manageTemplateList vs Vanilla) ===');
-        console.log('─'.repeat(60));
-        console.log(`${'Operation'.padEnd(25)} ${'MTL'.padStart(8)} ${'Vanilla'.padStart(8)} ${'Ratio'.padStart(8)}`);
-        console.log('─'.repeat(60));
-        for (let i = 0; i < Math.min(mtlResults.length, vanillaResults.length); i++) {
+        const vanillaTplResults = await runBenchmarkPage(
+            page,
+            'http://localhost:8000/demos/js-framework-benchmark-vanilla-template.html',
+            'Vanilla (template clone)'
+        );
+
+        // Print full comparison table
+        const ops = ['Create 1,000', 'Update every 10th', 'Swap rows 1↔998', 'Append 1,000', 'Clear', 'Create 10,000'];
+
+        console.log('\n' + '═'.repeat(75));
+        console.log('  manageTemplateList BENCHMARK — COMPARISON');
+        console.log('═'.repeat(75));
+        console.log(`${'Operation'.padEnd(22)} ${'MTL'.padStart(8)} ${'Van-CE'.padStart(8)} ${'Van-Tpl'.padStart(8)} ${'MTL/CE'.padStart(8)} ${'MTL/Tpl'.padStart(8)}`);
+        console.log('─'.repeat(75));
+
+        for (let i = 0; i < Math.min(ops.length, mtlResults.length, vanillaResults.length, vanillaTplResults.length); i++) {
             const mtl = mtlResults[i];
             const van = vanillaResults[i];
-            const ratio = (mtl.elapsed / van.elapsed).toFixed(2);
-            console.log(`${mtl.name.padEnd(25)} ${(mtl.elapsed.toFixed(1) + 'ms').padStart(8)} ${(van.elapsed.toFixed(1) + 'ms').padStart(8)} ${(ratio + 'x').padStart(8)}`);
+            const tpl = vanillaTplResults[i];
+            const ratioCE = (mtl.elapsed / van.elapsed).toFixed(2);
+            const ratioTpl = (mtl.elapsed / tpl.elapsed).toFixed(2);
+            console.log(
+                `${mtl.name.padEnd(22)} ` +
+                `${(mtl.elapsed.toFixed(1) + 'ms').padStart(8)} ` +
+                `${(van.elapsed.toFixed(1) + 'ms').padStart(8)} ` +
+                `${(tpl.elapsed.toFixed(1) + 'ms').padStart(8)} ` +
+                `${(ratioCE + 'x').padStart(8)} ` +
+                `${(ratioTpl + 'x').padStart(8)}`
+            );
         }
-        console.log('─'.repeat(60));
+        console.log('═'.repeat(75));
+        console.log('  MTL = manageTemplateList | Van-CE = Vanilla createElement | Van-Tpl = Vanilla template clone');
+        console.log('  Ratio < 1.0 means MTL is faster\n');
 
-        // Sanity check
         expect(mtlResults.length).toBeGreaterThanOrEqual(5);
         expect(vanillaResults.length).toBeGreaterThanOrEqual(5);
+        expect(vanillaTplResults.length).toBeGreaterThanOrEqual(5);
     });
 });
