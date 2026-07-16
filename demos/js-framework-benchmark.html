@@ -66,10 +66,7 @@
         const tbody = document.getElementById('tbody');
         const resultsEl = document.getElementById('results');
         let timings = [];
-
-        // --- Render ---
-        async function render() {
-            await assignFrom(tbody, {
+        const assignValues = {
                 '?. =>': {
                     do: 'builtIns.manageTemplateList',
                     resolve: {
@@ -85,7 +82,11 @@
                         resolve: { key: '?.id' }
                     }
                 }
-            }, {
+            };
+
+        // --- Render ---
+        async function render() {
+            await assignFrom(tbody, assignValues, {
                 from: { data },
                 protocols: { globalThis: k => globalThis[k] }
             });
