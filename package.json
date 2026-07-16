@@ -118,6 +118,10 @@
       "default": "./markerUtils.js",
       "types": "./markerUtils.ts"
     },
+    "./waitForSettled.js": {
+      "default": "./waitForSettled.js",
+      "types": "./waitForSettled.ts"
+    },
     "./inferredAssignments.js": {
       "default": "./inferredAssignments.js",
       "types": "./inferredAssignments.ts"

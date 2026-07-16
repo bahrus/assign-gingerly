@@ -138,6 +138,17 @@ export class ManageTemplateListHandler {
         }
 
         if (fragment.childNodes.length > 0) {
+            const waitOpt = resolvedParams.waitForSettled;
+            if (waitOpt) {
+                const { waitForSettled } = await import('../waitForSettled.js');
+                const idleMs = typeof waitOpt === 'object' ? waitOpt.idleMs : 100;
+                const timeout = typeof waitOpt === 'object' ? waitOpt.timeout : undefined;
+                try {
+                    await waitForSettled(fragment, idleMs, timeout);
+                } catch (e) {
+                    console.warn('builtIns.manageTemplateList:', e.message, '— inserting fragment anyway');
+                }
+            }
             endMarker.parentNode.insertBefore(fragment, endMarker);
         }
 

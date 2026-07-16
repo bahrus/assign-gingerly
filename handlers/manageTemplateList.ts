@@ -190,8 +190,22 @@ export class ManageTemplateListHandler implements AssignFromHandler {
 
         // Remove old clones that weren't reused (already handled above via forget/hide)
 
-        // Insert new fragment before end marker
+        // Wait for async rendering in the fragment to settle before committing
         if (fragment.childNodes.length > 0) {
+            const waitOpt = resolvedParams.waitForSettled;
+            if (waitOpt) {
+                const { waitForSettled } = await import('../waitForSettled.js');
+                const idleMs = typeof waitOpt === 'object' ? waitOpt.idleMs : 100;
+                const timeout = typeof waitOpt === 'object' ? waitOpt.timeout : undefined;
+                try {
+                    await waitForSettled(fragment, idleMs, timeout);
+                } catch (e) {
+                    // Timeout exceeded — insert anyway (best-effort), log warning
+                    console.warn('builtIns.manageTemplateList:', (e as Error).message, '— inserting fragment anyway');
+                }
+            }
+
+            // Insert new fragment before end marker
             endMarker.parentNode!.insertBefore(fragment, endMarker);
         }
 
