@@ -5,6 +5,7 @@
  */
 
 import { resolveValues } from './resolveValues.js';
+import { getValues } from './getValues.js';
 import { evaluatePathWithMethods } from './assignGingerly.js';
 import { isAllowedImportPath } from './isAllowedImportPath.js';
 import type { AssignPermissions } from './isAllowedImportPath.js';
@@ -206,15 +207,23 @@ export async function processHandlerCommands(
                 throw new Error(`assignFrom: unknown handler "${config.do}". Provide it in options.handlers.`);
             }
 
-            // Resolve 'resolve' map if present — uses full resolveValues (paths, protocols, literals)
+            // Resolve 'get' map synchronously (no thread yield)
             let resolvedParams: Record<string, any> = {};
-            //return; //1.8 ms
-            if (config.resolve) {
-                resolvedParams = await resolveValues(config.resolve, options.from, {
+            if (config.get) {
+                resolvedParams = getValues(config.get, options.from, {
                     withMethods: options.withMethods,
                     aka: options.aka,
                     protocols: options.protocols
                 });
+            }
+            // Resolve 'resolve' map asynchronously (yields to microtask queue)
+            if (config.resolve) {
+                const asyncResolved = await resolveValues(config.resolve, options.from, {
+                    withMethods: options.withMethods,
+                    aka: options.aka,
+                    protocols: options.protocols
+                });
+                Object.assign(resolvedParams, asyncResolved);
             }
 
             // Instantiate and invoke the handler
