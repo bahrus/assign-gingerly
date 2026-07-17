@@ -232,4 +232,86 @@ Want me to update the implementation to this pattern?
 
 ## Human Response III
 
-Let me think about this.
+I think the locic should be:
+
+```JS
+const shouldYield = yieldEvery && i > 0 && i % yieldEvery === 0;
+if (shouldYield) await new Promise(r => setTimeout(r, 0));
+if (processInferred) {
+    processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
+} else {
+    assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+}
+if (sourceAssignToFragment && options?.from) {
+    assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+}
+```
+
+Do you see any flaws with the logic?  Forget about setting yieldEvery: 1
+
+I may make another proposal to support:
+
+```JS
+const assignValues = {
+    '?. =>': {
+        do: 'builtIns.manageTemplateList',
+        resolve: {
+            forEach: '?.data',
+            instantiate: 'globalThis://row-tpl',
+            forget: true,
+            yieldEvery: 1000
+        },
+        fromEachItem: {
+            assignAsyncToFragment: {
+                '?.cells?.0?.textContent': '?.id',
+                '?.cells?.1?.textContent': '?.label'
+            },
+            // withOptions: {
+            //     inferredAssignments: { byItemprop: true }
+            // },
+            resolve: { key: '?.id' }
+        }
+    }
+};
+```
+
+---
+
+## Implementation Notes
+
+The logic is clean — no flaws. Just yield, then always sync. Let me simplify the implementation to match:
+
+Now remove the unused `assignFromAsync` import:
+
+Done. The logic is now the clean pattern you proposed:
+
+```ts
+const shouldYield = yieldEvery && i > 0 && i % yieldEvery === 0;
+if (shouldYield) await new Promise(r => setTimeout(r, 0));
+// then always sync processing:
+if (processInferred) { ... }
+else { assignFrom(...) }
+if (sourceAssignToFragment) { assignFrom(...) }
+```
+
+No `assignFromAsync` in the loop. Yield is just a simple `setTimeout(0)` pause, processing is always sync afterward.
+
+## Human Response IV
+
+Can you add better typing support for resolvedParams, like you did for lazy Load.
+
+
+
+---
+
+## Response to Human Response IV
+
+Yes — will add a `ManageTemplateListResolvedParams` interface to `types.d.ts` and type the handler's `assign` method with it. Implementing now.
+
+--
+
+## Implementation Notes
+
+Now update `manageTemplateList.ts` to use the typed params:
+
+Done. Added `ManageTemplateListResolvedParams` to `types.d.ts` and typed the handler's `assign` method with it. The interface documents all supported resolve fields: `forEach`, `instantiate`, `method`, `forget`, `markerName`, `waitForSettled`, and `yieldEvery`.

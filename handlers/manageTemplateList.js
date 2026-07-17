@@ -27,7 +27,6 @@
 import { findMarkers, createMarkers } from '../markerUtils.js';
 import { resolveValue } from '../resolveValues.js';
 import { assignFrom } from '../assignFrom.js';
-import { assignFromAsync } from '../assignFromAsync.js';
 import { processInferredAssignments } from '../inferredAssignments.js';
 const listStateMap = new WeakMap();
 /**
@@ -116,13 +115,10 @@ export class ManageTemplateListHandler {
                 const rootEl = existingNodes.find(n => n instanceof Element);
                 if (rootEl) {
                     const shouldYield = yieldEvery && i > 0 && i % yieldEvery === 0;
+                    if (shouldYield)
+                        await new Promise(r => setTimeout(r, 0));
                     if (processInferred) {
-                        if (shouldYield)
-                            await new Promise(r => setTimeout(r, 0));
                         processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
-                    }
-                    else if (shouldYield) {
-                        await assignFromAsync(rootEl, assignToFragment, { from: item, ...withOptions });
                     }
                     else {
                         assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
@@ -156,13 +152,10 @@ export class ManageTemplateListHandler {
                     const tempContainer = document.createDocumentFragment();
                     tempContainer.appendChild(content);
                     const shouldYield = yieldEvery && i > 0 && i % yieldEvery === 0;
+                    if (shouldYield)
+                        await new Promise(r => setTimeout(r, 0));
                     if (processInferred) {
-                        if (shouldYield)
-                            await new Promise(r => setTimeout(r, 0));
                         processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
-                    }
-                    else if (shouldYield) {
-                        await assignFromAsync(rootEl, assignToFragment, { from: item, ...withOptions });
                     }
                     else {
                         assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });

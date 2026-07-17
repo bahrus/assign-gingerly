@@ -26,10 +26,10 @@
  */
 
 import type { AssignFromHandler } from '../assignFromAsync.js';
+import type { ManageTemplateListResolvedParams } from '../types/assign-gingerly/types.js';
 import { findMarkers, createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 import { resolveValue } from '../resolveValues.js';
 import { assignFrom } from '../assignFrom.js';
-import { assignFromAsync } from '../assignFromAsync.js';
 import { processInferredAssignments } from '../inferredAssignments.js';
 
 /**
@@ -55,7 +55,7 @@ export class ManageTemplateListHandler implements AssignFromHandler {
         this.config = config;
     }
 
-    async assign(lhsTarget: any, resolvedParams: Record<string, any>, options?: any): Promise<void> {
+    async assign(lhsTarget: any, resolvedParams: ManageTemplateListResolvedParams, options?: any): Promise<void> {
         //return;
         const {
             forEach: items,
@@ -152,11 +152,9 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                 const rootEl = existingNodes.find(n => n instanceof Element) as Element | undefined;
                 if (rootEl) {
                     const shouldYield = yieldEvery && i > 0 && i % yieldEvery === 0;
+                    if (shouldYield) await new Promise(r => setTimeout(r, 0));
                     if (processInferred) {
-                        if (shouldYield) await new Promise(r => setTimeout(r, 0));
                         processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
-                    } else if (shouldYield) {
-                        await assignFromAsync(rootEl, assignToFragment, { from: item, ...withOptions });
                     } else {
                         assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
                     }
@@ -188,11 +186,9 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                     tempContainer.appendChild(content);
 
                     const shouldYield = yieldEvery && i > 0 && i % yieldEvery === 0;
+                    if (shouldYield) await new Promise(r => setTimeout(r, 0));
                     if (processInferred) {
-                        if (shouldYield) await new Promise(r => setTimeout(r, 0));
                         processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
-                    } else if (shouldYield) {
-                        await assignFromAsync(rootEl, assignToFragment, { from: item, ...withOptions });
                     } else {
                         assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
                     }
