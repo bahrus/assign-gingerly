@@ -3525,7 +3525,7 @@ Substitution applies inside handler `resolve` maps too:
 await assignFromAsync(container, {
     '?.querySelector?..${x}View =>': {
         do: 'builtIns.lazyLoad',
-        resolve: {
+        get: {
             if: '?.${x}Visible',
             instantiate: 'globalThis://${x}Template'
         }
@@ -3569,7 +3569,7 @@ class MyListHandler {
 await assignFromAsync(myElement, {
     '?.querySelector?.tbody =>': {
         do: 'my-list',
-        resolve: {
+        get: {
             list: '?.rankings',
             template: 'globalThis://myTemplate'
         }
@@ -3590,7 +3590,7 @@ Handlers can also be specified as import paths (dynamically loaded on demand):
 await assignFromAsync(myElement, {
     '?.querySelector?.tbody =>': {
         do: 'my-list',
-        resolve: { list: '?.rankings', template: 'globalThis://myTemplate' }
+        get: { list: '?.rankings', template: 'globalThis://myTemplate' }
     }
 }, {
     from: viewModel,
@@ -3645,7 +3645,7 @@ Conditionally loads (clones) a template into a target element. Uses comment mark
 await assignFromAsync(document.body, {
     '?.querySelector?..mainView =>': {
         do: 'builtIns.lazyLoad',
-        resolve: {
+        get: {
             if: '?.isVisible',
             instantiate: 'globalThis://myTemplate',
         }
@@ -3653,7 +3653,7 @@ await assignFromAsync(document.body, {
 }, { withMethods: ['querySelector'], from: myVM, protocols: { globalThis: k => globalThis[k] } });
 ```
 
-**Resolve parameters:**
+**Parameters:**
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -3679,7 +3679,7 @@ Both `builtIns.lazyLoad` and `builtIns.lazyLoadSwitch` support animated transiti
 await assignFromAsync(container, {
     '?.querySelector?..outlet =>': {
         do: 'builtIns.lazyLoad',
-        resolve: {
+        get: {
             if: '?.isVisible',
             instantiate: 'globalThis://myTemplate',
             transitional: true,
@@ -3718,10 +3718,10 @@ The handler injects a minimal default style (`.ag-hide { display: none }`) once 
 
 **Custom hide class:**
 
-Use the `hideClass` resolve parameter to use a different CSS class name:
+Use the `hideClass` parameter to use a different CSS class name:
 
 ```JavaScript
-resolve: {
+get: {
     if: '?.isVisible',
     instantiate: 'globalThis://myTemplate',
     transitional: true,
@@ -3740,9 +3740,9 @@ resolve: {
 ```JavaScript
 await assignFromAsync(container, {
     '?.querySelector?..routerOutlet =>': [
-        { do: 'builtIns.lazyLoadSwitch', resolve: { lhs: '?.route', rhs: 'home', instantiate: 'globalThis://homeView', transitional: true } },
-        { do: 'builtIns.lazyLoadSwitch', resolve: { lhs: '?.route', rhs: 'settings', instantiate: 'globalThis://settingsView', transitional: true } },
-        { do: 'builtIns.lazyLoadSwitch', resolve: { lhs: '?.route', rhs: 'profile', instantiate: 'globalThis://profileView', transitional: true } },
+        { do: 'builtIns.lazyLoadSwitch', get: { lhs: '?.route', rhs: 'home', instantiate: 'globalThis://homeView', transitional: true } },
+        { do: 'builtIns.lazyLoadSwitch', get: { lhs: '?.route', rhs: 'settings', instantiate: 'globalThis://settingsView', transitional: true } },
+        { do: 'builtIns.lazyLoadSwitch', get: { lhs: '?.route', rhs: 'profile', instantiate: 'globalThis://profileView', transitional: true } },
     ]
 }, { withMethods: ['querySelector'], from: router, protocols: { globalThis: k => globalThis[k] } });
 ```
@@ -3778,14 +3778,14 @@ await assignFromAsync(document.body, {
     '?.querySelector?..mainView =>': [
         {
             do: 'builtIns.lazyLoad',
-            resolve: {
+            get: {
                 if: '?.isVisible',
                 instantiate: 'globalThis://viewTemplate',
             }
         },
         {
             do: 'applyTheme',
-            resolve: {
+            get: {
                 theme: '?.currentTheme'
             }
         }
@@ -3814,7 +3814,7 @@ const vm = {
 assignFrom(oElement, {
     '?.textContent =>': {
         do: 'builtIns.join',
-        resolve: {
+        get: {
             value: ['?.lastName', ', ', '?.firstName']
         }
     }
@@ -3825,7 +3825,7 @@ assignFrom(oElement, {
 
 **How it works:**
 
-1. The `resolve.value` array is resolved by `getValues` — `?.` path strings are replaced with actual values from `options.from`.
+1. The `get.value` array is resolved by `getValues` — `?.` path strings are replaced with actual values from `options.from`.
 2. Top-level `null`/`undefined` values are filtered out.
 3. Nested sub-arrays use **all-or-nothing** semantics: if any element in a sub-array resolves to `null`/`undefined`, the entire sub-array is dropped.
 4. Remaining elements are joined with the separator (default: `''`, empty string).
@@ -3843,7 +3843,7 @@ const vm = {
 assignFrom(oElement, {
     '?.textContent =>': {
         do: 'builtIns.join',
-        resolve: {
+        get: {
             value: ['?.lastName', [', ', '?.middleName'], ', ', '?.firstName']
         }
     }
@@ -3863,7 +3863,7 @@ assignFrom(oElement, {
     '?.textContent =>': {
         do: 'builtIns.join',
         separator: ' | ',
-        resolve: {
+        get: {
             value: ['?.firstName', '?.lastName']
         }
     }
@@ -3892,7 +3892,7 @@ const vm = {
 assignFrom(oSection, {
     '?.querySelector?.div =>': {
         do: 'builtIns.microDataJoin',
-        resolve: {
+        get: {
             template: [
                 { prop: 'firstName', val: '?.firstName' },
                 ' ',
@@ -3939,7 +3939,7 @@ Produces:
 Same all-or-nothing semantics as `builtIns.join` — if any `val` in a nested sub-array is null/undefined, the entire sub-array is dropped:
 
 ```JavaScript
-resolve: {
+get: {
     template: [
         { prop: 'firstName', val: '?.firstName' },
         [' ', { prop: 'middleName', val: '?.middleName' }],  // dropped if middleName is undefined
@@ -3981,14 +3981,14 @@ Clones a template once per item in an iterable, with keyed reconciliation for ef
 assignFrom(document.body, {
     '?.querySelector?.tbody =>': {
         do: 'builtIns.manageTemplateList',
-        resolve: {
+        get: {
             forEach: '?.rankings',
             instantiate: 'globalThis://country-ranking',
         },
         fromEachItem: {
             assignToFragment: { '?.querySelector?.tr?.ish': '?.' },
             withOptions: { withMethods: ['querySelector'], inferredAssignments: true },
-            resolve: { key: '?.rank' }
+            get: { key: '?.rank' }
         }
     }
 }, {
@@ -4008,7 +4008,7 @@ assignFrom(document.body, {
 
 **Keyed reconciliation:**
 
-The `key` field (in `fromEachItem.resolve`) identifies each item for stable identity across updates:
+The `key` field (in `fromEachItem.get`) identifies each item for stable identity across updates:
 - New key → clone + append
 - Key removed → hide (or remove if `forget: true`)
 - Key still present → update clone in place (no re-cloning)
@@ -4033,7 +4033,7 @@ fromSource: {
 Optionally wait for async operations inside the fragment to complete before committing to the live DOM:
 
 ```JavaScript
-resolve: {
+get: {
     forEach: '?.rankings',
     instantiate: 'globalThis://country-ranking',
     waitForSettled: true,  // or { idleMs: 50, timeout: 2000 }
@@ -4063,7 +4063,7 @@ const $ = paths<Person>();
 export default {
     '?.textContent =>': {
         do: 'builtIns.join',
-        resolve: {
+        get: {
             value: sp`${$.lastName}, ${$.firstName}`
         }
     }
@@ -4159,7 +4159,7 @@ await assignFromAsync(document.body, {
     '#[main]?.textContent': '?.greeting',
     '#[main] =>': {
         do: 'builtIns.lazyLoad',
-        resolve: { if: '?.showContent', instantiate: 'globalThis://myTemplate' }
+        get: { if: '?.showContent', instantiate: 'globalThis://myTemplate' }
     }
 }, {
     from: viewModel,
@@ -4211,7 +4211,7 @@ assignFrom(document.body, {
 await assignFromAsync(container, {
     '#[outlet] =>': {
         do: 'builtIns.lazyLoadSwitch',
-        resolve: { lhs: '?.route', rhs: 'home', instantiate: 'globalThis://homeView' }
+        get: { lhs: '?.route', rhs: 'home', instantiate: 'globalThis://homeView' }
     }
 }, {
     from: router,
