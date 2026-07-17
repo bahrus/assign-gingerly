@@ -3467,6 +3467,83 @@ const result = await resolveValues(pattern, source, {
 });
 ```
 
+## Looped Substitution (`where_x_in`, `where_y_in`, `where_z_in`)
+
+`assignFrom` supports expanding template patterns into multiple concrete assignments via variable substitution. Placeholders `${x}`, `${y}`, and `${z}` in pattern keys and string values are replaced with each value from the corresponding option array.
+
+```JavaScript
+const vm = {
+    firstName: 'Monkey',
+    lastName: 'Luffy'
+};
+
+await assignFrom(myForm, {
+    '?.[name="${x}"]': '?.${x}'
+}, {
+    from: vm,
+    withMethods: ['querySelector'],
+    where_x_in: ['firstName', 'lastName']
+});
+
+// Expands to the equivalent of:
+// '?.[name="firstName"]': '?.firstName'   → querySelector('[name="firstName"]').value = 'Monkey'
+// '?.[name="lastName"]':  '?.lastName'    → querySelector('[name="lastName"]').value = 'Luffy'
+```
+
+**How it works:**
+
+1. Before any other processing, `assignFrom` checks for `where_x_in`, `where_y_in`, and `where_z_in` in options.
+2. For each pattern entry whose key or value contains the placeholder (e.g., `${x}`), the entry is expanded — one copy per value in the array.
+3. Substitution applies to both LHS keys and all RHS string values (including nested objects like handler `resolve` maps).
+4. Multiple variables produce a **cartesian product**: x is expanded first, then y, then z. Result count = x.length × y.length × z.length.
+5. Non-string RHS values pass through untouched.
+
+**Cartesian expansion with multiple variables:**
+
+```JavaScript
+await assignFrom(grid, {
+    '?.querySelector?.[data-row="${x}"][data-col="${y}"]?.textContent': '${x}-${y}'
+}, {
+    from: {},
+    withMethods: ['querySelector'],
+    where_x_in: ['1', '2'],
+    where_y_in: ['A', 'B']
+});
+
+// Produces 4 entries (2 × 2):
+// '?.[data-row="1"][data-col="A"]' → '1-A'
+// '?.[data-row="1"][data-col="B"]' → '1-B'
+// '?.[data-row="2"][data-col="A"]' → '2-A'
+// '?.[data-row="2"][data-col="B"]' → '2-B'
+```
+
+**With handler ( =>) keys:**
+
+Substitution applies inside handler `resolve` maps too:
+
+```JavaScript
+await assignFrom(container, {
+    '?.querySelector?..${x}View =>': {
+        do: 'builtIns.lazyLoad',
+        resolve: {
+            if: '?.${x}Visible',
+            instantiate: 'globalThis://${x}Template'
+        }
+    }
+}, {
+    from: vm,
+    withMethods: ['querySelector'],
+    protocols: { globalThis: k => globalThis[k] },
+    where_x_in: ['home', 'settings', 'profile']
+});
+```
+
+**Edge cases:**
+
+- Empty array (`where_x_in: []`) — template entries produce nothing (silent no-op).
+- Missing option — if a pattern contains `${x}` but `where_x_in` is not provided, the literal `${x}` remains in the string.
+- Entries without placeholders — passed through unchanged.
+
 ## assignFrom Handlers (` =>` operator)
 
 `assignFrom` supports a plugin system via the ` =>` operator. When a LHS key ends with ` =>`, instead of normal assignment, a handler class is invoked to perform custom logic (DOM manipulation, template instantiation, etc.).
@@ -3723,83 +3800,6 @@ await assignFrom(document.body, {
 - Nested arrays — throws an error (not supported).
 - Mixed `do` values — fully supported, each handler is looked up independently.
 - Error handling — fail-fast. If a handler throws, remaining handlers are skipped.
-
-## Looped Substitution (`where_x_in`, `where_y_in`, `where_z_in`)
-
-`assignFrom` supports expanding template patterns into multiple concrete assignments via variable substitution. Placeholders `${x}`, `${y}`, and `${z}` in pattern keys and string values are replaced with each value from the corresponding option array.
-
-```JavaScript
-const vm = {
-    firstName: 'Monkey',
-    lastName: 'Luffy'
-};
-
-await assignFrom(myForm, {
-    '?.[name="${x}"]': '?.${x}'
-}, {
-    from: vm,
-    withMethods: ['querySelector'],
-    where_x_in: ['firstName', 'lastName']
-});
-
-// Expands to the equivalent of:
-// '?.[name="firstName"]': '?.firstName'   → querySelector('[name="firstName"]').value = 'Monkey'
-// '?.[name="lastName"]':  '?.lastName'    → querySelector('[name="lastName"]').value = 'Luffy'
-```
-
-**How it works:**
-
-1. Before any other processing, `assignFrom` checks for `where_x_in`, `where_y_in`, and `where_z_in` in options.
-2. For each pattern entry whose key or value contains the placeholder (e.g., `${x}`), the entry is expanded — one copy per value in the array.
-3. Substitution applies to both LHS keys and all RHS string values (including nested objects like handler `resolve` maps).
-4. Multiple variables produce a **cartesian product**: x is expanded first, then y, then z. Result count = x.length × y.length × z.length.
-5. Non-string RHS values pass through untouched.
-
-**Cartesian expansion with multiple variables:**
-
-```JavaScript
-await assignFrom(grid, {
-    '?.querySelector?.[data-row="${x}"][data-col="${y}"]?.textContent': '${x}-${y}'
-}, {
-    from: {},
-    withMethods: ['querySelector'],
-    where_x_in: ['1', '2'],
-    where_y_in: ['A', 'B']
-});
-
-// Produces 4 entries (2 × 2):
-// '?.[data-row="1"][data-col="A"]' → '1-A'
-// '?.[data-row="1"][data-col="B"]' → '1-B'
-// '?.[data-row="2"][data-col="A"]' → '2-A'
-// '?.[data-row="2"][data-col="B"]' → '2-B'
-```
-
-**With handler ( =>) keys:**
-
-Substitution applies inside handler `resolve` maps too:
-
-```JavaScript
-await assignFrom(container, {
-    '?.querySelector?..${x}View =>': {
-        do: 'builtIns.lazyLoad',
-        resolve: {
-            if: '?.${x}Visible',
-            instantiate: 'globalThis://${x}Template'
-        }
-    }
-}, {
-    from: vm,
-    withMethods: ['querySelector'],
-    protocols: { globalThis: k => globalThis[k] },
-    where_x_in: ['home', 'settings', 'profile']
-});
-```
-
-**Edge cases:**
-
-- Empty array (`where_x_in: []`) — template entries produce nothing (silent no-op).
-- Missing option — if a pattern contains `${x}` but `where_x_in` is not provided, the literal `${x}` remains in the string.
-- Entries without placeholders — passed through unchanged.
 
 ### Built-in handler: `builtIns.join`
 
