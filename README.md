@@ -3477,7 +3477,7 @@ const vm = {
     lastName: 'Luffy'
 };
 
-await assignFrom(myForm, {
+assignFrom(myForm, {
     '?.[name="${x}"]': '?.${x}'
 }, {
     from: vm,
@@ -3501,7 +3501,7 @@ await assignFrom(myForm, {
 **Cartesian expansion with multiple variables:**
 
 ```JavaScript
-await assignFrom(grid, {
+assignFrom(grid, {
     '?.querySelector?.[data-row="${x}"][data-col="${y}"]?.textContent': '${x}-${y}'
 }, {
     from: {},
@@ -3522,7 +3522,7 @@ await assignFrom(grid, {
 Substitution applies inside handler `resolve` maps too:
 
 ```JavaScript
-await assignFrom(container, {
+await assignFromAsync(container, {
     '?.querySelector?..${x}View =>': {
         do: 'builtIns.lazyLoad',
         resolve: {
@@ -3553,7 +3553,7 @@ await assignFrom(container, {
 Handlers are provided via the `handlers` option — scoped to each `assignFrom` call:
 
 ```JavaScript
-import { assignFrom } from 'assign-gingerly/assignFrom.js';
+import { assignFromAsync } from 'assign-gingerly/assignFromAsync.js';
 
 class MyListHandler {
     constructor(config) {
@@ -3566,7 +3566,7 @@ class MyListHandler {
     }
 }
 
-await assignFrom(myElement, {
+await assignFromAsync(myElement, {
     '?.querySelector?.tbody =>': {
         do: 'my-list',
         resolve: {
@@ -3587,7 +3587,7 @@ await assignFrom(myElement, {
 Handlers can also be specified as import paths (dynamically loaded on demand):
 
 ```JavaScript
-await assignFrom(myElement, {
+await assignFromAsync(myElement, {
     '?.querySelector?.tbody =>': {
         do: 'my-list',
         resolve: { list: '?.rankings', template: 'globalThis://myTemplate' }
@@ -3642,7 +3642,7 @@ Use `get` for performance-sensitive handlers (synchronous, no yield). Use `resol
 Conditionally loads (clones) a template into a target element. Uses comment markers to track inserted content and supports show/hide/remove modes. Built-in handlers are auto-loaded on demand — no explicit import is needed.
 
 ```JavaScript
-await assignFrom(document.body, {
+await assignFromAsync(document.body, {
     '?.querySelector?..mainView =>': {
         do: 'builtIns.lazyLoad',
         resolve: {
@@ -3676,7 +3676,7 @@ This is useful for conditional rendering, routing, and lazy-loading views.
 Both `builtIns.lazyLoad` and `builtIns.lazyLoadSwitch` support animated transitions via the [View Transition API](https://developer.mozilla.org/docs/Web/API/View_Transition_API). Enable with `transitional: true` in the resolve map:
 
 ```JavaScript
-await assignFrom(container, {
+await assignFromAsync(container, {
     '?.querySelector?..outlet =>': {
         do: 'builtIns.lazyLoad',
         resolve: {
@@ -3738,7 +3738,7 @@ resolve: {
 **Routing example with transitions:**
 
 ```JavaScript
-await assignFrom(container, {
+await assignFromAsync(container, {
     '?.querySelector?..routerOutlet =>': [
         { do: 'builtIns.lazyLoadSwitch', resolve: { lhs: '?.route', rhs: 'home', instantiate: 'globalThis://homeView', transitional: true } },
         { do: 'builtIns.lazyLoadSwitch', resolve: { lhs: '?.route', rhs: 'settings', instantiate: 'globalThis://settingsView', transitional: true } },
@@ -3774,7 +3774,7 @@ See the visual demo at `demos/view-transition-demo.html`.
 When the RHS of a ` =>` key is an array, each element is treated as a separate handler config and they are executed sequentially (awaiting each before proceeding to the next). All handlers share the same LHS target.
 
 ```JavaScript
-await assignFrom(document.body, {
+await assignFromAsync(document.body, {
     '?.querySelector?..mainView =>': [
         {
             do: 'builtIns.lazyLoad',
@@ -3811,7 +3811,7 @@ const vm = {
     firstName: 'Helaena'
 };
 
-await assignFrom(oElement, {
+assignFrom(oElement, {
     '?.textContent =>': {
         do: 'builtIns.join',
         resolve: {
@@ -3840,7 +3840,7 @@ const vm = {
     firstName: 'Helaena'
 };
 
-await assignFrom(oElement, {
+assignFrom(oElement, {
     '?.textContent =>': {
         do: 'builtIns.join',
         resolve: {
@@ -3859,7 +3859,7 @@ await assignFrom(oElement, {
 **Custom separator:**
 
 ```JavaScript
-await assignFrom(oElement, {
+assignFrom(oElement, {
     '?.textContent =>': {
         do: 'builtIns.join',
         separator: ' | ',
@@ -3889,7 +3889,7 @@ const vm = {
     isHappy: false
 };
 
-await assignFrom(oSection, {
+assignFrom(oSection, {
     '?.querySelector?.div =>': {
         do: 'builtIns.microDataJoin',
         resolve: {
@@ -3978,7 +3978,7 @@ const template = md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, format
 Clones a template once per item in an iterable, with keyed reconciliation for efficient updates. Each clone receives its item's data via `assignFrom`, and optionally shared data from the parent source.
 
 ```JavaScript
-await assignFrom(document.body, {
+assignFrom(document.body, {
     '?.querySelector?.tbody =>': {
         do: 'builtIns.manageTemplateList',
         resolve: {
@@ -4153,9 +4153,9 @@ Both auto-detect path proxies (no `.path` needed inside template literals) and p
 `assignFrom` supports cached element references via the `#[x]` syntax in LHS keys. This provides near-zero-cost repeated access to DOM elements (~10ns via WeakRef) instead of expensive `querySelector` calls (~3,000-17,000ns for class selectors at scale).
 
 ```TypeScript
-import { assignFrom } from 'assign-gingerly/assignFrom.js';
+import { assignFromAsync } from 'assign-gingerly/assignFromAsync.js';
 
-await assignFrom(document.body, {
+await assignFromAsync(document.body, {
     '#[main]?.textContent': '?.greeting',
     '#[main] =>': {
         do: 'builtIns.lazyLoad',
@@ -4191,7 +4191,7 @@ withIds: {
 `#[x]` anchors the start of the path. Further `?.` segments chain from the resolved element:
 
 ```TypeScript
-await assignFrom(document.body, {
+assignFrom(document.body, {
     '#[form]?.querySelector?..username?.value': '?.username',
     '#[form]?.querySelector?..email?.value': '?.email',
     '#[header]?.style?.color': '?.themeColor',
@@ -4208,7 +4208,7 @@ await assignFrom(document.body, {
 **With handlers (` =>`):**
 
 ```TypeScript
-await assignFrom(container, {
+await assignFromAsync(container, {
     '#[outlet] =>': {
         do: 'builtIns.lazyLoadSwitch',
         resolve: { lhs: '?.route', rhs: 'home', instantiate: 'globalThis://homeView' }
@@ -4249,7 +4249,7 @@ const vm = {
     user: { role: 'admin', avatar: '/img/alice.png' }
 };
 
-await assignFrom(outerDiv, {}, {
+assignFrom(outerDiv, {}, {
     from: vm,
     inferredAssignments: {
         byItemprop: ['name', 'email', 'user']
@@ -4282,9 +4282,9 @@ For full details, see [docs/inferred-assignments.md](docs/inferred-assignments.m
 Apply enhancements in bulk to matching elements using EMC (Element Mount Configuration) JSON files that enhancement packages already publish. No manual registration step needed — enhancements are auto-loaded and registered on demand.
 
 ```TypeScript
-import { assignFrom } from 'assign-gingerly/assignFrom.js';
+import { assignFromAsync } from 'assign-gingerly/assignFromAsync.js';
 
-await assignFrom(shadowRoot, { /* normal assignments */ }, {
+await assignFromAsync(shadowRoot, { /* normal assignments */ }, {
     from: vm,
     enhance: [
         { emc: 'be-bound/emc.json', matching: '[name]' },
