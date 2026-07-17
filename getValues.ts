@@ -1,29 +1,27 @@
 /**
- * resolveValues.ts — Async value resolution for path strings.
+ * getValues.ts — Synchronous value resolution for path strings.
  * 
- * Thin async wrapper around getValues that adds support for async protocol handlers.
- * For synchronous-only use cases, import getValues/getValue directly for better performance.
+ * The synchronous counterpart to resolveValues. Resolves `?.`-prefixed path
+ * strings against a source object, with support for withMethods, aka aliases,
+ * synchronous protocols, arrays, and nested plain objects.
  * 
- * Re-exports ResolveValuesOptions for backward compatibility.
+ * For async protocol handlers, use resolveValues instead.
+ * 
+ * @example
+ * import { getValues, getValue } from 'assign-gingerly/getValues.js';
+ * 
+ * const result = getValues({
+ *     name: '?.user?.name',
+ *     greeting: '?.messages?.hello',
+ *     count: 42
+ * }, source, { withMethods: ['querySelector'], aka: { q: 'querySelector' } });
  */
 
-import { getValue } from './getValues.js';
-import type { ResolveValuesOptions } from './types/assign-gingerly/types.js';
-
-export type { ResolveValuesOptions };
-
-// Re-export getValue as resolveValue for backward compatibility
-export { getValue as resolveValue };
-
-/**
- * Checks if a string value looks like a protocol reference.
- */
-function hasProtocol(value: string): boolean {
-    return value.includes('://');
-}
+import type { GetValuesOptions } from './types/assign-gingerly/types.js';
 
 /**
  * Apply alias substitutions to a path string.
+ * Replaces complete tokens between `?.` delimiters with their aliased values.
  */
 function applyAliases(path: string, aliasMap: Map<string, string>): string {
     if (aliasMap.size === 0) return path;
@@ -34,9 +32,13 @@ function applyAliases(path: string, aliasMap: Map<string, string>): string {
 
 /**
  * Path cache for parsed path strings.
+ * Avoids re-splitting the same path on repeated calls.
  */
 const pathCache = new Map<string, string[]>();
 
+/**
+ * Parse a `?.`-delimited path string into segments, with caching.
+ */
 function parseCachedPath(path: string): string[] {
     let parts = pathCache.get(path);
     if (!parts) {
@@ -48,6 +50,7 @@ function parseCachedPath(path: string): string[] {
 
 /**
  * Navigate a path against a source object, optionally calling methods.
+ * Returns the resolved value at the end of the path.
  */
 function navigatePath(
     source: any,
@@ -56,9 +59,12 @@ function navigatePath(
 ): any {
     let current = source;
     let i = 0;
+
     while (i < parts.length) {
         if (current == null) return current;
+
         const part = parts[i];
+
         if (withMethods && withMethods.has(part)) {
             const method = current[part];
             if (typeof method === 'function') {
@@ -79,29 +85,38 @@ function navigatePath(
             i++;
         }
     }
+
     return current;
 }
 
 /**
- * Resolves a protocol-prefixed value asynchronously.
+ * Checks if a string value looks like a protocol reference.
  */
-async function resolveProtocolValue(
+function hasProtocol(value: string): boolean {
+    return value.includes('://');
+}
+
+/**
+ * Resolve a protocol-prefixed value synchronously.
+ */
+function getProtocolValue(
     value: string,
-    protocols: Record<string, (key: string) => any | Promise<any>>,
-    options?: ResolveValuesOptions
-): Promise<any> {
+    protocols: Record<string, (key: string) => any>,
+    options?: GetValuesOptions
+): any {
     const protoEnd = value.indexOf('://');
     const protocol = value.substring(0, protoEnd);
 
     const handler = protocols[protocol];
-    if (!handler) return value;
+    if (!handler) return value; // not a recognized protocol
 
     const rest = value.substring(protoEnd + 3);
+
     const pathStart = rest.indexOf('?.');
     const key = pathStart === -1 ? rest : rest.substring(0, pathStart);
     const path = pathStart === -1 ? null : rest.substring(pathStart);
 
-    const resolved = await handler(key);
+    const resolved = handler(key);
 
     if (path) {
         return getValue(path, resolved, options);
@@ -110,16 +125,17 @@ async function resolveProtocolValue(
 }
 
 /**
- * Resolve path strings and protocol references within an array (async).
+ * Resolve path strings and protocols within an array (synchronous).
+ * Recurses into nested arrays and plain objects.
  */
-async function resolveArray(
+function getArray(
     arr: any[],
     source: any,
     aliasMap: Map<string, string>,
     withMethods: Set<string> | undefined,
-    protocols: Record<string, (key: string) => any | Promise<any>> | undefined,
-    options?: ResolveValuesOptions
-): Promise<any[]> {
+    protocols: Record<string, (key: string) => any> | undefined,
+    options?: GetValuesOptions
+): any[] {
     const result: any[] = [];
     for (const item of arr) {
         if (typeof item === 'string' && item.startsWith('?.')) {
@@ -127,13 +143,13 @@ async function resolveArray(
             const parts = parseCachedPath(aliased);
             result.push(parts.length === 0 ? source : navigatePath(source, parts, withMethods));
         } else if (typeof item === 'string' && protocols && hasProtocol(item)) {
-            result.push(await resolveProtocolValue(item, protocols, options));
+            result.push(getProtocolValue(item, protocols, options));
         } else if (Array.isArray(item)) {
-            result.push(await resolveArray(item, source, aliasMap, withMethods, protocols, options));
+            result.push(getArray(item, source, aliasMap, withMethods, protocols, options));
         } else if (item && typeof item === 'object') {
             const proto = Object.getPrototypeOf(item);
             if (proto === Object.prototype || proto === null) {
-                result.push(await resolveValues(item, source, options));
+                result.push(getValues(item, source, options));
             } else {
                 result.push(item);
             }
@@ -145,21 +161,23 @@ async function resolveArray(
 }
 
 /**
- * Async resolve RHS path strings in a pattern object against a source object.
+ * Synchronously resolve RHS path strings in a pattern object against a source object.
  * 
- * Supports async protocol handlers (e.g., fetch, IndexedDB).
- * For synchronous-only patterns, use `getValues` from 'assign-gingerly/getValues.js' instead.
+ * Any value that is a string starting with `?.` is treated as a path
+ * and resolved against the source object. Non-string values and strings
+ * not starting with `?.` pass through unchanged.
  * 
  * @param pattern - Object whose RHS values may contain `?.` path strings
  * @param source - Object to resolve paths against
- * @param options - Optional withMethods, aka, and protocol handlers
+ * @param options - Optional withMethods, aka, and synchronous protocols
  * @returns New object with path strings replaced by resolved values
  */
-export async function resolveValues(
+export function getValues(
     pattern: Record<string, any>,
     source: any,
-    options?: ResolveValuesOptions
-): Promise<Record<string, any>> {
+    options?: GetValuesOptions
+): Record<string, any> {
+    // Build alias map
     const aliasMap = new Map<string, string>();
     if (options?.aka) {
         for (const [alias, target] of Object.entries(options.aka)) {
@@ -167,6 +185,7 @@ export async function resolveValues(
         }
     }
 
+    // Build methods set
     const withMethods = options?.withMethods
         ? options.withMethods instanceof Set
             ? options.withMethods
@@ -182,13 +201,13 @@ export async function resolveValues(
             const parts = parseCachedPath(aliased);
             result[key] = parts.length === 0 ? source : navigatePath(source, parts, withMethods);
         } else if (typeof value === 'string' && protocols && hasProtocol(value)) {
-            result[key] = await resolveProtocolValue(value, protocols, options);
+            result[key] = getProtocolValue(value, protocols, options);
         } else if (Array.isArray(value)) {
-            result[key] = await resolveArray(value, source, aliasMap, withMethods, protocols, options);
+            result[key] = getArray(value, source, aliasMap, withMethods, protocols, options);
         } else if (typeof value === 'object' && value !== null) {
             const proto = Object.getPrototypeOf(value);
             if (proto === Object.prototype || proto === null) {
-                result[key] = await resolveValues(value, source, options);
+                result[key] = getValues(value, source, options);
             } else {
                 result[key] = value;
             }
@@ -197,4 +216,40 @@ export async function resolveValues(
         }
     }
     return result;
+}
+
+/**
+ * Synchronously resolve a single `?.`-delimited path string against a source object.
+ * 
+ * @param path - A `?.`-delimited path string (e.g., '?.user?.name')
+ * @param source - Object to resolve the path against
+ * @param options - Optional withMethods and aka
+ * @returns The resolved value, or undefined if any segment is nullish
+ */
+export function getValue(
+    path: string,
+    source: any,
+    options?: GetValuesOptions
+): any {
+    if (!path.startsWith('?.')) return path;
+
+    let aliased = path;
+    if (options?.aka) {
+        const aliasMap = new Map<string, string>();
+        for (const [alias, target] of Object.entries(options.aka)) {
+            aliasMap.set(alias, target);
+        }
+        aliased = applyAliases(path, aliasMap);
+    }
+
+    const parts = parseCachedPath(aliased);
+    if (parts.length === 0) return source;
+
+    const withMethods = options?.withMethods
+        ? options.withMethods instanceof Set
+            ? options.withMethods
+            : new Set(options.withMethods)
+        : undefined;
+
+    return navigatePath(source, parts, withMethods);
 }

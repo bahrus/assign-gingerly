@@ -158,6 +158,44 @@ Yes
 
 > **Should `getValues` recurse into plain objects?**
 
-**Should the sync protocol handlers in `GetValuesOptions` be strictly `(key: string) => any` (no Promise allowed)?**
+Yes
+
+> **Should the sync protocol handlers in `GetValuesOptions` be strictly `(key: string) => any` (no Promise allowed)?**
 
 I think the type should indicate no promise allowed (though I admit any covers asynchronous -- is there a way to say anything but a Promise?) but trust the author not to deviate from the tping and stuff an asynchronous protocol in there.
+
+---
+
+## Response to Human Response I
+
+### On "anything but a Promise" type
+
+TypeScript doesn't have a built-in "not a Promise" type, but you can approximate it:
+
+```ts
+type NotPromise<T> = T extends Promise<any> ? never : T;
+type SyncValue = NotPromise<any>;  // doesn't quite work with `any`
+```
+
+The practical approach is just:
+
+```ts
+protocols?: Record<string, (key: string) => Exclude<any, Promise<any>>>;
+```
+
+But `Exclude<any, Promise<any>>` still evaluates to `any` because `any` absorbs everything. The real answer is: **document it, type it as `any`, and trust the author**. If someone passes an async handler to `getValues`, it'll silently produce Promise objects as values instead of resolved values — garbage in, garbage out.
+
+The type in the interface:
+```ts
+protocols?: Record<string, (key: string) => any>;
+```
+With a JSDoc note: "Must return synchronously. Async protocol handlers should use `resolveValues` instead."
+
+### Proceeding with implementation
+
+Assumptions:
+1. `getValues` handles arrays ✓
+2. `getValues` recurses into plain objects (same as resolveValues) — assuming yes
+3. Sync protocols typed as `(key: string) => any` with documentation caveat
+
+Implementing now.

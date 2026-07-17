@@ -62,6 +62,10 @@
       "default": "./resolveValues.js",
       "types": "./resolveValues.ts"
     },
+    "./getValues.js": {
+      "default": "./getValues.js",
+      "types": "./getValues.ts"
+    },
     "./resolveIdRef.js": {
       "default": "./resolveIdRef.js",
       "types": "./resolveIdRef.ts"
