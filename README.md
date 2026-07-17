@@ -58,15 +58,29 @@ assignTentatively provides a far more limited subset of functionality compared t
 
 The third fundamental utility function is:
 
-## assignFrom
+## assignFrom (and assignFromAsync)
 
-assignFrom builds on assignGingerly by adding a resolution step: RHS values that are `?.`-prefixed path strings are resolved against a source object before assignment.  This enables a declarative, data-driven pattern where a view model (or any source) feeds values into a target through path expressions — replacing imperative property lookups with a single configuration object.
+`assignFrom` builds on assignGingerly by adding a resolution step: RHS values that are `?.`-prefixed path strings are resolved against a source object before assignment. This enables a declarative, data-driven pattern where a view model (or any source) feeds values into a target through path expressions — replacing imperative property lookups with a single configuration object.
+
+**`assignFrom` is synchronous** — it resolves paths, expands substitutions, handles spreads, processes `#[x]` refs, and runs inferred assignments all without yielding to the event loop. Handler commands (` =>`), `beVigilant`, and `enhance` are fire-and-forget (kicked off asynchronously in the background).
+
+**`assignFromAsync`** is the awaitable variant for when you need to:
+- Use async protocol handlers (e.g., `fetch`-based resolution)
+- `await` handler completion before proceeding
+- Wait for `enhance` (EMC JSON imports) to finish
+
+```TypeScript
+import { assignFrom } from 'assign-gingerly/assignFrom.js';           // sync (default)
+import { assignFromAsync } from 'assign-gingerly/assignFromAsync.js';  // async when needed
+```
+
+For most use cases — including `manageTemplateList`, reactive merge cycles, and DOM binding — the sync `assignFrom` is the right choice. It delivers near-vanilla-JS performance by avoiding microtask overhead.
 
 assignFrom adds support for:
 
 1.  Resolving RHS path strings against a source object (`from`).
-2.  Protocol resolution (`globalThis://`, `localStorage://`, custom protocols).
-3.  Handler plugins via the ` =>` operator for custom logic (template instantiation, DOM manipulation, etc.).
+2.  Protocol resolution (`globalThis://`, `localStorage://`, custom sync protocols).
+3.  Handler plugins via the ` =>` operator for custom logic (fire-and-forget in sync mode, awaitable in async mode).
 4.  Looped substitution with `where_x_in` / `where_y_in` / `where_z_in` for expanding template patterns into multiple concrete assignments.
 5.  Spread merging via the `"..."` key.
 
