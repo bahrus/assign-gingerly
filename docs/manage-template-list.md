@@ -173,6 +173,24 @@ resolve: {
 - `idleMs` — debounce window (default: 100ms). Resolves when no mutations for this duration.
 - `timeout` — maximum wait. If exceeded, inserts fragment anyway with a console warning.
 
+## Yielding for Large Lists (`yieldEvery`)
+
+For very large lists, synchronous processing of all items can freeze the browser. Use `yieldEvery` to periodically yield to the event loop, allowing the browser to paint and handle input:
+
+```JavaScript
+resolve: {
+    forEach: '?.data',
+    instantiate: 'globalThis://row-tpl',
+    yieldEvery: 1000,  // yield to browser every 1000 items
+}
+```
+
+- Items 0 through 999 are processed synchronously (no yield before the first batch)
+- At every Nth item (1000th, 2000th, etc.), the handler yields via `setTimeout(0)` before continuing
+- Default: `undefined` (no yielding — all items processed in one synchronous block)
+
+This prevents jank for lists with tens of thousands of items while maintaining near-optimal performance for typical list sizes.
+
 ## Insertion Methods
 
 | `method` | Behavior |
