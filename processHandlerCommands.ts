@@ -8,7 +8,7 @@ import { resolveValues } from './resolveValues.js';
 import { evaluatePathWithMethods } from './assignGingerly.js';
 import { isAllowedImportPath } from './isAllowedImportPath.js';
 import type { AssignPermissions } from './isAllowedImportPath.js';
-import type { AssignFromOptions, AssignFromHandlerConstructor } from './assignFrom.js';
+import type { AssignFromOptions, AssignFromHandlerConstructor } from './assignFromAsync.js';
 
 /**
  * Map of built-in handler names to their module paths.

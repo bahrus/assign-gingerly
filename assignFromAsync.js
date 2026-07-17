@@ -142,7 +142,7 @@ function mergeHandlerDuplicates(entries) {
     }
     return result;
 }
-export async function assignFrom(target, pattern, options, permissions) {
+export async function assignFromAsync(target, pattern, options, permissions) {
     // First: expand looped substitution variables (${x}, ${y}, ${z})
     const expandedPattern = expandSubstitutions(pattern, options);
     // Separate handler commands ( =>), #[x] keys, and normal keys

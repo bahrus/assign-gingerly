@@ -33,7 +33,7 @@
  * }, { from: vm, withMethods: ['querySelector'] });
  */
 
-import type { AssignFromHandler } from '../assignFrom.js';
+import type { AssignFromHandler } from '../assignFromAsync.js';
 
 const MARKER_START_PREFIX = '?start name="';
 const MARKER_END = '?end';

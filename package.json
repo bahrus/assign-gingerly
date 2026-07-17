@@ -142,9 +142,9 @@
       "default": "./inferencer/withScopePerimeter.js",
       "types": "./inferencer/withScopePerimeter.ts"
     },
-    "./assignFrom.js": {
-      "default": "./assignFrom.js",
-      "types": "./assignFrom.ts"
+    "./assignFromAsync.js": {
+      "default": "./assignFromAsync.js",
+      "types": "./assignFromAsync.ts"
     },
     "./assignFeatures.js": {
       "default": "./assignFeatures.js",

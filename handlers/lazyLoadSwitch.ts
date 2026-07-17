@@ -21,7 +21,7 @@
  */
 
 import { LazyLoadHandler } from './lazyLoad.js';
-import type { AssignFromHandler } from '../assignFrom.js';
+import type { AssignFromHandler } from '../assignFromAsync.js';
 import type { LazyLoadSwitchResolvedParams } from '../types/assign-gingerly/types.js';
 
 /**

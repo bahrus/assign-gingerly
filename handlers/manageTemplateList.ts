@@ -25,10 +25,10 @@
  * }, { from: vm, withMethods: ['querySelector'], protocols: { globalThis: k => globalThis[k] } });
  */
 
-import type { AssignFromHandler } from '../assignFrom.js';
+import type { AssignFromHandler } from '../assignFromAsync.js';
 import { findMarkers, createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 import { resolveValue } from '../resolveValues.js';
-import { assignFrom } from '../assignFrom.js';
+import { assignFromAsync } from '../assignFromAsync.js';
 import { processInferredAssignments } from '../inferredAssignments.js';
 
 /**
@@ -152,10 +152,10 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                     if (processInferred) {
                         processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                     } else {
-                        await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                        await assignFromAsync(rootEl, assignToFragment, { from: item, ...withOptions });
                     }
                     if (sourceAssignToFragment && options?.from) {
-                        await assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                        await assignFromAsync(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
                     }
                 }
                 newKeyToNodes.set(key, existingNodes);
@@ -184,11 +184,11 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                     if (processInferred) {
                         processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                     } else {
-                        await assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                        await assignFromAsync(rootEl, assignToFragment, { from: item, ...withOptions });
                     }
 
                     if (sourceAssignToFragment && options?.from) {
-                        await assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                        await assignFromAsync(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
                     }
                 }
 

@@ -19,13 +19,16 @@
  * }, { from: source });
  * // target is now { color: 'red', text: 'Hello' }
  */
-import { resolveValues, ResolveValuesOptions } from './resolveValues.js';
+import { resolveValues } from './resolveValues.js';
 import assignGingerly, { IAssignGingerlyOptions } from './assignGingerly.js';
 import type { AssignPermissions } from './isAllowedImportPath.js';
 
-export interface AssignFromOptions extends IAssignGingerlyOptions, ResolveValuesOptions {
+export interface AssignFromOptions extends IAssignGingerlyOptions {
   /** Source object to resolve RHS path strings against */
   from: any;
+
+  /** Protocol handlers (sync or async) */
+  protocols?: Record<string, (key: string) => any | Promise<any>>;
 
   /** Loop variable bindings — expand pattern entries containing ${x} */
   where_x_in?: string[];
@@ -242,7 +245,7 @@ function mergeHandlerDuplicates(entries: [string, any][]): Record<string, any> {
   return result;
 }
 
-export async function assignFrom(
+export async function assignFromAsync(
   target: any,
   pattern: Record<string, any>,
   options: AssignFromOptions,

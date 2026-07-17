@@ -31,7 +31,7 @@
  * // If middleName is undefined, the sub-array [', ', undefined] is dropped entirely.
  */
 
-import type { AssignFromHandler } from '../assignFrom.js';
+import type { AssignFromHandler } from '../assignFromAsync.js';
 
 /**
  * Process nested arrays with all-or-nothing null semantics.
