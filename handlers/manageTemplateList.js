@@ -26,7 +26,7 @@
  */
 import { findMarkers, createMarkers } from '../markerUtils.js';
 import { resolveValue } from '../resolveValues.js';
-import { assignFromAsync } from '../assignFromAsync.js';
+import { assignFrom } from '../assignFrom.js';
 import { processInferredAssignments } from '../inferredAssignments.js';
 const listStateMap = new WeakMap();
 /**
@@ -118,10 +118,10 @@ export class ManageTemplateListHandler {
                         processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                     }
                     else {
-                        await assignFromAsync(rootEl, assignToFragment, { from: item, ...withOptions });
+                        assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
                     }
                     if (sourceAssignToFragment && options?.from) {
-                        await assignFromAsync(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                        assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
                     }
                 }
                 newKeyToNodes.set(key, existingNodes);
@@ -152,10 +152,10 @@ export class ManageTemplateListHandler {
                         processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                     }
                     else {
-                        await assignFromAsync(rootEl, assignToFragment, { from: item, ...withOptions });
+                        assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
                     }
                     if (sourceAssignToFragment && options?.from) {
-                        await assignFromAsync(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                        assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
                     }
                 }
                 for (const node of clonedNodes) {

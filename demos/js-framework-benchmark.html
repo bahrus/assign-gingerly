@@ -76,12 +76,12 @@
                     },
                     fromEachItem: {
                         assignToFragment: {
-                            // '?.cells?.0?.textContent': '?.id',
-                            // '?.cells?.1?.textContent': '?.label'
+                            '?.cells?.0?.textContent': '?.id',
+                            '?.cells?.1?.textContent': '?.label'
                         },
-                        withOptions: {
-                            inferredAssignments: { byItemprop: true }
-                        },
+                        // withOptions: {
+                        //     inferredAssignments: { byItemprop: true }
+                        // },
                         resolve: { key: '?.id' }
                     }
                 }

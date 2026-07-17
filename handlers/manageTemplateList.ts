@@ -28,7 +28,7 @@
 import type { AssignFromHandler } from '../assignFromAsync.js';
 import { findMarkers, createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 import { resolveValue } from '../resolveValues.js';
-import { assignFromAsync } from '../assignFromAsync.js';
+import { assignFrom } from '../assignFrom.js';
 import { processInferredAssignments } from '../inferredAssignments.js';
 
 /**
@@ -152,10 +152,10 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                     if (processInferred) {
                         processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                     } else {
-                        await assignFromAsync(rootEl, assignToFragment, { from: item, ...withOptions });
+                        assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
                     }
                     if (sourceAssignToFragment && options?.from) {
-                        await assignFromAsync(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                        assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
                     }
                 }
                 newKeyToNodes.set(key, existingNodes);
@@ -184,11 +184,11 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                     if (processInferred) {
                         processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                     } else {
-                        await assignFromAsync(rootEl, assignToFragment, { from: item, ...withOptions });
+                        assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
                     }
 
                     if (sourceAssignToFragment && options?.from) {
-                        await assignFromAsync(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                        assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
                     }
                 }
 
