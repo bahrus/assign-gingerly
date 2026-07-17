@@ -21,151 +21,14 @@
  */
 import { resolveValues } from './resolveValues.js';
 import assignGingerly from './assignGingerly.js';
-/**
- * Check if a key ends with the handler operator ' =>'.
- */
-function isHandlerCommand(key) {
-    return key.endsWith(' =>');
-}
+import { expandSubstitutions, categorizeKeys, handleSpreads } from './assignFrom.js';
 // Module cache for processHandlerCommands — avoids await on dynamic import after first call
 let _processHandlerCommands;
-/**
- * Supported substitution variables and their option keys.
- */
-const SUBSTITUTION_VARS = [
-    { placeholder: '${x}', optionKey: 'where_x_in' },
-    { placeholder: '${y}', optionKey: 'where_y_in' },
-    { placeholder: '${z}', optionKey: 'where_z_in' },
-];
-/**
- * Recursively substitute a placeholder in all string values of an object.
- * Returns a new object (shallow clone at each level) with substitutions applied.
- */
-function substituteInValue(value, placeholder, replacement) {
-    if (typeof value === 'string') {
-        return value.includes(placeholder) ? value.replaceAll(placeholder, replacement) : value;
-    }
-    if (Array.isArray(value)) {
-        return value.map(item => substituteInValue(item, placeholder, replacement));
-    }
-    if (value && typeof value === 'object') {
-        const proto = Object.getPrototypeOf(value);
-        if (proto === Object.prototype || proto === null) {
-            const result = {};
-            for (const [k, v] of Object.entries(value)) {
-                result[k] = substituteInValue(v, placeholder, replacement);
-            }
-            return result;
-        }
-    }
-    return value;
-}
-/**
- * Check if a pattern entry (key + value) contains a given placeholder.
- */
-function entryContainsPlaceholder(key, value, placeholder) {
-    if (key.includes(placeholder))
-        return true;
-    return valueContainsPlaceholder(value, placeholder);
-}
-/**
- * Check if a value (string, object, or array) contains a placeholder.
- */
-function valueContainsPlaceholder(value, placeholder) {
-    if (typeof value === 'string')
-        return value.includes(placeholder);
-    if (Array.isArray(value))
-        return value.some(item => valueContainsPlaceholder(item, placeholder));
-    if (value && typeof value === 'object') {
-        const proto = Object.getPrototypeOf(value);
-        if (proto === Object.prototype || proto === null) {
-            return Object.values(value).some(v => valueContainsPlaceholder(v, placeholder));
-        }
-    }
-    return false;
-}
-/**
- * Expand looped substitution variables in a pattern.
- * Applies cartesian expansion: x values are expanded first, then y, then z.
- * Each variable multiplies the entries — result count = x.length × y.length × z.length.
- *
- * Returns the expanded pattern (or the original if no substitutions apply).
- */
-function expandSubstitutions(pattern, options) {
-    let entries = Object.entries(pattern);
-    for (const { placeholder, optionKey } of SUBSTITUTION_VARS) {
-        const values = options[optionKey];
-        if (!values || values.length === 0)
-            continue;
-        const expanded = [];
-        for (const [key, value] of entries) {
-            if (entryContainsPlaceholder(key, value, placeholder)) {
-                // Expand this entry for each value in the variable array
-                for (const replacement of values) {
-                    const newKey = key.includes(placeholder)
-                        ? key.replaceAll(placeholder, replacement)
-                        : key;
-                    const newValue = substituteInValue(value, placeholder, replacement);
-                    expanded.push([newKey, newValue]);
-                }
-            }
-            else {
-                // No placeholder in this entry — pass through
-                expanded.push([key, value]);
-            }
-        }
-        entries = expanded;
-    }
-    return mergeHandlerDuplicates(entries);
-}
-/**
- * Convert entries to an object, merging duplicate handler (` =>`) keys into arrays.
- * For normal (non-handler) keys, later entries overwrite earlier ones (standard object behavior).
- * For handler keys, duplicate entries are combined into an array (Multiple Handlers pattern).
- */
-function mergeHandlerDuplicates(entries) {
-    const result = {};
-    for (const [key, value] of entries) {
-        if (key.endsWith(' =>') && key in result) {
-            // Duplicate handler key — merge into array
-            const existing = result[key];
-            if (Array.isArray(existing)) {
-                existing.push(value);
-            }
-            else {
-                result[key] = [existing, value];
-            }
-        }
-        else {
-            result[key] = value;
-        }
-    }
-    return result;
-}
 export async function assignFromAsync(target, pattern, options, permissions) {
     // First: expand looped substitution variables (${x}, ${y}, ${z})
     const expandedPattern = expandSubstitutions(pattern, options);
-    // Separate handler commands ( =>), #[x] keys, and normal keys
-    const handlerKeys = [];
-    const normalPattern = {};
-    const idRefNormalKeys = [];
-    const idRefHandlerKeys = [];
-    for (const key of Object.keys(expandedPattern)) {
-        if (isHandlerCommand(key)) {
-            if (key.startsWith('#[')) {
-                idRefHandlerKeys.push(key);
-            }
-            else {
-                handlerKeys.push(key);
-            }
-        }
-        else if (key.startsWith('#[')) {
-            idRefNormalKeys.push(key);
-        }
-        else {
-            normalPattern[key] = expandedPattern[key];
-        }
-    }
+    // Categorize keys
+    const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys } = categorizeKeys(expandedPattern);
     // Process normal keys via resolveValues + assignGingerly
     if (Object.keys(normalPattern).length > 0) {
         const resolved = await resolveValues(normalPattern, options.from, {
@@ -252,27 +115,4 @@ export async function assignFromAsync(target, pattern, options, permissions) {
         await enhanceAll(target, options.enhance, permissions);
     }
     return target;
-}
-/**
- * Recursively walk an object and handle "..." spread keys.
- * When a "..." key is found, its value (which should be an object after protocol resolution)
- * is spread into the parent, replacing the "..." entry.
- */
-function handleSpreads(obj) {
-    for (const [key, value] of Object.entries(obj)) {
-        if (key !== '...' && typeof value === 'object' && value !== null && !Array.isArray(value)) {
-            const proto = Object.getPrototypeOf(value);
-            if (proto === Object.prototype || proto === null) {
-                obj[key] = handleSpreads(value);
-            }
-        }
-    }
-    if ('...' in obj) {
-        const spreadValue = obj['...'];
-        delete obj['...'];
-        if (spreadValue && typeof spreadValue === 'object') {
-            Object.assign(obj, spreadValue);
-        }
-    }
-    return obj;
 }

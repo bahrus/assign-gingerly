@@ -146,6 +146,10 @@
       "default": "./assignFromAsync.js",
       "types": "./assignFromAsync.ts"
     },
+    "./assignFrom.js": {
+      "default": "./assignFrom.js",
+      "types": "./assignFrom.ts"
+    },
     "./assignFeatures.js": {
       "default": "./assignFeatures.js",
       "types": "./assignFeatures.ts"

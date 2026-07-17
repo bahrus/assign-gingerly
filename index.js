@@ -9,6 +9,7 @@ export { resolveTemplate } from './resolveTemplate.js';
 export { getHost } from './getHost.js';
 export { resolveValues, resolveValue } from './resolveValues.js';
 export { assignFromAsync } from './assignFromAsync.js';
+export { assignFrom } from './assignFrom.js';
 export { assignFeatures, FeaturesRegistry, captureFeatureInitVals, PropertyBag, suggestFeatureInfo, getFeatureInfoSuggestions } from './assignFeatures.js';
 export { installForwarding } from './installForwarding.js';
 export { defineWithFeatures } from './defineWithFeatures.js';
