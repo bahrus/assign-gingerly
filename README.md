@@ -3396,14 +3396,14 @@ assignFrom(target, {
 
 For full documentation, see [docs/assignFrom.md](docs/assignFrom.md).
 
-## Protocol Resolution in `resolveValues` and `assignFrom`
+## Protocol Resolution in `getValues` and `assignFrom`
 
-`resolveValues` (and by extension `assignFrom`) supports resolving values from external sources via protocol-prefixed strings. This enables declarative references to `globalThis`, `localStorage`, `sessionStorage`, or custom stores.
+`getValues` (and by extension `assignFrom`) supports resolving values from external sources via protocol-prefixed strings. This enables declarative references to `globalThis`, `localStorage`, `sessionStorage`, or custom stores.
 
 ```JavaScript
-import { resolveValues } from 'assign-gingerly/resolveValues.js';
+import { getValues } from 'assign-gingerly/getValues.js';
 
-const result = await resolveValues({
+const result = getValues({
     baseURL: 'globalThis://myAppConfig?.apiBaseUrl',
     authToken: 'localStorage://auth?.token',
     label: '?.title'  // normal path resolution still works
@@ -3419,7 +3419,7 @@ const result = await resolveValues({
 
 1. If a value contains `://` and the part before it matches a key in `protocols`, it's treated as a protocol reference.
 2. The protocol handler is called with the key portion (between `://` and the first `?.`, or end of string).
-3. If a `?.` path follows the key, it's resolved against the handler's result using `resolveValue`.
+3. If a `?.` path follows the key, it's resolved against the handler's result using `getValue`.
 4. If the protocol isn't found in the map, the value passes through unchanged (no error).
 
 **Path after protocol key:**
@@ -3439,7 +3439,7 @@ const result = await resolveValues({
 ```JavaScript
 import { assignFrom } from 'assign-gingerly/assignFrom.js';
 
-await assignFrom(myForm, {
+assignFrom(myForm, {
     "...": "globalThis://qmywdO1vr0SwyuIe4fvzxQ",
     path: "api/v2/:operation/:expression",
     headers: {
@@ -3453,7 +3453,19 @@ await assignFrom(myForm, {
 
 The `"..."` key causes the resolved object to be merged (spread) into the result before passing to `assignGingerly`, rather than being assigned to a property named `"..."`.
 
-**Note:** Both `resolveValues` and `assignFrom` are async (return Promises) to support async protocol handlers (e.g., IndexedDB, fetch). For patterns without protocols, the async overhead is negligible.
+**Async protocol handlers:**
+
+For protocol handlers that return Promises (e.g., `fetch`, IndexedDB), use `resolveValues` (async) or `assignFromAsync`:
+
+```JavaScript
+import { resolveValues } from 'assign-gingerly/resolveValues.js';
+import { assignFromAsync } from 'assign-gingerly/assignFromAsync.js';
+
+// resolveValues is the async variant of getValues
+const result = await resolveValues(pattern, source, {
+    protocols: { api: async (key) => (await fetch(`/api/${key}`)).json() }
+});
+```
 
 ## assignFrom Handlers (` =>` operator)
 
@@ -3521,9 +3533,9 @@ Built-in handlers (`builtIns.lazyLoad`, `builtIns.join`, etc.) auto-load without
 **How it works:**
 
 1. Keys ending with ` =>` are separated from normal keys.
-2. Normal keys are processed via `resolveValues` + `assignGingerly` as usual.
+2. Normal keys are processed via `getValues` + `assignGingerly` as usual.
 3. For handler keys: the LHS path is evaluated (with `withMethods` support) to get the target.
-4. The `resolve` map is processed through `resolveValues` — paths (`?.`), protocols (`globalThis://`), and literals are all resolved.
+4. The `resolve` map is processed through `getValues` — paths (`?.`), protocols (`globalThis://`), and literals are all resolved.
 5. The handler class (looked up via `do` in `options.handlers`, then built-in auto-load) is instantiated with the full config, then `assign(target, resolvedParams, options)` is called.
 
 **The `resolve` map supports:**
@@ -3796,7 +3808,7 @@ await assignFrom(oElement, {
 
 **How it works:**
 
-1. The `resolve.value` array is resolved by `resolveValues` — `?.` path strings are replaced with actual values from `options.from`.
+1. The `resolve.value` array is resolved by `getValues` — `?.` path strings are replaced with actual values from `options.from`.
 2. Top-level `null`/`undefined` values are filtered out.
 3. Nested sub-arrays use **all-or-nothing** semantics: if any element in a sub-array resolves to `null`/`undefined`, the entire sub-array is dropped.
 4. Remaining elements are joined with the separator (default: `''`, empty string).
