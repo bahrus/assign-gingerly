@@ -3535,13 +3535,30 @@ Built-in handlers (`builtIns.lazyLoad`, `builtIns.join`, etc.) auto-load without
 1. Keys ending with ` =>` are separated from normal keys.
 2. Normal keys are processed via `getValues` + `assignGingerly` as usual.
 3. For handler keys: the LHS path is evaluated (with `withMethods` support) to get the target.
-4. The `resolve` map is processed through `getValues` — paths (`?.`), protocols (`globalThis://`), and literals are all resolved.
-5. The handler class (looked up via `do` in `options.handlers`, then built-in auto-load) is instantiated with the full config, then `assign(target, resolvedParams, options)` is called.
+4. The `get` map (if present) is processed synchronously via `getValues` — no thread yield.
+5. The `resolve` map (if present) is processed asynchronously via `resolveValues` — yields to the microtask queue. Results are merged with `get` results.
+6. The handler class (looked up via `do` in `options.handlers`, then built-in auto-load) is instantiated with the full config, then `assign(target, resolvedParams, options)` is called.
 
-**The `resolve` map supports:**
+**The `get` and `resolve` maps support:**
 - `?.` paths — resolved against `options.from`
 - Protocol strings — resolved via `options.protocols`
 - Plain literals — passed through unchanged
+
+Use `get` for performance-sensitive handlers (synchronous, no yield). Use `resolve` when you need async protocol handlers (e.g., `fetch`). Both can coexist — `get` runs first, `resolve` merges on top:
+
+```JavaScript
+'?.querySelector?.tbody =>': {
+    do: 'builtIns.manageTemplateList',
+    get: {
+        forEach: '?.rankings',
+        instantiate: 'globalThis://country-ranking',
+    },
+    resolve: {
+        // Only for genuinely async protocols
+        remoteConfig: 'api://settings'
+    }
+}
+```
 
 ### Built-in handler: `builtIns.lazyLoad`
 

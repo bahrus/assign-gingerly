@@ -102,3 +102,15 @@ Done. The change:
 - Both can coexist — `get` results are computed first, `resolve` results merge on top
 
 Handlers can now choose: put time-sensitive params in `get`, async-protocol params in `resolve`.
+
+## Human Response II
+
+Great.  Can you update the documentation to reflect this?
+
+## Implementation Notes II
+
+Now let me also add a brief note to the handler usage example section showing both `get` and `resolve`:
+
+Done. Updated the README:
+- "How it works" now lists both `get` (step 4, sync) and `resolve` (step 5, async) as separate steps
+- Added a dedicated explanation block showing when to use each, with an example of both coexisting on the same handler config
