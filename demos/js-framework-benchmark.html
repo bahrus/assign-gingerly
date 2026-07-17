@@ -1,21 +1,57 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="utf-8">
     <title>manageTemplateList — JS Framework Benchmark (Local)</title>
     <style>
-        body { font-family: system-ui, sans-serif; margin: 1rem; }
-        .controls { margin: 1rem 0; display: flex; gap: 0.5rem; flex-wrap: wrap; }
-        button { padding: 0.4rem 0.8rem; cursor: pointer; }
-        #results { margin: 1rem 0; font-family: monospace; white-space: pre-wrap; background: #f8f8f8; padding: 1rem; border-radius: 4px; }
-        table { border-collapse: collapse; width: 100%; }
-        td, th { padding: 0.25rem 0.5rem; border: 1px solid #ddd; }
-        tr.selected td { background: #d4edda; }
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 1rem;
+        }
+
+        .controls {
+            margin: 1rem 0;
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 0.4rem 0.8rem;
+            cursor: pointer;
+        }
+
+        #results {
+            margin: 1rem 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            background: #f8f8f8;
+            padding: 1rem;
+            border-radius: 4px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        td,
+        th {
+            padding: 0.25rem 0.5rem;
+            border: 1px solid #ddd;
+        }
+
+        tr.selected td {
+            background: #d4edda;
+        }
     </style>
 </head>
+
 <body>
     <h1>manageTemplateList — Benchmark</h1>
-    <p>Approximates the <a href="https://github.com/nicholaskajoh/js-framework-benchmark">js-framework-benchmark</a> operations.</p>
+    <p>Approximates the <a href="https://github.com/nicholaskajoh/js-framework-benchmark">js-framework-benchmark</a>
+        operations.</p>
 
     <div class="controls">
         <button id="btn-create">Create 1,000</button>
@@ -37,7 +73,13 @@
     </template>
 
     <table>
-        <thead><tr><th>ID</th><th>Label</th><th></th></tr></thead>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Label</th>
+                <th></th>
+            </tr>
+        </thead>
         <tbody id="tbody"></tbody>
     </table>
 
@@ -67,25 +109,25 @@
         const resultsEl = document.getElementById('results');
         let timings = [];
         const assignValues = {
-                '?. =>': {
-                    do: 'builtIns.manageTemplateList',
-                    resolve: {
-                        forEach: '?.data',
-                        instantiate: 'globalThis://row-tpl',
-                        forget: true,
+            '?. =>': {
+                do: 'builtIns.manageTemplateList',
+                resolve: {
+                    forEach: '?.data',
+                    instantiate: 'globalThis://row-tpl',
+                    forget: true,
+                },
+                fromEachItem: {
+                    assignToFragment: {
+                        '?.cells?.0?.textContent': '?.id',
+                        '?.cells?.1?.textContent': '?.label'
                     },
-                    fromEachItem: {
-                        assignToFragment: {
-                            '?.cells?.0?.textContent': '?.id',
-                            '?.cells?.1?.textContent': '?.label'
-                        },
-                        // withOptions: {
-                        //     inferredAssignments: { byItemprop: true }
-                        // },
-                        resolve: { key: '?.id' }
-                    }
+                    // withOptions: {
+                    //     inferredAssignments: { byItemprop: true }
+                    // },
+                    resolve: { key: '?.id' }
                 }
-            };
+            }
+        };
 
         const protocols = { globalThis: k => globalThis[k] };
 
@@ -93,7 +135,7 @@
         async function render() {
             await assignFrom(tbody, assignValues, {
                 from: { data },
-                protocols 
+                protocols
             });
         }
 
@@ -159,4 +201,5 @@
         })();
     </script>
 </body>
+
 </html>
