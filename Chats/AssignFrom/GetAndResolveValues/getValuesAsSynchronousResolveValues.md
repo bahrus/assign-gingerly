@@ -199,3 +199,26 @@ Assumptions:
 3. Sync protocols typed as `(key: string) => any` with documentation caveat
 
 Implementing now.
+
+## Implementation Notes
+
+Let me refactor `resolveValues.ts` to import shared logic from `getValues.ts` and become a thin async wrapper:
+
+Now I'll rewrite `resolveValues.ts` as a thin async wrapper that imports shared sync logic from `getValues.ts`:
+
+Now let me verify existing tests still pass (since `resolveValues` is used throughout):
+
+All passing. Here's what was done:
+
+**Refactored `resolveValues.ts`:**
+- Now imports `getValue` from `getValues.ts` and re-exports it as `resolveValue` (backward compatible)
+- Re-exports `ResolveValuesOptions` from types (backward compatible)
+- Keeps only the async-specific logic: `resolveProtocolValue` (awaits handlers), `resolveArray` (async recursion), and `resolveValues` (async main function)
+- Still has its own `applyAliases`, `parseCachedPath`, `navigatePath` — these are duplicated for now to avoid cross-module function call overhead in the hot async path. Could be deduplicated later if desired.
+
+**The layering:**
+- `getValues.ts` — fully synchronous, zero `await`, maximum performance
+- `resolveValues.ts` — async wrapper for when protocols return Promises
+- Both share the same path resolution semantics (aliases, caching, method calls)
+
+**Next step:** Create the sync `assignFrom` that uses `getValues` instead of `resolveValues`. Ready when you are.
