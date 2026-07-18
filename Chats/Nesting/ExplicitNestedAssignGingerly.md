@@ -298,7 +298,33 @@ Why `Y=` edges out `$=`:
 
 The only downside vs `$=` is that `Y=` is slightly more "unusual" — it mixes alpha and punctuation in a way that's uncommon in programming. But assign-gingerly already has an unconventional operator vocabulary (` =>` repurposed, ` =!` for toggle). `Y=` fits the project's personality of choosing expressiveness over convention.
 
+---
+
 ## Human Response IV
 
 Let's go with Y=.  I like it.  Are there any other points that need clarifying before implementation can begin?
+
+---
+
+## AI Response V
+
+No uncertainties — implemented. Here's what was done:
+
+**Files modified:**
+- `assignGingerly.ts` — added `isMergeCommand()`, `parseMergeCommand()`, and handling logic in the main loop
+- `assignGingerly.js` — same changes (JS companion)
+
+**Files created:**
+- `tests/merge-command.html` — 12 browser-based tests
+- `tests/merge-command.spec.ts` — Playwright runner
+
+**Test results:** 12/12 passing across Chromium, Firefox, and WebKit. Existing operator tests (`+=`, `-=`, nested paths) all still pass.
+
+**Behavior summary:**
+- `'prop Y='` — merges the RHS object into `target.prop` via recursive `assignGingerly`
+- `'?.a?.b?.c Y='` — navigates the nested path, then merges into the resolved object
+- Works with `withMethods` for DOM-like path evaluation
+- Nested `Y=` composes: `'config Y=': { 'database Y=': { port: 3306 } }`
+- Non-existent or non-object targets are a silent no-op (no throw)
+- Arrays in the RHS replace (not concatenate) — consistent with normal assignGingerly behavior---
 

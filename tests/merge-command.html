@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>assignGingerly - Y= Merge Command Tests</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>assignGingerly - Y= Merge Command Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0"></div>
+
+    <script type="module">
+        import assignGingerly from '../assignGingerly.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function test(name, fn) {
+            try {
+                fn();
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+        }
+
+        function expect(actual) {
+            return {
+                toEqual(expected) {
+                    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${expected} but got ${actual}`);
+                    }
+                }
+            };
+        }
+
+        // Basic merge into plain sub-object
+        test('should merge properties into a sub-object', () => {
+            const obj = { style: { color: 'red', fontSize: '14px' } };
+            assignGingerly(obj, {
+                'style Y=': {
+                    width: '100px',
+                    height: '50px'
+                }
+            });
+            expect(obj.style).toEqual({ color: 'red', fontSize: '14px', width: '100px', height: '50px' });
+        });
+
+        // Overwrite existing properties during merge
+        test('should overwrite existing properties during merge', () => {
+            const obj = { style: { width: '50px', height: '30px' } };
+            assignGingerly(obj, {
+                'style Y=': {
+                    width: '100px',
+                    height: '50px'
+                }
+            });
+            expect(obj.style).toEqual({ width: '100px', height: '50px' });
+        });
+
+        // Merge with nested ?. path
+        test('should merge into a nested path target', () => {
+            const obj = { a: { b: { settings: { debug: false, verbose: true } } } };
+            assignGingerly(obj, {
+                '?.a?.b?.settings Y=': {
+                    debug: true,
+                    logLevel: 'info'
+                }
+            });
+            expect(obj.a.b.settings).toEqual({ debug: true, verbose: true, logLevel: 'info' });
+        });
+
+        // Merge into DOM-like style object
+        test('should work with element-like objects', () => {
+            const element = {
+                style: { color: 'blue', display: 'block' },
+                dataset: { userId: '1' }
+            };
+            assignGingerly(element, {
+                'style Y=': {
+                    width: '100px',
+                    height: '50px'
+                },
+                'dataset Y=': {
+                    role: 'admin'
+                }
+            });
+            expect(element.style).toEqual({ color: 'blue', display: 'block', width: '100px', height: '50px' });
+            expect(element.dataset).toEqual({ userId: '1', role: 'admin' });
+        });
+
+        // Nested Y= (recursive merge within merge)
+        test('should support nested Y= for recursive merge', () => {
+            const obj = {
+                config: {
+                    database: { host: 'localhost', port: 5432 },
+                    appName: 'OldApp'
+                }
+            };
+            assignGingerly(obj, {
+                'config Y=': {
+                    'database Y=': {
+                        port: 3306,
+                        ssl: true
+                    },
+                    appName: 'NewApp'
+                }
+            });
+            expect(obj.config.database).toEqual({ host: 'localhost', port: 3306, ssl: true });
+            expect(obj.config.appName).toBe('NewApp');
+        });
+
+        // Mix Y= with normal assignments
+        test('should mix Y= with normal assignments in the same call', () => {
+            const obj = { style: { color: 'red' }, textContent: 'old' };
+            assignGingerly(obj, {
+                'style Y=': { width: '100px' },
+                textContent: 'new'
+            });
+            expect(obj.style).toEqual({ color: 'red', width: '100px' });
+            expect(obj.textContent).toBe('new');
+        });
+
+        // Y= with non-existent target (no-op, doesn't throw)
+        test('should be a no-op when target property does not exist', () => {
+            const obj = { a: 1 };
+            assignGingerly(obj, {
+                'nonExistent Y=': { x: 1 }
+            });
+            expect(obj).toEqual({ a: 1 });
+        });
+
+        // Y= with non-object target (no-op, doesn't throw)
+        test('should be a no-op when target property is not an object', () => {
+            const obj = { count: 42 };
+            assignGingerly(obj, {
+                'count Y=': { x: 1 }
+            });
+            expect(obj.count).toBe(42);
+        });
+
+        // Y= with withMethods for nested path
+        test('should work with withMethods for path evaluation', () => {
+            const container = {
+                querySelector(selector) {
+                    if (selector === '.panel') return this._panel;
+                    return null;
+                },
+                _panel: { style: { display: 'none' } }
+            };
+            assignGingerly(container, {
+                '?.querySelector?..panel?.style Y=': {
+                    display: 'block',
+                    opacity: '1'
+                }
+            }, { withMethods: ['querySelector'] });
+            expect(container._panel.style).toEqual({ display: 'block', opacity: '1' });
+        });
+
+        // Y= preserves non-merged properties
+        test('should not remove properties not mentioned in the merge source', () => {
+            const obj = { config: { a: 1, b: 2, c: 3 } };
+            assignGingerly(obj, {
+                'config Y=': { b: 20 }
+            });
+            expect(obj.config).toEqual({ a: 1, b: 20, c: 3 });
+        });
+
+        // Y= with array values (replaces, not merges)
+        test('should replace array values during merge (not concatenate)', () => {
+            const obj = { data: { items: [1, 2, 3], label: 'old' } };
+            assignGingerly(obj, {
+                'data Y=': {
+                    items: [4, 5],
+                    label: 'new'
+                }
+            });
+            expect(obj.data.items).toEqual([4, 5]);
+            expect(obj.data.label).toBe('new');
+        });
+
+        // Y= with nested path that doesn't fully exist (no-op)
+        test('should be a no-op when nested path cannot be fully traversed', () => {
+            const obj = { a: { b: 1 } };
+            assignGingerly(obj, {
+                '?.a?.b?.c Y=': { x: 1 }
+            });
+            // b is 1 (not an object), so c can't be reached — no-op
+            expect(obj).toEqual({ a: { b: 1 } });
+        });
+
+        // Display results
+        const total = passed + failed;
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const completeEl = document.getElementById('test-complete');
+
+        statusEl.innerHTML = `<span class="${failed === 0 ? 'pass' : 'fail'}">${passed}/${total} tests passed</span>`;
+
+        results.forEach(result => {
+            const div = document.createElement('div');
+            div.className = `test-item ${result.status}`;
+            div.innerHTML = `<strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}${result.error ? `<div class="error">${result.error}</div>` : ''}`;
+            resultsEl.appendChild(div);
+        });
+
+        completeEl.setAttribute('data-passed', passed.toString());
+        completeEl.setAttribute('data-failed', failed.toString());
+        completeEl.setAttribute('data-total', total.toString());
+
+        console.log(`Tests complete: ${passed}/${total} passed`);
+    </script>
+</body>
+</html>

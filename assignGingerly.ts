@@ -389,6 +389,23 @@ function parseDeleteCommand(key: string): string | null {
 }
 
 /**
+ * Helper function to check if a key represents a Y= merge command
+ */
+function isMergeCommand(key: string): boolean {
+  return key.endsWith(' Y=');
+}
+
+/**
+ * Helper function to parse a Y= merge command and extract the path
+ */
+function parseMergeCommand(key: string): string | null {
+  if (!isMergeCommand(key)) {
+    return null;
+  }
+  return key.substring(0, key.length - 3); // Remove ' Y=' suffix
+}
+
+/**
  * Helper function to parse a path string with ?. notation
  * Always splits on '?.' delimiter, preserving dots that are part of values
  * (e.g., CSS class selectors like '.username')
@@ -963,6 +980,40 @@ export function assignGingerly(
               delete parent[prop];
             }
           }
+        }
+      }
+      continue;
+    }
+
+    // Handle Y= merge commands (recursive assignGingerly into sub-object)
+    if (isMergeCommand(key)) {
+      const path = parseMergeCommand(key);
+      if (path) {
+        // Navigate to the target sub-object
+        let mergeTarget: any;
+        if (isNestedPath(path)) {
+          if (withMethodsSet) {
+            const result = evaluatePathWithMethods(target, parsePath(path), value, withMethodsSet);
+            mergeTarget = result.target[result.lastKey];
+          } else {
+            const pathParts = parsePath(path);
+            mergeTarget = target;
+            for (const part of pathParts) {
+              if (mergeTarget && typeof mergeTarget === 'object' && part in mergeTarget) {
+                mergeTarget = mergeTarget[part];
+              } else {
+                mergeTarget = undefined;
+                break;
+              }
+            }
+          }
+        } else {
+          mergeTarget = target[path];
+        }
+        
+        // Recursively merge if target is a valid object
+        if (mergeTarget && typeof mergeTarget === 'object') {
+          assignGingerly(mergeTarget, value, options, permissions);
         }
       }
       continue;
