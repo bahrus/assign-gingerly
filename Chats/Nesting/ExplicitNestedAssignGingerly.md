@@ -328,3 +328,50 @@ No uncertainties — implemented. Here's what was done:
 - Non-existent or non-object targets are a silent no-op (no throw)
 - Arrays in the RHS replace (not concatenate) — consistent with normal assignGingerly behavior---
 
+---
+
+## Human Response V
+
+Can you now document this in README.md?
+
+---
+
+## Implementation Notes
+
+Let me read around Example 6 to find the right insertion point:
+
+I'll insert the `Y=` documentation as a new Example 7 and renumber the existing Example 7 to Example 8:
+
+Now let me check if there are any other references to "Example 7" or higher that need renumbering:
+
+All looks correct. Let me also check if there are any inline references to "Example 7" or "Example 8" in the document that might need updating:
+
+There's a reference on line 1288 that says "described in Example 7" — it should now say Example 8:
+
+Let me also check that the operator summary table (if one exists) includes `Y=`:
+
+Now let me check if there's a feature list or summary at the top of the README that mentions the operators:
+
+I don't see an explicit feature list for `assignGingerly` operators at the top. The intro mentions features broadly. The section at line 758 already now mentions "merging into sub-objects." That's sufficient — the documentation is well-placed as Example 7 in the natural progression of operators.
+
+Let me do a final verification that the README is consistent:
+
+Documentation is in place. The `Y=` merge command is documented as Example 7 with:
+- Basic usage with plain keys
+- Comparison to the verbose path-per-property approach
+- Nested `?.` path usage
+- Recursive `Y=` composition
+- Mixing with other operators
+- Behavior notes explaining edge cases and the naming rationale
+
+---
+
+## Human Response VI
+
+Maybe we should have a table summarizing all the operators?
+
+---
+
+## AI Response VI
+
+Done — added an operator summary table in README.md right before Example 4 (where the operators section begins). It lists all five operators (`+=`, `=!`, `-=`, `Y=`, `=>`) with their name, description, and a terse example. Also notes that all operators use the space-before-suffix convention and compose with `?.` paths and `withMethods`.

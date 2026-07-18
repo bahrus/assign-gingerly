@@ -754,7 +754,17 @@ assignGingerly(div, {
 - Testing is done in mount-observer package (no tests in assign-gingerly)
 - Single @eachTime per path (nested @eachTime not currently supported)
 
-While we are in the business of passing values of object A into object B, we might as well add some extremely common behavior that allows updating properties of object B based on the current values of object B -- things like incrementing, toggling, and deleting.  Deleting is critical for assignTentatively, but is included with both functions.
+While we are in the business of passing values of object A into object B, we might as well add some extremely common behavior that allows updating properties of object B based on the current values of object B -- things like incrementing, toggling, deleting, and merging into sub-objects.  Deleting is critical for assignTentatively, but is included with both functions.
+
+| Operator | Name | Description | Example |
+|----------|------|-------------|---------|
+| ` +=` | Increment | Add to numeric value, concatenate strings, append to arrays | `'count +=': 5` |
+| ` =!` | Toggle | Negate a boolean (or any value via `!`) | `'visible =!': '.'` |
+| ` -=` | Delete | Remove properties from an object | `'?.data -=': 'key'` |
+| ` Y=` | Merge | Recursively `assignGingerly` into a sub-object | `'style Y=': { width: '100px' }` |
+| ` =>` | Handler | Invoke a handler plugin (assignFrom only) | `'?.el =>': { do: 'builtIns.join', ... }` |
+
+All operators use a space before the suffix to distinguish them from property names. They compose with `?.` nested paths and `withMethods`.
 
 ## Example 4 - Incrementing values with += command
 
@@ -900,7 +910,101 @@ console.log(obj);
 
 
 
-## Example 7 - Reversible assignments with assignTentatively
+## Example 7 - Merging into sub-objects with Y= command
+
+The `Y=` command recursively merges an object into an existing sub-object — like a nested `assignGingerly` call, declared inline:
+
+```TypeScript
+const element = {
+    style: { color: 'blue', display: 'block' },
+    dataset: { userId: '1' }
+};
+
+assignGingerly(element, {
+    'style Y=': {
+        width: '100px',
+        height: '50px'
+    },
+    'dataset Y=': {
+        role: 'admin'
+    }
+});
+
+console.log(element.style);
+// { color: 'blue', display: 'block', width: '100px', height: '50px' }
+
+console.log(element.dataset);
+// { userId: '1', role: 'admin' }
+```
+
+This is equivalent to the more verbose path-per-property approach:
+
+```TypeScript
+assignGingerly(element, {
+    '?.style?.width': '100px',
+    '?.style?.height': '50px',
+    '?.dataset?.role': 'admin'
+});
+```
+
+**With `?.` nested paths:**
+
+```TypeScript
+const app = { config: { database: { host: 'localhost', port: 5432 } } };
+
+assignGingerly(app, {
+    '?.config?.database Y=': {
+        port: 3306,
+        ssl: true
+    }
+});
+// app.config.database = { host: 'localhost', port: 3306, ssl: true }
+```
+
+**Nested `Y=` (recursive composition):**
+
+`Y=` composes — the merged object can itself contain `Y=` keys:
+
+```TypeScript
+const app = {
+    config: {
+        database: { host: 'localhost', port: 5432 },
+        appName: 'OldApp'
+    }
+};
+
+assignGingerly(app, {
+    'config Y=': {
+        'database Y=': {
+            port: 3306,
+            ssl: true
+        },
+        appName: 'NewApp'
+    }
+});
+// config.database = { host: 'localhost', port: 3306, ssl: true }
+// config.appName = 'NewApp'
+```
+
+**Mixing with other operators:**
+
+```TypeScript
+assignGingerly(obj, {
+    'style Y=': { width: '100px' },      // merge into sub-object
+    '?.style?.opacity': '1',              // direct path assignment
+    'counter +=': 1,                      // increment
+    textContent: 'Hello'                  // plain assignment
+});
+```
+
+**Behavior notes:**
+- If the target property doesn't exist or isn't an object, the command is a silent no-op
+- Arrays in the RHS replace the target property (not concatenated) — consistent with normal `assignGingerly` behavior
+- Works with `withMethods` for DOM path evaluation (e.g., `'?.querySelector?..panel?.style Y='`)
+- The name `Y=` evokes a merge sign (Y) — two paths converging into one — combined with `=` to signal an assignment operator
+
+
+## Example 8 - Reversible assignments with assignTentatively
 
 The `assignTentatively` function works like `assignGingerly` but with a powerful addition: **reversibility**. It tracks changes and generates a reversal object that can undo all modifications:
 
@@ -1190,7 +1294,7 @@ obj
 console.log(obj); // { a: 1, b: { c: 2 }, d: 3 }
 ```
 
-**Note**: The `assignTentatively` method on Object.prototype is simply an alias for `assignGingerly` and does **not** provide the reversibility features of the standalone `assignTentatively` function described in Example 7. For reversible assignments, use the standalone function from `assign-gingerly/assignTentatively`.
+**Note**: The `assignTentatively` method on Object.prototype is simply an alias for `assignGingerly` and does **not** provide the reversibility features of the standalone `assignTentatively` function described in Example 8. For reversible assignments, use the standalone function from `assign-gingerly/assignTentatively`.
 
 The prototype extensions are non-enumerable and won't appear in `Object.keys()` or `for...in` loops.
 
