@@ -1528,7 +1528,7 @@ interface EnhancementConfig<T, TObj = Element> {
 
 The `withAttrs` property enables automatic attribute parsing when the enhancement is spawned. See the [Parsing Attributes with parseWithAttrs](#parsing-attributes-with-parsewithattrs) section for details.
 
-It also tips off extending polyfills / libraries, in particular mount-observer, to be on te lookout for the attributes specified by withAttrs.  But *assign-gingerly, by itself, performs **no** DOM observing to automatically spawn the class instance*.  It expects consumers of the polyfill to programmatically attach such behavior/enhancements, and/or rely on alternative, higher level packages to be vigilant for enhancement opportunities. 
+It also tips off extending polyfills / libraries, in particular mount-observer, to be on the lookout for the attributes specified by withAttrs.  But *assign-gingerly, by itself, performs **no** DOM observing to automatically spawn the class instance*.  It expects consumers of the polyfill to programmatically attach such behavior/enhancements, and/or rely on alternative, higher level packages to be vigilant for enhancement opportunities. 
 
 The `canSpawn` static method allows enhancement classes to conditionally block spawning based on the target object. See the [Conditional Spawning with canSpawn](#conditional-spawning-with-canspawn) section for details.
 
