@@ -130,3 +130,22 @@ for (const [key, value] of Object.entries(normalPattern)) {
 ```
 
 This runs before `getValues`, so the resolved ID string flows through the normal assignment path.
+
+
+---
+
+## Human Response I
+
+>  The `.` notation after `#[x]` is a new parsing concept
+
+What about:
+
+```JS
+assignFrom(oForm, {
+    '?.querySelector?.label?.htmlFor': '#[x]?.id'
+}, { ... })
+```
+
+?
+
+Would that keep the implementation to a minimum?
