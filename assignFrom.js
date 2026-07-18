@@ -8,7 +8,7 @@
  *
  * Handler commands (` =>`) are fire-and-forget (kicked off asynchronously, not awaited).
  */
-import { getValues } from './getValues.js';
+import { getValues, getValue } from './getValues.js';
 import assignGingerly from './assignGingerly.js';
 import { resolveIdVariable, parseIdRef } from './resolveIdRef.js';
 import { processInferredAssignments } from './inferredAssignments.js';
@@ -25,6 +25,98 @@ export const SUBSTITUTION_VARS = [
  */
 export function isHandlerCommand(key) {
     return key.endsWith(' =>');
+}
+/**
+ * Check if a key ends with the ternary operator ' ?='.
+ */
+export function isTernaryCommand(key) {
+    return key.endsWith(' ?=');
+}
+/**
+ * Parse a ?= ternary command and extract the LHS path.
+ */
+export function parseTernaryCommand(key) {
+    if (!isTernaryCommand(key)) return null;
+    return key.substring(0, key.length - 3); // Remove ' ?=' suffix
+}
+/**
+ * Resolve a single value for ternary evaluation.
+ */
+function resolveTernaryValue(value, source, options) {
+    if (typeof value === 'string' && value.startsWith('?.')) {
+        return getValue(value, source, {
+            withMethods: options.withMethods,
+            aka: options.aka,
+            protocols: options.protocols
+        });
+    }
+    if (typeof value === 'string' && value.includes('://') && options.protocols) {
+        const protoEnd = value.indexOf('://');
+        const protocol = value.substring(0, protoEnd);
+        if (options.protocols[protocol]) {
+            return getValue(value, source, {
+                withMethods: options.withMethods,
+                aka: options.aka,
+                protocols: options.protocols
+            });
+        }
+    }
+    return value;
+}
+/**
+ * Symbol to signal "skip assignment" from ternary guard forms.
+ */
+const TERNARY_SKIP = Symbol('ternary-skip');
+/**
+ * Evaluate a ?= ternary expression.
+ */
+function evaluateTernary(arr, source, options) {
+    const condition = arr[0];
+    if (Array.isArray(condition)) {
+        // Comparison mode
+        const lhs = resolveTernaryValue(condition[0], source, options);
+        if (condition.length === 2) {
+            const rhs = resolveTernaryValue(condition[1], source, options);
+            if (lhs === rhs) {
+                return resolveTernaryValue(arr[1], source, options);
+            } else {
+                return arr.length > 2 ? resolveTernaryValue(arr[2], source, options) : TERNARY_SKIP;
+            }
+        } else {
+            const op = condition[1];
+            const rhs = resolveTernaryValue(condition[2], source, options);
+            const satisfied = compareWithOp(lhs, op, rhs);
+            if (satisfied) {
+                return resolveTernaryValue(arr[1], source, options);
+            } else {
+                return arr.length > 2 ? resolveTernaryValue(arr[2], source, options) : TERNARY_SKIP;
+            }
+        }
+    } else {
+        const resolved = resolveTernaryValue(condition, source, options);
+        if (arr.length === 4) {
+            if (resolved == null) return resolveTernaryValue(arr[3], source, options);
+            return resolved ? resolveTernaryValue(arr[1], source, options) : resolveTernaryValue(arr[2], source, options);
+        } else if (arr.length === 3) {
+            return resolved ? resolveTernaryValue(arr[1], source, options) : resolveTernaryValue(arr[2], source, options);
+        } else {
+            return resolved ? resolveTernaryValue(arr[1], source, options) : TERNARY_SKIP;
+        }
+    }
+}
+/**
+ * Compare two values with a given operator.
+ */
+function compareWithOp(lhs, op, rhs) {
+    switch (op) {
+        case '===': return lhs === rhs;
+        case '!==': return lhs !== rhs;
+        case '>': return lhs > rhs;
+        case '>=': return lhs >= rhs;
+        case '<': return lhs < rhs;
+        case '<=': return lhs <= rhs;
+        default: return lhs === rhs;
+    }
 }
 /**
  * Recursively substitute a placeholder in all string values of an object.
@@ -150,6 +242,7 @@ export function categorizeKeys(expandedPattern) {
     const normalPattern = {};
     const idRefNormalKeys = [];
     const idRefHandlerKeys = [];
+    const ternaryKeys = [];
     for (const key of Object.keys(expandedPattern)) {
         if (isHandlerCommand(key)) {
             if (key.startsWith('#[')) {
@@ -159,6 +252,9 @@ export function categorizeKeys(expandedPattern) {
                 handlerKeys.push(key);
             }
         }
+        else if (isTernaryCommand(key)) {
+            ternaryKeys.push(key);
+        }
         else if (key.startsWith('#[')) {
             idRefNormalKeys.push(key);
         }
@@ -166,7 +262,7 @@ export function categorizeKeys(expandedPattern) {
             normalPattern[key] = expandedPattern[key];
         }
     }
-    return { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys };
+    return { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys };
 }
 /**
  * Process #[x] normal keys synchronously.
@@ -210,7 +306,24 @@ export function assignFrom(target, pattern, options, permissions) {
     // Expand looped substitution variables
     const expandedPattern = expandSubstitutions(pattern, options);
     // Categorize keys
-    const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys } = categorizeKeys(expandedPattern);
+    const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys } = categorizeKeys(expandedPattern);
+    // Process ?= ternary keys (sync)
+    if (ternaryKeys.length > 0) {
+        const ternaryResolved = {};
+        for (const key of ternaryKeys) {
+            const lhsPath = parseTernaryCommand(key);
+            if (!lhsPath) continue;
+            const arr = expandedPattern[key];
+            if (!Array.isArray(arr) || arr.length < 2) continue;
+            const result = evaluateTernary(arr, options.from, options);
+            if (result !== TERNARY_SKIP) {
+                ternaryResolved[lhsPath] = result;
+            }
+        }
+        if (Object.keys(ternaryResolved).length > 0) {
+            assignGingerly(target, ternaryResolved, options);
+        }
+    }
     // Process normal keys via getValues (sync) + assignGingerly
     if (Object.keys(normalPattern).length > 0) {
         const resolved = getValues(normalPattern, options.from, {

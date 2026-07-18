@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>assignFrom - ?= Ternary Command Tests</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>assignFrom - ?= Ternary Command Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0"></div>
+
+    <script type="module">
+        import { assignFrom } from '../assignFrom.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function test(name, fn) {
+            try {
+                fn();
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+        }
+
+        function expect(actual) {
+            return {
+                toEqual(expected) {
+                    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                }
+            };
+        }
+
+        // Form 1: [ifTruthy, thenResult] — guard
+        test('guard: should assign when condition is truthy', () => {
+            const target = { textContent: 'original' };
+            const vm = { isHappy: true, msg: 'Hello' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.isHappy', '?.msg']
+            }, { from: vm });
+            expect(target.textContent).toBe('Hello');
+        });
+
+        test('guard: should skip assignment when condition is falsy', () => {
+            const target = { textContent: 'original' };
+            const vm = { isHappy: false, msg: 'Hello' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.isHappy', '?.msg']
+            }, { from: vm });
+            expect(target.textContent).toBe('original');
+        });
+
+        test('guard: should skip when condition is null', () => {
+            const target = { textContent: 'original' };
+            const vm = { isHappy: null, msg: 'Hello' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.isHappy', '?.msg']
+            }, { from: vm });
+            expect(target.textContent).toBe('original');
+        });
+
+        // Form 2: [ifTruthy, thenResult, elseResult] — ternary
+        test('ternary: should assign then-value when truthy', () => {
+            const target = { textContent: '' };
+            const vm = { isHappy: true, happyMsg: 'I am happy', sadMsg: 'I am sad' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.isHappy', '?.happyMsg', '?.sadMsg']
+            }, { from: vm });
+            expect(target.textContent).toBe('I am happy');
+        });
+
+        test('ternary: should assign else-value when falsy', () => {
+            const target = { textContent: '' };
+            const vm = { isHappy: false, happyMsg: 'I am happy', sadMsg: 'I am sad' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.isHappy', '?.happyMsg', '?.sadMsg']
+            }, { from: vm });
+            expect(target.textContent).toBe('I am sad');
+        });
+
+        test('ternary: should work with literal values', () => {
+            const target = { textContent: '' };
+            const vm = { isHappy: true };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.isHappy', 'yes', 'no']
+            }, { from: vm });
+            expect(target.textContent).toBe('yes');
+        });
+
+        test('ternary: should work with literal else value', () => {
+            const target = { textContent: '' };
+            const vm = { isHappy: false };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.isHappy', 'yes', 'no']
+            }, { from: vm });
+            expect(target.textContent).toBe('no');
+        });
+
+        // Form 3: [ifTrue, trueResult, falseResult, neitherResult] — three-state
+        test('three-state: should assign true-result when strictly true', () => {
+            const target = { status: '' };
+            const vm = { loaded: true };
+            assignFrom(target, {
+                '?.status ?=': ['?.loaded', 'ready', 'failed', 'loading']
+            }, { from: vm });
+            expect(target.status).toBe('ready');
+        });
+
+        test('three-state: should assign false-result when strictly false', () => {
+            const target = { status: '' };
+            const vm = { loaded: false };
+            assignFrom(target, {
+                '?.status ?=': ['?.loaded', 'ready', 'failed', 'loading']
+            }, { from: vm });
+            expect(target.status).toBe('failed');
+        });
+
+        test('three-state: should assign neither-result when null', () => {
+            const target = { status: '' };
+            const vm = { loaded: null };
+            assignFrom(target, {
+                '?.status ?=': ['?.loaded', 'ready', 'failed', 'loading']
+            }, { from: vm });
+            expect(target.status).toBe('loading');
+        });
+
+        test('three-state: should assign neither-result when undefined', () => {
+            const target = { status: '' };
+            const vm = {};
+            assignFrom(target, {
+                '?.status ?=': ['?.loaded', 'ready', 'failed', 'loading']
+            }, { from: vm });
+            expect(target.status).toBe('loading');
+        });
+
+        // Form 4: [[lhs, rhs], ifEqual] — equality guard
+        test('equality guard: should assign when equal', () => {
+            const target = { textContent: '' };
+            const vm = { role: 'admin' };
+            assignFrom(target, {
+                '?.textContent ?=': [['?.role', 'admin'], 'Welcome, admin!']
+            }, { from: vm });
+            expect(target.textContent).toBe('Welcome, admin!');
+        });
+
+        test('equality guard: should skip when not equal', () => {
+            const target = { textContent: 'original' };
+            const vm = { role: 'user' };
+            assignFrom(target, {
+                '?.textContent ?=': [['?.role', 'admin'], 'Welcome, admin!']
+            }, { from: vm });
+            expect(target.textContent).toBe('original');
+        });
+
+        // Form 5: [[lhs, rhs], ifEqual, ifNotEqual] — equality ternary
+        test('equality ternary: should assign equal-result when match', () => {
+            const target = { className: '' };
+            const vm = { theme: 'dark' };
+            assignFrom(target, {
+                '?.className ?=': [['?.theme', 'dark'], 'dark-mode', 'light-mode']
+            }, { from: vm });
+            expect(target.className).toBe('dark-mode');
+        });
+
+        test('equality ternary: should assign not-equal-result when no match', () => {
+            const target = { className: '' };
+            const vm = { theme: 'light' };
+            assignFrom(target, {
+                '?.className ?=': [['?.theme', 'dark'], 'dark-mode', 'light-mode']
+            }, { from: vm });
+            expect(target.className).toBe('light-mode');
+        });
+
+        // Comparison with both sides as paths
+        test('equality: should compare two resolved paths', () => {
+            const target = { textContent: '' };
+            const vm = { a: 'hello', b: 'hello' };
+            assignFrom(target, {
+                '?.textContent ?=': [['?.a', '?.b'], 'match', 'no match']
+            }, { from: vm });
+            expect(target.textContent).toBe('match');
+        });
+
+        test('equality: should detect mismatch between two paths', () => {
+            const target = { textContent: '' };
+            const vm = { a: 'hello', b: 'world' };
+            assignFrom(target, {
+                '?.textContent ?=': [['?.a', '?.b'], 'match', 'no match']
+            }, { from: vm });
+            expect(target.textContent).toBe('no match');
+        });
+
+        // Mixed with normal assignments
+        test('should mix ?= with normal assignments', () => {
+            const target = { textContent: '', title: '' };
+            const vm = { isHappy: true, msg: 'Happy!', titleText: 'My Title' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.isHappy', '?.msg', 'Sad'],
+                '?.title': '?.titleText'
+            }, { from: vm });
+            expect(target.textContent).toBe('Happy!');
+            expect(target.title).toBe('My Title');
+        });
+
+        // Multiple ?= in same call
+        test('should support multiple ?= keys in same call', () => {
+            const target = { a: '', b: '' };
+            const vm = { x: true, y: false };
+            assignFrom(target, {
+                '?.a ?=': ['?.x', 'yes', 'no'],
+                '?.b ?=': ['?.y', 'yes', 'no']
+            }, { from: vm });
+            expect(target.a).toBe('yes');
+            expect(target.b).toBe('no');
+        });
+
+        // Display results
+        const total = passed + failed;
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const completeEl = document.getElementById('test-complete');
+
+        statusEl.innerHTML = `<span class="${failed === 0 ? 'pass' : 'fail'}">${passed}/${total} tests passed</span>`;
+
+        results.forEach(result => {
+            const div = document.createElement('div');
+            div.className = `test-item ${result.status}`;
+            div.innerHTML = `<strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}${result.error ? `<div class="error">${result.error}</div>` : ''}`;
+            resultsEl.appendChild(div);
+        });
+
+        completeEl.setAttribute('data-passed', passed.toString());
+        completeEl.setAttribute('data-failed', failed.toString());
+        completeEl.setAttribute('data-total', total.toString());
+
+        console.log(`Tests complete: ${passed}/${total} passed`);
+    </script>
+</body>
+</html>

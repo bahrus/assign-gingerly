@@ -777,6 +777,7 @@ While we are in the business of passing values of object A into object B, we mig
 | ` =!` | Toggle | Negate a boolean (or any value via `!`) | `'visible =!': '.'` |
 | ` -=` | Delete | Remove properties from an object | `'?.data -=': 'key'` |
 | ` Y=` | Merge | Recursively `assignGingerly` into a sub-object | `'style Y=': { width: '100px' }` |
+| ` ?=` | Ternary | Conditional assignment (assignFrom only) | `'?.text ?=': ['?.cond', 'yes', 'no']` |
 | ` =>` | Handler | Invoke a handler plugin (assignFrom only) | `'?.el =>': { do: 'builtIns.join', ... }` |
 
 All operators use a space before the suffix to distinguish them from property names. They compose with `?.` nested paths and `withMethods`.
