@@ -19,6 +19,21 @@ has the "side effect" of enhancing the platform API in a way that this proposal 
 
 One can achieve the same functionality with a little more work, and "playing nicer" with the platform by importing assign-gingerly.js, assign-tentatively.js, and/or assignFrom.js, which has no such side effects.
 
+For `assignFrom` method chaining on objects, separate extension modules are available — import only what you need:
+
+```JavaScript
+import 'assign-gingerly/assignFrom-extension.js';       // adds obj.assignFrom() — sync
+import 'assign-gingerly/assignFromAsync-extension.js';  // adds obj.assignFromAsync() — async
+```
+
+This enables fluent patterns like:
+
+```JavaScript
+oElement
+    .assignFrom({ '?.textContent': '?.greeting' }, { from: vm1 })
+    .assignFrom({ '?.style Y=': { width: '?.w' } }, { from: vm2 });
+```
+
 ## Object Extension Pattern
 
 Not only does this polyfill package allow merging data properties onto objects that are expecting them, this polyfill also provides the ability to merge *augmented behavior* onto run-time objects without sub classing all such objects of the same type. This includes the ability to spawn an instance of a class and "merge" it into the API of the original object in an elegant way that is easy to wrap one's brain around, without ever blocking access to the original object or breaking it.

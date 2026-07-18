@@ -195,3 +195,13 @@ await oElement.assignFromAsync({
 **Also updated:** `package.json` exports map with both new entries.
 
 **Tests:** 11/11 passing across Chromium, Firefox, WebKit — covering prototype presence, non-enumerability, path resolution, chaining, DOM elements, async return, and Y= merge composition.
+
+## Human Response II
+
+Can you briefly mention this in README.md, I think near the top where you mention object-extension.js, but use your best judgment.
+
+---
+
+## AI Response II
+
+Done — added a brief section right after the `object-extension.js` mention in the introduction. Shows the two import lines and a chaining example. Kept it short since the standalone function docs already cover the full API.
