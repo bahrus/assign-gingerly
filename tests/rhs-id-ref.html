@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>assignFrom - RHS #[x] Reference Tests</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>assignFrom - RHS #[x] Reference Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0"></div>
+
+    <form id="testForm">
+        <label class="nameLabel">Name:</label>
+        <input class="nameInput" type="text">
+        <label class="emailLabel">Email:</label>
+        <input class="emailInput" id="existingEmailId" type="email">
+        <div class="info" data-user="alice" title="User Info">Info section</div>
+    </form>
+
+    <script type="module">
+        import { assignFrom } from '../assignFrom.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function test(name, fn) {
+            try {
+                fn();
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+        }
+
+        function expect(actual) {
+            return {
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toBeTruthy() {
+                    if (!actual) {
+                        throw new Error(`Expected truthy but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toStartWith(prefix) {
+                    if (typeof actual !== 'string' || !actual.startsWith(prefix)) {
+                        throw new Error(`Expected to start with "${prefix}" but got ${JSON.stringify(actual)}`);
+                    }
+                }
+            };
+        }
+
+        const form = document.getElementById('testForm');
+
+        // Bare #[x] — resolves to auto-generated ID
+        test('bare #[x] should resolve to the element ID (auto-generated)', () => {
+            const nameInput = form.querySelector('.nameInput');
+            assignFrom(form, {
+                '?.forAttr': '#[nameInput]'
+            }, {
+                from: {},
+                withIds: { nameInput: { qry: '.nameInput' } }
+            });
+            // Should have auto-assigned an ID to the input
+            expect(nameInput.id).toBeTruthy();
+            expect(form.forAttr).toBe(nameInput.id);
+        });
+
+        // Bare #[x] — resolves to existing ID
+        test('bare #[x] should resolve to existing ID when element already has one', () => {
+            assignFrom(form, {
+                '?.emailRef': '#[emailInput]'
+            }, {
+                from: {},
+                withIds: { emailInput: { qry: '.emailInput' } }
+            });
+            expect(form.emailRef).toBe('existingEmailId');
+        });
+
+        // #[x]?.id — explicit ID access
+        test('#[x]?.id should resolve to the element ID', () => {
+            assignFrom(form, {
+                '?.ref': '#[emailInput]?.id'
+            }, {
+                from: {},
+                withIds: { emailInput: { qry: '.emailInput' } }
+            });
+            expect(form.ref).toBe('existingEmailId');
+        });
+
+        // #[x]?.property — access arbitrary property
+        test('#[x]?.type should resolve to input type', () => {
+            assignFrom(form, {
+                '?.inputType': '#[emailInput]?.type'
+            }, {
+                from: {},
+                withIds: { emailInput: { qry: '.emailInput' } }
+            });
+            expect(form.inputType).toBe('email');
+        });
+
+        // #[x]?.nested?.property — nested path navigation
+        test('#[x]?.dataset?.user should resolve nested property', () => {
+            assignFrom(form, {
+                '?.userName': '#[info]?.dataset?.user'
+            }, {
+                from: {},
+                withIds: { info: { qry: '.info' } }
+            });
+            expect(form.userName).toBe('alice');
+        });
+
+        // #[x]?.title — another property
+        test('#[x]?.title should resolve title attribute', () => {
+            assignFrom(form, {
+                '?.tooltip': '#[info]?.title'
+            }, {
+                from: {},
+                withIds: { info: { qry: '.info' } }
+            });
+            expect(form.tooltip).toBe('User Info');
+        });
+
+        // #[x]?.className — class name
+        test('#[x]?.className should resolve element class', () => {
+            assignFrom(form, {
+                '?.cls': '#[info]?.className'
+            }, {
+                from: {},
+                withIds: { info: { qry: '.info' } }
+            });
+            expect(form.cls).toBe('info');
+        });
+
+        // Real-world: label.htmlFor = input.id
+        test('should set label.htmlFor to input auto-generated ID', () => {
+            const label = form.querySelector('.nameLabel');
+            assignFrom(form, {
+                '?.querySelector?.label?.htmlFor': '#[nameInput]'
+            }, {
+                from: {},
+                withIds: { nameInput: { qry: '.nameInput' } },
+                withMethods: ['querySelector']
+            });
+            const input = form.querySelector('.nameInput');
+            expect(label.htmlFor).toBe(input.id);
+        });
+
+        // Mixed with normal path resolution
+        test('should work alongside normal ?. path resolution', () => {
+            assignFrom(form, {
+                '?.inputId': '#[emailInput]',
+                '?.greeting': '?.msg'
+            }, {
+                from: { msg: 'Hello' },
+                withIds: { emailInput: { qry: '.emailInput' } }
+            });
+            expect(form.inputId).toBe('existingEmailId');
+            expect(form.greeting).toBe('Hello');
+        });
+
+        // #[x] with non-existent withIds entry — passes through unchanged
+        test('should leave value as literal when withIds entry does not match', () => {
+            assignFrom(form, {
+                '?.ref': '#[nonExistent]'
+            }, {
+                from: {},
+                withIds: { other: { qry: '.other' } }
+            });
+            // resolveIdVariable returns undefined for unknown varName, value passes through as literal
+            expect(form.ref).toBe('#[nonExistent]');
+        });
+
+        // Display results
+        const total = passed + failed;
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const completeEl = document.getElementById('test-complete');
+
+        statusEl.innerHTML = `<span class="${failed === 0 ? 'pass' : 'fail'}">${passed}/${total} tests passed</span>`;
+
+        results.forEach(result => {
+            const div = document.createElement('div');
+            div.className = `test-item ${result.status}`;
+            div.innerHTML = `<strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}${result.error ? `<div class="error">${result.error}</div>` : ''}`;
+            resultsEl.appendChild(div);
+        });
+
+        completeEl.setAttribute('data-passed', passed.toString());
+        completeEl.setAttribute('data-failed', failed.toString());
+        completeEl.setAttribute('data-total', total.toString());
+
+        console.log(`Tests complete: ${passed}/${total} passed`);
+    </script>
+</body>
+</html>

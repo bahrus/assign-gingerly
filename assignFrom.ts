@@ -380,6 +380,32 @@ export function assignFrom(
 
   // Process normal keys via getValues (sync) + assignGingerly
   if (Object.keys(normalPattern).length > 0) {
+    // Resolve #[x] references on RHS values before getValues
+    if (options.withIds) {
+      for (const key of Object.keys(normalPattern)) {
+        const value = normalPattern[key];
+        if (typeof value === 'string' && value.startsWith('#[')) {
+          const closeIdx = value.indexOf(']');
+          if (closeIdx !== -1) {
+            const varName = value.substring(2, closeIdx);
+            const el = resolveIdVariable(varName, target, options.withIds);
+            if (el) {
+              const remainingPath = value.substring(closeIdx + 1);
+              if (remainingPath) {
+                normalPattern[key] = getValue(remainingPath, el, {
+                  withMethods: options.withMethods,
+                  aka: options.aka,
+                  protocols: options.protocols
+                });
+              } else {
+                normalPattern[key] = el.id; // bare #[x] → ID string
+              }
+            }
+          }
+        }
+      }
+    }
+
     const resolved = getValues(normalPattern, options.from, {
       withMethods: options.withMethods,
       aka: options.aka,

@@ -148,4 +148,84 @@ assignFrom(oForm, {
 
 ?
 
-Would that keep the implementation to a minimum?
+Would that keep the implementation to a minimum?  Would that affect your ranking?
+
+---
+
+## AI Response II
+
+This is actually better than my Option A. Let me explain why.
+
+### Why `#[x]?.id` is the best syntax
+
+1. **Reuses existing path resolution** — The `?.` notation is already the core navigation mechanism throughout the library. After resolving `#[x]` to an element, the remaining `?.id` is just standard path traversal. No new parsing concepts.
+
+2. **Generalizes naturally** — You get `#[x]?.id` for free, but you also get:
+   - `#[x]?.className` — the element's class
+   - `#[x]?.dataset?.userId` — a data attribute
+   - `#[x]?.textContent` — its text
+   - `#[x]?.offsetWidth` — a computed measurement
+   
+   No special-casing needed. The element is the "source" and `?.` navigates from there.
+
+3. **Consistent with LHS** — On the LHS, `#[x]?.textContent` means "navigate to x, then to textContent." On the RHS, the same syntax means "resolve x, then read textContent from it." Same mental model, both sides.
+
+4. **Implementation is minimal** — The logic is:
+   - Detect RHS strings starting with `#[`
+   - Extract varName (up to `]`)
+   - Resolve the element via `resolveIdVariable`
+   - If there's a remaining `?.` path after `]`, navigate it on the resolved element
+   - Return the final value
+
+```TS
+if (typeof value === 'string' && value.startsWith('#[') && options.withIds) {
+    const closeIdx = value.indexOf(']');
+    if (closeIdx !== -1) {
+        const varName = value.substring(2, closeIdx);
+        const el = resolveIdVariable(varName, target, options.withIds);
+        if (el) {
+            const remainingPath = value.substring(closeIdx + 1); // e.g., '?.id'
+            if (remainingPath) {
+                normalPattern[key] = getValue(remainingPath, el, options);
+            } else {
+                normalPattern[key] = el.id; // bare #[x] → ID string (convenience default)
+            }
+        }
+    }
+}
+```
+
+5. **Bare `#[x]` still works as a convenience** — When there's no `?.` suffix, it defaults to the ID string (the 90% case). `#[x]?.id` is the explicit form of the same thing. This means you don't lose the simple syntax for the common case.
+
+### Updated ranking
+
+```
+#[x]?.prop  — best: reuses existing ?. navigation, generalizes, minimal impl
+#[x]        — good convenience shorthand (implicit ?.id)
+#[x].prop   — new dot notation concept, unnecessary given ?. exists
+id://x      — overkill
+```
+
+Yes, this bumps `#[x]?.prop` to #1 and makes the bare `#[x]` → ID a nice shorthand default rather than the only option. The implementation cost is essentially the same either way — you're just checking whether there's a remaining path after `]` and, if so, passing it through `getValue`.
+
+---
+
+## Human Response
+
+I agree.  Please implement.
+
+---
+
+## AI Response III
+
+Done. Implemented RHS `#[x]` resolution in `assignFrom.ts` / `assignFrom.js`.
+
+**Behavior:**
+- `'#[x]'` (bare) → resolves to the element's ID string (auto-generates if needed)
+- `'#[x]?.id'` → explicit ID access (same result as bare)
+- `'#[x]?.type'` → reads any property from the resolved element
+- `'#[x]?.dataset?.user'` → nested path navigation works via `getValue`
+
+**Implementation:** ~15 lines in the normal-key processing path, runs before `getValues`. Checks if RHS starts with `#[`, resolves the element via `resolveIdVariable`, then navigates any remaining `?.` path.
+
+**Tests:** 10/10 passing across Chromium, Firefox, WebKit. All existing tests still pass.
