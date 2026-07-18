@@ -36,6 +36,12 @@ assignGingerly(oElement, {
         width: '100px',
         height: '50px'
     }
+} {
+    explicitNested: true // or ['_', '_']
 });
 ```
+
+Other ideas?  
+
+Do any of them seem worth it?
 
