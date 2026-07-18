@@ -4350,6 +4350,24 @@ await assignFromAsync(container, {
 
 The `#[x]` + `withIds` pattern gives you the Map+WeakRef speed tier automatically.
 
+**RHS references (`#[x]` on the value side):**
+
+`#[x]` can also appear on the RHS (value side) to read properties from a cached element. Bare `#[x]` resolves to the element's ID string; append `?.` paths to access other properties:
+
+```TypeScript
+assignFrom(form, {
+    '?.querySelector?.label?.htmlFor': '#[nameInput]',           // → the input's ID string
+    '?.querySelector?.label?.title': '#[nameInput]?.type',       // → 'text', 'email', etc.
+    '?.headerText': '#[info]?.dataset?.user',                    // → nested property access
+}, {
+    from: {},
+    withIds: { nameInput: { qry: 'input' }, info: { qry: '.info' } },
+    withMethods: ['querySelector']
+});
+```
+
+This is useful for accessibility patterns (setting `label[for]` to an auto-generated input ID) and cross-referencing elements declaratively.
+
 **Key behaviors:**
 
 - **Lazy resolution** — elements are resolved on first encounter, not eagerly at the start.

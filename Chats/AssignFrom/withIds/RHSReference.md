@@ -210,7 +210,7 @@ Yes, this bumps `#[x]?.prop` to #1 and makes the bare `#[x]` → ID a nice short
 
 ---
 
-## Human Response
+## Human Response II
 
 I agree.  Please implement.
 
@@ -229,3 +229,15 @@ Done. Implemented RHS `#[x]` resolution in `assignFrom.ts` / `assignFrom.js`.
 **Implementation:** ~15 lines in the normal-key processing path, runs before `getValues`. Checks if RHS starts with `#[`, resolves the element via `resolveIdVariable`, then navigates any remaining `?.` path.
 
 **Tests:** 10/10 passing across Chromium, Firefox, WebKit. All existing tests still pass.
+
+---
+
+## Human Response III
+
+Can you mention this feature in README.md?
+
+## Implementation Notes
+
+I'll add the RHS reference documentation right before the "Key behaviors" section:
+
+Done. Added a concise section documenting the RHS `#[x]` feature within the existing "Cached Element Resolution" section of the README — shows bare `#[x]` for ID strings, `#[x]?.type` for property access, and `#[x]?.dataset?.user` for nested paths, with a note about the accessibility use case.
