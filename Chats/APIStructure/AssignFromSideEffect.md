@@ -158,3 +158,40 @@ oElement
 ```
 
 That's the real ergonomic win — method chaining with different sources in a fluent API.
+
+## Human Response I
+
+Please implement both assignFrom and assignFromAsync as your recommend.
+
+---
+
+## AI Response I
+
+Done. Created four files:
+
+**Extension modules:**
+- `assignFrom-extension.ts` / `.js` — adds `assignFrom` to `Object.prototype` (sync, returns `this` for chaining)
+- `assignFromAsync-extension.ts` / `.js` — adds `assignFromAsync` to `Object.prototype` (async, returns `Promise<this>`)
+
+**Usage:**
+```JS
+import 'assign-gingerly/assignFrom-extension.js';
+import 'assign-gingerly/assignFromAsync-extension.js';  // if async needed
+
+// Chaining
+oElement
+    .assignFrom({ '?.textContent': '?.greeting' }, { from: vm1 })
+    .assignFrom({ '?.style Y=': { color: '?.themeColor' } }, { from: vm2 });
+
+// Async
+await oElement.assignFromAsync({
+    '?.querySelector?..mainView =>': {
+        do: 'builtIns.lazyLoad',
+        get: { if: '?.isVisible', instantiate: 'globalThis://myTemplate' }
+    }
+}, { from: vm, withMethods: ['querySelector'], protocols: { globalThis: k => globalThis[k] } });
+```
+
+**Also updated:** `package.json` exports map with both new entries.
+
+**Tests:** 11/11 passing across Chromium, Firefox, WebKit — covering prototype presence, non-enumerability, path resolution, chaining, DOM elements, async return, and Y= merge composition.

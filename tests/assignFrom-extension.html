@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>assignFrom / assignFromAsync - Object Prototype Extension Tests</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>assignFrom / assignFromAsync - Object Prototype Extension Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0"></div>
+
+    <template id="testTemplate">
+        <div class="item">placeholder</div>
+    </template>
+
+    <script type="module">
+        import '../assignFrom-extension.js';
+        import '../assignFromAsync-extension.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function test(name, fn) {
+            try {
+                const result = fn();
+                if (result && typeof result.then === 'function') {
+                    return result.then(() => {
+                        passed++;
+                        results.push({ name, status: 'pass' });
+                    }).catch(error => {
+                        failed++;
+                        results.push({ name, status: 'fail', error: error.message });
+                    });
+                }
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+            return Promise.resolve();
+        }
+
+        function expect(actual) {
+            return {
+                toEqual(expected) {
+                    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${expected} but got ${actual}`);
+                    }
+                },
+                toBeInstanceOf(expected) {
+                    if (!(actual instanceof expected)) {
+                        throw new Error(`Expected instance of ${expected.name} but got ${actual?.constructor?.name}`);
+                    }
+                }
+            };
+        }
+
+        // Run all tests sequentially (some are async)
+        async function runTests() {
+            await test('assignFrom should be defined on Object.prototype', () => {
+                expect(typeof ({}).assignFrom).toBe('function');
+            });
+
+            await test('assignFromAsync should be defined on Object.prototype', () => {
+                expect(typeof ({}).assignFromAsync).toBe('function');
+            });
+
+            await test('assignFrom should be non-enumerable', () => {
+                const keys = Object.keys({});
+                expect(keys.includes('assignFrom')).toBe(false);
+            });
+
+            await test('assignFromAsync should be non-enumerable', () => {
+                const keys = Object.keys({});
+                expect(keys.includes('assignFromAsync')).toBe(false);
+            });
+
+            await test('assignFrom should resolve paths from source', () => {
+                const target = { textContent: '' };
+                const vm = { greeting: 'Hello World' };
+                target.assignFrom({
+                    '?.textContent': '?.greeting'
+                }, { from: vm });
+                expect(target.textContent).toBe('Hello World');
+            });
+
+            await test('assignFrom should return this for chaining', () => {
+                const target = { a: '', b: '' };
+                const result = target
+                    .assignFrom({ '?.a': '?.x' }, { from: { x: 'one' } })
+                    .assignFrom({ '?.b': '?.y' }, { from: { y: 'two' } });
+                expect(result).toBe(target);
+                expect(target.a).toBe('one');
+                expect(target.b).toBe('two');
+            });
+
+            await test('assignFrom should work with nested paths', () => {
+                const target = { style: { width: '', height: '' } };
+                const vm = { w: '100px', h: '50px' };
+                target.assignFrom({
+                    '?.style?.width': '?.w',
+                    '?.style?.height': '?.h'
+                }, { from: vm });
+                expect(target.style.width).toBe('100px');
+                expect(target.style.height).toBe('50px');
+            });
+
+            await test('assignFrom should work on DOM elements', () => {
+                const div = document.createElement('div');
+                div.assignFrom({
+                    '?.textContent': '?.msg'
+                }, { from: { msg: 'DOM test' } });
+                expect(div.textContent).toBe('DOM test');
+            });
+
+            await test('assignFromAsync should resolve paths from source', async () => {
+                const target = { textContent: '' };
+                const vm = { greeting: 'Async Hello' };
+                const result = await target.assignFromAsync({
+                    '?.textContent': '?.greeting'
+                }, { from: vm });
+                expect(target.textContent).toBe('Async Hello');
+                expect(result).toBe(target);
+            });
+
+            await test('assignFromAsync should return a promise', () => {
+                const target = {};
+                const result = target.assignFromAsync({}, { from: {} });
+                expect(typeof result.then).toBe('function');
+            });
+
+            await test('assignFrom chaining with Y= merge', () => {
+                const target = { style: { color: 'red', display: 'block' }, data: { id: '1' } };
+                target
+                    .assignFrom({ '?.style Y=': { width: '?.w' } }, { from: { w: '100px' } })
+                    .assignFrom({ '?.data Y=': { role: '?.r' } }, { from: { r: 'admin' } });
+                expect(target.style.width).toBe('100px');
+                expect(target.style.color).toBe('red');
+                expect(target.data.role).toBe('admin');
+                expect(target.data.id).toBe('1');
+            });
+
+            // Display results
+            const total = passed + failed;
+            const statusEl = document.getElementById('status');
+            const resultsEl = document.getElementById('results');
+            const completeEl = document.getElementById('test-complete');
+
+            statusEl.innerHTML = `<span class="${failed === 0 ? 'pass' : 'fail'}">${passed}/${total} tests passed</span>`;
+
+            results.forEach(result => {
+                const div = document.createElement('div');
+                div.className = `test-item ${result.status}`;
+                div.innerHTML = `<strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}${result.error ? `<div class="error">${result.error}</div>` : ''}`;
+                resultsEl.appendChild(div);
+            });
+
+            completeEl.setAttribute('data-passed', passed.toString());
+            completeEl.setAttribute('data-failed', failed.toString());
+            completeEl.setAttribute('data-total', total.toString());
+
+            console.log(`Tests complete: ${passed}/${total} passed`);
+        }
+
+        runTests();
+    </script>
+</body>
+</html>

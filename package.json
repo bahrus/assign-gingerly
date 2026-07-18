@@ -150,6 +150,14 @@
       "default": "./assignFrom.js",
       "types": "./assignFrom.ts"
     },
+    "./assignFrom-extension.js": {
+      "default": "./assignFrom-extension.js",
+      "types": "./assignFrom-extension.ts"
+    },
+    "./assignFromAsync-extension.js": {
+      "default": "./assignFromAsync-extension.js",
+      "types": "./assignFromAsync-extension.ts"
+    },
     "./assignFeatures.js": {
       "default": "./assignFeatures.js",
       "types": "./assignFeatures.ts"
