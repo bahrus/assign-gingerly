@@ -81,8 +81,14 @@ async function resolveFromHandlers(
         return entry as AssignFromHandlerConstructor;
     }
 
-    // Import path string — validate and dynamically import
+    // String value — could be a built-in alias or an import path
     if (typeof entry === 'string') {
+        // Built-in alias: redirect to built-in loader
+        if (entry.startsWith('builtIns.')) {
+            return loadBuiltIn(entry);
+        }
+
+        // Import path string — validate and dynamically import
         if (!permissions?.crossDomainImports && !isAllowedImportPath(entry)) {
             throw new Error(
                 `assignFrom: handler "${name}" has an invalid import path "${entry}". ` +

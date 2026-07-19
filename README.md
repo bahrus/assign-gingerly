@@ -3727,6 +3727,23 @@ Import paths must be local (relative, absolute, or bare specifiers — no cross-
 
 Built-in handlers (`builtIns.lazyLoad`, `builtIns.join`, etc.) auto-load without needing to be listed in `handlers`.
 
+**Handler aliases:** The `handlers` option also accepts built-in names as values, allowing you to define short aliases (including emoji) for concise configs:
+
+```JavaScript
+import { builtInEmoji } from 'assign-gingerly/builtInEmoji.js';
+// { '📦': 'builtIns.lazyLoad', '🎚️': 'builtIns.lazyLoadSwitch', '🔗': 'builtIns.join', '🏷️': 'builtIns.microDataJoin', '📋': 'builtIns.manageTemplateList' }
+
+assignFrom(target, {
+    '?.textContent =>': { do: '🔗', get: { value: ['?.first', ' ', '?.last'] } }
+}, { from: vm, handlers: builtInEmoji });
+
+// Or define your own:
+assignFrom(target, pattern, {
+    from: vm,
+    handlers: { 'sw': 'builtIns.lazyLoadSwitch', 'list': 'builtIns.manageTemplateList' }
+});
+```
+
 **How it works:**
 
 1. Keys ending with ` =>` are separated from normal keys.
