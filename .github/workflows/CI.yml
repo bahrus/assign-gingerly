@@ -2,7 +2,7 @@ name: Playwright Tests
 on: [push]
 jobs:
   test:
-    timeout-minutes: 20
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -15,5 +15,11 @@ jobs:
       run: npm ci
     - name: Install Playwright
       run: npx playwright install --with-deps
+    - name: Verify server starts
+      run: |
+        npm run serve &
+        sleep 3
+        curl -s -o /dev/null -w "%{http_code}" http://localhost:8000 || echo "Server failed to start"
+        kill %1 2>/dev/null || true
     - name: Run Playwright tests
       run: npm run test
