@@ -238,3 +238,44 @@ inferredAssignments: { '|': true, '@': { props: ['email'], outside: 'fieldset' }
 ```
 
 Documentation updated in `docs/inferred-assignments.md`.
+
+---
+
+## Human Response V
+
+No more changes for this document, I promise.  This covered a lot of ground.
+
+I'm just wondering if you can think of a small emoji or one or two letter abbreviation of inferredAssignments?  The only one I can think of would be iA.  But no one could guess what that means by looking at it.  Anything better?
+
+---
+
+## AI Response V
+
+Some ideas, ranked by how guessable they are:
+
+| Short form | Mnemonic | Guessability |
+|------------|----------|-------------|
+| `infer` | Truncation — still readable | High |
+| `bind` | "Bind source values to matching elements" | Medium-high |
+| `distribute` or `dist` | "Distribute values to matching elements" | Medium |
+| `auto` | "Auto-assign based on structure" | Medium |
+| `↓` | Downward flow (source → DOM) | Low without context, memorable once learned |
+| `⇣` | Same idea, different arrow | Low |
+| `🎯` | "Target matching elements" | Memorable but opaque |
+| `iA` | Abbreviation | Low — looks like a typo |
+
+My pick: **`infer`**.
+
+```ts
+assignFrom(form, {}, {
+    from: vm,
+    infer: { '|': ['user'], '@': ['firstName'] }
+});
+```
+
+It's short (5 chars vs 20), self-explanatory, and reads naturally: "infer where these values go." It's also the name of the submodule that powers it, which creates a nice conceptual link.
+
+Runner-up: **`bind`** — even shorter (4 chars), reads well (`bind: { '@': ['email'] }`), and evokes the right concept (data binding). The risk is it could be confused with `Function.prototype.bind`, but in this context it's unambiguous.
+
+If you want a single character/emoji: **`↓`** is the most semantically accurate (values flowing down from source into DOM), but it requires a keyboard shortcut or copy-paste to type. Not ideal for DX.
+
