@@ -199,6 +199,68 @@ This prevents jank for lists with tens of thousands of items while maintaining n
 | `'prepend'` | Markers + content prepended inside target |
 | `'after'` | Markers + content as siblings after target |
 
+## Multi-Element Templates (`configs`)
+
+When a template contains multiple top-level elements (e.g., two `<tr>` rows per item), use the `configs` array to assign to each element separately:
+
+```html
+<template id="item-tpl">
+    <tr class="header-row">
+        <td class="id-cell"></td>
+        <td class="label-cell"></td>
+    </tr>
+    <tr>
+        <td class="desc-cell"></td>
+        <td class="status-cell"></td>
+    </tr>
+</template>
+```
+
+```JavaScript
+fromEachItem: {
+    configs: [
+        {
+            assignToFragment: {
+                '#[a]?.textContent': '?.id',
+                '#[b]?.textContent': '?.label',
+            },
+            withOptions: {
+                at: { a: [0], b: [1] }  // first <tr>'s children
+            }
+        },
+        {
+            assignToFragment: {
+                '#[c]?.textContent': '?.description',
+                '#[d]?.textContent': '?.status'
+            },
+            withOptions: {
+                at: { c: [0], d: [1] }  // second <tr>'s children
+            }
+        }
+    ],
+    resolve: { key: '?.id' }
+}
+```
+
+**How it works:**
+
+- Each entry in `configs` is zipped with the corresponding top-level element in the cloned template (config[0] → first element, config[1] → second element).
+- Each config has its own `assignToFragment` and `withOptions` — coordinates in `at` are relative to *that* element.
+- `resolve` stays at the top level (shared key for reconciliation — all elements belong to the same item).
+- Mismatch handling: if there are more template elements than configs, extras get no assignment. If there are more configs than elements, extras are ignored.
+
+**Without `configs` (single-element templates):**
+
+The existing syntax still works unchanged — `assignToFragment` and `withOptions` at the top level of `fromEachItem` apply to the first element:
+
+```JavaScript
+fromEachItem: {
+    assignToFragment: { '#[a]?.textContent': '?.id' },
+    withOptions: { at: { a: [0] } },
+    resolve: { key: '?.id' }
+}
+```
+
 ## Combining with Other Features
 
 The handler works with all `assignFrom` features inside `withOptions`:
