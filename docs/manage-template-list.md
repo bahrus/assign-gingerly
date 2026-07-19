@@ -202,10 +202,31 @@ This prevents jank for lists with tens of thousands of items while maintaining n
 ## Combining with Other Features
 
 The handler works with all `assignFrom` features inside `withOptions`:
-- `infer` — auto-distribute item properties by itemprop
+- `infer` — auto-distribute item properties by itemprop or name
 - `withMethods` — call methods during path evaluation
-- `withIds` — cached element references within each clone
+- `withIds` — stable element references with auto-assigned IDs (resilient to DOM mutations)
+- `at` — lightweight positional references by child index (no IDs, no DOM pollution — ideal for repeated templates)
 - `enhance` — bulk-apply enhancements to cloned elements
+
+**Using `at` for per-row element access (recommended for template lists):**
+
+```TypeScript
+fromEachItem: {
+    assignToFragment: {
+        '#[a]?.textContent': '?.id',
+        '#[b]?.textContent': '?.label'
+    },
+    withOptions: {
+        at: {
+            a: [0],    // tr.children[0] — first <td>
+            b: [1],    // tr.children[1] — second <td>
+        }
+    },
+    get: { key: '?.id' }
+}
+```
+
+`at` resolves elements by child index (~2-4ns) without assigning IDs — keeping the DOM clean when rendering thousands of rows. Use `withIds` with `{ path: [...] }` instead if you need stability against future DOM structural changes (at the cost of adding ID attributes to each element).
 
 ## Optimized Binding (Direct Cell Access)
 

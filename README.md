@@ -4340,22 +4340,46 @@ await assignFromAsync(document.body, {
 4. On subsequent calls, the cached `WeakRef.deref()` returns the element in ~10ns.
 5. If the WeakRef is collected (element was GC'd), falls back to `getElementById` (~10-100ns).
 
-**Four forms of `withIds` configuration:**
+**`withIds` — stable references with auto-assigned IDs:**
+
+All forms assign a unique ID to the resolved element (if it doesn't have one). This makes the reference resilient to future DOM mutations — once an element has an ID, it can be found regardless of structural changes.
 
 ```TypeScript
 withIds: {
-    x: { qry: '.mainView' },    // Object form: querySelector on target, auto-assign ID
-    y: 'existingId',             // String form: element already has an ID, just cache it
-    z: [0, 1],                   // Array form: child index path (target.children[0].children[1])
-    w: { path: [0, 2], expect: 'input', fallback: true },  // Validated path with fallback
+    x: { qry: '.mainView' },    // querySelector on target, auto-assign ID
+    y: 'existingId',             // element already has an ID, cache via WeakRef
+    z: { path: [0, 1], expect: 'input', fallback: true },  // child index path + auto-ID + validation
 }
 ```
 
-The array form is the fastest first-access strategy (~2-4ns per index step vs ~3,000-17,000ns for querySelector). Ideal for build-time-generated configs where element positions are known statically.
+| Form | First access | Subsequent | Use case |
+|------|-------------|------------|----------|
+| `'existingId'` | getElementById (~10-100ns) | WeakRef cache (~10ns) | Singleton elements with known IDs |
+| `{ qry: '.x' }` | querySelector (~3,000ns) | — (re-queries each call) | Target-relative elements, stable against mutations |
+| `{ path: [0, 1] }` | children[i] (~2-4ns) | — (re-traverses each call) | Fast + stable (ID protects against future DOM changes) |
+
+**`at` — lightweight positional references (no IDs, no DOM pollution):**
+
+For repeated elements (e.g., per-row in `manageTemplateList`) where you control the template structure and don't want to assign 2,000 IDs to the DOM:
+
+```TypeScript
+at: {
+    a: [0],                                              // target.children[0]
+    b: [1],                                              // target.children[1]
+    c: { path: [0, 2], expect: '.info', fallback: true } // with validation
+}
+```
+
+`at` resolves by child index every call — no IDs assigned, no WeakRef cache, no DOM attributes added. ~2-4ns per index step. Use when:
+- The template structure is stable (you own it)
+- You want a clean DOM (no auto-generated `id` attributes)
+- You're rendering many items (1,000 rows × 2 refs = 2,000 fewer DOM attributes)
+
+Both `withIds` and `at` use the same `#[x]` syntax on LHS and RHS keys.
 
 **Validated paths with `expect` and `fallback`:**
 
-The `{ path, expect, fallback }` form adds a dev-time safety net for child-index coordinates:
+Both `withIds` and `at` support the `{ path, expect, fallback }` form for dev-time validation:
 
 ```TypeScript
 withIds: {

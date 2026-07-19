@@ -130,8 +130,8 @@
                     },
                     withOptions:{
                         withIds: {
-                            a: { qry: '.a' },
-                            b: { qry: '.b' }
+                            a: { path: [0], expect: '.a', fallback: true },
+                            b: { path: [1], expect: '.b', fallback: true }
                         }
                     },
                     resolve: { key: '?.id' }

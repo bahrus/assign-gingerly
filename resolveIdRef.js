@@ -44,8 +44,8 @@ export function resolveIdVariable(varName, target, withIds) {
     const config = withIds[varName];
     if (config === undefined)
         return undefined;
-    // For path-based configs (array or { path }), resolve directly from target — no caching
-    // These are target-relative and fast (~2-4ns), caching would return wrong elements when target changes
+    // For 'at' option path-based configs (array or { path }), resolve directly from target — no ID, no caching
+    // These are target-relative and fast (~2-4ns), for when structure is guaranteed stable
     if (Array.isArray(config)) {
         let current = target;
         for (const idx of config) {
@@ -55,7 +55,12 @@ export function resolveIdVariable(varName, target, withIds) {
         }
         return current instanceof Element ? current : undefined;
     }
-    if (typeof config === 'object' && 'path' in config) {
+    if (typeof config === 'object' && 'path' in config && !('qry' in config)) {
+        // Determine if this is from 'at' (no ID assignment) or 'withIds' with path (assigns ID + caches)
+        // When called from 'at', we skip ID/caching. When from 'withIds', we assign ID and cache.
+        // Distinguish by presence in the options — caller passes the merged map.
+        // For now: { path } without 'noId' → assign ID + cache (withIds behavior)
+        const rootNode = target.getRootNode?.() ?? target;
         let current = target;
         for (const idx of config.path) {
             if (!current || !current.children)
@@ -78,7 +83,15 @@ export function resolveIdVariable(varName, target, withIds) {
                 }).catch(() => { });
             }
         }
-        return el ?? undefined;
+        if (!el)
+            return undefined;
+        // Assign ID for stability against future DOM mutations
+        let id = el.id;
+        if (!id) {
+            id = generateUniqueId(rootNode);
+            el.id = id;
+        }
+        return el;
     }
     const rootNode = target.getRootNode?.() ?? target;
     // Get or create cache for this rootNode
