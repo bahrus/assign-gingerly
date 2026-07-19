@@ -179,4 +179,47 @@ fromEachItem: {
 
 If there are no remaining ambiguities, please begin implementing.
 
+---
+
+## AI Implementation Notes
+
+Clear spec. Let me implement the `configs` array support in `manageTemplateList`:
+
+Now I understand the full structure. I need to:
+1. Detect `fromEachItem.configs` array
+2. When present, zip configs with cloned elements (not just use the first element)
+3. For "update in place" path — apply each config to its corresponding element
+4. For "new item" path — same zip logic on the cloned elements
+
+Let me refactor the relevant sections:
+
+Now update the "existing item — update in place" section to handle configs:
+
+Now update the "new item — clone template" section:
+
+Now let me check for diagnostics:
+
+Now update the JS file with the same changes:
+
+Good — the JS file is already updated. Now let me update the demo to use the new `configs` syntax:
+
+Ah — you already edited the demo to match your proposed syntax from the chat (array form with `resolve` in each element). But the agreed-upon syntax is `{ configs: [...], resolve: { key } }`. Let me update it:
+
+Now let me run the tests to make sure nothing's broken:
+
+All passing. The implementation is done:
+
+- **`fromEachItem.configs`** — array of per-element configs, zipped with the template's top-level elements
+- **`fromEachItem.resolve`** — stays at the top level (shared key for reconciliation)
+- **Zip semantics** — pairs configs with elements, ignores extras on either side
+- **Single object (no `configs`)** — unchanged behavior, applies to first element
+
+Try `demos/multi-row-template.html` — it should render the 2×2 binding correctly now.
+
+---
+
+## Human Response III
+
+Can you update the relevant documentation to explain how to deal with this scenario?
+
 
