@@ -202,3 +202,53 @@ All 13 tests pass (10 existing + 3 new array form tests). Let me run across all 
 - `withIds: { a: [0, 0] }` → `target.children[0].children[0]`
 
 ~6 lines added to `resolveIdRef.ts` / `.js`. Once resolved, the element is cached via WeakRef just like the other forms — so subsequent accesses are still ~10ns.
+
+---
+
+## Human Response II
+
+Just out of curiouity, do you think an AI agent like a kiro hook could be trained to calculate the coordinates on a save?  How would one go about creating such an authoring hook?
+
+---
+
+## AI Response II
+
+Yes, this could work — and a Kiro hook is actually a decent fit for it. Here's the rough shape:
+
+**Trigger:** `fileEdited` on `*.html` or `*.ts`/`*.js` files that contain template literals with marker attributes (e.g., `ref="..."` or a custom `idx="..."` attribute).
+
+**What the hook does:**
+1. Parse the HTML (from a template literal or `.html` file) into a DOM tree (using a lightweight parser like `parse5` or even regex for simple cases)
+2. Find elements with the marker attribute (e.g., `ref="labelEl"`)
+3. Walk up from each marked element to the root, recording the `children` index at each level
+4. Output the `withIds` map as a generated constant (either inline in the file or in a companion `.ids.json`)
+
+**Feasibility concerns:**
+- **HTML parsing** — straightforward for static templates. Gets tricky if the template has dynamic interpolations that affect structure (e.g., `${condition ? '<div>' : ''}`)
+- **Keeping it in sync** — the hook fires on save, so any structural change auto-recomputes. That's the key advantage over manual maintenance
+- **Where to write the output** — could be a comment block in the same file, a sidecar file, or injected into an export statement
+
+**A simpler approach that might be "good enough":**
+
+Rather than a full AI agent, a deterministic `runCommand` hook could do it:
+
+```json
+{
+  "name": "Compute withIds indices",
+  "version": "1.0.0",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["*.html", "templates/**"]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "node scripts/compute-ids.js ${file}"
+  }
+}
+```
+
+Where `compute-ids.js` is a ~50-line Node script that parses the HTML, finds `ref` attributes, computes paths, and writes a `.ids.ts` file.
+
+**Where an AI agent (askAgent) adds value:** If the template structure is complex or has conditional branches, an AI could make judgment calls about which indices are stable vs. fragile, and flag warnings. But for the straightforward case, a deterministic script is more reliable and faster.
+
+**Estimate:** The deterministic approach is maybe a half-day of work — a small Node script + a hook config. The AI-agent approach would be more exploratory but isn't necessary for the core use case.
