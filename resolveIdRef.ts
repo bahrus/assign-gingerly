@@ -103,29 +103,27 @@ export function resolveIdVariable(
         idCacheMap.set(rootNode, cache);
     }
 
-    // Check cache first
-    const cached = cache.get(varName);
-    if (cached) {
-        const el = cached.ref.deref();
-        if (el) return el;
-
-        // WeakRef was collected — try getElementById fallback
-        const el2 = rootNode.getElementById?.(cached.id);
-        if (el2) {
-            cache.set(varName, { id: cached.id, ref: new WeakRef(el2) });
-            return el2;
-        }
-        // Element no longer exists — fall through to re-query
-    }
-
     // First time or cache miss — resolve the element
     let el: Element | null = null;
 
     if (typeof config === 'string') {
         // String form: existing ID — use getElementById directly
+        // Check cache first (getElementById lookups are cacheable — global to rootNode)
+        const cached = cache.get(varName);
+        if (cached) {
+            const cachedEl = cached.ref.deref();
+            if (cachedEl) return cachedEl;
+
+            // WeakRef was collected — try getElementById fallback
+            const el2 = rootNode.getElementById?.(cached.id);
+            if (el2) {
+                cache.set(varName, { id: cached.id, ref: new WeakRef(el2) });
+                return el2;
+            }
+        }
         el = rootNode.getElementById?.(config) ?? null;
     } else {
-        // Object form: { qry } — run querySelector against target
+        // Object form: { qry } — run querySelector against target (target-relative, no cache)
         el = target.querySelector?.(config.qry) ?? null;
     }
 
@@ -138,8 +136,10 @@ export function resolveIdVariable(
         el.id = id;
     }
 
-    // Cache it
-    cache.set(varName, { id, ref: new WeakRef(el) });
+    // Cache only for string-form (getElementById) — not for qry form (target-relative)
+    if (typeof config === 'string') {
+        cache.set(varName, { id, ref: new WeakRef(el) });
+    }
     return el;
 }
 
