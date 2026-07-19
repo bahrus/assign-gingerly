@@ -18,7 +18,7 @@
  *         },
  *         fromEachItem: {
  *             assignToFragment: { '?.querySelector?.tr?.ish': '?.' },
- *             withOptions: { withMethods: ['querySelector'], inferredAssignments: true },
+ *             withOptions: { withMethods: ['querySelector'], infer: true },
  *             resolve: { key: '?.rank' }
  *         }
  *     }
@@ -55,9 +55,9 @@ export class ManageTemplateListHandler {
         const fromSource = this.config.fromSource;
         const sourceAssignToFragment = fromSource?.assignToFragment;
         const sourceWithOptions = fromSource?.withOptions ?? {};
-        // Detect fast path: no assignToFragment patterns, just inferredAssignments
+        // Detect fast path: no assignToFragment patterns, just infer
         const hasAssignPatterns = Object.keys(assignToFragment).length > 0;
-        const inferredConfig = withOptions.inferredAssignments;
+        const inferredConfig = withOptions.infer;
         const useFastPath = !hasAssignPatterns && inferredConfig && !sourceAssignToFragment;
         const name = markerName ?? getMarkerName(instantiate) ?? 'templateList';
         // Find or create markers

@@ -29,7 +29,7 @@ const vm = {
 
 await assignFrom(card, {}, {
     from: vm,
-    inferredAssignments: {
+    infer: {
         byItemprop: ['name', 'email', 'joinDate']
     }
 });
@@ -72,7 +72,7 @@ Queries respect itemscope boundaries. Given:
 ```TypeScript
 await assignFrom(outer, {}, {
     from: { name: 'Alice' },
-    inferredAssignments: { byItemprop: ['name'] }
+    infer: { byItemprop: ['name'] }
 });
 // Only the outer <span itemprop="name"> is set to 'Alice'
 // The inner one (inside nested itemscope) is untouched
@@ -93,7 +93,7 @@ When an element has a non-empty `itemscope` attribute (e.g., `itemscope="user-ca
 ```TypeScript
 await assignFrom(container, {}, {
     from: { user: { name: 'Alice', role: 'admin' } },
-    inferredAssignments: { byItemprop: ['user'] }
+    infer: { byItemprop: ['user'] }
 });
 // Sets element.ish = { name: 'Alice', role: 'admin' }
 // → triggers UserCardManager instantiation/update
@@ -106,7 +106,7 @@ Pass `true` to automatically distribute all keys from the source object:
 ```TypeScript
 await assignFrom(card, {}, {
     from: vm,
-    inferredAssignments: { byItemprop: true }
+    infer: { byItemprop: true }
 });
 ```
 
@@ -127,14 +127,14 @@ If multiple elements share the same `itemprop` value (within scope), all of them
 ```TypeScript
 await assignFrom(list, {}, {
     from: { tag: 'updated' },
-    inferredAssignments: { byItemprop: ['tag'] }
+    infer: { byItemprop: ['tag'] }
 });
 // All three spans now show 'updated'
 ```
 
 ## Combining with Other assignFrom Features
 
-`inferredAssignments` runs after all other processing (normal keys, handlers, `#[x]` refs). You can combine them freely:
+`infer` runs after all other processing (normal keys, handlers, `#[x]` refs). You can combine them freely:
 
 ```TypeScript
 await assignFrom(container, {
@@ -143,7 +143,7 @@ await assignFrom(container, {
 }, {
     from: vm,
     withIds: { nav: { qry: '.nav-bar' } },
-    inferredAssignments: { byItemprop: ['name', 'email'] }
+    infer: { byItemprop: ['name', 'email'] }
 });
 ```
 
@@ -156,7 +156,7 @@ await assignFrom(container, {
 ```TypeScript
 assignFrom(form, {}, {
     from: { firstName: 'Alice', lastName: 'Smith', rememberMe: true },
-    inferredAssignments: { byName: ['firstName', 'lastName', 'rememberMe'] }
+    infer: { byName: ['firstName', 'lastName', 'rememberMe'] }
 });
 // Sets input[name="firstName"].value = 'Alice'
 // Sets input[name="lastName"].value = 'Smith'
@@ -166,7 +166,7 @@ assignFrom(form, {}, {
 **All keys from source:**
 
 ```TypeScript
-inferredAssignments: { byName: true }
+infer: { byName: true }
 // Queries [name="x"] for every own key in `from`
 ```
 
@@ -177,7 +177,7 @@ For complex forms with nested fieldsets, use the object form to prevent crossing
 ```TypeScript
 assignFrom(outerForm, {}, {
     from: { email: 'a@b.com', phone: '555-1234' },
-    inferredAssignments: {
+    infer: {
         byName: {
             props: ['email', 'phone'],
             outside: 'fieldset'  // don't descend into nested fieldsets
@@ -191,7 +191,7 @@ Without `outside`, queries are flat (no scope boundary) — correct for most for
 **Combining with `byItemprop`:**
 
 ```TypeScript
-inferredAssignments: {
+infer: {
     byItemprop: ['user'],              // display elements (spans, data, time)
     byName: ['firstName', 'lastName']  // form elements (inputs, selects, textareas)
 }
@@ -202,13 +202,13 @@ inferredAssignments: {
 For brevity (inspired by the [WHATWG template instantiation proposal](https://github.com/nicg/webcomponents/issues/1013)), you can use symbol aliases:
 
 ```TypeScript
-inferredAssignments: {
+infer: {
     '|': ['user'],              // same as byItemprop
     '@': ['firstName', 'lastName']  // same as byName
 }
 
 // With scoping:
-inferredAssignments: {
+infer: {
     '|': true,
     '@': { props: ['firstName'], outside: 'fieldset' }
 }
@@ -224,7 +224,7 @@ const controller = new AbortController();
 await assignFrom(container, {}, {
     from: vm,
     signal: controller.signal,  // Required for cleanup
-    inferredAssignments: {
+    infer: {
         byItemprop: ['name', 'email', 'user'],
         beVigilant: true,
     }
@@ -258,4 +258,4 @@ controller.abort();
 
 **Performance note:**
 
-MutationObservers have overhead for large or frequently-mutating DOMs. Use `beVigilant` only when content is genuinely added dynamically after the initial render. For static DOM structures, the initial `inferredAssignments` pass is sufficient.
+MutationObservers have overhead for large or frequently-mutating DOMs. Use `beVigilant` only when content is genuinely added dynamically after the initial render. For static DOM structures, the initial `infer` pass is sufficient.

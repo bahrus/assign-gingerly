@@ -386,15 +386,15 @@ export function assignFrom(target, pattern, options, permissions) {
         });
     }
     // Process inferred assignments (sync)
-    if (options.inferredAssignments) {
-        processInferredAssignments(target, options.from, options.inferredAssignments);
+    if (options.infer) {
+        processInferredAssignments(target, options.from, options.infer);
         // beVigilant — fire-and-forget (async)
-        if (options.inferredAssignments.beVigilant) {
+        if (options.infer.beVigilant) {
             if (!options.signal) {
-                throw new Error('assignFrom: inferredAssignments.beVigilant requires options.signal (AbortSignal) for cleanup');
+                throw new Error('assignFrom: infer.beVigilant requires options.signal (AbortSignal) for cleanup');
             }
             import('./beVigilant.js').then(({ setupVigilantObserver }) => {
-                setupVigilantObserver(target, options.from, options.inferredAssignments, options.signal);
+                setupVigilantObserver(target, options.from, options.infer, options.signal);
             });
         }
     }

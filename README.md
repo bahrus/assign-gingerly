@@ -4150,7 +4150,7 @@ assignFrom(document.body, {
         },
         fromEachItem: {
             assignToFragment: { '?.querySelector?.tr?.ish': '?.' },
-            withOptions: { withMethods: ['querySelector'], inferredAssignments: true },
+            withOptions: { withMethods: ['querySelector'], infer: true },
             get: { key: '?.rank' }
         }
     }
@@ -4452,7 +4452,7 @@ const vm = {
 
 assignFrom(outerDiv, {}, {
     from: vm,
-    inferredAssignments: {
+    infer: {
         byItemprop: ['name', 'email', 'user']
     }
 });
@@ -4473,7 +4473,7 @@ For each key in `byItemprop`, this finds `[itemprop="${key}"]` elements within t
 **Pass `true` to infer all source keys:**
 
 ```TypeScript
-inferredAssignments: { byItemprop: true }
+infer: { byItemprop: true }
 ```
 
 For full details, see [docs/inferred-assignments.md](docs/inferred-assignments.md).

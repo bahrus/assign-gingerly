@@ -46,7 +46,7 @@ await assignFrom(document.getElementById('rankings-body'), {
             assignToFragment: { '?.querySelector?.tr?.ish': '?.' },
             withOptions: {
                 withMethods: ['querySelector'],
-                inferredAssignments: { byItemprop: true }
+                infer: { byItemprop: true }
             },
             resolve: { key: '?.rank' }
         }
@@ -82,7 +82,7 @@ await assignFrom(document.getElementById('rankings-body'), {
         // Options for the per-item assignFrom call
         withOptions: {
             withMethods: ['querySelector'],
-            inferredAssignments: { byItemprop: true }
+            infer: { byItemprop: true }
         },
         // Per-item resolved values (key is required for reconciliation)
         resolve: {
@@ -202,14 +202,14 @@ This prevents jank for lists with tens of thousands of items while maintaining n
 ## Combining with Other Features
 
 The handler works with all `assignFrom` features inside `withOptions`:
-- `inferredAssignments` — auto-distribute item properties by itemprop
+- `infer` — auto-distribute item properties by itemprop
 - `withMethods` — call methods during path evaluation
 - `withIds` — cached element references within each clone
 - `enhance` — bulk-apply enhancements to cloned elements
 
 ## Optimized Binding (Direct Cell Access)
 
-For maximum performance, use direct property path indexing instead of `inferredAssignments`. Numeric segments in paths are treated as array/collection indexes:
+For maximum performance, use direct property path indexing instead of `infer`. Numeric segments in paths are treated as array/collection indexes:
 
 ```html
 <template id="row-tpl">
@@ -246,7 +246,7 @@ assignFrom(tbody, config, {
 });
 ```
 
-This bypasses `inferredAssignments` (no `querySelectorAll` per item) and directly accesses `tr.cells[0].textContent` and `tr.cells[1].textContent` via the path evaluator. Each item assignment is a simple property chain traversal — no DOM queries.
+This bypasses `infer` (no `querySelectorAll` per item) and directly accesses `tr.cells[0].textContent` and `tr.cells[1].textContent` via the path evaluator. Each item assignment is a simple property chain traversal — no DOM queries.
 
 ## Performance Benchmark
 
