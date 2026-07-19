@@ -4314,14 +4314,17 @@ await assignFromAsync(document.body, {
 4. On subsequent calls, the cached `WeakRef.deref()` returns the element in ~10ns.
 5. If the WeakRef is collected (element was GC'd), falls back to `getElementById` (~10-100ns).
 
-**Two forms of `withIds` configuration:**
+**Three forms of `withIds` configuration:**
 
 ```TypeScript
 withIds: {
     x: { qry: '.mainView' },    // Object form: querySelector on target, auto-assign ID
     y: 'existingId',             // String form: element already has an ID, just cache it
+    z: [0, 1],                   // Array form: child index path (target.children[0].children[1])
 }
 ```
+
+The array form is the fastest first-access strategy (~2-4ns per index step vs ~3,000-17,000ns for querySelector). Ideal for build-time-generated configs where element positions are known statically.
 
 **Chaining with `?.` paths:**
 

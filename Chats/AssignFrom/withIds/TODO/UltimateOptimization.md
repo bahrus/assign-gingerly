@@ -171,3 +171,34 @@ A build plugin scans for `ref="..."` attributes, computes child indices, strips 
 | Build optimization | Compiler evaluates tag statically → zero runtime parsing |
 
 The implementation is trivial; the DX tooling is the real project. I'd suggest implementing the array form in `resolveIdRef` now (cheap, fast, useful for generated configs) and tackling the `indexedTemplate` tag as a separate follow-up when you're ready to build the authoring tool.
+
+---
+
+## Human Response I
+
+Please implement the array coordinates for now, and briefly mention in README.md.  Thanks for the thoughts on authoring.  Will think further about it.  
+
+---
+
+## Implementaation Notes
+
+I need to update the `WithIdConfig` type and add the array form handling. Let me see the type definition:
+
+Now add the array form handling in the resolution logic:
+
+Now update the JS file:
+
+Let me verify no TS errors:
+
+Now let me run the existing `rhs-id-ref` tests plus a quick inline test to confirm the array form works:
+
+Existing tests still pass. Let me add a quick test for the array form to the same test file:
+
+All 13 tests pass (10 existing + 3 new array form tests). Let me run across all browsers:
+
+13/13 across all browsers. Done — the array form for `withIds` is implemented:
+
+- `withIds: { a: [1] }` → `target.children[1]`
+- `withIds: { a: [0, 0] }` → `target.children[0].children[0]`
+
+~6 lines added to `resolveIdRef.ts` / `.js`. Once resolved, the element is cached via WeakRef just like the other forms — so subsequent accesses are still ~10ns.

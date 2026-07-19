@@ -188,6 +188,52 @@
             expect(form.ref).toBe('#[nonExistent]');
         });
 
+        // Array form: child index path
+        test('array withIds: should resolve element via child indices', () => {
+            // form.children[0] = label, form.children[1] = input
+            assignFrom(form, {
+                '?.labelFor': '#[myInput]?.id'
+            }, {
+                from: {},
+                withIds: { myInput: [1] }  // form.children[1] = input
+            });
+            const input = form.children[1];
+            expect(form.labelFor).toBe(input.id);
+        });
+
+        // Array form: nested child indices
+        test('array withIds: should traverse nested children', () => {
+            // Create a nested structure for this test
+            const wrapper = document.createElement('div');
+            const inner = document.createElement('div');
+            const deepEl = document.createElement('span');
+            deepEl.title = 'deep target';
+            inner.appendChild(deepEl);
+            wrapper.appendChild(inner);
+            document.body.appendChild(wrapper);
+
+            assignFrom(wrapper, {
+                '?.found': '#[deep]?.title'
+            }, {
+                from: {},
+                withIds: { deep: [0, 0] }  // wrapper.children[0].children[0] = span
+            });
+            expect(wrapper.found).toBe('deep target');
+            document.body.removeChild(wrapper);
+        });
+
+        // Array form: bare #[x] returns auto-generated ID
+        test('array withIds: bare #[x] should return element ID', () => {
+            assignFrom(form, {
+                '?.inputRef': '#[arrInput]'
+            }, {
+                from: {},
+                withIds: { arrInput: [1] }
+            });
+            const input = form.children[1];
+            expect(form.inputRef).toBe(input.id);
+        });
+
         // Display results
         const total = passed + failed;
         const statusEl = document.getElementById('status');

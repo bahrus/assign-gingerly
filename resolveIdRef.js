@@ -70,6 +70,15 @@ export function resolveIdVariable(varName, target, withIds) {
         // String form: existing ID — use getElementById directly
         el = rootNode.getElementById?.(config) ?? null;
     }
+    else if (Array.isArray(config)) {
+        // Array form: child index path — traverse children[i] for each index
+        let current = target;
+        for (const idx of config) {
+            if (!current || !current.children) break;
+            current = current.children[idx];
+        }
+        el = current instanceof Element ? current : null;
+    }
     else {
         // Object form: { qry } — run querySelector against target
         el = target.querySelector?.(config.qry) ?? null;

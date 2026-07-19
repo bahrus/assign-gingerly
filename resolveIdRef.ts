@@ -11,7 +11,7 @@
 /**
  * Configuration for a withIds entry.
  */
-export type WithIdConfig = string | { qry: string };
+export type WithIdConfig = string | { qry: string } | number[];
 
 /**
  * Module-level cache: rootNode → Map<varName, { id, WeakRef }>
@@ -86,6 +86,14 @@ export function resolveIdVariable(
     if (typeof config === 'string') {
         // String form: existing ID — use getElementById directly
         el = rootNode.getElementById?.(config) ?? null;
+    } else if (Array.isArray(config)) {
+        // Array form: child index path — traverse children[i] for each index
+        let current: any = target;
+        for (const idx of config) {
+            if (!current || !current.children) break;
+            current = current.children[idx];
+        }
+        el = current instanceof Element ? current : null;
     } else {
         // Object form: { qry } — run querySelector against target
         el = target.querySelector?.(config.qry) ?? null;
