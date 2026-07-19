@@ -11,7 +11,7 @@
 /**
  * Configuration for a withIds entry.
  */
-export type WithIdConfig = string | { qry: string } | number[];
+export type WithIdConfig = string | { qry: string } | number[] | { path: number[]; expect?: string; fallback?: boolean };
 
 /**
  * Module-level cache: rootNode → Map<varName, { id, WeakRef }>
@@ -94,6 +94,31 @@ export function resolveIdVariable(
             current = current.children[idx];
         }
         el = current instanceof Element ? current : null;
+    } else if ('path' in config) {
+        // Object form with path: { path, expect?, fallback? }
+        let current: any = target;
+        for (const idx of config.path) {
+            if (!current || !current.children) break;
+            current = current.children[idx];
+        }
+        el = current instanceof Element ? current : null;
+
+        // Validation: check if resolved element matches expected selector
+        if (el && config.expect) {
+            const didNotMatch = !el.matches(config.expect);
+            if (didNotMatch) {
+                if (config.fallback) {
+                    el = target.querySelector?.(config.expect) ?? el;
+                }
+                // Fire-and-forget: log correction suggestion
+                const capturedEl = el;
+                const capturedConfig = config;
+                const capturedVarName = varName;
+                import('./withIdsCorrector.js').then(module => {
+                    module.logConfigCorrection(target, capturedVarName, capturedConfig);
+                }).catch(() => {});
+            }
+        }
     } else {
         // Object form: { qry } — run querySelector against target
         el = target.querySelector?.(config.qry) ?? null;

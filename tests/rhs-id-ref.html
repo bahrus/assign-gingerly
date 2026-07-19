@@ -234,6 +234,40 @@
             expect(form.inputRef).toBe(input.id);
         });
 
+        // { path, expect } form: passes validation
+        test('path+expect: should resolve when element matches', () => {
+            assignFrom(form, {
+                '?.inputType': '#[validInput]?.type'
+            }, {
+                from: {},
+                withIds: { validInput: { path: [1], expect: 'input' } }
+            });
+            expect(form.inputType).toBe('text');
+        });
+
+        // { path, expect } form: mismatch without fallback
+        test('path+expect: should still resolve (stale) when no fallback', () => {
+            assignFrom(form, {
+                '?.staleTag': '#[wrong]?.tagName'
+            }, {
+                from: {},
+                withIds: { wrong: { path: [0], expect: 'input' } } // [0] is label, not input
+            });
+            // Still resolves to the element at path (label), even though it doesn't match
+            expect(form.staleTag).toBe('LABEL');
+        });
+
+        // { path, expect, fallback: true } form: falls back to querySelector on mismatch
+        test('path+expect+fallback: should fall back to querySelector on mismatch', () => {
+            assignFrom(form, {
+                '?.foundType': '#[fb]?.type'
+            }, {
+                from: {},
+                withIds: { fb: { path: [0], expect: 'input', fallback: true } } // [0] is label, fallback finds input
+            });
+            expect(form.foundType).toBe('text');
+        });
+
         // Display results
         const total = passed + failed;
         const statusEl = document.getElementById('status');

@@ -4314,17 +4314,34 @@ await assignFromAsync(document.body, {
 4. On subsequent calls, the cached `WeakRef.deref()` returns the element in ~10ns.
 5. If the WeakRef is collected (element was GC'd), falls back to `getElementById` (~10-100ns).
 
-**Three forms of `withIds` configuration:**
+**Four forms of `withIds` configuration:**
 
 ```TypeScript
 withIds: {
     x: { qry: '.mainView' },    // Object form: querySelector on target, auto-assign ID
     y: 'existingId',             // String form: element already has an ID, just cache it
     z: [0, 1],                   // Array form: child index path (target.children[0].children[1])
+    w: { path: [0, 2], expect: 'input', fallback: true },  // Validated path with fallback
 }
 ```
 
 The array form is the fastest first-access strategy (~2-4ns per index step vs ~3,000-17,000ns for querySelector). Ideal for build-time-generated configs where element positions are known statically.
+
+**Validated paths with `expect` and `fallback`:**
+
+The `{ path, expect, fallback }` form adds a dev-time safety net for child-index coordinates:
+
+```TypeScript
+withIds: {
+    nameInput: { path: [1], expect: 'input' },              // warn if [1] isn't an <input>
+    label:     { path: [0], expect: 'label', fallback: true } // warn + recover via querySelector
+}
+```
+
+- `expect` — a CSS selector checked via `element.matches()` (~50-200ns). If the element at `path` doesn't match, a console warning is logged with the correct coordinates.
+- `fallback: true` — on mismatch, automatically recovers by falling back to `querySelector(expect)`. The corrected element is cached for subsequent access.
+- The correction diagnostic is loaded lazily (fire-and-forget dynamic import) — zero payload in the happy path.
+- Strip `expect`/`fallback` in production builds for maximum performance (or leave them — the overhead is a single `matches()` call).
 
 **Chaining with `?.` paths:**
 
