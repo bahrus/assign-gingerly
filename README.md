@@ -769,6 +769,8 @@ assignGingerly(div, {
 - Testing is done in mount-observer package (no tests in assign-gingerly)
 - Single @eachTime per path (nested @eachTime not currently supported)
 
+## Common Operation Support
+
 While we are in the business of passing values of object A into object B, we might as well add some extremely common behavior that allows updating properties of object B based on the current values of object B -- things like incrementing, toggling, deleting, and merging into sub-objects.  Deleting is critical for assignTentatively, but is included with both functions.
 
 | Operator | Name | Description | Example |
