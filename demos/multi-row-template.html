@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>manageTemplateList — Multi-Row Template (2×2 bindings)</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 1rem;
+        }
+
+        .controls {
+            margin: 1rem 0;
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 0.4rem 0.8rem;
+            cursor: pointer;
+        }
+
+        #results {
+            margin: 1rem 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            background: #f8f8f8;
+            padding: 1rem;
+            border-radius: 4px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        td,
+        th {
+            padding: 0.25rem 0.5rem;
+            border: 1px solid #ddd;
+        }
+
+        tr.header-row td {
+            background: #eef;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>manageTemplateList — Multi-Row Template</h1>
+    <p>Each item in the data produces <strong>two</strong> table rows from a single template — a 2×2 binding scenario.
+        Tests how manageTemplateList handles multiple top-level elements per template clone.</p>
+
+    <div class="controls">
+        <button id="btn-create">Create 10</button>
+        <button id="btn-create100">Create 100</button>
+        <button id="btn-update">Update every 3rd</button>
+        <button id="btn-clear">Clear</button>
+    </div>
+
+    <pre id="results">Click a button to run an operation...</pre>
+
+    <!-- Template with TWO top-level <tr> elements per item -->
+    <template id="item-tpl">
+        <tr class="header-row">
+            <td class="id-cell"></td>
+            <td class="label-cell"></td>
+        </tr>
+        <tr>
+            <td class="desc-cell"></td>
+            <td class="status-cell"></td>
+        </tr>
+    </template>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Col A</th>
+                <th>Col B</th>
+            </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+    </table>
+
+    <script type="module">
+        import { assignFrom } from '../assignFrom.js';
+
+        // --- Data generation ---
+        const statuses = ['active', 'pending', 'closed', 'archived'];
+        let nextId = 1;
+
+        function buildData(count) {
+            const data = [];
+            for (let i = 0; i < count; i++) {
+                data.push({
+                    id: nextId++,
+                    label: `Item #${nextId - 1}`,
+                    description: `Description for item ${nextId - 1}`,
+                    status: statuses[Math.floor(Math.random() * statuses.length)]
+                });
+            }
+            return data;
+        }
+
+        // --- State ---
+        let data = [];
+        const tbody = document.getElementById('tbody');
+        const resultsEl = document.getElementById('results');
+
+        const assignValues = {
+            '?. =>': {
+                do: 'builtIns.manageTemplateList',
+                resolve: {
+                    forEach: '?.data',
+                    instantiate: 'globalThis://item-tpl',
+                    forget: true,
+                },
+                fromEachItem: {
+                    assignToFragment: {
+                        '#[a]?.textContent': '?.id',
+                        '#[b]?.textContent': '?.label',
+                        '#[c]?.textContent': '?.description',
+                        '#[d]?.textContent': '?.status'
+                    },
+                    withOptions: {
+                        at: {
+                            a: [0, 0],  // first tr, first td
+                            b: [0, 1],  // first tr, second td
+                            c: [1, 0],  // second tr, first td
+                            d: [1, 1],  // second tr, second td
+                        }
+                    },
+                    resolve: { key: '?.id' }
+                }
+            }
+        };
+
+        const protocols = { globalThis: k => globalThis[k] };
+
+        // --- Render ---
+        async function render() {
+            await assignFrom(tbody, assignValues, {
+                from: { data },
+                protocols
+            });
+        }
+
+        // --- Operations ---
+        document.getElementById('btn-create').addEventListener('click', async () => {
+            data = buildData(10);
+            await render();
+            resultsEl.textContent = `Created 10 items (${data.length * 2} rows in DOM)`;
+        });
+
+        document.getElementById('btn-create100').addEventListener('click', async () => {
+            data = buildData(100);
+            await render();
+            resultsEl.textContent = `Created 100 items (${data.length * 2} rows in DOM)`;
+        });
+
+        document.getElementById('btn-update').addEventListener('click', async () => {
+            for (let i = 0; i < data.length; i += 3) {
+                data[i] = { ...data[i], status: 'UPDATED', description: data[i].description + ' [modified]' };
+            }
+            data = [...data];
+            await render();
+            resultsEl.textContent = `Updated every 3rd item`;
+        });
+
+        document.getElementById('btn-clear').addEventListener('click', async () => {
+            data = [];
+            await render();
+            resultsEl.textContent = `Cleared`;
+        });
+    </script>
+</body>
+
+</html>
