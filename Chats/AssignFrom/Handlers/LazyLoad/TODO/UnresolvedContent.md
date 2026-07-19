@@ -152,3 +152,20 @@ Rather than `elseMarker`, I'd suggest `placeholder` for the one-shot case and si
 Yes, but the scope is small. It's essentially: "on first clone, also nuke content in a named marker pair." That's ~5 lines in the `cloneAndInsert` path. The "else" toggling is already achievable today with two handlers (one for true-state template, one for false-state template). The missing piece is just the one-shot placeholder removal.
 
 Whether to call it `placeholder`, `replaces`, or `elseMarker` is a naming question. I lean toward `replaces` — it reads naturally: "this handler's content *replaces* the content in marker X."
+
+---
+
+## Human Response I
+
+> **Markers (`<!--?start name=X-->...<!--?end-->`):**
+> - Already the internal mechanism lazyLoad uses
+> - Server can stream them without adding real DOM nodes
+> - No styling side effects
+> - But: comment markers in authored HTML feel unusual — they're typically an implementation detail
+
+Not necessarily germane to the subject at hand (actually I think it strengthens your arguments), but I'm hoping they start feeling less unusual as [out of order streaming](https://developer.chrome.com/blog/declarative-partial-updates) rolls out.
+
+Anyway, I think I like your approach.  "placeholder" seems like a good name, given the precedence with input elements.
+
+Please implement and document.
+
