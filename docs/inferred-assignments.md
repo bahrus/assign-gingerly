@@ -147,14 +147,70 @@ await assignFrom(container, {
 });
 ```
 
-## Future: `byName` (Phase II)
+## `byName` — Form Element Binding
 
-A planned extension will support `byName` for form element binding:
+`byName` distributes source values to elements by their `name` attribute. The inferencer determines the correct property (`value`, `checked`, `selectedIndex`, etc.) for each matched element.
+
+**Simple form — array of keys:**
+
+```TypeScript
+assignFrom(form, {}, {
+    from: { firstName: 'Alice', lastName: 'Smith', rememberMe: true },
+    inferredAssignments: { byName: ['firstName', 'lastName', 'rememberMe'] }
+});
+// Sets input[name="firstName"].value = 'Alice'
+// Sets input[name="lastName"].value = 'Smith'
+// Sets input[name="rememberMe"].checked = true
+```
+
+**All keys from source:**
+
+```TypeScript
+inferredAssignments: { byName: true }
+// Queries [name="x"] for every own key in `from`
+```
+
+**With donut-hole scoping (`outside`):**
+
+For complex forms with nested fieldsets, use the object form to prevent crossing fieldset boundaries:
+
+```TypeScript
+assignFrom(outerForm, {}, {
+    from: { email: 'a@b.com', phone: '555-1234' },
+    inferredAssignments: {
+        byName: {
+            props: ['email', 'phone'],
+            outside: 'fieldset'  // don't descend into nested fieldsets
+        }
+    }
+});
+```
+
+Without `outside`, queries are flat (no scope boundary) — correct for most forms.
+
+**Combining with `byItemprop`:**
 
 ```TypeScript
 inferredAssignments: {
-    byItemprop: ['user'],
-    byName: ['firstName', 'lastName']  // finds [name="firstName"], etc.
+    byItemprop: ['user'],              // display elements (spans, data, time)
+    byName: ['firstName', 'lastName']  // form elements (inputs, selects, textareas)
+}
+```
+
+**Concise aliases (`|` and `@`):**
+
+For brevity (inspired by the [WHATWG template instantiation proposal](https://github.com/nicg/webcomponents/issues/1013)), you can use symbol aliases:
+
+```TypeScript
+inferredAssignments: {
+    '|': ['user'],              // same as byItemprop
+    '@': ['firstName', 'lastName']  // same as byName
+}
+
+// With scoping:
+inferredAssignments: {
+    '|': true,
+    '@': { props: ['firstName'], outside: 'fieldset' }
 }
 ```
 

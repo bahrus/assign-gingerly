@@ -110,3 +110,131 @@ For `byItemprop: true`, you enumerate all keys on the source object. For `byName
 Let's go with your suggestion
 
 Please implement and update the documentation.
+
+---
+
+## AI Response II
+
+Done. Implemented `byName` for inferred assignments.
+
+**Files modified:**
+- `inferredAssignments.ts` / `.js` — added `byName` to the config interface + processing logic (~25 lines)
+- `docs/inferred-assignments.md` — replaced "Future: byName (Phase II)" placeholder with full documentation
+
+**Supported forms:**
+- `byName: ['firstName', 'lastName']` — array of keys, no scoping
+- `byName: true` — all own keys from `from` source
+- `byName: { props: ['firstName'], outside: 'fieldset' }` — with donut-hole scoping
+
+**How it works:**
+- Uses the inferencer's `['@']` method (queries `[name="x"]`, optional scope boundary)
+- Setting `match.value = x` uses `inferValueProperty` to determine the correct property (`value`, `checked`, `selectedIndex`, `dateTime`, etc.)
+- No changes to the inferencer submodule — it already had the API
+
+**No new tests added** (per your general instruction). The feature is exercised through the same code path as `byItemprop` — just using `['@']` instead of `['|']`.
+
+---
+
+## Human Response II
+
+Looking at the inferencer.ts in the inferencer folder, I think maybe we can reduce the footprint by having some or all of them ('[|]', '[@]') call a private method, passing in just the query or something?
+
+
+---
+
+## AI Response III
+
+Yes, absolutely. Looking at the methods, `['@']`, `['%']`, `['#']`, and `['.']` are all identical except for the query string construction. They all:
+
+1. `querySelectorAll(someSelector)`
+2. Optionally filter by `withScopePerimeter`
+3. Map to `new Infer(x, propName)`
+
+`['|']` is slightly different (always applies scoping with a default boundary), but could also use the shared helper.
+
+A refactored version:
+
+```ts
+#queryScoped(selector: string, propName: string, scopeBoundary?: string): Infer[] {
+    const candidates = this.enhancedElement.querySelectorAll(selector);
+    const filtered = scopeBoundary
+        ? Array.from(candidates).filter(el => withScopePerimeter(this.enhancedElement, el, scopeBoundary))
+        : Array.from(candidates);
+    return filtered.map(x => new Infer(x, propName));
+}
+
+['|'](itempropAttr: string, scopeBoundary: string = '[itemscope]') {
+    return this.#queryScoped(`[itemprop="${itempropAttr}"]`, itempropAttr, scopeBoundary);
+}
+
+['@'](nameAttr: string, scopeBoundary?: string) {
+    return this.#queryScoped(`[name="${nameAttr}"]`, nameAttr, scopeBoundary);
+}
+
+['%'](partAttr: string, scopeBoundary?: string) {
+    return this.#queryScoped(`[part~="${partAttr}"]`, partAttr, scopeBoundary);
+}
+
+['#'](id: string, scopeBoundary?: string) {
+    return this.#queryScoped(`#${id}`, id, scopeBoundary);
+}
+
+['.'](className: string, scopeBoundary?: string) {
+    return this.#queryScoped(`.${className}`, className, scopeBoundary);
+}
+```
+
+**Savings:** ~20 lines removed, replaced by one 6-line private method. The minified footprint drops by roughly 200-300 bytes since the duplicated filter/map logic compresses into a single function call.
+
+**Caveat:** This is inside the `inferencer/` submodule, so it needs to be done as a change to that repo. But it's a pure refactor — no API change, no behavior change. Want me to make the change?
+
+---
+
+## Human Response IV
+
+Yes, please.  Also, new requirement:
+
+Can you allow for a more concise confiruation alternative (both should work):
+
+```ts
+inferredAssignments: {
+    '|': ['user'],  // or true
+    '@': {
+        props: ['firstName', 'lastName'], // or true?
+        outside: 'fieldset'
+    } 
+}
+```
+
+Those symbols relate to [another WHATWG proposal](https://github.com/WICG/webcomponents/issues/1013) I have with regards to template instantiation.
+
+---
+
+## AI Response IV
+
+Done. Both changes implemented:
+
+**1. Inferencer refactor** (`inferencer/inferencer.ts` / `.js`):
+- Extracted `#queryScoped(selector, propName, scopeBoundary?)` private method
+- All 5 query methods (`['|']`, `['@']`, `['%']`, `['#']`, `['.']`) now delegate to it
+- ~20 lines removed, ~6 lines added
+
+**2. Concise aliases** (`inferredAssignments.ts` / `.js`):
+- `'|'` is an alias for `byItemprop`
+- `'@'` is an alias for `byName`
+- Resolution: `byItemprop ?? config['|']` and `byName ?? config['@']`
+- Both forms work interchangeably; verbose names take precedence if both specified
+
+**Usage:**
+```ts
+// Verbose
+inferredAssignments: { byItemprop: ['user'], byName: ['firstName'] }
+
+// Concise
+inferredAssignments: { '|': ['user'], '@': ['firstName'] }
+
+// Mixed
+inferredAssignments: { '|': true, '@': { props: ['email'], outside: 'fieldset' } }
+```
+
+Documentation updated in `docs/inferred-assignments.md`.
