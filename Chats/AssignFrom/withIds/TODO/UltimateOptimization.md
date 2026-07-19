@@ -30,6 +30,6 @@ assignFrom(oForm, {
 
 So if the rhs of the expressions inside the withIds is an array, assume it it lists the sequence of index of element children.
 
-How much weight would this add?
+How much weight would this add?  Do you agree, that without the added one-time download time of that code, it is the fastest way to specify the element?
 
 Any idea how to improve the DX for this during build time / server side rendering time?  Assume the html is defined as a const variable using a (tagged) template literal to define it.
