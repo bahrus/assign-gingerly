@@ -44,7 +44,7 @@ export class LazyLoadHandler {
         this.config = config;
     }
     async assign(lhsTarget, resolvedParams) {
-        const { if: condition, instantiate, method = 'appendChild', forget = false, transitional = false, hideClass = DEFAULT_HIDE_CLASS, hideCss, markerName, toggleInert = false, toggleDisabled = false } = resolvedParams;
+        const { if: condition, instantiate, method = 'appendChild', forget = false, transitional = false, hideClass = DEFAULT_HIDE_CLASS, hideCss, markerName, toggleInert = false, toggleDisabled = false, placeholder } = resolvedParams;
         if (!(lhsTarget instanceof Element)) {
             throw new Error('builtIns.lazyLoad: lhsTarget must be a DOM Element');
         }
@@ -83,6 +83,16 @@ export class LazyLoadHandler {
                 }
             }
             else {
+                // Remove placeholder content if specified
+                if (placeholder) {
+                    const [phStart, phEnd] = findMarkers(lhsTarget, placeholder);
+                    if (phStart && phEnd) {
+                        const phNodes = getNodesBetweenMarkers(phStart, phEnd);
+                        for (const node of phNodes) {
+                            node.parentNode?.removeChild(node);
+                        }
+                    }
+                }
                 if (method === 'after') {
                     [startMarker, endMarker] = createMarkersSibling(lhsTarget, name);
                 } else {

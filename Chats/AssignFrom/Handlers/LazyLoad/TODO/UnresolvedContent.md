@@ -169,3 +169,20 @@ Anyway, I think I like your approach.  "placeholder" seems like a good name, giv
 
 Please implement and document.
 
+
+---
+
+## AI Response II
+
+Done. Implemented `placeholder` parameter for `builtIns.lazyLoad` (and `builtIns.lazyLoadSwitch` inherits it automatically).
+
+**Files modified:**
+- `handlers/lazyLoad.ts` / `.js` — added `placeholder` to destructuring + removal logic on first activation
+- `types/assign-gingerly/types.d.ts` — added `placeholder?: string` to `LazyLoadResolvedParams`
+- `README.md` — documented in the parameters table + added a dedicated "Placeholder content (SSR/streaming)" section
+
+**Behavior:**
+- On first activation (condition true, no existing markers for this handler): find `<!--?start name="${placeholder}"-->...<!--?end-->` and remove its contents
+- One-shot: the placeholder never reappears on subsequent show/hide cycles
+- If condition is false on first call: placeholder remains visible (no template cloned)
+- `builtIns.lazyLoadSwitch` inherits this via `...rest` spread to `super.assign()`

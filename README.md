@@ -3798,17 +3798,43 @@ await assignFromAsync(document.body, {
 | `instantiate` | HTMLTemplateElement | The template to clone (typically resolved via globalThis protocol) |
 | `method` | string | `'appendChild'` (default) or `'prepend'` — where to place markers |
 | `forget` | boolean | If true, removes nodes entirely when `if` is false (default: hides with `hidden` attribute) |
+| `placeholder` | string | Name of a pre-existing marker pair whose content is removed on first activation |
 
 **Behavior:**
 
-- **First load (`if` = true, no existing content):** Clones the template, inserts content between `<!--?start name="X"-->` / `<!--?end-->` comment markers.
+- **First load (`if` = true, no existing content):** Clones the template, inserts content between `<!--?start name="X"-->` / `<!--?end-->` comment markers. If `placeholder` is specified, its content is removed first.
 - **Show (content exists but hidden):** Removes `hidden` attribute from elements between markers.
 - **Hide (`if` = false, `forget` = false):** Adds `hidden` attribute to elements between markers.
 - **Remove (`if` = false, `forget` = true):** Removes nodes between markers entirely. Markers persist for re-insertion if `if` becomes true again.
 
 This is useful for conditional rendering, routing, and lazy-loading views.
 
-### View Transitions
+**Placeholder content (SSR/streaming):**
+
+Use `placeholder` to remove pre-rendered "loading" content when real content first activates. The server streams placeholder content inside named markers; once JS runs and the condition is met, the placeholder is cleared and the template is cloned in its place:
+
+```html
+<div class="mainView">
+    <!--?start name="loading"-->
+    <div class="skeleton">Loading...</div>
+    <!--?end-->
+</div>
+```
+
+```JavaScript
+await assignFromAsync(container, {
+    '?.querySelector?..mainView =>': {
+        do: 'builtIns.lazyLoad',
+        get: {
+            if: '?.isReady',
+            instantiate: 'globalThis://mainTemplate',
+            placeholder: 'loading',
+        }
+    }
+}, { withMethods: ['querySelector'], from: vm, protocols: { globalThis: k => globalThis[k] } });
+```
+
+The placeholder is removed only on first activation (one-shot). If `if` later becomes false and then true again, the template is re-shown from its own markers — the placeholder does not reappear.### View Transitions
 
 Both `builtIns.lazyLoad` and `builtIns.lazyLoadSwitch` support animated transitions via the [View Transition API](https://developer.mozilla.org/docs/Web/API/View_Transition_API). Enable with `transitional: true` in the resolve map:
 

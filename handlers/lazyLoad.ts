@@ -64,6 +64,7 @@ export class LazyLoadHandler implements AssignFromHandler {
             markerName,
             toggleInert = false,
             toggleDisabled = false,
+            placeholder,
         } = resolvedParams;
 
         if (!(lhsTarget instanceof Element)) {
@@ -112,6 +113,16 @@ export class LazyLoadHandler implements AssignFromHandler {
                 }
             } else {
                 // No markers — first time. Create markers and clone template.
+                // Remove placeholder content if specified
+                if (placeholder) {
+                    const [phStart, phEnd] = findMarkers(lhsTarget, placeholder);
+                    if (phStart && phEnd) {
+                        const phNodes = getNodesBetweenMarkers(phStart, phEnd);
+                        for (const node of phNodes) {
+                            node.parentNode?.removeChild(node);
+                        }
+                    }
+                }
                 if (method === 'after') {
                     [startMarker, endMarker] = createMarkersSibling(lhsTarget, name);
                 } else {
