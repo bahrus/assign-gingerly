@@ -113,26 +113,38 @@
         const assignValues = {
             '?. =>': {
                 do: 'builtIns.manageTemplateList',
-                resolve: {
+                get: {
                     forEach: '?.data',
                     instantiate: 'globalThis://item-tpl',
                     forget: true,
                 },
                 fromEachItem: {
-                    assignToFragment: {
-                        '#[a]?.textContent': '?.id',
-                        '#[b]?.textContent': '?.label',
-                        '#[c]?.textContent': '?.description',
-                        '#[d]?.textContent': '?.status'
-                    },
-                    withOptions: {
-                        at: {
-                            a: [0, 0],  // first tr, first td
-                            b: [0, 1],  // first tr, second td
-                            c: [1, 0],  // second tr, first td
-                            d: [1, 1],  // second tr, second td
+                    configs: [
+                        {
+                            assignToFragment: {
+                                '#[a]?.textContent': '?.id',
+                                '#[b]?.textContent': '?.label',
+                            },
+                            withOptions: {
+                                at: {
+                                    a: [0],  // first tr → first td
+                                    b: [1],  // first tr → second td
+                                }
+                            }
+                        },
+                        {
+                            assignToFragment: {
+                                '#[c]?.textContent': '?.description',
+                                '#[d]?.textContent': '?.status'
+                            },
+                            withOptions: {
+                                at: {
+                                    c: [0],  // second tr → first td
+                                    d: [1],  // second tr → second td
+                                }
+                            }
                         }
-                    },
+                    ],
                     resolve: { key: '?.id' }
                 }
             }

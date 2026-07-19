@@ -75,6 +75,7 @@ export class ManageTemplateListHandler implements AssignFromHandler {
         }
 
         const fromEachItem = this.config.fromEachItem;
+        const configs = fromEachItem?.configs; // Array form for multi-element templates
         const assignToFragment = fromEachItem?.assignToFragment ?? {};
         const withOptions = fromEachItem?.withOptions ?? {};
         const perItemResolve = fromEachItem?.resolve ?? {};
@@ -85,10 +86,10 @@ export class ManageTemplateListHandler implements AssignFromHandler {
         const sourceAssignToFragment = fromSource?.assignToFragment;
         const sourceWithOptions = fromSource?.withOptions ?? {};
 
-        // Detect fast path: no assignToFragment patterns, just infer
-        const hasAssignPatterns = Object.keys(assignToFragment).length > 0;
-        const inferredConfig = withOptions.infer;
-        const useFastPath = !hasAssignPatterns && inferredConfig && !sourceAssignToFragment;
+        // Detect fast path: no assignToFragment patterns, just infer (only for non-configs mode)
+        const hasAssignPatterns = !configs && Object.keys(assignToFragment).length > 0;
+        const inferredConfig = !configs && withOptions.infer;
+        const useFastPath = !configs && !hasAssignPatterns && inferredConfig && !sourceAssignToFragment;
 
         const name = markerName ?? getMarkerName(instantiate) ?? 'templateList';
 
@@ -149,17 +150,28 @@ export class ManageTemplateListHandler implements AssignFromHandler {
             if (state.keyToNodes.has(key) && oldKeys.has(key)) {
                 // Existing item — update in place
                 const existingNodes = state.keyToNodes.get(key)!;
-                const rootEl = existingNodes.find(n => n instanceof Element) as Element | undefined;
-                if (rootEl) {
-                    const shouldYield = yieldEvery && i > 0 && i % yieldEvery === 0;
-                    if (shouldYield) await new Promise(r => setTimeout(r, 0));
-                    if (processInferred) {
-                        processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
-                    } else {
-                        assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                const shouldYield = yieldEvery && i > 0 && i % yieldEvery === 0;
+                if (shouldYield) await new Promise(r => setTimeout(r, 0));
+
+                if (configs) {
+                    // Multi-element: zip configs with element nodes
+                    const elements = existingNodes.filter(n => n instanceof Element) as Element[];
+                    const len = Math.min(elements.length, configs.length);
+                    for (let j = 0; j < len; j++) {
+                        const cfg = configs[j];
+                        assignFrom(elements[j], cfg.assignToFragment ?? {}, { from: item, ...cfg.withOptions });
                     }
-                    if (sourceAssignToFragment && options?.from) {
-                        assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                } else {
+                    const rootEl = existingNodes.find(n => n instanceof Element) as Element | undefined;
+                    if (rootEl) {
+                        if (processInferred) {
+                            processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
+                        } else {
+                            assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                        }
+                        if (sourceAssignToFragment && options?.from) {
+                            assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                        }
                     }
                 }
                 newKeyToNodes.set(key, existingNodes);
@@ -180,21 +192,32 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                 const clonedNodes = Array.from(content.childNodes);
 
                 // Apply per-item assignments to the cloned fragment
-                const rootEl = clonedNodes.find(n => n instanceof Element) as Element | undefined;
-                if (rootEl) {
-                    const tempContainer = document.createDocumentFragment();
-                    tempContainer.appendChild(content);
+                const shouldYield = yieldEvery && i > 0 && i % yieldEvery === 0;
+                if (shouldYield) await new Promise(r => setTimeout(r, 0));
 
-                    const shouldYield = yieldEvery && i > 0 && i % yieldEvery === 0;
-                    if (shouldYield) await new Promise(r => setTimeout(r, 0));
-                    if (processInferred) {
-                        processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
-                    } else {
-                        assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                if (configs) {
+                    // Multi-element: zip configs with element nodes
+                    const elements = clonedNodes.filter(n => n instanceof Element) as Element[];
+                    const len = Math.min(elements.length, configs.length);
+                    for (let j = 0; j < len; j++) {
+                        const cfg = configs[j];
+                        assignFrom(elements[j], cfg.assignToFragment ?? {}, { from: item, ...cfg.withOptions });
                     }
+                } else {
+                    const rootEl = clonedNodes.find(n => n instanceof Element) as Element | undefined;
+                    if (rootEl) {
+                        const tempContainer = document.createDocumentFragment();
+                        tempContainer.appendChild(content);
 
-                    if (sourceAssignToFragment && options?.from) {
-                        assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                        if (processInferred) {
+                            processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
+                        } else {
+                            assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                        }
+
+                        if (sourceAssignToFragment && options?.from) {
+                            assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                        }
                     }
                 }
 
