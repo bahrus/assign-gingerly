@@ -125,13 +125,13 @@
                     //     infer: { byItemprop: true }
                     // },
                     assignToFragment: {
-                        '#[a]': '?.id',
-                        '#[b]': '?.label'
+                        '#[a]?.textContent': '?.id',
+                        '#[b]?.textContent': '?.label'
                     },
                     withOptions:{
                         withIds: {
-                            a: { path: [0, 1] , expect: '.a', fallback: true},
-                            b: { path: [0, 2] , expect: '.b', fallback: true},
+                            a: { path: [0] , expectx: '.a', fallback: true},
+                            b: { path: [1] , expectx: '.b', fallback: true},
                         }
                     },
                     resolve: { key: '?.id' }

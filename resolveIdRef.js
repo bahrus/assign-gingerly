@@ -18,14 +18,15 @@ const idCacheMap = new WeakMap();
 const idCounterMap = new WeakMap();
 /**
  * Generate a unique ID within a rootNode.
- * Format: _ag0, _ag1, _ag2, ...
+ * Format: -ag:0, -ag:1, -ag:2, ...
+ * Starts with '-' and contains ':' to avoid collision with JS identifiers/globalThis properties.
  */
 function generateUniqueId(rootNode) {
     let counter = idCounterMap.get(rootNode) ?? 0;
     let id;
     // Ensure uniqueness (skip if ID already exists in the document)
     do {
-        id = `_ag${counter}`;
+        id = `-ag:${counter}`;
         counter++;
     } while (rootNode.getElementById?.(id));
     idCounterMap.set(rootNode, counter);
@@ -90,8 +91,8 @@ export function resolveIdVariable(varName, target, withIds) {
         }
         el = current instanceof Element ? current : null;
         // Validation: check if resolved element matches expected selector
-        if (el && config.expect) {
-            const didNotMatch = !el.matches(config.expect);
+        if (config.expect) {
+            const didNotMatch = !el || !el.matches(config.expect);
             if (didNotMatch) {
                 if (config.fallback) {
                     el = target.querySelector?.(config.expect) ?? el;
