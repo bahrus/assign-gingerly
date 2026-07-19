@@ -8,10 +8,10 @@ Allow `builtIns.join` to accept the same `{prop, val}` structure that `microData
 
 ```js
 // Start with join (flat string output):
-{ do: 'builtIns.join', resolve: { template: [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'lastName', val: '?.lastName' }] } }
+{ do: 'builtIns.join', get: { template: [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'lastName', val: '?.lastName' }] } }
 
 // Upgrade to semantic HTML (just change `do`):
-{ do: 'builtIns.microDataJoin', resolve: { template: [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'lastName', val: '?.lastName' }] } }
+{ do: 'builtIns.microDataJoin', get: { template: [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'lastName', val: '?.lastName' }] } }
 ```
 
 ## Status

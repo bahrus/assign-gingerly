@@ -36,11 +36,13 @@ export function isTernaryCommand(key) {
  * Parse a ?= ternary command and extract the LHS path.
  */
 export function parseTernaryCommand(key) {
-    if (!isTernaryCommand(key)) return null;
+    if (!isTernaryCommand(key))
+        return null;
     return key.substring(0, key.length - 3); // Remove ' ?=' suffix
 }
 /**
- * Resolve a single value for ternary evaluation.
+ * Resolve a single value — if it's a `?.` path string, resolve against source.
+ * If it's a protocol string, resolve via protocol. Otherwise pass through as literal.
  */
 function resolveTernaryValue(value, source, options) {
     if (typeof value === 'string' && value.startsWith('?.')) {
@@ -51,6 +53,7 @@ function resolveTernaryValue(value, source, options) {
         });
     }
     if (typeof value === 'string' && value.includes('://') && options.protocols) {
+        // Check if it matches a known protocol
         const protoEnd = value.indexOf('://');
         const protocol = value.substring(0, protoEnd);
         if (options.protocols[protocol]) {
@@ -64,42 +67,61 @@ function resolveTernaryValue(value, source, options) {
     return value;
 }
 /**
- * Symbol to signal "skip assignment" from ternary guard forms.
+ * Evaluate a ?= ternary expression.
+ *
+ * Supported forms:
+ * - [ifTruthy, thenResult]                         — guard (skip if falsy)
+ * - [ifTruthy, thenResult, elseResult]             — ternary
+ * - [ifTrue, trueResult, falseResult, neither]     — three-state (true/false/nullish)
+ * - [[lhs, rhs], ifEqual, ifNotEqual?]             — equality comparison
+ * - [[lhs, rhs], ifEqual]                          — equality guard
+ *
+ * Returns undefined to signal "skip assignment" (guard forms when condition not met).
  */
 const TERNARY_SKIP = Symbol('ternary-skip');
-/**
- * Evaluate a ?= ternary expression.
- */
 function evaluateTernary(arr, source, options) {
     const condition = arr[0];
     if (Array.isArray(condition)) {
-        // Comparison mode
+        // Comparison mode: [[lhs, rhs], ...] or [[lhs, op, rhs], ...]
         const lhs = resolveTernaryValue(condition[0], source, options);
         if (condition.length === 2) {
+            // Equality: [[lhs, rhs], result, elseResult?]
             const rhs = resolveTernaryValue(condition[1], source, options);
             if (lhs === rhs) {
                 return resolveTernaryValue(arr[1], source, options);
-            } else {
+            }
+            else {
                 return arr.length > 2 ? resolveTernaryValue(arr[2], source, options) : TERNARY_SKIP;
             }
-        } else {
+        }
+        else {
+            // Operator: [[lhs, op, rhs], result, elseResult?]
             const op = condition[1];
             const rhs = resolveTernaryValue(condition[2], source, options);
             const satisfied = compareWithOp(lhs, op, rhs);
             if (satisfied) {
                 return resolveTernaryValue(arr[1], source, options);
-            } else {
+            }
+            else {
                 return arr.length > 2 ? resolveTernaryValue(arr[2], source, options) : TERNARY_SKIP;
             }
         }
-    } else {
+    }
+    else {
+        // Truthiness mode
         const resolved = resolveTernaryValue(condition, source, options);
         if (arr.length === 4) {
-            if (resolved == null) return resolveTernaryValue(arr[3], source, options);
+            // [ifTrue, trueResult, falseResult, neitherResult]
+            if (resolved == null)
+                return resolveTernaryValue(arr[3], source, options);
             return resolved ? resolveTernaryValue(arr[1], source, options) : resolveTernaryValue(arr[2], source, options);
-        } else if (arr.length === 3) {
+        }
+        else if (arr.length === 3) {
+            // [ifTruthy, thenResult, elseResult]
             return resolved ? resolveTernaryValue(arr[1], source, options) : resolveTernaryValue(arr[2], source, options);
-        } else {
+        }
+        else {
+            // [ifTruthy, thenResult] — guard, skip if falsy
             return resolved ? resolveTernaryValue(arr[1], source, options) : TERNARY_SKIP;
         }
     }
@@ -115,7 +137,7 @@ function compareWithOp(lhs, op, rhs) {
         case '>=': return lhs >= rhs;
         case '<': return lhs < rhs;
         case '<=': return lhs <= rhs;
-        default: return lhs === rhs;
+        default: return lhs === rhs; // fallback to equality
     }
 }
 /**
@@ -312,9 +334,11 @@ export function assignFrom(target, pattern, options, permissions) {
         const ternaryResolved = {};
         for (const key of ternaryKeys) {
             const lhsPath = parseTernaryCommand(key);
-            if (!lhsPath) continue;
+            if (!lhsPath)
+                continue;
             const arr = expandedPattern[key];
-            if (!Array.isArray(arr) || arr.length < 2) continue;
+            if (!Array.isArray(arr) || arr.length < 2)
+                continue;
             const result = evaluateTernary(arr, options.from, options);
             if (result !== TERNARY_SKIP) {
                 ternaryResolved[lhsPath] = result;
@@ -343,7 +367,8 @@ export function assignFrom(target, pattern, options, permissions) {
                                     aka: options.aka,
                                     protocols: options.protocols
                                 });
-                            } else {
+                            }
+                            else {
                                 normalPattern[key] = el.id; // bare #[x] → ID string
                             }
                         }

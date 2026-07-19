@@ -794,19 +794,22 @@ export function assignGingerly(target, source, options, permissions) {
                     if (withMethodsSet) {
                         const result = evaluatePathWithMethods(target, parsePath(path), value, withMethodsSet);
                         mergeTarget = result.target[result.lastKey];
-                    } else {
+                    }
+                    else {
                         const pathParts = parsePath(path);
                         mergeTarget = target;
                         for (const part of pathParts) {
                             if (mergeTarget && typeof mergeTarget === 'object' && part in mergeTarget) {
                                 mergeTarget = mergeTarget[part];
-                            } else {
+                            }
+                            else {
                                 mergeTarget = undefined;
                                 break;
                             }
                         }
                     }
-                } else {
+                }
+                else {
                     mergeTarget = target[path];
                 }
                 // Recursively merge if target is a valid object

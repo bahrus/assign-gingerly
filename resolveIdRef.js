@@ -74,7 +74,8 @@ export function resolveIdVariable(varName, target, withIds) {
         // Array form: child index path — traverse children[i] for each index
         let current = target;
         for (const idx of config) {
-            if (!current || !current.children) break;
+            if (!current || !current.children)
+                break;
             current = current.children[idx];
         }
         el = current instanceof Element ? current : null;
@@ -83,7 +84,8 @@ export function resolveIdVariable(varName, target, withIds) {
         // Object form with path: { path, expect?, fallback? }
         let current = target;
         for (const idx of config.path) {
-            if (!current || !current.children) break;
+            if (!current || !current.children)
+                break;
             current = current.children[idx];
         }
         el = current instanceof Element ? current : null;
@@ -95,11 +97,12 @@ export function resolveIdVariable(varName, target, withIds) {
                     el = target.querySelector?.(config.expect) ?? el;
                 }
                 // Fire-and-forget: log correction suggestion
-                const capturedVarName = varName;
+                const capturedEl = el;
                 const capturedConfig = config;
+                const capturedVarName = varName;
                 import('./withIdsCorrector.js').then(module => {
                     module.logConfigCorrection(target, capturedVarName, capturedConfig);
-                }).catch(() => {});
+                }).catch(() => { });
             }
         }
     }

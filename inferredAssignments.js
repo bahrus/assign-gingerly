@@ -44,9 +44,11 @@ export function processInferredAssignments(target, from, config) {
         let scopeBoundary;
         if (effectiveByName === true) {
             keys = Object.keys(from);
-        } else if (Array.isArray(effectiveByName)) {
+        }
+        else if (Array.isArray(effectiveByName)) {
             keys = effectiveByName;
-        } else {
+        }
+        else {
             // Object form: { props, outside }
             keys = effectiveByName.props === true ? Object.keys(from) : effectiveByName.props;
             scopeBoundary = effectiveByName.outside;

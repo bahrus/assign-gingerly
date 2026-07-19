@@ -66,8 +66,8 @@
 
     <template id="row-tpl">
         <tr>
-            <td></td>
-            <td></td>
+            <td class="a"></td>
+            <td class="b"></td>
             <td><button class="remove">×</button></td>
         </tr>
     </template>
@@ -117,13 +117,23 @@
                     forget: true,
                 },
                 fromEachItem: {
-                    assignToFragment: {
-                        '?.cells?.0?.textContent': '?.id',
-                        '?.cells?.1?.textContent': '?.label'
-                    },
+                    // assignToFragment: {
+                    //     '?.cells?.0?.textContent': '?.id',
+                    //     '?.cells?.1?.textContent': '?.label'
+                    // },
                     // withOptions: {
                     //     infer: { byItemprop: true }
                     // },
+                    assignToFragment: {
+                        '#[a]': '?.id',
+                        '#[b]': '?.label'
+                    },
+                    withOptions:{
+                        withIds: {
+                            a: { path: [0, 1] , expect: '.a', fallback: true},
+                            b: { path: [0, 2] , expect: '.b', fallback: true},
+                        }
+                    },
                     resolve: { key: '?.id' }
                 }
             }
