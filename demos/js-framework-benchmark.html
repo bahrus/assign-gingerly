@@ -66,8 +66,8 @@
 
     <template id="row-tpl">
         <tr>
-            <td></td>
-            <td></td>
+            <td class="a"></td>
+            <td class="b"></td>
             <td><button class="remove">×</button></td>
         </tr>
     </template>
@@ -129,9 +129,9 @@
                         '#[b]?.textContent': '?.label'
                     },
                     withOptions:{
-                        withIds: {
-                            a: { path: [0] , expectx: '.a', fallback: true},
-                            b: { path: [1] , expectx: '.b', fallback: true},
+                        at: {
+                            a: { path: [0] , expect: '.a', fallback: true},
+                            b: { path: [1] , expect: '.b', fallback: true},
                         }
                     },
                     resolve: { key: '?.id' }

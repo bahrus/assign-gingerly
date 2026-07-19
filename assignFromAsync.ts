@@ -52,6 +52,17 @@ export interface AssignFromOptions extends IAssignGingerlyOptions {
   withIds?: Record<string, string | { qry: string }>;
 
   /**
+   * Positional element references for use with `#[varName]` syntax.
+   * Resolves elements by child index path — no IDs assigned, no caching.
+   * 
+   * - Array value: child index path (e.g., [0, 1] = target.children[0].children[1])
+   * - Object value: { path: [...], expect?: 'selector', fallback?: true }
+   *   expect: validates via element.matches(), logs correction if wrong
+   *   fallback: on mismatch, recovers via querySelector(expect)
+   */
+  at?: Record<string, number[] | { path: number[]; expect?: string; fallback?: boolean }>;
+
+  /**
    * Handler implementations scoped to this call.
    * Key: the `do` name referenced in handler configs.
    * Value: a class constructor, or an import path to dynamically load one.
@@ -153,13 +164,14 @@ export async function assignFromAsync(
   }
 
   // Process #[x] normal keys — resolve element, then apply remaining path + value
-  if (idRefNormalKeys.length > 0 && options.withIds) {
+  if (idRefNormalKeys.length > 0 && (options.withIds || options.at)) {
+    const ids = { ...options.withIds, ...options.at };
     const { resolveIdVariable, parseIdRef } = await import('./resolveIdRef.js');
     for (const key of idRefNormalKeys) {
       const parsed = parseIdRef(key);
       if (!parsed) continue;
 
-      const el = resolveIdVariable(parsed.varName, target, options.withIds);
+      const el = resolveIdVariable(parsed.varName, target, ids);
       if (!el) continue;
 
       const value = expandedPattern[key];
@@ -193,7 +205,8 @@ export async function assignFromAsync(
     await _processHandlerCommands(target, handlerKeys, expandedPattern, options, permissions);
   }
   // Process #[x] handler keys — resolve element, then pass to handler processing
-  if (idRefHandlerKeys.length > 0 && options.withIds) {
+  if (idRefHandlerKeys.length > 0 && (options.withIds || options.at)) {
+    const ids = { ...options.withIds, ...options.at };
     const { resolveIdVariable, parseIdRef } = await import('./resolveIdRef.js');
     _processHandlerCommands ??= (await import('./processHandlerCommands.js')).processHandlerCommands;
 
@@ -201,7 +214,7 @@ export async function assignFromAsync(
       const parsed = parseIdRef(key);
       if (!parsed) continue;
 
-      const el = resolveIdVariable(parsed.varName, target, options.withIds);
+      const el = resolveIdVariable(parsed.varName, target, ids);
       if (!el) continue;
 
       // Build a synthetic key for processHandlerCommands:

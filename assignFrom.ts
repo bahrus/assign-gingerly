@@ -299,6 +299,16 @@ export function categorizeKeys(expandedPattern: Record<string, any>) {
 }
 
 /**
+ * Merge withIds and at into a single lookup map for resolveIdVariable.
+ */
+function getEffectiveIds(options: AssignFromOptions): Record<string, any> | undefined {
+  if (!options.withIds && !options.at) return undefined;
+  if (options.withIds && !options.at) return options.withIds;
+  if (!options.withIds && options.at) return options.at;
+  return { ...options.withIds, ...options.at };
+}
+
+/**
  * Process #[x] normal keys synchronously.
  */
 function processIdRefNormalKeys(
@@ -307,13 +317,14 @@ function processIdRefNormalKeys(
   target: any,
   options: AssignFromOptions
 ): void {
-  if (!options.withIds) return;
+  const ids = getEffectiveIds(options);
+  if (!ids) return;
 
   for (const key of idRefNormalKeys) {
     const parsed = parseIdRef(key);
     if (!parsed) continue;
 
-    const el = resolveIdVariable(parsed.varName, target, options.withIds);
+    const el = resolveIdVariable(parsed.varName, target, ids);
     if (!el) continue;
 
     const value = expandedPattern[key];
@@ -381,14 +392,15 @@ export function assignFrom(
   // Process normal keys via getValues (sync) + assignGingerly
   if (Object.keys(normalPattern).length > 0) {
     // Resolve #[x] references on RHS values before getValues
-    if (options.withIds) {
+    if (options.withIds || options.at) {
+      const ids = getEffectiveIds(options)!;
       for (const key of Object.keys(normalPattern)) {
         const value = normalPattern[key];
         if (typeof value === 'string' && value.startsWith('#[')) {
           const closeIdx = value.indexOf(']');
           if (closeIdx !== -1) {
             const varName = value.substring(2, closeIdx);
-            const el = resolveIdVariable(varName, target, options.withIds);
+            const el = resolveIdVariable(varName, target, ids);
             if (el) {
               const remainingPath = value.substring(closeIdx + 1);
               if (remainingPath) {
@@ -429,12 +441,13 @@ export function assignFrom(
   }
 
   // Process #[x] handler keys — fire-and-forget (async)
-  if (idRefHandlerKeys.length > 0 && options.withIds) {
+  if (idRefHandlerKeys.length > 0 && (options.withIds || options.at)) {
+    const ids = getEffectiveIds(options)!;
     import('./processHandlerCommands.js').then(({ processHandlerCommands }) => {
       for (const key of idRefHandlerKeys) {
         const parsed = parseIdRef(key);
         if (!parsed) continue;
-        const el = resolveIdVariable(parsed.varName, target, options.withIds!);
+        const el = resolveIdVariable(parsed.varName, target, ids);
         if (!el) continue;
         const syntheticKey = parsed.remainingPath ? `${parsed.remainingPath} =>` : ' =>';
         const syntheticPattern = { [syntheticKey]: expandedPattern[key] };
