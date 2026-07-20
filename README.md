@@ -3801,6 +3801,7 @@ await assignFromAsync(document.body, {
 | `method` | string | `'appendChild'` (default) or `'prepend'` — where to place markers |
 | `forget` | boolean | If true, removes nodes entirely when `if` is false (default: hides with `hidden` attribute) |
 | `placeholder` | string | Name of a pre-existing marker pair whose content is removed on first activation |
+| `assign` | object | Assignment config applied to cloned content before insertion (see below) |
 
 **Behavior:**
 
@@ -3836,7 +3837,36 @@ await assignFromAsync(container, {
 }, { withMethods: ['querySelector'], from: vm, protocols: { globalThis: k => globalThis[k] } });
 ```
 
-The placeholder is removed only on first activation (one-shot). If `if` later becomes false and then true again, the template is re-shown from its own markers — the placeholder does not reappear.### View Transitions
+The placeholder is removed only on first activation (one-shot). If `if` later becomes false and then true again, the template is re-shown from its own markers — the placeholder does not reappear.
+
+**Assigning values to cloned content (`assign`):**
+
+Use `assign` to populate the cloned template's elements before they are inserted into the DOM. This uses the same pattern as `manageTemplateList`'s `fromEachItem`:
+
+```JavaScript
+await assignFromAsync(container, {
+    '?.querySelector?..panel =>': {
+        do: 'builtIns.lazyLoad',
+        get: {
+            if: '?.showPanel',
+            instantiate: 'globalThis://panelTemplate',
+            assign: {
+                assignToFragment: {
+                    '#[title]?.textContent': '?.panelTitle',
+                    '#[body]?.textContent': '?.panelContent'
+                },
+                withOptions: {
+                    at: { title: [0], body: [1] }
+                }
+            }
+        }
+    }
+}, { from: vm, withMethods: ['querySelector'], protocols: { globalThis: k => globalThis[k] } });
+```
+
+The `assign.assignToFragment` paths resolve against `options.from` (the same source that drives the `if` condition). For multi-element templates, use `assign.configs` (same zip semantics as `manageTemplateList`).
+
+### View Transitions
 
 Both `builtIns.lazyLoad` and `builtIns.lazyLoadSwitch` support animated transitions via the [View Transition API](https://developer.mozilla.org/docs/Web/API/View_Transition_API). Enable with `transitional: true` in the resolve map:
 

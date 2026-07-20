@@ -23,6 +23,7 @@ import type { AssignFromHandler } from '../assignFromAsync.js';
 import type { LazyLoadResolvedParams, LazyLoadInstantiatedContext } from '../types/assign-gingerly/types.js';
 import { withTransition, ensureHideStyle, DEFAULT_HIDE_CLASS } from '../transitionHelper.js';
 import { findMarkers, createMarkers, getNodesBetweenMarkers, findMarkersSibling, createMarkersSibling, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
+import { assignFrom } from '../assignFrom.js';
 
 export type { LazyLoadResolvedParams, LazyLoadInstantiatedContext };
 
@@ -46,13 +47,15 @@ function getMarkerName(templateEl: any): string {
  */
 export class LazyLoadHandler implements AssignFromHandler {
     config: any;
+    _options: any;
     static #markerCounter = 0;
 
     constructor(config: any) {
         this.config = config;
     }
 
-    async assign(lhsTarget: any, resolvedParams: LazyLoadResolvedParams): Promise<void> {
+    async assign(lhsTarget: any, resolvedParams: LazyLoadResolvedParams, options?: any): Promise<void> {
+        this._options = options; // Store for applyAssign access
         const {
             if: condition,
             instantiate,
@@ -240,6 +243,10 @@ export class LazyLoadHandler implements AssignFromHandler {
         }
 
         const nodes = Array.from(content.childNodes);
+
+        // Apply assignments to cloned content before insertion
+        this.applyAssign(nodes, resolvedParams);
+
         endMarker.parentNode!.insertBefore(content, endMarker);
         return nodes;
     }
@@ -270,6 +277,9 @@ export class LazyLoadHandler implements AssignFromHandler {
         // Capture nodes before insertion (childNodes empties after insertBefore)
         const nodes = Array.from(content.childNodes);
 
+        // Apply assignments to cloned content before insertion
+        this.applyAssign(nodes, resolvedParams);
+
         // Insert before endMarker
         endMarker.parentNode!.insertBefore(content, endMarker);
 
@@ -288,6 +298,30 @@ export class LazyLoadHandler implements AssignFromHandler {
         }
 
         return nodes;
+    }
+
+    /**
+     * Apply assignFrom to cloned nodes based on the `assign` config.
+     * Supports single-element and multi-element (configs array) templates.
+     */
+    protected applyAssign(nodes: Node[], resolvedParams: LazyLoadResolvedParams): void {
+        const assign = (resolvedParams as any).assign;
+        if (!assign) return;
+
+        const elements = nodes.filter(n => n instanceof Element) as Element[];
+        if (elements.length === 0) return;
+
+        const from = this._options?.from ?? {};
+
+        if (assign.configs && Array.isArray(assign.configs)) {
+            const len = Math.min(elements.length, assign.configs.length);
+            for (let j = 0; j < len; j++) {
+                const cfg = assign.configs[j];
+                assignFrom(elements[j], cfg.assignToFragment ?? {}, { from, ...cfg.withOptions });
+            }
+        } else if (assign.assignToFragment) {
+            assignFrom(elements[0], assign.assignToFragment, { from, ...assign.withOptions });
+        }
     }
 
     /**

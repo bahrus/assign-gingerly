@@ -37,13 +37,16 @@ function getMarkerName(templateEl) {
  *
  * Exported so it can be subclassed for custom behavior.
  */
+import { assignFrom } from '../assignFrom.js';
 export class LazyLoadHandler {
     config;
+    _options;
     static #markerCounter = 0;
     constructor(config) {
         this.config = config;
     }
-    async assign(lhsTarget, resolvedParams) {
+    async assign(lhsTarget, resolvedParams, options) {
+        this._options = options;
         const { if: condition, instantiate, method = 'appendChild', forget = false, transitional = false, hideClass = DEFAULT_HIDE_CLASS, hideCss, markerName, toggleInert = false, toggleDisabled = false, placeholder } = resolvedParams;
         if (!(lhsTarget instanceof Element)) {
             throw new Error('builtIns.lazyLoad: lhsTarget must be a DOM Element');
@@ -174,6 +177,7 @@ export class LazyLoadHandler {
             throw new Error(`builtIns.lazyLoad: instantiate must resolve to an HTMLTemplateElement or DocumentFragment`);
         }
         const nodes = Array.from(content.childNodes);
+        this.applyAssign(nodes, resolvedParams);
         endMarker.parentNode.insertBefore(content, endMarker);
         return nodes;
     }
@@ -189,6 +193,7 @@ export class LazyLoadHandler {
             throw new Error(`builtIns.lazyLoad: instantiate must resolve to an HTMLTemplateElement or DocumentFragment`);
         }
         const nodes = Array.from(content.childNodes);
+        this.applyAssign(nodes, resolvedParams);
         endMarker.parentNode.insertBefore(content, endMarker);
         await this.onCloneInserted(nodes, lhsTarget, resolvedParams);
         if (resolvedParams.onInstantiated && typeof resolvedParams.onInstantiated === 'function') {
@@ -201,6 +206,22 @@ export class LazyLoadHandler {
             await resolvedParams.onInstantiated(ctx);
         }
         return nodes;
+    }
+    applyAssign(nodes, resolvedParams) {
+        const assign = resolvedParams.assign;
+        if (!assign) return;
+        const elements = nodes.filter(n => n instanceof Element);
+        if (elements.length === 0) return;
+        const from = this._options?.from ?? {};
+        if (assign.configs && Array.isArray(assign.configs)) {
+            const len = Math.min(elements.length, assign.configs.length);
+            for (let j = 0; j < len; j++) {
+                const cfg = assign.configs[j];
+                assignFrom(elements[j], cfg.assignToFragment ?? {}, { from, ...cfg.withOptions });
+            }
+        } else if (assign.assignToFragment) {
+            assignFrom(elements[0], assign.assignToFragment, { from, ...assign.withOptions });
+        }
     }
     async onCloneInserted(nodes, lhsTarget, resolvedParams) {
         // No-op by default. Subclasses override.

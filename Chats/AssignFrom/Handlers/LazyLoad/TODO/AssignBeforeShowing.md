@@ -117,3 +117,28 @@ No — `lazyLoadSwitch` extends `lazyLoad` and delegates via `super.assign(...)`
 | Existing behavior | Unchanged when `assign` is absent |
 
 This is a clean extension that reuses the exact pattern established by `manageTemplateList` without duplicating logic.
+
+---
+
+## Human Response I
+
+Sounds good.  Please implement and document it.
+
+---
+
+## AI Implementation Notes
+
+Done. Implemented `assign` param for `builtIns.lazyLoad` (and `builtIns.lazyLoadSwitch` inherits automatically).
+
+**Files modified:**
+- `handlers/lazyLoad.ts` / `.js` — added `assignFrom` import, `_options` field, `applyAssign` method, calls in both `cloneAndInsertSync` and `cloneAndInsert`
+- `types/assign-gingerly/types.d.ts` — added `assign?` to `LazyLoadResolvedParams`
+- `README.md` — added `assign` to parameters table + usage example
+
+**Behavior:**
+- `assign.assignToFragment` + `assign.withOptions` — single-element template
+- `assign.configs` — multi-element template (zip semantics)
+- `from` source is `options.from` (the outer VM)
+- Assignments happen after cloning, before DOM insertion
+- `lazyLoadSwitch` inherits via `super.assign()` — no changes needed
+- Zero cost when `assign` is absent
