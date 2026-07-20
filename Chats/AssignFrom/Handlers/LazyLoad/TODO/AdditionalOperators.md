@@ -17,6 +17,8 @@ From the [LazyLoadSwitch](./LazyLoadSwitch.md) discussion, the initial set of op
 | `'startsWith'` | `lhs.startsWith(rhs)` | Prefix matching (route segments) |
 | `'endsWith'` | `lhs.endsWith(rhs)` | Suffix matching |
 | `'typeof'` | `typeof lhs === rhs` | Type checking |
+| `'nearlyEq'` | `tbd` | Close Enough |
+| `'custom'` | `tbd` | Edge cases
 
 ## Notes
 
