@@ -4057,9 +4057,9 @@ assignFrom(oElement, {
 assignFrom(oElement, {
     '?.textContent =>': {
         do: 'builtIns.join',
-        separator: ' | ',
         get: {
-            value: ['?.firstName', '?.lastName']
+            value: ['?.firstName', '?.lastName'],
+            separator: ' | '
         }
     }
 }, { from: vm });

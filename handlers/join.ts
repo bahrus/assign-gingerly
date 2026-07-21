@@ -71,8 +71,7 @@ export class JoinHandler implements AssignFromHandler {
     }
 
     async assign(lhsTarget: any, resolvedParams: Record<string, any>): Promise<string> {
-        const { value } = resolvedParams;
-        const separator = this.config.separator ?? '';
+        const { value, separator = '' } = resolvedParams;
 
         const items = Array.isArray(value) ? processValue(value) : [value];
         return items.join(separator);

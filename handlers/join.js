@@ -66,8 +66,7 @@ export class JoinHandler {
         this.config = config;
     }
     async assign(lhsTarget, resolvedParams) {
-        const { value } = resolvedParams;
-        const separator = this.config.separator ?? '';
+        const { value, separator = '' } = resolvedParams;
         const items = Array.isArray(value) ? processValue(value) : [value];
         return items.join(separator);
     }
