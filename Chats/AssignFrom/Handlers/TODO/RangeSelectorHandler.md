@@ -185,3 +185,24 @@ This is ~10 lines of handler code. Very lightweight.
 | Lazy-loadable | Yes (built-in, loaded on demand) |
 
 Want me to implement with the `null` catch-all format, or do you prefer your original `[]`/`[20]` distinction?
+
+## Human Response I
+
+Good feedback.
+
+Taking a fresh look:
+
+```JS
+get: {
+    select: '?.count',
+    ranges: [
+        {ubInc: 10, merge: { status: 'low', statusMessage: 'Low count' }},
+        {ub: 20, merge: { status: 'medium', statusMessage: 'Medium count' }},
+        {merge: { status: 'high', statusMessage: 'High count!' }}
+    ],
+}
+```
+
+ubInc means <=.  ub neabs <.
+
+We should note when we document/type this that false < true.  And ub/ubInc can also be a string
