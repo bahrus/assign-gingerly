@@ -222,3 +222,121 @@ get: {
 ```
 
 Or compare/wuth?  Any others?
+
+---
+
+## AI Response II
+
+The inline `merge` per case is a big improvement — it eliminates the indirection of key-matching between `ranges` and a separate `merge` map. Each case is self-contained: condition + result in one object. Much easier to read and maintain.
+
+### On naming: `select`/`ranges` vs `switch`/`case` vs others
+
+| Naming | Pros | Cons |
+|--------|------|------|
+| `switch`/`case` | Familiar from JS syntax, immediately readable | `switch` is a reserved word — can't destructure without quoting. Also implies exact match, not ranges |
+| `select`/`ranges` | Descriptive, no reserved word clash | `ranges` implies numeric only (might not match string/boolean use) |
+| `compare`/`with` | Generic, works for any type | `with` is a reserved word (strict mode) |
+| `value`/`when` | Clean, evokes pattern matching (`match`/`when` in other languages) | `value` is overloaded in many contexts |
+| `on`/`when` | Very concise: "on this value, when..." | `on` might be confused with event handling |
+
+**My pick: `value`/`when`**
+
+```JS
+get: {
+    value: '?.count',
+    when: [
+        { '<=': 10, merge: { status: 'low', statusMessage: 'Low count' } },
+        { '<': 20, merge: { status: 'medium', statusMessage: 'Medium count' } },
+        { merge: { status: 'high', statusMessage: 'High count!' } }
+    ],
+}
+```
+
+Reads naturally: "value is count; when ≤ 10 merge low; when < 20 merge medium; otherwise merge high." No reserved words, no confusion with event handlers or existing `select` DOM semantics.
+
+Runner-up: `switch`/`case` is the most instantly recognizable, and the reserved-word issue is minor since it's inside an object literal (quoted keys are fine in JSON configs anyway).
+
+### On the operator keys (`<=`, `<`)
+
+I like this — it's self-documenting. The supported set would be:
+
+| Key | Meaning |
+|-----|---------|
+| `<=` | value ≤ threshold |
+| `<` | value < threshold |
+| `>=` | value ≥ threshold |
+| `>` | value > threshold |
+| `===` | exact match |
+| `!==` | not equal |
+| (none) | default/catch-all |
+
+For the common `<=` case (which is what the original `updateStatus` uses), this reads cleanly. And yes, good call that `false < true` and strings compare lexicographically — worth documenting.
+
+### One thought: what about multiple conditions per case?
+
+```JS
+{ '>=': 10, '<': 20, merge: { ... } }  // 10 ≤ value < 20
+```
+
+This would mean "all conditions must be true" (AND). Gives you open intervals without needing the sequential evaluation trick. The first case in your example would be `{ '<=': 10, merge: {...} }` — just one condition. But `{ '>=': 10, '<': 20 }` gives you a proper range band.
+
+This is a natural extension of the single-operator format — no new syntax, just allows multiple operator keys per case object. The handler checks all operator keys and requires all to pass.
+
+### Summary recommendation
+
+```JS
+{
+    do: 'builtIns.rangeSelector',
+    get: {
+        value: '?.count',
+        when: [
+            { '<=': 10, merge: { status: 'low', statusMessage: 'Low count' } },
+            { '<': 20, merge: { status: 'medium', statusMessage: 'Medium count' } },
+            { merge: { status: 'high', statusMessage: 'High count!' } }
+        ]
+    }
+}
+```
+
+- `value` / `when` naming (or `switch`/`case` if you prefer familiarity over reserved-word avoidance)
+- First matching case wins (short-circuit)
+- No operator keys = default/catch-all
+- Multiple operators per case = AND logic (future-proof)
+- `merge` in each case is applied via `assignGingerly(target, merge)`
+
+---
+
+## Human Response II
+
+Let's go with your recommendations.  Please implement.
+
+---
+
+## AI Implementation Notes
+
+Done. Created `builtIns.rangeSelector`:
+
+**Files created:**
+- `handlers/rangeSelector.ts` / `.js` — ~50 lines (handler class + condition matching)
+
+**Files updated:**
+- `processHandlerCommands.ts` / `.js` — registered in `BUILT_IN_MAP`
+- `builtInEmoji.ts` / `.js` — added `📊` mapping
+- `README.md` — documented with example, operator table, and behavior notes
+
+**API:**
+```JS
+{
+    do: 'builtIns.rangeSelector',
+    get: {
+        value: '?.count',
+        when: [
+            { '<=': 10, merge: { status: 'low' } },
+            { '>=': 10, '<': 20, merge: { status: 'medium' } },  // AND logic
+            { merge: { status: 'high' } }                         // catch-all
+        ]
+    }
+}
+```
+
+First match wins. Merges via `assignGingerly(target, merge)`. Fully JSON-serializable.

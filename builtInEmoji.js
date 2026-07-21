@@ -20,6 +20,7 @@ export const builtInEmoji = {
     '🔗': 'builtIns.join',
     '🏷️': 'builtIns.microDataJoin',
     '📋': 'builtIns.manageTemplateList',
+    '📊': 'builtIns.rangeSelector',
 };
 
 export default builtInEmoji;

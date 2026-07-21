@@ -28,6 +28,7 @@ export const builtInEmoji: Record<string, string> = {
     '🔗': 'builtIns.join',
     '🏷️': 'builtIns.microDataJoin',
     '📋': 'builtIns.manageTemplateList',
+    '📊': 'builtIns.rangeSelector',
 };
 
 export default builtInEmoji;

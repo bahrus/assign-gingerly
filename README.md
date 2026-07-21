@@ -4237,6 +4237,42 @@ get: {
 
 For full details, see [docs/manage-template-list.md](docs/manage-template-list.md).
 
+### Built-in handler: `builtIns.rangeSelector`
+
+Evaluates a value against a series of range conditions and merges the matched case's properties into the target. Converts imperative if/else-if chains into declarative JSON configs.
+
+```JavaScript
+assignFrom(element, {
+    '?. =>': {
+        do: 'builtIns.rangeSelector',
+        get: {
+            value: '?.count',
+            when: [
+                { '<=': 10, merge: { status: 'low', statusMessage: 'Low count' } },
+                { '<': 20, merge: { status: 'medium', statusMessage: 'Medium count' } },
+                { merge: { status: 'high', statusMessage: 'High count!' } }
+            ]
+        }
+    }
+}, { from: vm });
+```
+
+**How it works:**
+
+1. Resolves `value` from the source (e.g., `vm.count`)
+2. Iterates `when` cases in order — first match wins
+3. Each case can have operator keys (`<=`, `<`, `>=`, `>`, `===`, `!==`) as conditions
+4. Multiple operators per case = AND logic (e.g., `{ '>=': 10, '<': 20, merge: {...} }`)
+5. No operator keys = default/catch-all
+6. Merges the matched case's `merge` object into the target via `assignGingerly`
+
+**Supported operators:** `<=`, `<`, `>=`, `>`, `===`, `!==`
+
+**Notes:**
+- Comparison uses JavaScript semantics (`false < true`, strings compare lexicographically)
+- Fully JSON-serializable — no functions, no special types
+- Lazy-loaded on demand like all built-in handlers
+
 ## Typed Path Authoring with `paths`, `sp`, and `md`
 
 For JSON generated config files generated from TypeScript/`.mts`/`mjs` files during a build or server-side rendering, the `paths` utility provides compile-time autocomplete and type safety for `?.`-prefixed path strings. The `sp` tagged template literal ("split into parts") produces arrays suitable for `builtIns.join`. The `md` tagged template literal produces `{prop, val}` objects suitable for `builtIns.microDataJoin`.

@@ -21,6 +21,7 @@ const BUILT_IN_MAP: Record<string, string> = {
     'builtIns.join': './handlers/join.js',
     'builtIns.microDataJoin': './handlers/microDataJoin.js',
     'builtIns.manageTemplateList': './handlers/manageTemplateList.js',
+    'builtIns.rangeSelector': './handlers/rangeSelector.js',
 };
 
 /**
