@@ -196,13 +196,29 @@ Taking a fresh look:
 get: {
     select: '?.count',
     ranges: [
-        {ubInc: 10, merge: { status: 'low', statusMessage: 'Low count' }},
-        {ub: 20, merge: { status: 'medium', statusMessage: 'Medium count' }},
+        {'<=': 10, merge: { status: 'low', statusMessage: 'Low count' }},
+        {'<': 20, merge: { status: 'medium', statusMessage: 'Medium count' }},
         {merge: { status: 'high', statusMessage: 'High count!' }}
     ],
 }
 ```
 
-ubInc means <=.  ub neabs <.
 
-We should note when we document/type this that false < true.  And ub/ubInc can also be a string
+We should note when we document/type this that false < true.  And ub/ubInc can also be a string.
+
+What do think?
+
+What about alternatives to select, ranges:
+
+```JS
+get: {
+    switch: '?.count',
+    case: [
+        {'<=': 10, merge: { status: 'low', statusMessage: 'Low count' }},
+        {'<': 20, merge: { status: 'medium', statusMessage: 'Medium count' }},
+        {merge: { status: 'high', statusMessage: 'High count!' }}
+    ],
+}
+```
+
+Or compare/wuth?  Any others?
