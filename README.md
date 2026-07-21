@@ -300,7 +300,7 @@ In real-world use cases, you often need to replace one object with another of a 
 
 **Exception: classes with `static assignTo`**
 
-If the current value is an instance of a class that defines [`static assignTo`](#custom-assignment-with-static-assignto-protocol), that method is called instead of replacing. This allows classes to opt into custom assignment behavior (e.g., reactive models, validated records, iterable collections with private lists):
+If the current value is an instance of a class that defines `static assignTo`, that method is called instead of replacing. This allows classes to opt into custom assignment behavior (e.g., reactive models, validated records, iterable collections with private lists). See the full [Custom Assignment with `static assignTo` Protocol](#custom-assignment-with-static-assignto-protocol) section below for details, examples, and the method signature.
 
 ```TypeScript
 class TodoList {
@@ -4631,7 +4631,7 @@ assignGingerly(shadowRoot, {
 
 ## Custom Assignment with `static assignTo` Protocol
 
-Classes can opt into custom assignment behavior by defining a `static assignTo` method. When `assignGingerly` encounters a property whose current value is an instance of such a class, it delegates the assignment to `assignTo` instead of performing the default merge/replace logic.
+As [introduced earlier](#example-3b---class-instances-are-normally-replaced), classes can opt into custom assignment behavior by defining a `static assignTo` method. When `assignGingerly` encounters a property whose current value is an instance of such a class, it delegates the assignment to `assignTo` instead of performing the default merge/replace logic. This section covers the full API, method signature, and advanced use cases.
 
 ```JavaScript
 class ReactiveModel {
