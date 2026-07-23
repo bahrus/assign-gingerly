@@ -1312,7 +1312,15 @@ obj
 console.log(obj); // { a: 1, b: { c: 2 }, d: 3 }
 ```
 
-**Note**: The `assignTentatively` method on Object.prototype is simply an alias for `assignGingerly` and does **not** provide the reversibility features of the standalone `assignTentatively` function described in Example 8. For reversible assignments, use the standalone function from `assign-gingerly/assignTentatively`.
+**Note**: The `assignTentatively` method on Object.prototype provides full reversibility — it calls the standalone `assignTentatively` function and returns a reversal object. Apply the reversal with `obj.assignGingerly(reversal)` to undo all changes:
+
+```TypeScript
+const obj = { name: 'Alice', age: 30 };
+const reversal = obj.assignTentatively({ name: 'Bob', score: 100 });
+// obj = { name: 'Bob', age: 30, score: 100 }
+obj.assignGingerly(reversal);
+// obj = { name: 'Alice', age: 30 } — restored
+```
 
 The prototype extensions are non-enumerable and won't appear in `Object.keys()` or `for...in` loops.
 

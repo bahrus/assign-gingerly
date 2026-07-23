@@ -1,4 +1,5 @@
 import assignGingerly, { EnhancementRegistry, ItemscopeRegistry, IAssignGingerlyOptions, getInstanceMap, INSTANCE_MAP_GUID } from './assignGingerly.js';
+import assignTentatively from './assignTentatively.js';
 import { EnhancementConfig, SpawnContext } from './types/assign-gingerly/types.js';
 import { parseWithAttrs } from './parseWithAttrs.js';
 
@@ -60,22 +61,24 @@ declare global {
     ): this;
 
     /**
-     * Alias for assignGingerly. Carefully merge properties from a source object into this object.
-     * Supports nested paths with ?. notation and dependency injection via registry.
+     * Carefully merge properties from a source object into this object, tracking changes
+     * for reversibility. Returns a reversal object that can undo all modifications.
      * 
      * @param source - The source object to merge
-     * @param options - Optional configuration with registry for dependency injection
-     * @returns This object after merging
+     * @param options - Optional configuration with reversal tracking
+     * @returns A reversal object that, when passed to assignGingerly, undoes the changes
      * 
      * @example
-     * const target = {};
-     * target.assignTentatively({ '?.style?.height': '15px' });
-     * console.log(target); // { style: { height: '15px' } }
+     * const obj = { name: 'Alice', age: 30 };
+     * const reversal = obj.assignTentatively({ name: 'Bob', score: 100 });
+     * // obj = { name: 'Bob', age: 30, score: 100 }
+     * obj.assignGingerly(reversal);
+     * // obj = { name: 'Alice', age: 30 } — score removed, name restored
      */
     assignTentatively(
       source: Record<string | symbol, any>,
-      options?: IAssignGingerlyOptions
-    ): this;
+      options?: { reversal?: Record<string | symbol, any> }
+    ): Record<string | symbol, any>;
   }
 }
 
@@ -567,21 +570,17 @@ Object.defineProperty(Object.prototype, 'assignGingerly', {
 
 /**
  * Adds assignTentatively method to all objects via the Object prototype
- * This is an alias for assignGingerly
+ * Returns a reversal object that can undo the changes when passed to assignGingerly.
  */
 Object.defineProperty(Object.prototype, 'assignTentatively', {
   value: function <T extends object>(
     this: T,
     source: Record<string | symbol, any>,
-    options?: IAssignGingerlyOptions
-  ): T {
-    // Auto-populate registry from customElementRegistry if this is an Element
-    if (this instanceof Element && (!options || !options.registry)) {
-      if (!options) options = {};
-      options.registry = (this as any).customElementRegistry?.enhancementRegistry;
-    }
-    assignGingerly(this, source, options);
-    return this;
+    options?: { reversal?: Record<string | symbol, any> }
+  ): Record<string | symbol, any> {
+    const reversal = options?.reversal ?? {};
+    assignTentatively(this, source, { reversal });
+    return reversal;
   },
   writable: true,
   enumerable: false,
