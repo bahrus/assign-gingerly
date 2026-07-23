@@ -287,16 +287,16 @@ export function categorizeKeys(expandedPattern) {
     return { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys };
 }
 /**
- * Merge withIds and at into a single lookup map for resolveIdVariable.
+ * Merge pin and at into a single lookup map for resolveIdVariable.
  */
 function getEffectiveIds(options) {
-    if (!options.withIds && !options.at)
+    if (!options.pin && !options.at)
         return undefined;
-    if (options.withIds && !options.at)
-        return options.withIds;
-    if (!options.withIds && options.at)
+    if (options.pin && !options.at)
+        return options.pin;
+    if (!options.pin && options.at)
         return options.at;
-    return { ...options.withIds, ...options.at };
+    return { ...options.pin, ...options.at };
 }
 /**
  * Process #[x] normal keys synchronously.
@@ -364,7 +364,7 @@ export function assignFrom(target, pattern, options, permissions) {
     // Process normal keys via getValues (sync) + assignGingerly
     if (Object.keys(normalPattern).length > 0) {
         // Resolve #[x] references on RHS values before getValues
-        if (options.withIds || options.at) {
+        if (options.pin || options.at) {
             const ids = getEffectiveIds(options);
             for (const key of Object.keys(normalPattern)) {
                 const value = normalPattern[key];
@@ -409,7 +409,7 @@ export function assignFrom(target, pattern, options, permissions) {
         });
     }
     // Process #[x] handler keys — fire-and-forget (async)
-    if (idRefHandlerKeys.length > 0 && (options.withIds || options.at)) {
+    if (idRefHandlerKeys.length > 0 && (options.pin || options.at)) {
         const ids = getEffectiveIds(options);
         import('./processHandlerCommands.js').then(({ processHandlerCommands }) => {
             for (const key of idRefHandlerKeys) {

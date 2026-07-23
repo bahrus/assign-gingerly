@@ -266,7 +266,7 @@ fromEachItem: {
 The handler works with all `assignFrom` features inside `withOptions`:
 - `infer` — auto-distribute item properties by itemprop or name
 - `withMethods` — call methods during path evaluation
-- `withIds` — stable element references with auto-assigned IDs (resilient to DOM mutations)
+- `pin` — stable element references with auto-assigned IDs (resilient to DOM mutations)
 - `at` — lightweight positional references by child index (no IDs, no DOM pollution — ideal for repeated templates)
 - `enhance` — bulk-apply enhancements to cloned elements
 
@@ -288,7 +288,7 @@ fromEachItem: {
 }
 ```
 
-`at` resolves elements by child index (~2-4ns) without assigning IDs — keeping the DOM clean when rendering thousands of rows. Use `withIds` with `{ path: [...] }` instead if you need stability against future DOM structural changes (at the cost of adding ID attributes to each element).
+`at` resolves elements by child index (~2-4ns) without assigning IDs — keeping the DOM clean when rendering thousands of rows. Use `pin` with `{ path: [...] }` instead if you need stability against future DOM structural changes (at the cost of adding ID attributes to each element).
 
 ## Optimized Binding (Direct Cell Access)
 

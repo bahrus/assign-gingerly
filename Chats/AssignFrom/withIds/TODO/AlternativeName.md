@@ -94,3 +94,23 @@ Rename `withIds` → `pin`. Support `📍` as an alias for those who like it. Th
 ## Human Response I
 
 Good point about '📍' being hard to type, especially as pin is such a short name.  Let's just support pin only for now.  Please implement this, including updating the documentation and test / demo files.
+
+---
+
+## AI Implementation Notes
+
+Done. Renamed `withIds` → `pin` across the codebase:
+
+**Files updated:**
+- `assignFromAsync.ts` / `.js` — interface field + all usage
+- `assignFrom.ts` / `.js` — `getEffectiveIds` helper + all usage
+- `resolveIdRef.ts` / `.js` — comments and parameter docs
+- `withIdsCorrector.ts` / `.js` — console.warn messages
+- `paths.ts` — example usage
+- `tests/rhs-id-ref.html` — test configs
+- `demos/js-framework-benchmark.html` — demo config
+- `README.md` — all documentation references
+- `docs/manage-template-list.md` — feature list + examples
+- `docs/inferred-assignments.md` — example usage
+
+All diagnostics clean. The `#[x]` syntax is unchanged — it just looks up names in `pin` (or `at`).

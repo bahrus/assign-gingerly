@@ -287,7 +287,7 @@ export function doAssign(...pairs: Record<string, any>[]): { assign: Record<stri
  * const merges = [
  *     ...forEachKeyIn<Person>(['firstName', 'lastName'], (key, $) => ({
  *         ifKeyIn: [key],
- *         assignOptions: { withIds: { [key]: { qry: `[name="${key}"]` } } },
+ *         assignOptions: { pin: { [key]: { qry: `[name="${key}"]` } } },
  *         ...doAssign(set($['#' + key]).to($[key]))
  *     })),
  * ];

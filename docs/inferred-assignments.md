@@ -142,7 +142,7 @@ await assignFrom(container, {
     '#[nav]?.className': '?.navClass',  // cached element ref
 }, {
     from: vm,
-    withIds: { nav: { qry: '.nav-bar' } },
+    pin: { nav: { qry: '.nav-bar' } },
     infer: { byItemprop: ['name', 'email'] }
 });
 ```

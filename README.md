@@ -4387,7 +4387,7 @@ md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, format: 'long' }}`
 
 Both auto-detect path proxies (no `.path` needed inside template literals) and preserve nested arrays for optional segments.
 
-## Cached Element Resolution with `#[x]` and `withIds`
+## Cached Element Resolution with `#[x]` and `pin`
 
 `assignFrom` supports cached element references via the `#[x]` syntax in LHS keys. This provides near-zero-cost repeated access to DOM elements (~10ns via WeakRef) instead of expensive `querySelector` calls (~3,000-17,000ns for class selectors at scale).
 
@@ -4402,7 +4402,7 @@ await assignFromAsync(document.body, {
     }
 }, {
     from: viewModel,
-    withIds: {
+    pin: {
         main: { qry: '.mainView' }  // find by class, auto-assign ID, cache
     }
 });
@@ -4416,12 +4416,12 @@ await assignFromAsync(document.body, {
 4. On subsequent calls, the cached `WeakRef.deref()` returns the element in ~10ns.
 5. If the WeakRef is collected (element was GC'd), falls back to `getElementById` (~10-100ns).
 
-**`withIds` — stable references with auto-assigned IDs:**
+**`pin` — stable references with auto-assigned IDs:**
 
 All forms assign a unique ID to the resolved element (if it doesn't have one). This makes the reference resilient to future DOM mutations — once an element has an ID, it can be found regardless of structural changes.
 
 ```TypeScript
-withIds: {
+pin: {
     x: { qry: '.mainView' },    // querySelector on target, auto-assign ID
     y: 'existingId',             // element already has an ID, cache via WeakRef
     z: { path: [0, 1], expect: 'input', fallback: true },  // child index path + auto-ID + validation
@@ -4451,14 +4451,14 @@ at: {
 - You want a clean DOM (no auto-generated `id` attributes)
 - You're rendering many items (1,000 rows × 2 refs = 2,000 fewer DOM attributes)
 
-Both `withIds` and `at` use the same `#[x]` syntax on LHS and RHS keys.
+Both `pin` and `at` use the same `#[x]` syntax on LHS and RHS keys.
 
 **Validated paths with `expect` and `fallback`:**
 
-Both `withIds` and `at` support the `{ path, expect, fallback }` form for dev-time validation:
+Both `pin` and `at` support the `{ path, expect, fallback }` form for dev-time validation:
 
 ```TypeScript
-withIds: {
+pin: {
     nameInput: { path: [1], expect: 'input' },              // warn if [1] isn't an <input>
     label:     { path: [0], expect: 'label', fallback: true } // warn + recover via querySelector
 }
@@ -4481,7 +4481,7 @@ assignFrom(document.body, {
 }, {
     from: viewModel,
     withMethods: ['querySelector'],
-    withIds: {
+    pin: {
         form: { qry: '.registration-form' },
         header: 'page-header'
     }
@@ -4498,7 +4498,7 @@ await assignFromAsync(container, {
     }
 }, {
     from: router,
-    withIds: { outlet: { qry: '.router-outlet' } },
+    pin: { outlet: { qry: '.router-outlet' } },
     protocols: { globalThis: k => globalThis[k] }
 });
 ```
@@ -4511,7 +4511,7 @@ await assignFromAsync(container, {
 | `getElementById(id)` | 100ns | 20ns | 10ns |
 | `Map<id, WeakRef>.deref()` | 12ns | 40ns | 10ns |
 
-The `#[x]` + `withIds` pattern gives you the Map+WeakRef speed tier automatically.
+The `#[x]` + `pin` pattern gives you the Map+WeakRef speed tier automatically.
 
 **RHS references (`#[x]` on the value side):**
 
@@ -4524,7 +4524,7 @@ assignFrom(form, {
     '?.headerText': '#[info]?.dataset?.user',                    // → nested property access
 }, {
     from: {},
-    withIds: { nameInput: { qry: 'input' }, info: { qry: '.info' } },
+    pin: { nameInput: { qry: 'input' }, info: { qry: '.info' } },
     withMethods: ['querySelector']
 });
 ```

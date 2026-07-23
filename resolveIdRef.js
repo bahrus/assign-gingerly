@@ -1,7 +1,7 @@
 /**
  * resolveIdRef.ts — Cached element resolution via #[x] syntax.
  *
- * Dynamically imported by assignFrom when `withIds` is provided or `#[x]` patterns are detected.
+ * Dynamically imported by assignFrom when `pin` is provided or `#[x]` patterns are detected.
  * Provides lazy, WeakRef-cached element lookups keyed by variable name.
  *
  * First access: runs the query against the target, auto-assigns an ID if needed, caches via WeakRef.
@@ -37,11 +37,11 @@ function generateUniqueId(rootNode) {
  *
  * @param varName - The variable name (e.g., 'x' from '#[x]')
  * @param target - The target element to query against
- * @param withIds - The withIds configuration map
+ * @param pin - The pin configuration map
  * @returns The resolved element, or undefined if not found
  */
-export function resolveIdVariable(varName, target, withIds) {
-    const config = withIds[varName];
+export function resolveIdVariable(varName, target, pin) {
+    const config = pin[varName];
     if (config === undefined)
         return undefined;
     // For 'at' option path-based configs (array or { path }), resolve directly from target — no ID, no caching
@@ -56,10 +56,10 @@ export function resolveIdVariable(varName, target, withIds) {
         return current instanceof Element ? current : undefined;
     }
     if (typeof config === 'object' && 'path' in config && !('qry' in config)) {
-        // Determine if this is from 'at' (no ID assignment) or 'withIds' with path (assigns ID + caches)
-        // When called from 'at', we skip ID/caching. When from 'withIds', we assign ID and cache.
+        // Determine if this is from 'at' (no ID assignment) or 'pin' with path (assigns ID + caches)
+        // When called from 'at', we skip ID/caching. When from 'pin', we assign ID and cache.
         // Distinguish by presence in the options — caller passes the merged map.
-        // For now: { path } without 'noId' → assign ID + cache (withIds behavior)
+        // For now: { path } without 'noId' → assign ID + cache (pin behavior)
         const rootNode = target.getRootNode?.() ?? target;
         let current = target;
         for (const idx of config.path) {
@@ -78,7 +78,7 @@ export function resolveIdVariable(varName, target, withIds) {
                 // Fire-and-forget: log correction suggestion
                 const capturedConfig = config;
                 const capturedVarName = varName;
-                import('./withIdsCorrector.js').then(module => {
+                import('./pinCorrector.js').then(module => {
                     module.logConfigCorrection(target, capturedVarName, capturedConfig);
                 }).catch(() => { });
             }

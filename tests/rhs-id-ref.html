@@ -76,7 +76,7 @@
                 '?.forAttr': '#[nameInput]'
             }, {
                 from: {},
-                withIds: { nameInput: { qry: '.nameInput' } }
+                pin: { nameInput: { qry: '.nameInput' } }
             });
             // Should have auto-assigned an ID to the input
             expect(nameInput.id).toBeTruthy();
@@ -89,7 +89,7 @@
                 '?.emailRef': '#[emailInput]'
             }, {
                 from: {},
-                withIds: { emailInput: { qry: '.emailInput' } }
+                pin: { emailInput: { qry: '.emailInput' } }
             });
             expect(form.emailRef).toBe('existingEmailId');
         });
@@ -100,7 +100,7 @@
                 '?.ref': '#[emailInput]?.id'
             }, {
                 from: {},
-                withIds: { emailInput: { qry: '.emailInput' } }
+                pin: { emailInput: { qry: '.emailInput' } }
             });
             expect(form.ref).toBe('existingEmailId');
         });
@@ -111,7 +111,7 @@
                 '?.inputType': '#[emailInput]?.type'
             }, {
                 from: {},
-                withIds: { emailInput: { qry: '.emailInput' } }
+                pin: { emailInput: { qry: '.emailInput' } }
             });
             expect(form.inputType).toBe('email');
         });
@@ -122,7 +122,7 @@
                 '?.userName': '#[info]?.dataset?.user'
             }, {
                 from: {},
-                withIds: { info: { qry: '.info' } }
+                pin: { info: { qry: '.info' } }
             });
             expect(form.userName).toBe('alice');
         });
@@ -133,7 +133,7 @@
                 '?.tooltip': '#[info]?.title'
             }, {
                 from: {},
-                withIds: { info: { qry: '.info' } }
+                pin: { info: { qry: '.info' } }
             });
             expect(form.tooltip).toBe('User Info');
         });
@@ -144,7 +144,7 @@
                 '?.cls': '#[info]?.className'
             }, {
                 from: {},
-                withIds: { info: { qry: '.info' } }
+                pin: { info: { qry: '.info' } }
             });
             expect(form.cls).toBe('info');
         });
@@ -156,7 +156,7 @@
                 '?.querySelector?.label?.htmlFor': '#[nameInput]'
             }, {
                 from: {},
-                withIds: { nameInput: { qry: '.nameInput' } },
+                pin: { nameInput: { qry: '.nameInput' } },
                 withMethods: ['querySelector']
             });
             const input = form.querySelector('.nameInput');
@@ -170,7 +170,7 @@
                 '?.greeting': '?.msg'
             }, {
                 from: { msg: 'Hello' },
-                withIds: { emailInput: { qry: '.emailInput' } }
+                pin: { emailInput: { qry: '.emailInput' } }
             });
             expect(form.inputId).toBe('existingEmailId');
             expect(form.greeting).toBe('Hello');
@@ -182,27 +182,27 @@
                 '?.ref': '#[nonExistent]'
             }, {
                 from: {},
-                withIds: { other: { qry: '.other' } }
+                pin: { other: { qry: '.other' } }
             });
             // resolveIdVariable returns undefined for unknown varName, value passes through as literal
             expect(form.ref).toBe('#[nonExistent]');
         });
 
         // Array form: child index path
-        test('array withIds: should resolve element via child indices', () => {
+        test('array pin: should resolve element via child indices', () => {
             // form.children[0] = label, form.children[1] = input
             assignFrom(form, {
                 '?.labelFor': '#[myInput]?.id'
             }, {
                 from: {},
-                withIds: { myInput: [1] }  // form.children[1] = input
+                pin: { myInput: [1] }  // form.children[1] = input
             });
             const input = form.children[1];
             expect(form.labelFor).toBe(input.id);
         });
 
         // Array form: nested child indices
-        test('array withIds: should traverse nested children', () => {
+        test('array pin: should traverse nested children', () => {
             // Create a nested structure for this test
             const wrapper = document.createElement('div');
             const inner = document.createElement('div');
@@ -216,19 +216,19 @@
                 '?.found': '#[deep]?.title'
             }, {
                 from: {},
-                withIds: { deep: [0, 0] }  // wrapper.children[0].children[0] = span
+                pin: { deep: [0, 0] }  // wrapper.children[0].children[0] = span
             });
             expect(wrapper.found).toBe('deep target');
             document.body.removeChild(wrapper);
         });
 
         // Array form: bare #[x] returns auto-generated ID
-        test('array withIds: bare #[x] should return element ID', () => {
+        test('array pin: bare #[x] should return element ID', () => {
             assignFrom(form, {
                 '?.inputRef': '#[arrInput]'
             }, {
                 from: {},
-                withIds: { arrInput: [1] }
+                pin: { arrInput: [1] }
             });
             const input = form.children[1];
             expect(form.inputRef).toBe(input.id);
@@ -240,7 +240,7 @@
                 '?.inputType': '#[validInput]?.type'
             }, {
                 from: {},
-                withIds: { validInput: { path: [1], expect: 'input' } }
+                pin: { validInput: { path: [1], expect: 'input' } }
             });
             expect(form.inputType).toBe('text');
         });
@@ -251,7 +251,7 @@
                 '?.staleTag': '#[wrong]?.tagName'
             }, {
                 from: {},
-                withIds: { wrong: { path: [0], expect: 'input' } } // [0] is label, not input
+                pin: { wrong: { path: [0], expect: 'input' } } // [0] is label, not input
             });
             // Still resolves to the element at path (label), even though it doesn't match
             expect(form.staleTag).toBe('LABEL');
@@ -263,7 +263,7 @@
                 '?.foundType': '#[fb]?.type'
             }, {
                 from: {},
-                withIds: { fb: { path: [0], expect: 'input', fallback: true } } // [0] is label, fallback finds input
+                pin: { fb: { path: [0], expect: 'input', fallback: true } } // [0] is label, fallback finds input
             });
             expect(form.foundType).toBe('text');
         });
