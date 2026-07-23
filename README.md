@@ -477,7 +477,7 @@ assignGingerly(div, {
 // With aliases (concise)
 assignGingerly(div, {
   '?.🔍?.my-element?.🎨?.+': 'highlighted',
-  '?.🔍.your-element?.🎨?.+': 'active'
+  '?.🔍?.your-element?.🎨?.+': 'active'
 }, { 
   withMethods: ['querySelector', 'add'],
   aka: { '🔍': 'querySelector', '🎨': 'classList', '+': 'add' }
