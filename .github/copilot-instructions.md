@@ -1,104 +1,61 @@
-# assign-gingerly AI Coding Guidelines
+# assign-gingerly AI coding guidelines
 
-## Project Overview
+This file captures the repository-specific guidance that should be followed when editing this project. It is informed by the steering notes in [.kiro/steering](../.kiro/steering) and the product documentation in [README.md](../README.md) and [docs](../docs).
 
-**assign-gingerly** is a utility library that extends `Object.assign` with two key capabilities:
-1. **Nested property merging** via `?.` notation (e.g., `'?.style?.height': '15px'`)
-2. **Dependency injection** through a registry pattern with Symbol-based mappings
+## Project overview
 
-The library is purely functional with no external runtime dependencies, published as ES modules.
+assign-gingerly is a small ES module library that extends object assignment with a few distinctive capabilities:
 
-## Architecture & Key Components
+- Deep, recursive merging via dotted paths such as `?.style?.height`
+- Dependency injection and registry-based behavior using symbols
+- Optional runtime extension modules that augment native objects and DOM APIs
+- Companion utilities such as assignTentatively and assignFrom/assignFromAsync
 
-### Core Concepts
+The package is documented primarily in [README.md](../README.md) and the docs under [docs](../docs). Prefer those sources when behavior is unclear.
 
-**Nested Path Pattern (Dotted Paths)**
-- Keys starting with `?.` trigger nested object creation instead of flat assignment
-- Example: `assignGingerly(obj, {'?.a?.b?.c': value})` creates deeply nested structures
-- The `?.` prefix is stripped before creating intermediate objects (see [assignGingerly.ts](assignGingerly.ts#L82))
-- Non-nested properties are merged with recursive application for plain objects
+## Architecture and main modules
 
-**Dependency Injection via Registry**
-- Symbol-based mappings allow classes to be registered as injectable services
-- `BaseRegistry` stores `IBaseRegistryItem` entries (spawn class + symbol-to-property map)
-- When symbols are assigned to targets, instances are lazily spawned and cached via `WeakMap`
-- The `.set` proxy (lines 159-190) enables reactive updates to instances
+- [assignGingerly.ts](../assignGingerly.ts) and [assignGingerly.js](../assignGingerly.js): core merge and registry behavior
+- [assignTentatively.ts](../assignTentatively.ts): reversible, limited-assignment behavior
+- [assignFrom.ts](../assignFrom.ts) and [assignFromAsync.ts](../assignFromAsync.ts): path-resolution and declarative assignment flows
+- [object-extension.ts](../object-extension.ts), [assignFrom-extension.ts](../assignFrom-extension.ts), and [assignFromAsync-extension.ts](../assignFromAsync-extension.ts): runtime augmentation modules
+- [inferencer](../inferencer): a git submodule and should stay self-contained
 
-### Main Files
+## Documentation to consult
 
-- [assignGingerly.ts](assignGingerly.ts) - Core implementation (245 lines)
-  - `assignGingerly()` function - two-pass: handles nested keys, then symbol-based DI
-  - `BaseRegistry` class - registry for dependency injection mappings
-  - Helper functions: `parsePath()`, `isNestedPath()`, `ensureNestedPath()`, Symbol parsing
-- [object-extension.ts](object-extension.ts) - Adds `Object.prototype.assignGingerly()` method
-- [types.d.ts](types.d.ts) - TypeScript type declarations for consumer packages
+When changing behavior, read the relevant docs before editing:
 
-## Critical Implementation Details
+- [docs/assignFrom.md](../docs/assignFrom.md)
+- [docs/defineWithFeatures.md](../docs/defineWithFeatures.md)
+- [docs/inferred-assignments.md](../docs/inferred-assignments.md)
+- [docs/paths-dx.md](../docs/paths-dx.md)
+- [docs/manage-template-list.md](../docs/manage-template-list.md)
+- [docs/inter-feature-communication.md](../docs/inter-feature-communication.md)
+- [docs/ternary-assignment.md](../docs/ternary-assignment.md)
 
-**Two-Pass Processing**
-1. **First pass** (lines 107-136): Handles all string/nested keys
-   - Recursive merging for plain objects (not arrays)
-   - Nested path creation via `ensureNestedPath()`
-2. **Second pass** (lines 138-157): Symbol key handling for DI
-   - Lazily instantiates registered classes
-   - Caches instances in `instanceMap` (WeakMap on target object)
-   - Maps symbols to instance properties via registry
+## Repository conventions
 
-**Symbol Parsing**
-- JSON cannot encode Symbols, so string keys like `[Symbol.for('id')]` are supported
-- `isSymbolForKey()` and `parseSymbolForKey()` convert these to actual symbols
-- Registry lookup uses both direct symbol keys and parsed Symbol.for keys
+- Keep changes aligned with the behavior described in [README.md](../README.md) and the docs above.
+- Source files are authored in TypeScript and emitted to sibling JavaScript files; preserve that pattern.
+- Follow existing naming and export conventions rather than introducing new patterns unless the change clearly requires it.
+- For public API changes, update the exported types in [types/assign-gingerly/types.d.ts](../types/assign-gingerly/types.d.ts).
 
-**Edge Case Handling**
-- Arrays are **not** recursed into (treated as leaf values) - see [edge-cases.spec.ts](tests/edge-cases.spec.ts#L5)
-- Null values are treated as non-objects (unlike `Object.assign`)
-- Non-object targets return unchanged
-- Symbol keys in source are preserved and processed in second pass
+## Steering rules from .kiro
 
-## Testing & Quality
+- Prefer `element.localName` over `element.tagName.toLowerCase()` when comparing element tag names.
+- Keep the inferencer submodule isolated: it must not import runtime code from the parent package, and should remain independently publishable.
+- Keep exported interfaces and types in [types/assign-gingerly/types.d.ts](../types/assign-gingerly/types.d.ts); module files should import those types rather than defining exported types inline.
+- Treat markdown-only changes as documentation-only; they do not require compilation or tests.
 
-**Test Organization** (Playwright)
-- [tests/basic.spec.ts](tests/basic.spec.ts) - Core Object.assign compatibility
-- [tests/nested.spec.ts](tests/nested.spec.ts) - Dotted path creation and merging
-- [tests/dependency-injection.spec.ts](tests/dependency-injection.spec.ts) - Registry & Symbol DI
-- [tests/edge-cases.spec.ts](tests/edge-cases.spec.ts) - Arrays, primitives, special values
-- [tests/json-symbol-support.spec.ts](tests/json-symbol-support.spec.ts) - Symbol.for parsing
-- [tests/readme-examples.spec.ts](tests/readme-examples.spec.ts) - Live README examples
+## Implementation guidance
 
-**Commands**
-- `npm test` - Run full Playwright test suite
-- TypeScript compiles only [assignGingerly.ts](assignGingerly.ts) (tsconfig.json line 9)
+- Preserve the package’s nested-path semantics: keys that start with `?.` should create or merge into nested objects rather than behaving like flat assignments.
+- Preserve the existing distinction between plain objects and arrays; arrays should generally be treated as leaf values rather than recursively traversed.
+- Keep registry and symbol-based behavior consistent with the existing implementation and tests.
+- When a change affects public behavior, add or update tests in [tests](../tests) to cover the new case.
 
-## Coding Patterns & Conventions
+## Validation expectations
 
-1. **Path Processing**: Always call `parsePath()` to normalize dotted keys (strips `?`)
-2. **Recursive Merging**: Check `typeof value === 'object' && value !== null && !Array.isArray(value)` before recursing
-3. **Registry Access**: Pass via `options?.registry`; normalize to instance if class is provided
-4. **WeakMap for Caching**: Use for instance storage keyed on target object to avoid memory leaks
-5. **TypeScript**: Strict mode enabled; use generics for flexible registries (e.g., `IBaseRegistryItem<T>`)
-
-## Build & Distribution
-
-- **Module Format**: ESNext (import/export)
-- **Export Point**: [assignGingerly.js](assignGingerly.js) (transpiled from .ts)
-- **Type Definitions**: [types.d.ts](types.d.ts) for consumers
-- **No Build System**: TypeScript compiler directly outputs to root
-- **Package**: Published as `assign-gingerly` on NPM with bundled .js/.d.ts files
-
-## Common Tasks
-
-**Adding a Feature**: 
-1. Implement in .ts file
-2. Add tests in appropriate [tests/](tests/) file
-3. Run `npm test` to validate
-4. Update [types.d.ts](types.d.ts) if API changed
-
-**Debugging Registry Issues**:
-- Verify Symbol identity: symbols created with `Symbol.for(id)` are globally unique
-- Check `registry.findBySymbol()` - must match exact symbol or string representation
-- Use `instanceMap.has(target)` to check if instances have been spawned
-
-**Working with Nested Paths**:
-- Keys must start with `?.` exactly; case-sensitive
-- Intermediate objects auto-created if missing or non-object
-- Existing objects are preserved; properties are merged recursively
+- Run `npm test` after code changes that affect runtime behavior.
+- Run `npx tsc` when a TypeScript change may affect compilation or type declarations.
+- If the change is markdown-only, compilation and tests are not required.
