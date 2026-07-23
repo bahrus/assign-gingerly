@@ -10,14 +10,14 @@
  */
 
 import { getValues, getValue } from './getValues.js';
-import assignGingerly, { IAssignGingerlyOptions } from './assignGingerly.js';
+import assignGingerly from './assignGingerly.js';
 import { resolveIdVariable, parseIdRef } from './resolveIdRef.js';
 import { processInferredAssignments } from './inferredAssignments.js';
 import type { AssignPermissions } from './isAllowedImportPath.js';
+import type { AssignFromOptions, AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
 
-// Re-export types and interfaces for consumers
-export type { AssignFromOptions, AssignFromHandler, AssignFromHandlerConstructor } from './assignFromAsync.js';
-import type { AssignFromOptions } from './assignFromAsync.js';
+// Re-export types for consumers
+export type { AssignFromOptions, AssignFromHandler, AssignFromHandlerConstructor };
 
 /**
  * Supported substitution variables and their option keys.
