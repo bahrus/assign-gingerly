@@ -1,9 +1,8 @@
 /**
- * Interface for assignTentatively options with reversal tracking
+ * assignTentatively — reversible assignment with change tracking.
  */
-export interface IAssignTentativelyOptions {
-  reversal?: Record<string | symbol, any>;
-}
+import type { IAssignTentativelyOptions } from './types/assign-gingerly/types.js';
+export type { IAssignTentativelyOptions };
 
 /**
  * Helper function to check if a string key represents an += command

@@ -1,5 +1,6 @@
 import assignGingerly, { EnhancementRegistry, ItemscopeRegistry, IAssignGingerlyOptions, getInstanceMap, INSTANCE_MAP_GUID } from './assignGingerly.js';
 import assignTentatively from './assignTentatively.js';
+import type { IAssignTentativelyOptions } from './types/assign-gingerly/types.js';
 import { EnhancementConfig, SpawnContext } from './types/assign-gingerly/types.js';
 import { parseWithAttrs } from './parseWithAttrs.js';
 
@@ -77,7 +78,7 @@ declare global {
      */
     assignTentatively(
       source: Record<string | symbol, any>,
-      options?: { reversal?: Record<string | symbol, any> }
+      options?: IAssignTentativelyOptions
     ): Record<string | symbol, any>;
   }
 }
@@ -576,10 +577,10 @@ Object.defineProperty(Object.prototype, 'assignTentatively', {
   value: function <T extends object>(
     this: T,
     source: Record<string | symbol, any>,
-    options?: { reversal?: Record<string | symbol, any> }
+    options?: IAssignTentativelyOptions
   ): Record<string | symbol, any> {
     const reversal = options?.reversal ?? {};
-    assignTentatively(this, source, { reversal });
+    assignTentatively(this, source, { ...options, reversal });
     return reversal;
   },
   writable: true,
