@@ -476,11 +476,11 @@ assignGingerly(div, {
 
 // With aliases (concise)
 assignGingerly(div, {
-  '?.$?.my-element?.c?.+': 'highlighted',
-  '?.$?.your-element?.c?.+': 'active'
+  '?.🔍?.my-element?.🎨?.+': 'highlighted',
+  '?.🔍.your-element?.🎨?.+': 'active'
 }, { 
   withMethods: ['querySelector', 'add'],
-  aka: { '$': 'querySelector', 'c': 'classList', '+': 'add' }
+  aka: { '🔍': 'querySelector', '🎨': 'classList', '+': 'add' }
 });
 ```
 
