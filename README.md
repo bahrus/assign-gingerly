@@ -94,10 +94,24 @@ For most use cases — including `manageTemplateList`, reactive merge cycles, an
 assignFrom adds support for:
 
 1.  Resolving RHS path strings against a source object (`from`).
-2.  Protocol resolution (`globalThis://`, `localStorage://`, custom sync protocols).
-3.  Handler plugins via the ` =>` operator for custom logic (fire-and-forget in sync mode, awaitable in async mode).
-4.  Looped substitution with `where_x_in` / `where_y_in` / `where_z_in` for expanding template patterns into multiple concrete assignments.
-5.  Spread merging via the `"..."` key.
+2.  Target-relative root references via `$0` so paths can resolve from the first argument passed to `assignFrom`/`assignFromAsync` (the target object) instead of the `from` object.
+3.  Protocol resolution (`globalThis://`, `localStorage://`, custom sync protocols).
+4.  Handler plugins via the ` =>` operator for custom logic (fire-and-forget in sync mode, awaitable in async mode).
+5.  Looped substitution with `where_x_in` / `where_y_in` / `where_z_in` for expanding template patterns into multiple concrete assignments.
+6.  Spread merging via the `"..."` key.
+
+Example:
+
+```TypeScript
+const target = { value: 'target-value' };
+const source = { value: 'from-value' };
+
+assignFrom(target, {
+  resolved: '$0?.value'
+}, { from: source });
+
+console.log(target.resolved); // 'target-value'
+```
 
 All of assignGingerly's features (nested paths, `withMethods`, `aka`, `@each`, `@eachTime`, registry, etc.) are inherited.
 
