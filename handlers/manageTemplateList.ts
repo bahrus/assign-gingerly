@@ -182,7 +182,7 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                 // New item — clone template
                 let content: DocumentFragment;
                 if (instantiate instanceof HTMLTemplateElement) {
-                    content = instantiate.content.cloneNode(true) as DocumentFragment;
+                    content = (instantiate.remoteContent ||instantiate.content).cloneNode(true) as DocumentFragment;
                 } else if (instantiate instanceof DocumentFragment) {
                     content = instantiate.cloneNode(true) as DocumentFragment;
                 } else {

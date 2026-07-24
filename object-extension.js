@@ -432,7 +432,7 @@ Object.defineProperty(Object.prototype, 'assignGingerly', {
 Object.defineProperty(Object.prototype, 'assignTentatively', {
     value: function (source, options) {
         const reversal = options?.reversal ?? {};
-        assignTentatively(this, source, { reversal });
+        assignTentatively(this, source, { ...options, reversal });
         return reversal;
     },
     writable: true,

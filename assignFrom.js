@@ -394,12 +394,7 @@ export function assignFrom(target, pattern, options, permissions) {
                 }
             }
         }
-        const resolved = getValues(normalPattern, options.from, {
-            withMethods: options.withMethods,
-            aka: options.aka,
-            protocols: options.protocols,
-            root: target
-        });
+        const resolved = getValues(normalPattern, options.from, resolveOptions);
         handleSpreads(resolved);
         assignGingerly(target, resolved, options);
     }

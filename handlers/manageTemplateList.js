@@ -149,7 +149,7 @@ export class ManageTemplateListHandler {
                 // New item — clone template
                 let content;
                 if (instantiate instanceof HTMLTemplateElement) {
-                    content = instantiate.content.cloneNode(true);
+                    content = (instantiate.remoteContent || instantiate.content).cloneNode(true);
                 }
                 else if (instantiate instanceof DocumentFragment) {
                     content = instantiate.cloneNode(true);
