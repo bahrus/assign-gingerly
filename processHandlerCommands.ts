@@ -220,7 +220,8 @@ export async function processHandlerCommands(
                 resolvedParams = getValues(config.get, options.from, {
                     withMethods: options.withMethods,
                     aka: options.aka,
-                    protocols: options.protocols
+                    protocols: options.protocols,
+                    root: target
                 });
             }
             // Resolve 'resolve' map asynchronously (yields to microtask queue)
@@ -228,7 +229,8 @@ export async function processHandlerCommands(
                 const asyncResolved = await resolveValues(config.resolve, options.from, {
                     withMethods: options.withMethods,
                     aka: options.aka,
-                    protocols: options.protocols
+                    protocols: options.protocols,
+                    root: target
                 });
                 Object.assign(resolvedParams, asyncResolved);
             }

@@ -11,5 +11,8 @@
         "statusBar.debuggingForeground": "#F9FCF6",
         "statusBar.noFolderBackground": "#233212",
         "statusBar.noFolderForeground": "#F9FCF6"
+    },
+    "chat.tools.terminal.autoApprove": {
+        "npx playwright": true
     }
 }

@@ -31,6 +31,16 @@ function applyAliases(path: string, aliasMap: Map<string, string>): string {
 }
 
 /**
+ * Resolve a special root-reference token at the start of a string.
+ * '$0' refers to the first argument passed to assignFrom / resolveValues.
+ */
+function resolveRootReference(path: string, source: any, root: any): { source: any; path: string } | null {
+    if (path === '$0') return { source: root ?? source, path: '' };
+    if (path.startsWith('$0?.')) return { source: root ?? source, path: path.substring(4) };
+    return null;
+}
+
+/**
  * Path cache for parsed path strings.
  * Avoids re-splitting the same path on repeated calls.
  */
@@ -142,6 +152,16 @@ function getArray(
             const aliased = applyAliases(item, aliasMap);
             const parts = parseCachedPath(aliased);
             result.push(parts.length === 0 ? source : navigatePath(source, parts, withMethods));
+        } else if (typeof item === 'string' && item.startsWith('$0')) {
+            const rootRef = resolveRootReference(item, source, options?.root);
+            if (rootRef === null) {
+                result.push(source);
+            } else {
+                const aliased = applyAliases(rootRef.path, aliasMap);
+                const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
+                const parts = parseCachedPath(normalizedPath);
+                result.push(parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods));
+            }
         } else if (typeof item === 'string' && protocols && hasProtocol(item)) {
             result.push(getProtocolValue(item, protocols, options));
         } else if (Array.isArray(item)) {
@@ -200,6 +220,16 @@ export function getValues(
             const aliased = applyAliases(value, aliasMap);
             const parts = parseCachedPath(aliased);
             result[key] = parts.length === 0 ? source : navigatePath(source, parts, withMethods);
+        } else if (typeof value === 'string' && value.startsWith('$0')) {
+            const rootRef = resolveRootReference(value, source, options?.root);
+            if (rootRef === null) {
+                result[key] = source;
+            } else {
+                const aliased = applyAliases(rootRef.path, aliasMap);
+                const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
+                const parts = parseCachedPath(normalizedPath);
+                result[key] = parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods);
+            }
         } else if (typeof value === 'string' && protocols && hasProtocol(value)) {
             result[key] = getProtocolValue(value, protocols, options);
         } else if (Array.isArray(value)) {
@@ -231,7 +261,13 @@ export function getValue(
     source: any,
     options?: GetValuesOptions
 ): any {
-    if (!path.startsWith('?.')) return path;
+    const rootRef = resolveRootReference(path, source, options?.root);
+    if (rootRef) {
+        path = rootRef.path;
+        source = rootRef.source;
+    } else if (!path.startsWith('?.')) {
+        return path;
+    }
 
     let aliased = path;
     if (options?.aka) {
@@ -242,7 +278,8 @@ export function getValue(
         aliased = applyAliases(path, aliasMap);
     }
 
-    const parts = parseCachedPath(aliased);
+    const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
+    const parts = parseCachedPath(normalizedPath);
     if (parts.length === 0) return source;
 
     const withMethods = options?.withMethods

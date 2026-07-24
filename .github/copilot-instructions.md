@@ -52,6 +52,7 @@ When changing behavior, read the relevant docs before editing:
 - Preserve the package’s nested-path semantics: keys that start with `?.` should create or merge into nested objects rather than behaving like flat assignments.
 - Preserve the existing distinction between plain objects and arrays; arrays should generally be treated as leaf values rather than recursively traversed.
 - Keep registry and symbol-based behavior consistent with the existing implementation and tests.
+- When implementing async resolution in [resolveValues.ts](../resolveValues.ts), import any synchronous helper that already exists in [getValues.ts](../getValues.ts) rather than duplicating the logic.
 - When a change affects public behavior, add or update tests in [tests](../tests) to cover the new case.
 
 ## Validation expectations

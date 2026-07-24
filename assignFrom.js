@@ -49,7 +49,8 @@ function resolveTernaryValue(value, source, options) {
         return getValue(value, source, {
             withMethods: options.withMethods,
             aka: options.aka,
-            protocols: options.protocols
+            protocols: options.protocols,
+            root: options.root
         });
     }
     if (typeof value === 'string' && value.includes('://') && options.protocols) {
@@ -60,7 +61,8 @@ function resolveTernaryValue(value, source, options) {
             return getValue(value, source, {
                 withMethods: options.withMethods,
                 aka: options.aka,
-                protocols: options.protocols
+                protocols: options.protocols,
+                root: options.root
             });
         }
     }
@@ -314,11 +316,11 @@ function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, option
             continue;
         const value = expandedPattern[key];
         if (parsed.remainingPath) {
-            const resolvedValue = getValues({ __v: value }, options.from, { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols });
+            const resolvedValue = getValues({ __v: value }, options.from, { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols, root: target });
             assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options);
         }
         else {
-            const resolvedValue = getValues(typeof value === 'object' && value !== null ? value : { __v: value }, options.from, { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols });
+            const resolvedValue = getValues(typeof value === 'object' && value !== null ? value : { __v: value }, options.from, { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols, root: target });
             if (!('__v' in resolvedValue)) {
                 assignGingerly(el, resolvedValue, options);
             }
@@ -342,6 +344,7 @@ export function assignFrom(target, pattern, options, permissions) {
     const expandedPattern = expandSubstitutions(pattern, options);
     // Categorize keys
     const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys } = categorizeKeys(expandedPattern);
+    const resolveOptions = { ...options, root: target };
     // Process ?= ternary keys (sync)
     if (ternaryKeys.length > 0) {
         const ternaryResolved = {};
@@ -352,7 +355,7 @@ export function assignFrom(target, pattern, options, permissions) {
             const arr = expandedPattern[key];
             if (!Array.isArray(arr) || arr.length < 2)
                 continue;
-            const result = evaluateTernary(arr, options.from, options);
+            const result = evaluateTernary(arr, options.from, resolveOptions);
             if (result !== TERNARY_SKIP) {
                 ternaryResolved[lhsPath] = result;
             }
@@ -379,7 +382,8 @@ export function assignFrom(target, pattern, options, permissions) {
                                 normalPattern[key] = getValue(remainingPath, el, {
                                     withMethods: options.withMethods,
                                     aka: options.aka,
-                                    protocols: options.protocols
+                                    protocols: options.protocols,
+                                    root: target
                                 });
                             }
                             else {
@@ -393,7 +397,8 @@ export function assignFrom(target, pattern, options, permissions) {
         const resolved = getValues(normalPattern, options.from, {
             withMethods: options.withMethods,
             aka: options.aka,
-            protocols: options.protocols
+            protocols: options.protocols,
+            root: target
         });
         handleSpreads(resolved);
         assignGingerly(target, resolved, options);

@@ -278,4 +278,24 @@ Are there any additional questions you have before implementation can begin?
 
 If not, please begin implementing.
 
+---
+
+## Copilot Response IV
+
+That seems like a solid choice. I would treat `$0` as a special root-reference token that is recognized only when it appears at the very start of the string, not when it appears in the middle of a larger expression. That keeps the semantics unambiguous and avoids surprising matches in ordinary property names or string content.
+
+So the intended behavior would be:
+
+- `$0` → resolve to the first argument passed to `assignFrom`
+- `$0?.shadowRoot?.🔍?.#country-ranking` → resolve from that target object along the given path
+- any other occurrence of `$0` inside a longer string should be treated as literal text, not as a special reference
+
+That seems like a clean and implementable rule, and it gives us a minimal syntax that fits the rest of the path-based model without introducing extra protocol machinery.
+
+---
+
+## Human Response IV
+
+Sounds good.  Can you now implement this?
+
 

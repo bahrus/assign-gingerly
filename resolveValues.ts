@@ -7,7 +7,7 @@
  * Re-exports ResolveValuesOptions for backward compatibility.
  */
 
-import { getValue } from './getValues.js';
+import { getValue, getValues } from './getValues.js';
 import type { ResolveValuesOptions } from './types/assign-gingerly/types.js';
 
 export type { ResolveValuesOptions };
@@ -22,65 +22,6 @@ function hasProtocol(value: string): boolean {
     return value.includes('://');
 }
 
-/**
- * Apply alias substitutions to a path string.
- */
-function applyAliases(path: string, aliasMap: Map<string, string>): string {
-    if (aliasMap.size === 0) return path;
-    const parts = path.split('?.');
-    const substituted = parts.map(part => aliasMap.get(part) ?? part);
-    return substituted.join('?.');
-}
-
-/**
- * Path cache for parsed path strings.
- */
-const pathCache = new Map<string, string[]>();
-
-function parseCachedPath(path: string): string[] {
-    let parts = pathCache.get(path);
-    if (!parts) {
-        parts = path.split('?.').filter(p => p.length > 0);
-        pathCache.set(path, parts);
-    }
-    return parts;
-}
-
-/**
- * Navigate a path against a source object, optionally calling methods.
- */
-function navigatePath(
-    source: any,
-    parts: string[],
-    withMethods: Set<string> | undefined
-): any {
-    let current = source;
-    let i = 0;
-    while (i < parts.length) {
-        if (current == null) return current;
-        const part = parts[i];
-        if (withMethods && withMethods.has(part)) {
-            const method = current[part];
-            if (typeof method === 'function') {
-                const nextPart = parts[i + 1];
-                if (nextPart !== undefined && !(withMethods.has(nextPart))) {
-                    current = method.call(current, nextPart);
-                    i += 2;
-                } else {
-                    current = method.call(current);
-                    i++;
-                }
-            } else {
-                current = current[part];
-                i++;
-            }
-        } else {
-            current = current[part];
-            i++;
-        }
-    }
-    return current;
-}
 
 /**
  * Resolves a protocol-prefixed value asynchronously.
@@ -115,25 +56,23 @@ async function resolveProtocolValue(
 async function resolveArray(
     arr: any[],
     source: any,
-    aliasMap: Map<string, string>,
-    withMethods: Set<string> | undefined,
     protocols: Record<string, (key: string) => any | Promise<any>> | undefined,
     options?: ResolveValuesOptions
 ): Promise<any[]> {
     const result: any[] = [];
     for (const item of arr) {
-        if (typeof item === 'string' && item.startsWith('?.')) {
-            const aliased = applyAliases(item, aliasMap);
-            const parts = parseCachedPath(aliased);
-            result.push(parts.length === 0 ? source : navigatePath(source, parts, withMethods));
-        } else if (typeof item === 'string' && protocols && hasProtocol(item)) {
-            result.push(await resolveProtocolValue(item, protocols, options));
+        if (typeof item === 'string') {
+            if (protocols && hasProtocol(item)) {
+                result.push(await resolveProtocolValue(item, protocols, options));
+            } else {
+                result.push(getValue(item, source, options));
+            }
         } else if (Array.isArray(item)) {
-            result.push(await resolveArray(item, source, aliasMap, withMethods, protocols, options));
+            result.push(await resolveArray(item, source, protocols, options));
         } else if (item && typeof item === 'object') {
             const proto = Object.getPrototypeOf(item);
             if (proto === Object.prototype || proto === null) {
-                result.push(await resolveValues(item, source, options));
+                result.push(options?.protocols ? await resolveValues(item, source, options) : getValues(item, source, options));
             } else {
                 result.push(item);
             }
@@ -160,35 +99,22 @@ export async function resolveValues(
     source: any,
     options?: ResolveValuesOptions
 ): Promise<Record<string, any>> {
-    const aliasMap = new Map<string, string>();
-    if (options?.aka) {
-        for (const [alias, target] of Object.entries(options.aka)) {
-            aliasMap.set(alias, target);
-        }
-    }
-
-    const withMethods = options?.withMethods
-        ? options.withMethods instanceof Set
-            ? options.withMethods
-            : new Set(options.withMethods)
-        : undefined;
-
     const protocols = options?.protocols;
 
     const result: Record<string, any> = {};
     for (const [key, value] of Object.entries(pattern)) {
-        if (typeof value === 'string' && value.startsWith('?.')) {
-            const aliased = applyAliases(value, aliasMap);
-            const parts = parseCachedPath(aliased);
-            result[key] = parts.length === 0 ? source : navigatePath(source, parts, withMethods);
-        } else if (typeof value === 'string' && protocols && hasProtocol(value)) {
-            result[key] = await resolveProtocolValue(value, protocols, options);
+        if (typeof value === 'string') {
+            if (protocols && hasProtocol(value)) {
+                result[key] = await resolveProtocolValue(value, protocols, options);
+            } else {
+                result[key] = getValue(value, source, options);
+            }
         } else if (Array.isArray(value)) {
-            result[key] = await resolveArray(value, source, aliasMap, withMethods, protocols, options);
+            result[key] = await resolveArray(value, source, protocols, options);
         } else if (typeof value === 'object' && value !== null) {
             const proto = Object.getPrototypeOf(value);
             if (proto === Object.prototype || proto === null) {
-                result[key] = await resolveValues(value, source, options);
+                result[key] = options?.protocols ? await resolveValues(value, source, options) : getValues(value, source, options);
             } else {
                 result[key] = value;
             }

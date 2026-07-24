@@ -34,7 +34,8 @@ export async function assignFromAsync(target, pattern, options, permissions) {
         const resolved = await resolveValues(normalPattern, options.from, {
             withMethods: options.withMethods,
             aka: options.aka,
-            protocols: options.protocols
+            protocols: options.protocols,
+            root: target
         });
         // Recursively handle "..." spread keys at all nesting levels
         handleSpreads(resolved);
@@ -54,13 +55,13 @@ export async function assignFromAsync(target, pattern, options, permissions) {
             const value = expandedPattern[key];
             if (parsed.remainingPath) {
                 // Resolve the RHS value
-                const resolvedValue = await resolveValues({ __v: value }, options.from, { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols });
+                const resolvedValue = await resolveValues({ __v: value }, options.from, { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols, root: target });
                 // Apply remaining path on the resolved element
                 assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options);
             }
             else {
                 // No remaining path — resolve and assign directly to the element
-                const resolvedValue = await resolveValues(typeof value === 'object' && value !== null ? value : { __v: value }, options.from, { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols });
+                const resolvedValue = await resolveValues(typeof value === 'object' && value !== null ? value : { __v: value }, options.from, { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols, root: target });
                 if ('__v' in resolvedValue) {
                     // Single value — can't assign to element root without a path
                 }

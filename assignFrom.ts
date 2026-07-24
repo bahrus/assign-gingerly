@@ -54,12 +54,13 @@ export function parseTernaryCommand(key: string): string | null {
  * Resolve a single value — if it's a `?.` path string, resolve against source.
  * If it's a protocol string, resolve via protocol. Otherwise pass through as literal.
  */
-function resolveTernaryValue(value: any, source: any, options: AssignFromOptions): any {
+function resolveTernaryValue(value: any, source: any, options: AssignFromOptions | any): any {
     if (typeof value === 'string' && value.startsWith('?.')) {
         return getValue(value, source, {
             withMethods: options.withMethods,
             aka: options.aka,
-            protocols: options.protocols
+            protocols: options.protocols,
+            root: options.root
         });
     }
     if (typeof value === 'string' && value.includes('://') && options.protocols) {
@@ -70,7 +71,8 @@ function resolveTernaryValue(value: any, source: any, options: AssignFromOptions
             return getValue(value, source, {
                 withMethods: options.withMethods,
                 aka: options.aka,
-                protocols: options.protocols
+                protocols: options.protocols,
+                root: options.root
             });
         }
     }
@@ -331,14 +333,14 @@ function processIdRefNormalKeys(
     if (parsed.remainingPath) {
       const resolvedValue = getValues(
         { __v: value }, options.from,
-        { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols }
+        { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols, root: target }
       );
       assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options);
     } else {
       const resolvedValue = getValues(
         typeof value === 'object' && value !== null ? value : { __v: value },
         options.from,
-        { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols }
+        { withMethods: options.withMethods, aka: options.aka, protocols: options.protocols, root: target }
       );
       if (!('__v' in resolvedValue)) {
         assignGingerly(el, resolvedValue, options);
@@ -371,6 +373,8 @@ export function assignFrom(
   // Categorize keys
   const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys } = categorizeKeys(expandedPattern);
 
+  const resolveOptions = { ...options, root: target } as any;
+
   // Process ?= ternary keys (sync)
   if (ternaryKeys.length > 0) {
     const ternaryResolved: Record<string, any> = {};
@@ -379,7 +383,7 @@ export function assignFrom(
       if (!lhsPath) continue;
       const arr = expandedPattern[key];
       if (!Array.isArray(arr) || arr.length < 2) continue;
-      const result = evaluateTernary(arr, options.from, options);
+      const result = evaluateTernary(arr, options.from, resolveOptions);
       if (result !== TERNARY_SKIP) {
         ternaryResolved[lhsPath] = result;
       }
@@ -407,7 +411,8 @@ export function assignFrom(
                 normalPattern[key] = getValue(remainingPath, el, {
                   withMethods: options.withMethods,
                   aka: options.aka,
-                  protocols: options.protocols
+                  protocols: options.protocols,
+                  root: target
                 });
               } else {
                 normalPattern[key] = el.id; // bare #[x] → ID string
@@ -418,11 +423,7 @@ export function assignFrom(
       }
     }
 
-    const resolved = getValues(normalPattern, options.from, {
-      withMethods: options.withMethods,
-      aka: options.aka,
-      protocols: options.protocols
-    });
+    const resolved = getValues(normalPattern, options.from, resolveOptions);
 
     handleSpreads(resolved);
     assignGingerly(target, resolved, options);

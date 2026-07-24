@@ -279,6 +279,36 @@
                 assert(result.val === 'value', 'resolveValues aka should not affect non-matching segments');
             }
 
+            // Test 25: resolveValues supports $0 as a root reference to the first argument
+            {
+                const target = { self: { nested: 'target-value' } };
+                const result = await resolveValues({
+                    selfRef: '$0',
+                    nested: '$0?.self?.nested'
+                }, target);
+                assert(result.selfRef === target, 'resolveValues should resolve $0 to the target object itself');
+                assert(result.nested === 'target-value', 'resolveValues should resolve $0 paths from the target object');
+            }
+
+            // Test 26: assignFrom uses $0 to resolve from the target object rather than the from object
+            {
+                const target = { value: 'target-value' };
+                const source = { value: 'from-value' };
+                await assignFrom(target, {
+                    resolved: '$0?.value'
+                }, { from: source });
+                assert(target.resolved === 'target-value', 'assignFrom should resolve $0 paths from the target object');
+            }
+
+            // Test 27: $0 is only recognized at the start of the string
+            {
+                const target = { value: 'target-value' };
+                const result = await resolveValues({
+                    literal: 'prefix$0'
+                }, target);
+                assert(result.literal === 'prefix$0', 'resolveValues should not treat $0 in the middle of a string as a special reference');
+            }
+
             // Display results
             const resultsDiv = document.getElementById('test-results');
             resultsDiv.innerHTML = `
