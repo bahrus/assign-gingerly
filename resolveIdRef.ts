@@ -91,7 +91,7 @@ export function resolveIdVariable(
                 // Fire-and-forget: log correction suggestion
                 const capturedConfig = config;
                 const capturedVarName = varName;
-                import('./withIdsCorrector.js').then(module => {
+                import('./pinCorrector.js').then(module => {
                     module.logConfigCorrection(target, capturedVarName, capturedConfig);
                 }).catch(() => {});
             }
