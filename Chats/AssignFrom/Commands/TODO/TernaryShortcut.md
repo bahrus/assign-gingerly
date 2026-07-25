@@ -8,7 +8,7 @@ The ternary operator ?= supports:
 
 [cond, then, else]
 
-However, it is a bit invonient to have to provide this, a frequent occurrence I'm sure:
+However, it is a bit inconvenient to have to provide this, a frequent occurrence I'm sure:
 
 [cond, cond, else]
 
@@ -25,3 +25,5 @@ In fact, I could see the following being useful, the equivalent of
 const answer = cond1 || cond2 || cond3 ...
 
 [cond1, '??', cond2, '??', cond3, ...]
+
+Is there a better alternative to '??'
