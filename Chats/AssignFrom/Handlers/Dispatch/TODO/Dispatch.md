@@ -41,7 +41,7 @@ class MyCustomElement extends HTMLElement{
                 },
                 signal: this.#abortController.signal;
             }
-        })
+        }, {from: this})
     }
 
     [myInputEventName](self: MyCustomElement, e: Event){
