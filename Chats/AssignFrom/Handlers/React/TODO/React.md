@@ -67,11 +67,12 @@ To reduce ceremonial noise:
 assignFrom(this /* this is the target */, {
     '?.button +=': {
         on: 'click', //default based on inferencer
-        // works from assign gingerly
-        assignTarget: {
+        // works from assignGingerly
+        assignToTarget: {
             "?.isHappy =!": ".",
             "?.age +=": 10
         },
+        //works from assignFrom
         fromSource:{
 
         }
