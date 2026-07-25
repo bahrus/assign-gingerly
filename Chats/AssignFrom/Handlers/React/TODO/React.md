@@ -1,4 +1,8 @@
-# ActOn (🎯)
+# React
+
+Option A:
+
+Define a handler:
 
 ```html
 <mood-stone>
@@ -36,24 +40,43 @@ class MoodStone extends HTMLElement{
     connectedCallback(){
         this.isHappy = true;
         this.age = 0;
-        assignFrom(this, {
+        assignFrom(this /* this is the target */, {
             '?.button =>': {
-                do: 'builtIns.actOn' //or '🎯',
-                // get: {
-
-                // },
+                do: 'builtIns.react',
                 act: {
-                    assignFromSource:{
-                        "?.isHappy =!": ".",
-                        "?.age +=": 10
+                    on: 'click', //default based on inferencer
+                    fromSource:{
+                        assignTarget: {
+                            "?.isHappy =!": ".",
+                            "?.age +=": 10
+                        }
                     }
-                },
-                // use inferencer to get default if not specified
-                on: 'click', 
+                }, //can also be an array
+                
             }
-        }, {from: this})
-    }
+        }, {from: this /* this is the Source */})
 }
 customElements.define('mood-stone', MoodStone);
 </script>
 ...
+
+To reduce ceremonial noise:
+
+
+```JS
+assignFrom(this /* this is the target */, {
+    '?.button +=': {
+        on: 'click', //default based on inferencer
+        // works from assign gingerly
+        assignTarget: {
+            "?.isHappy =!": ".",
+            "?.age +=": 10
+        },
+        fromSource:{
+
+        }
+    }, //can also be an array
+        
+}, {from: this /* this is the Source */})
+```
+
