@@ -60,21 +60,38 @@ class MoodStone extends HTMLElement{
                     controller: '?.abortController'
                 },
                 on: 'click', //default based on inferencer
-                // works from assignGingerly
+                // works from assignGingerly and assignFrom
                 assignToTarget: {
                     "?.isHappy =!": ".",
                     "?.age +=": '?.dataset.diff'
                 },
-                //works from assignFrom
+                // works from assignGingerly and assignFrom
+                assignToSource: {},
+                assignToLHS: {},
+                withOptions: {},
+                //works from assignFrom or assignGingerly asynchronously
                 fromLHS: {
-                    
+                    assignToTarget: {},
+                    assignToSource: {},
+                    assignToLHS: {},
+                    withOptions: {},
                 },
-                //works from assignFrom
+                //works from assignFrom or assignGingerly asynchronously
                 fromSource:{
-
+                    assignToTarget: {},
+                    assignToSource: {},
+                    assignToLHS: {},
+                    withOptions: {},
                 },
+                fromEvent:{
+                    assignToTarget: {},
+                    assignToSource: {},
+                    assignToLHS: {},
+                    withOptions: {},
+                }
                 //uses ./handlers/nudge.js
-                nudge: true
+                nudge: true,
+                
             }, //can also be an array
                 
         }, {
@@ -93,6 +110,8 @@ I was originally proposing this functionality to be done with a traditional hand
 Nevertheless, I think the module, addEventListener.js perhaps, should reside in the handlers folder.
 
 Because of the support for nudge, and since events are not expected to fire right away, and because "assigning" the event handler won't be used by subsequent calls, I think this whole functionality can be loaded asynchronously on demand, and use fire and forget.  To avoid unnecessary awaits, cache the import once it is done the first time.
+
+This could pose problems, though, when working from fromEvent.  This can't be asynchronous from the capturing of the event, so should only be available from assignFrom. 
 
 assignGingerly would also support this (but not the get).  Because the mode switches to async with this fire and forget handoff, the += handler could dynamically load assignFrom on demand.
 
