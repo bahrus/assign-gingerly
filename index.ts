@@ -14,5 +14,6 @@ export {assignFeatures, FeaturesRegistry, captureFeatureInitVals, PropertyBag, s
 export {installForwarding} from './installForwarding.js';
 export {defineWithFeatures} from './defineWithFeatures.js';
 export {resolveAndAssignFeatures} from './resolveAndAssignFeatures.js';
+export {nudge} from './nudge.js';
 export {} from './handlers/manageTemplateList.js';
 import './object-extension.js';
