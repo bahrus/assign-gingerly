@@ -10,12 +10,7 @@ Define a handler:
         Is Happy: <span id=happy></span>
         Age: <span id=age></span>
     </div>
-    <button 🔀='{
-        "assign": {
-            "?.isHappy =!": ".",
-            "?.age +=": 10
-        "
-    }'>Merge</button>
+    <button data-diff=10>Merge</button>
 </mood-stone>
 ```
 <script type=module>
@@ -70,8 +65,12 @@ assignFrom(this /* this is the target */, {
         // works from assignGingerly
         assignToTarget: {
             "?.isHappy =!": ".",
-            "?.age +=": 10
+            "?.age +=": '?.dataset.diff'
         },
+        //works from assignFrom
+        fromLHS: {
+            "
+        }
         //works from assignFrom
         fromSource:{
 
@@ -80,4 +79,8 @@ assignFrom(this /* this is the target */, {
         
 }, {from: this /* this is the Source */})
 ```
+
++=
+
+if lhs is number and right hand side is a 
 
