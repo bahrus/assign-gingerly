@@ -16,7 +16,7 @@ When it comes to the += operator, the README.md currently lays out the following
 | array | non-array | push single item (`[1,2] += 3` → `[1,2,3]`) |
 | undefined/missing | any | direct assignment |
 
-This proposal is to deal more carefully with LHS DOM, RHS Object.
+This proposal is to deal more carefully with the scenario that the LHS resolves to a DOM Element, and the RHS is an Object.
 
 ```html
 <mood-stone>
@@ -83,6 +83,7 @@ class MoodStone extends HTMLElement{
                     assignToLHS: {},
                     withOptions: {},
                 },
+                //works from assignFrom only because async
                 fromEvent:{
                     assignToTarget: {},
                     assignToSource: {},
@@ -118,6 +119,18 @@ assignGingerly would also support this (but not the get).  Because the mode swit
 I don't think an abortController / signal should be required, because typically, the handler goes away when the container does.
 
 I've added some preliminary typing for this handler in the [types/assign-gingerly/types.d.ts file](../../../../types/assign-gingerly/types.d.ts).
+
+## Preventing Duplicate Event Handlers
+
+In scenarios where the same assign needs to be called multiple times, perhaps with different options / assignments, and only the last call should prevail, we need a way of identifying that.  I'm thinking another parameter to be added to get:
+
+```JS
+'?.🔍?.button +=': {
+    get: {
+        controller: '?.abortController',
+
+    },
+```
 
 
 
