@@ -108,6 +108,8 @@ class MoodStone extends HTMLElement{
 customElements.define('mood-stone', MoodStone);
 ```
 
+All these AssignDispatchVectors (fromLHS, fromSource, fromEvent, fromTarget) x (assignToTarget, assignToSource, assignToLHS) are there to accommodate all possible combinations of assigning things from "A" to "B", depending on the developer needs.
+
 ### Location of module(s) to support this
 
 I was originally proposing this functionality to be done with a traditional assignFrom handler (builtIns.react), but this current approach involves a lot less ceremony, for an extremely common task.
