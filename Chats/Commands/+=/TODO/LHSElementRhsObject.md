@@ -24,7 +24,7 @@ This proposal is to deal more carefully with LHS DOM, RHS Object.
         Is Happy: <span id=happy></span>
         Age: <span id=age></span>
     </div>
-    <button data-diff=10>Merge</button>
+    <button disabled data-diff=10>Merge</button>
 </mood-stone>
 ```
 
@@ -60,15 +60,18 @@ class MoodStone extends HTMLElement{
                 },
                 //works from assignFrom
                 fromLHS: {
-                    "
-                }
+                    
+                },
                 //works from assignFrom
                 fromSource:{
 
                 }
             }, //can also be an array
                 
-        }, {from: this /* this is the Source */});
+        }, {
+            from: this, /* this is the Source */
+            
+        });
 }
 customElements.define('mood-stone', MoodStone);
 ```
