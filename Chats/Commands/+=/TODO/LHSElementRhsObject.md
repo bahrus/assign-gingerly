@@ -110,19 +110,21 @@ customElements.define('mood-stone', MoodStone);
 
 ### Location of module(s) to support this
 
-I was originally proposing this functionality to be done with a traditional assignFrom handler, but this current approach involves a lot less ceremony, for an extremely common task.
+I was originally proposing this functionality to be done with a traditional assignFrom handler (builtIns.react), but this current approach involves a lot less ceremony, for an extremely common task.
 
-Nevertheless, I think the module, addEventListener.js perhaps, should reside in the handlers folder.
+Nevertheless, I think the module, addEventListener.js perhaps, should reside in the handlers folder, and should follow similar patterns, for example, in resolving the get property and passing that in to some sort of class.
 
-Because of the support for nudge, and since events are not expected to fire right away, and because "assigning" the event handler won't be used by subsequent calls, I think this whole functionality can be loaded asynchronously on demand, and use fire and forget.  To avoid unnecessary awaits, cache the import once it is done the first time.
+Because of the support for nudge, and since events are not expected to fire right away, and because "assigning" the event handler won't be used by subsequent calls, I think this whole functionality can be loaded asynchronously on demand, and use fire and forget.  To avoid unnecessary microtask awaits, cache the import of addEventListener.js once it is done the first time.
 
-This could pose problems, though, when working from fromEvent.  This can't be asynchronous from the capturing of the event, so should only be available from assignFrom. 
+Asynchronous handling could pose problems, though, when working from fromEvent.  This can't be asynchronous from the capturing of the event, so should only be available from assignFrom. 
 
 assignGingerly would also support this (but not the get).  Because the mode switches to async with this fire and forget handoff, the += handler could dynamically load assignFrom on demand.
 
 I don't think an abortController / signal should be required, because typically, the handler goes away when the container does.
 
 I've added some preliminary typing for this handler in the [types/assign-gingerly/types.d.ts file](../../../../types/assign-gingerly/types.d.ts).
+
+Note that some of what is in the types relates to a phase II requirement to support dispatching another event with a unique name (perhaps) from a generic event, for more targeted handling.  Please consider that and give your initial impressions of how this would impact this requirement, getting ready for it.
 
 ## Preventing Duplicate Event Handlers
 
@@ -132,13 +134,13 @@ In scenarios where the same assign needs to be called multiple times, perhaps wi
 '?.🔍?.button +=': {
     get: {
         controller: '?.abortController',
-
+        key: 'J1blM83YNEGtLm71Kvic_w',
     },
 ```
 
 ## Require on setting?
 
-If we require the on setting, then we can limit the assumption that if the lhs is a DOM Element, and the rhs is any object, then it is an event handler.  We can instead conclude it is an event handler only if an on setting is there?  Does that see prudent?  It might be easier to read and reason about.
+If we require the on setting, then we can limit the assumption that if the lhs is a DOM Element, and the rhs is any object, then it is an event handler.  We can instead conclude it is an event handler only if an on setting is there.  Does that seem prudent?  It might be easier to read and reason about.
 
 ## Too complicated?
 
@@ -152,6 +154,8 @@ assignToTarget: {
     
 },
 ```
+
+and to support the more limited assignGingerly support, which wouldn't have access to the get object?
 
 
 
