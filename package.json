@@ -170,9 +170,9 @@
       "default": "./evaluatePathWithAsyncMethods.js",
       "types": "./evaluatePathWithAsyncMethods.ts"
     },
-    "./nudge.js": {
-      "default": "./nudge.js",
-      "types": "./nudge.ts"
+    "./handlers/nudge.js": {
+      "default": "./handlers/nudge.js",
+      "types": "./handlers/nudge.ts"
     }
   },
   "main": "index.js",

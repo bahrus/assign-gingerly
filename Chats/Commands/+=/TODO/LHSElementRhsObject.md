@@ -73,7 +73,7 @@ class MoodStone extends HTMLElement{
                 fromSource:{
 
                 },
-                //uses ./nudge.js
+                //uses ./handlers/nudge.js
                 nudge: true
             }, //can also be an array
                 
@@ -86,6 +86,18 @@ class MoodStone extends HTMLElement{
 customElements.define('mood-stone', MoodStone);
 ```
 
-Because of the support for nudge, and since events are not expected to fire right away, and because 
+### Location of module(s) to support this
+
+I was originally proposing this functionality to be done with a traditional handler, but this current approach involves a lot less ceremony, for an extremely common task.
+
+Nevertheless, I think the module, addEventListener.js perhaps, should reside in the handlers folder.
+
+Because of the support for nudge, and since events are not expected to fire right away, and because "assigning" the event handler won't be used by subsequent calls, I think this whole functionality can be loaded asynchronously on demand, and use fire and forget.  To avoid unnecessary awaits, cache the import once it is done the first time.
+
+assignGingerly would also support this (but not the get).  Because the mode switches to async with this fire and forget handoff, the += handler could dynamically load assignFrom on demand.
+
+I don't think an abortController / signal should be required, because typically, the handler goes away when the container does.
+
+
 
 
