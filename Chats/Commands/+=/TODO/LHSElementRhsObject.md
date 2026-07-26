@@ -16,7 +16,7 @@ When it comes to the += operator, README.md currently lays out the following rul
 | array | non-array | push single item (`[1,2] += 3` → `[1,2,3]`) |
 | undefined/missing | any | direct assignment |
 
-This proposal is to deal more carefully with the scenario that the LHS resolves to a DOM Element, and the RHS is an Object.
+This proposal is to deal more carefully with the scenario that the LHS resolves to a DOM Element, and the RHS is an Object, or an array of objects.
 
 ```html
 <mood-stone>
@@ -56,8 +56,7 @@ class MoodStone extends HTMLElement{
         this.age = 0;
         assignFrom(this /* this is the target */, {
             '?.🔍?.button +=': {
-                // requires assignFrom, 
-                // can't work with assignGingerly
+                // not relevant with assignGingerly
                 get: {
                     controller: '?.abortController'
                 },
