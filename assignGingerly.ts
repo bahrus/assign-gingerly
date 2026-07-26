@@ -3,6 +3,7 @@
 import { EnhancementConfig } from "./types/assign-gingerly/types";
 import type { FeatureConfigsMap } from "./types/assign-gingerly/types";
 import type { AssignPermissions } from "./isAllowedImportPath.js";
+import { normalizeAliasOptions } from './getValues.js';
 
 /**
  * Constructor signature for ItemScope Manager classes
@@ -82,6 +83,13 @@ export interface IAssignGingerlyOptions {
    * // Equivalent to: element.querySelector('my-element').classList.add('highlighted')
    */
   aka?: Record<string, string>;
+
+  /**
+   * Shorthand for binding method aliases from the source object.
+   * Each entry maps an alias to a method name, and is normalized into
+   * the existing withMethods + aka behavior.
+   */
+  akaMethods?: Record<string, string>;
   
   /**
    * AbortSignal for cleaning up reactive subscriptions (@eachTime)
@@ -759,13 +767,9 @@ export function assignGingerly(
   if (!target || typeof target !== 'object') {
     return target;
   }
+  //TODO
 
-  // Convert withMethods array to Set for O(1) lookup
-  const withMethodsSet = options?.withMethods
-    ? options.withMethods instanceof Set
-      ? options.withMethods
-      : new Set(options.withMethods)
-    : undefined;
+  const { aliasMap, withMethods: withMethodsSet } = normalizeAliasOptions(options);
 
   // Convert withAsyncMethods array to Set for O(1) lookup
   const withAsyncMethodsSet = options?.withAsyncMethods
@@ -773,18 +777,6 @@ export function assignGingerly(
       ? options.withAsyncMethods
       : new Set(options.withAsyncMethods)
     : undefined;
-
-  // Convert aka object to Map for O(1) lookup and validate aliases
-  const aliasMap = new Map<string, string>();
-  if (options?.aka) {
-    for (const [alias, target] of Object.entries(options.aka)) {
-      // Validate: disallow space and backtick in aliases
-      if (alias.includes(' ') || alias.includes('`')) {
-        throw new Error(`Invalid alias '${alias}': aliases cannot contain space or backtick characters`);
-      }
-      aliasMap.set(alias, target);
-    }
-  }
 
   const registry = options?.registry instanceof EnhancementRegistry
     ? options.registry

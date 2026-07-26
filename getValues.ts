@@ -18,6 +18,48 @@
  */
 
 import type { GetValuesOptions } from './types/assign-gingerly/types.js';
+//TODO
+export function normalizeAliasOptions(options?: {
+    aka?: Record<string, string>;
+    akaMethods?: Record<string, string>;
+    withMethods?: string[] | Set<string>;
+}): { aliasMap: Map<string, string>; withMethods: Set<string> | undefined } {
+    const aliasMap = new Map<string, string>();
+
+    if (options?.aka) {
+        for (const [alias, target] of Object.entries(options.aka)) {
+            if (alias.includes(' ') || alias.includes('`')) {
+                throw new Error(`Invalid alias '${alias}': aliases cannot contain space or backtick characters`);
+            }
+            aliasMap.set(alias, target);
+        }
+    }
+
+    if (options?.akaMethods) {
+        for (const [alias, target] of Object.entries(options.akaMethods)) {
+            if (alias.includes(' ') || alias.includes('`')) {
+                throw new Error(`Invalid alias '${alias}': aliases cannot contain space or backtick characters`);
+            }
+            aliasMap.set(alias, target);
+        }
+    }
+
+    const withMethods = options?.withMethods
+        ? options.withMethods instanceof Set
+            ? new Set(options.withMethods)
+            : new Set(options.withMethods)
+        : options?.akaMethods
+            ? new Set<string>()
+            : undefined;
+
+    if (options?.akaMethods) {
+        for (const target of Object.values(options.akaMethods)) {
+            withMethods?.add(target);
+        }
+    }
+
+    return { aliasMap, withMethods };
+}
 
 /**
  * Apply alias substitutions to a path string.
@@ -197,20 +239,7 @@ export function getValues(
     source: any,
     options?: GetValuesOptions
 ): Record<string, any> {
-    // Build alias map
-    const aliasMap = new Map<string, string>();
-    if (options?.aka) {
-        for (const [alias, target] of Object.entries(options.aka)) {
-            aliasMap.set(alias, target);
-        }
-    }
-
-    // Build methods set
-    const withMethods = options?.withMethods
-        ? options.withMethods instanceof Set
-            ? options.withMethods
-            : new Set(options.withMethods)
-        : undefined;
+    const { aliasMap, withMethods } = normalizeAliasOptions(options);
 
     const protocols = options?.protocols;
 
@@ -270,11 +299,8 @@ export function getValue(
     }
 
     let aliased = path;
-    if (options?.aka) {
-        const aliasMap = new Map<string, string>();
-        for (const [alias, target] of Object.entries(options.aka)) {
-            aliasMap.set(alias, target);
-        }
+    const { aliasMap } = normalizeAliasOptions(options);
+    if (aliasMap.size > 0) {
         aliased = applyAliases(path, aliasMap);
     }
 
@@ -282,11 +308,7 @@ export function getValue(
     const parts = parseCachedPath(normalizedPath);
     if (parts.length === 0) return source;
 
-    const withMethods = options?.withMethods
-        ? options.withMethods instanceof Set
-            ? options.withMethods
-            : new Set(options.withMethods)
-        : undefined;
+    const { withMethods } = normalizeAliasOptions(options);
 
     return navigatePath(source, parts, withMethods);
 }

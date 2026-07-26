@@ -16,6 +16,39 @@
  *     count: 42
  * }, source, { withMethods: ['querySelector'], aka: { q: 'querySelector' } });
  */
+//TODO
+export function normalizeAliasOptions(options) {
+    const aliasMap = new Map();
+    if (options?.aka) {
+        for (const [alias, target] of Object.entries(options.aka)) {
+            if (alias.includes(' ') || alias.includes('`')) {
+                throw new Error(`Invalid alias '${alias}': aliases cannot contain space or backtick characters`);
+            }
+            aliasMap.set(alias, target);
+        }
+    }
+    if (options?.akaMethods) {
+        for (const [alias, target] of Object.entries(options.akaMethods)) {
+            if (alias.includes(' ') || alias.includes('`')) {
+                throw new Error(`Invalid alias '${alias}': aliases cannot contain space or backtick characters`);
+            }
+            aliasMap.set(alias, target);
+        }
+    }
+    const withMethods = options?.withMethods
+        ? options.withMethods instanceof Set
+            ? new Set(options.withMethods)
+            : new Set(options.withMethods)
+        : options?.akaMethods
+            ? new Set()
+            : undefined;
+    if (options?.akaMethods) {
+        for (const target of Object.values(options.akaMethods)) {
+            withMethods?.add(target);
+        }
+    }
+    return { aliasMap, withMethods };
+}
 /**
  * Apply alias substitutions to a path string.
  * Replaces complete tokens between `?.` delimiters with their aliased values.
@@ -173,19 +206,7 @@ function getArray(arr, source, aliasMap, withMethods, protocols, options) {
  * @returns New object with path strings replaced by resolved values
  */
 export function getValues(pattern, source, options) {
-    // Build alias map
-    const aliasMap = new Map();
-    if (options?.aka) {
-        for (const [alias, target] of Object.entries(options.aka)) {
-            aliasMap.set(alias, target);
-        }
-    }
-    // Build methods set
-    const withMethods = options?.withMethods
-        ? options.withMethods instanceof Set
-            ? options.withMethods
-            : new Set(options.withMethods)
-        : undefined;
+    const { aliasMap, withMethods } = normalizeAliasOptions(options);
     const protocols = options?.protocols;
     const result = {};
     for (const [key, value] of Object.entries(pattern)) {
@@ -245,21 +266,14 @@ export function getValue(path, source, options) {
         return path;
     }
     let aliased = path;
-    if (options?.aka) {
-        const aliasMap = new Map();
-        for (const [alias, target] of Object.entries(options.aka)) {
-            aliasMap.set(alias, target);
-        }
+    const { aliasMap } = normalizeAliasOptions(options);
+    if (aliasMap.size > 0) {
         aliased = applyAliases(path, aliasMap);
     }
     const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
     const parts = parseCachedPath(normalizedPath);
     if (parts.length === 0)
         return source;
-    const withMethods = options?.withMethods
-        ? options.withMethods instanceof Set
-            ? options.withMethods
-            : new Set(options.withMethods)
-        : undefined;
+    const { withMethods } = normalizeAliasOptions(options);
     return navigatePath(source, parts, withMethods);
 }

@@ -320,6 +320,27 @@
             }
         });
 
+        // Test 16: akaMethods shorthand for method aliases
+        test('should support akaMethods shorthand for methods', () => {
+            const div = document.createElement('div');
+            div.innerHTML = '<my-element></my-element>';
+
+            assignGingerly(div, {
+                '?.$?.my-element?.c?.+': 'highlighted'
+            }, {
+                akaMethods: {
+                    '$': 'querySelector',
+                    'c': 'classList',
+                    '+': 'add'
+                }
+            });
+
+            const myElement = div.querySelector('my-element');
+            if (!myElement?.classList.contains('highlighted')) {
+                throw new Error('Method alias shorthand failed');
+            }
+        });
+
         // Display results
         const resultsDiv = document.getElementById('results');
         resultsDiv.innerHTML = `

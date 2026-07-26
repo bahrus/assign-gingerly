@@ -1,3 +1,4 @@
+import { normalizeAliasOptions } from './getValues.js';
 /**
  * GUID for global instance map storage to ensure uniqueness across package versions
  */
@@ -561,29 +562,14 @@ export function assignGingerly(target, source, options, permissions) {
     if (!target || typeof target !== 'object') {
         return target;
     }
-    // Convert withMethods array to Set for O(1) lookup
-    const withMethodsSet = options?.withMethods
-        ? options.withMethods instanceof Set
-            ? options.withMethods
-            : new Set(options.withMethods)
-        : undefined;
+    //TODO
+    const { aliasMap, withMethods: withMethodsSet } = normalizeAliasOptions(options);
     // Convert withAsyncMethods array to Set for O(1) lookup
     const withAsyncMethodsSet = options?.withAsyncMethods
         ? options.withAsyncMethods instanceof Set
             ? options.withAsyncMethods
             : new Set(options.withAsyncMethods)
         : undefined;
-    // Convert aka object to Map for O(1) lookup and validate aliases
-    const aliasMap = new Map();
-    if (options?.aka) {
-        for (const [alias, target] of Object.entries(options.aka)) {
-            // Validate: disallow space and backtick in aliases
-            if (alias.includes(' ') || alias.includes('`')) {
-                throw new Error(`Invalid alias '${alias}': aliases cannot contain space or backtick characters`);
-            }
-            aliasMap.set(alias, target);
-        }
-    }
     const registry = options?.registry instanceof EnhancementRegistry
         ? options.registry
         : options?.registry

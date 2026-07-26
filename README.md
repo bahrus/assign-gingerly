@@ -550,6 +550,33 @@ assignGingerly(element, {
 - Improves readability when you have many similar operations
 - Works seamlessly with `withMethods`
 
+**Shorthand for method aliases:**
+
+If you frequently pair aliases with method calls, you can use `akaMethods` as a compact alternative to passing both `withMethods` and `aka` separately. Each entry in `akaMethods` maps an alias to the method name that should be treated as a callable method:
+
+```TypeScript
+const div = document.createElement('div');
+
+div.innerHTML = `
+  <my-element></my-element>
+`;
+
+assignGingerly(div, {
+  '?.🔍?.my-element?.🎨?.+': 'highlighted'
+}, {
+  akaMethods: {
+    '🔍': 'querySelector',
+    '🎨': 'classList',
+    '+': 'add'
+  }
+});
+
+const myElement = div.querySelector('my-element');
+console.log(myElement?.classList.contains('highlighted')); // true
+```
+
+`akaMethods` is additive: it complements the existing `withMethods` and `aka` options rather than replacing them.
+
 ## Example 3e - ForEach with @each
 
 The `@each` symbol allows you to iterate over collections and apply operations to each item. This works with any iterable including Arrays, NodeList, HTMLCollection, and more.
