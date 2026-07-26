@@ -4,7 +4,7 @@
 
 ## Human Ask
 
-When it comes to the += operator, the README.md currently lays out the following rules for how it behaves:
+When it comes to the += operator, README.md currently lays out the following rules for how it behaves:
 
 **Behavior by type:**
 

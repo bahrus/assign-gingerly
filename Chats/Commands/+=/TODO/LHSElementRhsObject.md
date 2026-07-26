@@ -4,7 +4,7 @@
 
 ## Human Ask
 
-When it comes to the += operator, the README.md currently lays out the following rules for how it behaves:
+When it comes to the += operator, README.md currently lays out the following rules for how it behaves:
 
 **Behavior by type:**
 
@@ -56,14 +56,17 @@ class MoodStone extends HTMLElement{
         this.age = 0;
         assignFrom(this /* this is the target */, {
             '?.🔍?.button +=': {
+                // requires assignFrom, 
+                // can't work with assignGingerly
                 get: {
                     controller: '?.abortController'
                 },
                 on: 'click', //default based on inferencer
                 // works from assignGingerly and assignFrom
+                // no ?.s on the rhs
                 assignToTarget: {
                     "?.isHappy =!": ".",
-                    "?.age +=": '?.dataset.diff'
+                    
                 },
                 // works from assignGingerly and assignFrom
                 assignToSource: {},
@@ -71,7 +74,9 @@ class MoodStone extends HTMLElement{
                 withOptions: {},
                 //works from assignFrom or assignGingerly asynchronously
                 fromLHS: {
-                    assignToTarget: {},
+                    assignToTarget: {
+                        "?.age +=": '?.dataset.diff'
+                    },
                     assignToSource: {},
                     assignToLHS: {},
                     withOptions: {},
@@ -129,6 +134,23 @@ In scenarios where the same assign needs to be called multiple times, perhaps wi
         controller: '?.abortController',
 
     },
+```
+
+## Require on setting?
+
+If we require the on setting, then we can limit the assumption that if the lhs is a DOM Element, and the rhs is any object, then it is an event handler.  We can instead conclude it is an event handler only if an on setting is there?  Does that see prudent?  It might be easier to read and reason about.
+
+## Too complicated?
+
+Is the use case strong enough to need to support and explain and understand this:
+
+```JS
+// works from assignGingerly and assignFrom
+// no ?.s on the rhs
+assignToTarget: {
+    "?.isHappy =!": ".",
+    
+},
 ```
 
 
