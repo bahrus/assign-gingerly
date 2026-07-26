@@ -15,5 +15,6 @@ export {installForwarding} from './installForwarding.js';
 export {defineWithFeatures} from './defineWithFeatures.js';
 export {resolveAndAssignFeatures} from './resolveAndAssignFeatures.js';
 export {nudge} from './handlers/nudge.js';
+export {arr} from './handlers/arr.js';
 export {} from './handlers/manageTemplateList.js';
 import './object-extension.js';

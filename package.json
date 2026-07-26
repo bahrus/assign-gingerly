@@ -173,6 +173,10 @@
     "./handlers/nudge.js": {
       "default": "./handlers/nudge.js",
       "types": "./handlers/nudge.ts"
+    },
+    "./handlers/arr.js": {
+      "default": "./handlers/arr.js",
+      "types": "./handlers/arr.ts"
     }
   },
   "main": "index.js",
