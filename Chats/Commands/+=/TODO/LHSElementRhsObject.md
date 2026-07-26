@@ -116,9 +116,7 @@ I was originally proposing this functionality to be done with a traditional assi
 
 Nevertheless, I think the module, addEventListener.js perhaps, should reside in the handlers folder, and should follow similar patterns, for example, in resolving the get property and passing that in to some sort of class.
 
-Because of the support for nudge, and since events are not expected to fire right away, and because "assigning" the event handler won't be used by subsequent calls, I think this whole functionality can be loaded asynchronously on demand, and use fire and forget.  To avoid unnecessary microtask awaits, cache the import of addEventListener.js once it is done the first time.
-
-Asynchronous handling could pose problems, though, when working from fromEvent.  This can't be asynchronous from the capturing of the event, so should only be available from assignFrom. 
+Because of the support for nudge, and since events are not expected to fire right away, and because "assigning" the event handler won't be used by subsequent calls, I think this whole functionality can be loaded asynchronously on demand, but not wait until an actual event fires, but rather during the hydration handshake.  
 
 assignGingerly would also support this (but not the get).  Because the mode switches to async with this fire and forget handoff, the += handler could dynamically load assignFrom on demand.
 
@@ -130,7 +128,7 @@ Note that some of what is in the types relates to a phase II requirement to supp
 
 ## Preventing Duplicate Event Handlers
 
-In scenarios where the same assign needs to be called multiple times, perhaps with different options / assignments, and only the last call should prevail, we need a way of identifying that.  I'm thinking another parameter to be added to get:
+In scenarios where the same assign needs to be called multiple times, perhaps with different options / assignments, and where we only want the last call should prevail, we need a way of identifying that, so that previous event handlers can be aborted.  I'm thinking another parameter to be added to get the identifier:
 
 ```JS
 '?.🔍?.button +=': {
