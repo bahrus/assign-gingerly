@@ -47,11 +47,18 @@ class MoodStone extends HTMLElement{
         this.querySelector('#age').textContent = nv;
 
     }
+    #abortController = new AbortController();
+    get abortController(){
+        return this.#abortController;
+    }
     connectedCallback(){
         this.isHappy = true;
         this.age = 0;
         assignFrom(this /* this is the target */, {
-            '?.button +=': {
+            '?.🔍?.button +=': {
+                get: {
+                    controller: '?.abortController'
+                },
                 on: 'click', //default based on inferencer
                 // works from assignGingerly
                 assignToTarget: {
@@ -65,15 +72,20 @@ class MoodStone extends HTMLElement{
                 //works from assignFrom
                 fromSource:{
 
-                }
+                },
+                //uses ./nudge.js
+                nudge: true
             }, //can also be an array
                 
         }, {
             from: this, /* this is the Source */
-            
+            withMethods: ['querySelector'],
+            aka: {'🔍', 'querySelector'}
         });
 }
 customElements.define('mood-stone', MoodStone);
 ```
+
+Because of the support for nudge, and since events are not expected to fire right away, and because 
 
 
