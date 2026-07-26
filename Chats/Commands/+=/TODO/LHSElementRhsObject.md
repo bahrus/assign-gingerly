@@ -105,7 +105,7 @@ customElements.define('mood-stone', MoodStone);
 
 ### Location of module(s) to support this
 
-I was originally proposing this functionality to be done with a traditional handler, but this current approach involves a lot less ceremony, for an extremely common task.
+I was originally proposing this functionality to be done with a traditional assignFrom handler, but this current approach involves a lot less ceremony, for an extremely common task.
 
 Nevertheless, I think the module, addEventListener.js perhaps, should reside in the handlers folder.
 
@@ -116,6 +116,8 @@ This could pose problems, though, when working from fromEvent.  This can't be as
 assignGingerly would also support this (but not the get).  Because the mode switches to async with this fire and forget handoff, the += handler could dynamically load assignFrom on demand.
 
 I don't think an abortController / signal should be required, because typically, the handler goes away when the container does.
+
+I've added some preliminary typing for this handler in the [types/assign-gingerly/types.d.ts file](../../../../types/assign-gingerly/types.d.ts).
 
 
 
