@@ -97,8 +97,7 @@ class MoodStone extends HTMLElement{
                 
         }, {
             from: this, /* this is the Source */
-            withMethods: ['querySelector'],
-            aka: {'🔍', 'querySelector'}
+            akaMethods: {'🔍', 'querySelector'}
         });
 }
 customElements.define('mood-stone', MoodStone);
