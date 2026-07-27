@@ -58,4 +58,54 @@ await assignFrom(document.getElementById('rankings-body'), {
 
 I'm thinking it might make more sense to rename toFragment toClone while we are at it.
 
-But then, in the case of event binding, Kiro AI suggested
+But then, in the case of event binding, Kiro AI suggested dispensing each with the "toHost" even, since it can be inferred.  In this case, that would like:
+
+```JS
+await assignFrom(document.getElementById('rankings-body'), {
+    '?. =>': {
+        do: 'builtIns.manageTemplateList',
+        resolve: {
+            forEach: '?.rankings',
+            instantiate: 'globalThis://country-ranking',
+        },
+        fromEachItem: {
+            '?.querySelector?.tr?.ish': '?.',
+            withOptions: {
+                withMethods: ['querySelector'],
+                infer: { byItemprop: true }
+            },
+            resolve: { key: '?.rank' }
+        }
+    }
+}, {
+    from: vm,
+    protocols: { globalThis: k => globalThis[k] }
+});
+```
+
+Since merging cloned templates into the target is such a common requireent we could even overload even more the += operator, so that if the rhs object has "forEach", map it to this handler:
+
+```JS
+await assignFrom(document.getElementById('rankings-body'), {
+    '?. +=': {
+        forEach: '?.rankings',
+        instantiate: 'globalThis://country-ranking',
+        fromEachItem: {
+            '?.querySelector?.tr?.ish': '?.',
+            withOptions: {
+                withMethods: ['querySelector'],
+                infer: { byItemprop: true }
+            },
+            resolve: { key: '?.rank' }
+        }
+    }
+}, {
+    from: vm,
+    protocols: { globalThis: k => globalThis[k] }
+});
+```
+
+Which step(s), if any, is a step too far?
+
+
+
