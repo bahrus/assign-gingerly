@@ -1,4 +1,4 @@
-# Lhs Element, Rhs Object
+# Add Event Listener Declaratively
 
 ---
 
