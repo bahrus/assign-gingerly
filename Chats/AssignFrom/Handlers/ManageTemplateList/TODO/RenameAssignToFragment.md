@@ -111,3 +111,83 @@ I guess one could argue that the number of event handlers will tend to far excee
 
 
 
+
+---
+
+## AI Response
+
+Good instinct to revisit naming as the system matures. Let me evaluate each step:
+
+### Step 1: `assignToFragment` → `toClone`
+
+**Yes — do this.** Reasons:
+
+- "assignToFragment" is verbose and redundant (everything is an assign here)
+- "toClone" is accurate — you're assigning *to* the cloned template content
+- Consistent with the `toHost`/`toTarget`/`toLHS` naming from the event binding system
+- Shorter by 11 characters per occurrence
+
+### Step 2: Shorthand (dispense with `toClone` key, inline patterns directly)
+
+**This is where I'd pause.** The event binding shorthand works because:
+- There's one clear default destination (`toHost`) 
+- The `fromX` blocks provide unambiguous context for what the patterns mean
+
+In `fromEachItem`, the patterns go to *the clone*. But `fromEachItem` also has `withOptions`, `resolve`, and potentially `configs` as sibling keys. The shorthand detection ("any key starting with `?.` or containing operators") works, but it means:
+
+```JS
+fromEachItem: {
+    '?.querySelector?.tr?.ish': '?.',   // ← this is a pattern (toClone)
+    withOptions: { ... },                // ← this is config
+    resolve: { key: '?.rank' }           // ← this is config
+}
+```
+
+That's actually not confusing — the reserved keys (`withOptions`, `resolve`, `configs`, `get`) are distinct from pattern keys (`?.` prefix, operators). It reads fine. And it mirrors the event binding shorthand exactly.
+
+**Verdict: do this too.** The reserved key set is small and well-defined. Pattern keys are visually distinct.
+
+### Step 3: `+=` with `forEach` → auto-map to `manageTemplateList`
+
+**This is a step too far.** Here's why:
+
+1. **`+=` already does too much** — it handles numbers, strings, arrays, and now event listeners. Adding template list management makes it a grab-bag operator where the behavior depends entirely on the RHS shape. That's hard to reason about.
+
+2. **The ` =>` operator exists for exactly this purpose** — handlers are the designated "do complex things" mechanism. `manageTemplateList` is complex (reconciliation, keyed updates, multi-element templates, yieldEvery, waitForSettled). It *should* look complex at the call site because it *is* complex.
+
+3. **Event binding on `+=` works because it's literally "adding" something** — you're adding an event listener to an element, which is conceptually `element += listener`. But "element += list" doesn't have a natural semantic. `element => { do: 'list' }` reads more honestly.
+
+4. **Your own closing thought is correct** — event handlers far outnumber template lists, and template lists inherently warrant more explicit configuration. The ceremony of ` =>` is justified here.
+
+### My recommendation
+
+| Step | Verdict | Action |
+|------|---------|--------|
+| `assignToFragment` → `toClone` | ✓ Yes | Rename — cleaner, consistent |
+| Shorthand (inline patterns in `fromEachItem`) | ✓ Yes | Same mechanism as event binding |
+| `+=` with `forEach` | ✗ No | Too much overloading; ` =>` is the right tool |
+
+Would also apply the shorthand to `fromSource` (if that exists in manageTemplateList) — same pattern.
+
+### One thought on `toClone` vs bare shorthand
+
+If we support the shorthand (patterns directly in `fromEachItem`), then `toClone` becomes the *explicit* form — used only when you also need `toHost` or `toLHS` in the same block:
+
+```JS
+// Simple case — shorthand (default destination = clone)
+fromEachItem: {
+    '?.querySelector?.tr?.ish': '?.',
+    withOptions: { ... },
+    resolve: { key: '?.rank' }
+}
+
+// Complex case — explicit destinations
+fromEachItem: {
+    toClone: { '?.querySelector?.tr?.ish': '?.' },
+    toHost: { '?.lastRenderedKey': '?.rank' },
+    withOptions: { ... },
+    resolve: { key: '?.rank' }
+}
+```
+
+This parallels the event binding design exactly. Clean.
