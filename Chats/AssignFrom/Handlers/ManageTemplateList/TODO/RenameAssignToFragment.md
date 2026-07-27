@@ -107,5 +107,7 @@ await assignFrom(document.getElementById('rankings-body'), {
 
 Which step(s), if any, is a step too far?
 
+I guess one could argue that the number of event handlers will tend to far exceed the number of looping content, and it's an inheritently more complex beast anyway, hence the need to make the syntax as compact as adding an event handler might not make it worth it?
+
 
 
