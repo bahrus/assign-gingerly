@@ -11,6 +11,8 @@ When it comes to the += operator, README.md currently lays out the following rul
 | LHS type | RHS type | Result |
 |----------|----------|--------|
 | number | number | addition (`2 += 3` → `5`) |
+| number | string (numeric) | parse + addition (`5 += '3'` → `8`) |
+| number | string (non-numeric) | string concatenation (`5 += 'px'` → `'5px'`) |
 | string | any | string concatenation (`"hello" += 3` → `"hello3"`) |
 | array | array | array concatenation (`[1,2] += [3,4]` → `[1,2,3,4]`) |
 | array | non-array | push single item (`[1,2] += 3` → `[1,2,3]`) |
@@ -153,4 +155,6 @@ If we require the on setting, then we can limit the assumption that if the lhs i
 ## Options inheritance
 
 I think the parent options should apply to inner assigns by default, unless an explicit withOptions is specified
+
+Let's do this  in baby steps and first finalize on the syntax.
 
