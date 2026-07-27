@@ -93,7 +93,7 @@ class MoodStone extends HTMLElement{
                     toSource: {},
                     toLHS: {},
                     withOptions: {},
-                }
+                },
                 //uses ./handlers/nudge.js
                 nudge: true,
                 // not relevant with assignGingerly
