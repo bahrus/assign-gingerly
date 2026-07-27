@@ -8,7 +8,7 @@
  */
 
 import assignGingerly from '../assignGingerly.js';
-import type { AddEventListenerConfig, AssignDispatchVector, AssignFromOptions } from '../types/assign-gingerly/types.js';
+import type { AddEventListenerConfig, AssignDispatchVector } from '../types/assign-gingerly/types.js';
 
 /**
  * WeakMap for dedup: Element → Map<key, AbortController>
@@ -100,15 +100,10 @@ export function attachEventListener(
     host: any,
     inheritedOptions: any
 ): void {
-    const { on: eventName, get: getConfig } = config;
+    const { on: eventName, get: getConfig, fromLHS, fromHost, fromTarget, fromEvent, dispatch } = config;
 
     // Resolve get config values
-    const abortController = getConfig?.abortController;
-    const key = (getConfig as any)?.key;
-    const nudge = getConfig?.nudge;
-    const listenerOptions = getConfig?.options;
-    const stopPropagation = getConfig?.stopPropagation;
-    const preventDefault = getConfig?.preventDefault;
+    const { abortController, key, nudge, options: listenerOptions, stopPropagation, preventDefault, dispatch: getDispatch } = getConfig ?? {} as any;
 
     // Handle dedup via key
     let controller: AbortController;
@@ -139,27 +134,27 @@ export function attachEventListener(
         processVector(config, null, target, host, lhs, inheritedOptions, false);
 
         // fromLHS assignments
-        if (config.fromLHS) {
-            processVector(config.fromLHS, lhs, target, host, lhs, inheritedOptions, true);
+        if (fromLHS) {
+            processVector(fromLHS, lhs, target, host, lhs, inheritedOptions, true);
         }
 
         // fromHost assignments
-        if (config.fromHost) {
-            processVector(config.fromHost, host, target, host, lhs, inheritedOptions, true);
+        if (fromHost) {
+            processVector(fromHost, host, target, host, lhs, inheritedOptions, true);
         }
 
         // fromTarget assignments
-        if (config.fromTarget) {
-            processVector(config.fromTarget, target, target, host, lhs, inheritedOptions, true);
+        if (fromTarget) {
+            processVector(fromTarget, target, target, host, lhs, inheritedOptions, true);
         }
 
         // fromEvent assignments
-        if (config.fromEvent) {
-            processVector(config.fromEvent, event, target, host, lhs, inheritedOptions, true);
+        if (fromEvent) {
+            processVector(fromEvent, event, target, host, lhs, inheritedOptions, true);
         }
 
         // Dispatch custom event if configured
-        const dispatchConfig = config.dispatch || getConfig?.dispatch;
+        const dispatchConfig = dispatch || getDispatch;
         if (dispatchConfig && dispatchConfig.type) {
             const EventCtr = (typeof dispatchConfig.eventCtr === 'function' 
                 ? dispatchConfig.eventCtr 
