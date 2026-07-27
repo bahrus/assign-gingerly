@@ -16,7 +16,6 @@
  *     count: 42
  * }, source, { withMethods: ['querySelector'], aka: { q: 'querySelector' } });
  */
-//TODO
 export function normalizeAliasOptions(options) {
     const aliasMap = new Map();
     if (options?.aka) {

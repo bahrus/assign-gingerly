@@ -18,7 +18,7 @@
  */
 
 import type { GetValuesOptions } from './types/assign-gingerly/types.js';
-//TODO
+
 export function normalizeAliasOptions(options?: {
     aka?: Record<string, string>;
     akaMethods?: Record<string, string>;

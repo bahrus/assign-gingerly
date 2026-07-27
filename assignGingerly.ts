@@ -767,7 +767,6 @@ export function assignGingerly(
   if (!target || typeof target !== 'object') {
     return target;
   }
-  //TODO
 
   const { aliasMap, withMethods: withMethodsSet } = normalizeAliasOptions(options);
 

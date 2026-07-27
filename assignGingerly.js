@@ -562,7 +562,6 @@ export function assignGingerly(target, source, options, permissions) {
     if (!target || typeof target !== 'object') {
         return target;
     }
-    //TODO
     const { aliasMap, withMethods: withMethodsSet } = normalizeAliasOptions(options);
     // Convert withAsyncMethods array to Set for O(1) lookup
     const withAsyncMethodsSet = options?.withAsyncMethods

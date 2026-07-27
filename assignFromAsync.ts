@@ -83,7 +83,7 @@ export async function assignFromAsync(
   if (idRefNormalKeys.length > 0 && (options.pin || options.at)) {
     const ids = { ...options.pin, ...options.at };
     const { resolveIdVariable, parseIdRef } = await import('./resolveIdRef.js');
-    //TODO
+    const { withMethods, aka, akaMethods, protocols, from } = options;
     for (const key of idRefNormalKeys) {
       const parsed = parseIdRef(key);
       if (!parsed) continue;
@@ -95,8 +95,8 @@ export async function assignFromAsync(
       if (parsed.remainingPath) {
         // Resolve the RHS value
         const resolvedValue = await resolveValues(
-          { __v: value }, options.from,
-          { withMethods: options.withMethods, aka: options.aka, akaMethods: options.akaMethods, protocols: options.protocols, root: el }
+          { __v: value }, from,
+          { withMethods, aka, akaMethods, protocols, root: el }
         );
         // Apply remaining path on the resolved element
         assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options);
@@ -104,8 +104,8 @@ export async function assignFromAsync(
         // No remaining path — resolve and assign directly to the element
         const resolvedValue = await resolveValues(
           typeof value === 'object' && value !== null ? value : { __v: value },
-          options.from,
-          { withMethods: options.withMethods, aka: options.aka, akaMethods: options.akaMethods, protocols: options.protocols, root: el }
+          from,
+          { withMethods, aka, akaMethods, protocols, root: el }
         );
         if ('__v' in resolvedValue) {
           // Single value — can't assign to element root without a path

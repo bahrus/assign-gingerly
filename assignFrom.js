@@ -307,7 +307,7 @@ function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, option
     const ids = getEffectiveIds(options);
     if (!ids)
         return;
-    //TODO
+    const { withMethods, aka, akaMethods, protocols, from } = options;
     for (const key of idRefNormalKeys) {
         const parsed = parseIdRef(key);
         if (!parsed)
@@ -317,11 +317,11 @@ function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, option
             continue;
         const value = expandedPattern[key];
         if (parsed.remainingPath) {
-            const resolvedValue = getValues({ __v: value }, options.from, { withMethods: options.withMethods, aka: options.aka, akaMethods: options.akaMethods, protocols: options.protocols, root: target });
+            const resolvedValue = getValues({ __v: value }, from, { withMethods, aka, akaMethods, protocols, root: target });
             assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options);
         }
         else {
-            const resolvedValue = getValues(typeof value === 'object' && value !== null ? value : { __v: value }, options.from, { withMethods: options.withMethods, aka: options.aka, akaMethods: options.akaMethods, protocols: options.protocols, root: target });
+            const resolvedValue = getValues(typeof value === 'object' && value !== null ? value : { __v: value }, from, { withMethods, aka, akaMethods, protocols, root: target });
             if (!('__v' in resolvedValue)) {
                 assignGingerly(el, resolvedValue, options);
             }
