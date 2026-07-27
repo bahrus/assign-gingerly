@@ -60,38 +60,38 @@ class MoodStone extends HTMLElement{
                 on: 'click', //default based on inferencer
                 // works from assignGingerly and assignFrom
                 // no ?.'s on the rhs for this group
-                assignToTarget: {
+                toTarget: {
                     "?.isHappy =!": ".",
                     
                 },
-                assignToSource: {},
-                assignToLHS: {},
+                toSource: {},
+                toLHS: {},
                 withOptions: {},
                 //works from assignFrom or assignGingerly asynchronously
                 fromLHS: {
-                    assignToTarget: {
+                    toTarget: {
                         "?.age +=": '?.dataset.diff'
                     },
-                    assignToSource: {},
-                    assignToLHS: {},
+                    toSource: {},
+                    toLHS: {},
                     withOptions: {},
                 },
                 fromSource:{
-                    assignToTarget: {},
-                    assignToSource: {},
-                    assignToLHS: {},
+                    toTarget: {},
+                    toSource: {},
+                    toLHS: {},
                     withOptions: {},
                 },
                 fromTarget:{
-                    assignToTarget: {},
-                    assignToSource: {},
-                    assignToLHS: {},
+                    toTarget: {},
+                    toSource: {},
+                    toLHS: {},
                     withOptions: {},
                 },
                 fromEvent:{
-                    assignToTarget: {},
-                    assignToSource: {},
-                    assignToLHS: {},
+                    toTarget: {},
+                    toSource: {},
+                    toLHS: {},
                     withOptions: {},
                 }
                 //uses ./handlers/nudge.js
@@ -112,7 +112,7 @@ class MoodStone extends HTMLElement{
 customElements.define('mood-stone', MoodStone);
 ```
 
-All these AssignDispatchVectors (fromLHS, fromSource, fromEvent, fromTarget) x (assignToTarget, assignToSource, assignToLHS) are there to accommodate all possible combinations of assigning things from "A" to "B", depending on the developer needs.
+All these AssignDispatchVectors (fromLHS, fromSource, fromEvent, fromTarget) x (toTarget, toSource, toLHS) are there to accommodate all possible combinations of assigning things from "A" to "B", depending on the developer needs.
 
 ### fromTarget?
 
@@ -150,21 +150,7 @@ In scenarios where the same assign needs to be called multiple times, perhaps wi
 
 If we require the on setting, then we can limit the assumption that if the lhs is a DOM Element, and the rhs is any object, then it is an event handler.  We can instead conclude it is an event handler only if an on setting is there.  Does that seem prudent?  It might be easier to read and reason about.
 
-## Too complicated?
+## Options inheritance
 
-Is the use case strong enough to need to support and explain and understand this:
-
-```JS
-// works from assignGingerly and assignFrom
-// no ?.s on the rhs
-assignToTarget: {
-    "?.isHappy =!": ".",
-    
-},
-```
-
-and to support the more limited assignGingerly support, which wouldn't have access to the get object?
-
-
-
+I think the parent options should apply to inner assigns by default, unless an explicit withOptions is specified
 
