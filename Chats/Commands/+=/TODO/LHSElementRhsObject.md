@@ -16,7 +16,7 @@ When it comes to the += operator, README.md currently lays out the following rul
 | array | non-array | push single item (`[1,2] += 3` → `[1,2,3]`) |
 | undefined/missing | any | direct assignment |
 
-This proposal is to deal more carefully with the scenario that the LHS resolves to a DOM Element, and the RHS is an Object, or an array of objects.
+This proposal is to deal more carefully with the scenario that the LHS resolves to a DOM Element, and the RHS is an Object, or an array of objects.  In that scenario, we was to merge in an event handler.
 
 ```html
 <mood-stone>
@@ -55,19 +55,15 @@ class MoodStone extends HTMLElement{
         this.isHappy = true;
         this.age = 0;
         assignFrom(this /* this is the target */, {
+            //LHS points to the "LHS"
             '?.🔍?.button +=': {
-                // not relevant with assignGingerly
-                get: {
-                    controller: '?.abortController'
-                },
                 on: 'click', //default based on inferencer
                 // works from assignGingerly and assignFrom
-                // no ?.s on the rhs
+                // no ?.'s on the rhs for this group
                 assignToTarget: {
                     "?.isHappy =!": ".",
                     
                 },
-                // works from assignGingerly and assignFrom
                 assignToSource: {},
                 assignToLHS: {},
                 withOptions: {},
@@ -80,14 +76,12 @@ class MoodStone extends HTMLElement{
                     assignToLHS: {},
                     withOptions: {},
                 },
-                //works from assignFrom or assignGingerly asynchronously
                 fromSource:{
                     assignToTarget: {},
                     assignToSource: {},
                     assignToLHS: {},
                     withOptions: {},
                 },
-                //works from assignFrom only because async
                 fromEvent:{
                     assignToTarget: {},
                     assignToSource: {},
@@ -96,6 +90,11 @@ class MoodStone extends HTMLElement{
                 }
                 //uses ./handlers/nudge.js
                 nudge: true,
+                // not relevant with assignGingerly
+                // as there's no source to draw from
+                get: {
+                    controller: '?.abortController'
+                },
                 
             }, //can also be an array
                 
@@ -108,6 +107,10 @@ customElements.define('mood-stone', MoodStone);
 ```
 
 All these AssignDispatchVectors (fromLHS, fromSource, fromEvent, fromTarget) x (assignToTarget, assignToSource, assignToLHS) are there to accommodate all possible combinations of assigning things from "A" to "B", depending on the developer needs.
+
+### fromTarget?
+
+Is there a use case for fromTarget?
 
 ### Location of module(s) to support this
 
