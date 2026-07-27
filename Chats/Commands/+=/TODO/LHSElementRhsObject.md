@@ -82,6 +82,12 @@ class MoodStone extends HTMLElement{
                     assignToLHS: {},
                     withOptions: {},
                 },
+                fromTarget:{
+                    assignToTarget: {},
+                    assignToSource: {},
+                    assignToLHS: {},
+                    withOptions: {},
+                },
                 fromEvent:{
                     assignToTarget: {},
                     assignToSource: {},
