@@ -851,22 +851,60 @@ export function assignGingerly(
       if (path) {
         if (isNestedPath(path)) {
           const pathParts = parsePath(path);
-          const lastKey = pathParts[pathParts.length - 1];
-          const parent = ensureNestedPath(target, pathParts);
-          if (!(lastKey in parent)) {
-            parent[lastKey] = value;
-          } else if (Array.isArray(parent[lastKey])) {
-            parent[lastKey] = Array.isArray(value)
-              ? [...parent[lastKey], ...value]
-              : [...parent[lastKey], value];
-          } else if (typeof parent[lastKey] === 'number' && typeof value === 'string') {
-            const parsed = Number(value);
-            parent[lastKey] = isNaN(parsed) ? parent[lastKey] + value : parent[lastKey] + parsed;
+
+          // Check for withMethods path evaluation
+          let lhsValue: any;
+          let lhsParent: any;
+          let lhsKey: string;
+          if (withMethodsSet) {
+            const result = evaluatePathWithMethods(target, pathParts, value, withMethodsSet);
+            lhsParent = result.target;
+            lhsKey = result.lastKey;
+            lhsValue = lhsParent[lhsKey];
           } else {
-            parent[lastKey] += value;
+            lhsKey = pathParts[pathParts.length - 1];
+            lhsParent = ensureNestedPath(target, pathParts);
+            lhsValue = lhsParent[lhsKey];
+          }
+
+          // Event handler: Element LHS + object RHS with 'on' property
+          if (lhsValue instanceof Element && value && typeof value === 'object' && !Array.isArray(value) && 'on' in value) {
+            const capturedLhs = lhsValue;
+            const capturedValue = value;
+            const capturedTarget = target;
+            const capturedOptions = options;
+            import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
+              attachEventListener(capturedLhs, capturedValue, capturedTarget, capturedOptions?.from ?? capturedTarget, capturedOptions ?? {});
+            });
+            continue;
+          }
+
+          if (!(lhsKey in lhsParent)) {
+            lhsParent[lhsKey] = value;
+          } else if (Array.isArray(lhsValue)) {
+            lhsParent[lhsKey] = Array.isArray(value)
+              ? [...lhsValue, ...value]
+              : [...lhsValue, value];
+          } else if (typeof lhsValue === 'number' && typeof value === 'string') {
+            const parsed = Number(value);
+            lhsParent[lhsKey] = isNaN(parsed) ? lhsValue + value : lhsValue + parsed;
+          } else {
+            lhsParent[lhsKey] += value;
           }
         } else {
           // Plain key - direct operation on target
+          // Event handler: Element LHS + object RHS with 'on' property
+          if (target[path] instanceof Element && value && typeof value === 'object' && !Array.isArray(value) && 'on' in value) {
+            const capturedLhs = target[path];
+            const capturedValue = value;
+            const capturedTarget = target;
+            const capturedOptions = options;
+            import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
+              attachEventListener(capturedLhs, capturedValue, capturedTarget, capturedOptions?.from ?? capturedTarget, capturedOptions ?? {});
+            });
+            continue;
+          }
+
           if (!(path in target)) {
             target[path] = value;
           } else if (Array.isArray(target[path])) {

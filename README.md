@@ -816,7 +816,7 @@ While we are in the business of passing values of object A into object B, we mig
 
 | Operator | Name | Description | Example |
 |----------|------|-------------|---------|
-| ` +=` | Increment | Add to numeric value, concatenate strings, append to arrays | `'count +=': 5` |
+| ` +=` | Increment | Add to numeric, concat strings, append to arrays, or [bind events](docs/event-binding.md) | `'count +=': 5` |
 | ` =!` | Toggle | Negate a boolean (or any value via `!`) | `'visible =!': '.'` |
 | ` -=` | Delete | Remove properties from an object | `'?.data -=': 'key'` |
 | ` Y=` | Merge | Recursively `assignGingerly` into a sub-object | `'style Y=': { width: '100px' }` |
@@ -877,6 +877,22 @@ assignGingerly(obj, {
 // Push a single item
 assignGingerly(obj, { '?.tags +=': 'e' }); // ['a', 'b', 'c', 'd', 'e']
 ```
+
+**Event binding with `+=`:**
+
+When the LHS resolves to a DOM Element and the RHS is an object with an `on` property, `+=` attaches a declarative event listener:
+
+```JavaScript
+assignFrom(this.shadowRoot, {
+    '?.querySelector?.button +=': {
+        on: 'click',
+        '?.isHappy =!': '.',                    // toggle host property
+        fromLHS: { '?.age +=': '?.dataset.diff' } // read from button, assign to host
+    }
+}, { from: this, withMethods: ['querySelector'] });
+```
+
+The handler is lazy-loaded on demand. For full details including assignment vectors, dedup, nudge, and custom event dispatch, see [docs/event-binding.md](docs/event-binding.md).
 
 ## Example 5 - Toggling boolean values and negating
 

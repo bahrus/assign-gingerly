@@ -138,10 +138,16 @@
             });
         });
 
-        test('should allow string concatenation with += operator', () => {
+        test('should parse numeric string and add when LHS is number', () => {
             const obj = { value: 5 };
             assignGingerly(obj, { 'value +=': '3' });
-            expect(obj.value).toBe('53');
+            expect(obj.value).toBe(8);
+        });
+
+        test('should concatenate when LHS is number and RHS is non-numeric string', () => {
+            const obj = { value: 5 };
+            assignGingerly(obj, { 'value +=': 'px' });
+            expect(obj.value).toBe('5px');
         });
 
         test('should handle incrementing with zero', () => {
