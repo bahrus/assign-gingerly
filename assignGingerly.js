@@ -649,6 +649,10 @@ export function assignGingerly(target, source, options, permissions) {
                             ? [...parent[lastKey], ...value]
                             : [...parent[lastKey], value];
                     }
+                    else if (typeof parent[lastKey] === 'number' && typeof value === 'string') {
+                        const parsed = Number(value);
+                        parent[lastKey] = isNaN(parsed) ? parent[lastKey] + value : parent[lastKey] + parsed;
+                    }
                     else {
                         parent[lastKey] += value;
                     }
@@ -662,6 +666,10 @@ export function assignGingerly(target, source, options, permissions) {
                         target[path] = Array.isArray(value)
                             ? [...target[path], ...value]
                             : [...target[path], value];
+                    }
+                    else if (typeof target[path] === 'number' && typeof value === 'string') {
+                        const parsed = Number(value);
+                        target[path] = isNaN(parsed) ? target[path] + value : target[path] + parsed;
                     }
                     else {
                         target[path] += value;

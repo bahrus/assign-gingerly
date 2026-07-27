@@ -857,6 +857,8 @@ The `+=` command syntax is `<path> +=` where the path uses the `?.` nested notat
 | LHS type | RHS type | Result |
 |----------|----------|--------|
 | number | number | addition (`2 += 3` → `5`) |
+| number | string (numeric) | parse + addition (`5 += '3'` → `8`) |
+| number | string (non-numeric) | string concatenation (`5 += 'px'` → `'5px'`) |
 | string | any | string concatenation (`"hello" += 3` → `"hello3"`) |
 | array | array | array concatenation (`[1,2] += [3,4]` → `[1,2,3,4]`) |
 | array | non-array | push single item (`[1,2] += 3` → `[1,2,3]`) |
