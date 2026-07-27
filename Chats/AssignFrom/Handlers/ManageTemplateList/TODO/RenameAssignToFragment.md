@@ -4,7 +4,9 @@
 
 ## Human Ask
 
-In walking through the [Add Event Listener Command](../../../../Commands/+=/TODO/AddEventListener.md) the overuse of "assign" made things overly verbose.  Especially in the context of "from", simply saying "to" should be sufficient:
+Feel free to push back on this.  No worries about backwards compatibility, as no external dependencies so far.
+
+In walking through the [Add Event Listener Command](../../../../Commands/+=/TODO/AddEventListener.md) I was trying to follow naming conventions established by the ManageTemplateList handler, but found that the overuse of "assign" made things overly verbose, since the whole thing is wrapped inside an "assign".  Especially in the context of "from", simply saying "to" should be sufficient.  This makes me think we should now revisit the naming in ManageTemplateList.
 
 Instead of:
 
@@ -40,7 +42,7 @@ await assignFrom(document.getElementById('rankings-body'), {
             instantiate: 'globalThis://country-ranking',
         },
         fromEachItem: {
-            toFragment: { '?.querySelector?.tr?.ish': '?.' },
+            toClone: { '?.querySelector?.tr?.ish': '?.' },
             withOptions: {
                 withMethods: ['querySelector'],
                 infer: { byItemprop: true }
