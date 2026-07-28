@@ -10,7 +10,8 @@
 	},
 	"include": [
 		"index.ts",
-		"types/global.d.ts"
+		"types/global.d.ts",
+		"emojis.ts"
 	],
 	"exclude":[
 		"node_modules/*"

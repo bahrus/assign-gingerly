@@ -31,4 +31,9 @@ export const builtInEmoji: Record<string, string> = {
     '📊': 'builtIns.rangeSelector',
 };
 
+export const akaMethods: Record<string, string> = {
+    '🔍': 'querySelector',
+    '🧺': 'querySelectorAll'
+};
+
 export default builtInEmoji;

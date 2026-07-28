@@ -158,9 +158,9 @@
       "default": "./assignFromAsync-extension.js",
       "types": "./assignFromAsync-extension.ts"
     },
-    "./builtInEmoji.js": {
-      "default": "./builtInEmoji.js",
-      "types": "./builtInEmoji.ts"
+    "./emojis.js": {
+      "default": "./emojis.js",
+      "types": "./emojis.ts"
     },
     "./assignFeatures.js": {
       "default": "./assignFeatures.js",
