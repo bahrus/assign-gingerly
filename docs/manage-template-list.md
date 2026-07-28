@@ -43,7 +43,7 @@ await assignFrom(document.getElementById('rankings-body'), {
             instantiate: 'globalThis://country-ranking',
         },
         fromEachItem: {
-            assignToFragment: { '?.querySelector?.tr?.ish': '?.' },
+            toClone: { '?.querySelector?.tr?.ish': '?.' },
             withOptions: {
                 withMethods: ['querySelector'],
                 infer: { byItemprop: true }
@@ -76,7 +76,7 @@ await assignFrom(document.getElementById('rankings-body'), {
     // Per-item configuration
     fromEachItem: {
         // Pattern applied to each clone (from = current array item)
-        assignToFragment: {
+        toClone: {
             '?.querySelector?.tr?.ish': '?.'   // e.g., set ish to the whole item
         },
         // Options for the per-item assignFrom call
@@ -92,7 +92,7 @@ await assignFrom(document.getElementById('rankings-body'), {
 
     // Shared data from the outer source (optional)
     fromSource: {
-        assignToFragment: {
+        toClone: {
             '?.querySelector?.[part~="total"]?.textContent': '?.totalMedalCount'
         },
         withOptions: {
@@ -111,8 +111,8 @@ await assignFrom(document.getElementById('rankings-body'), {
 3. Creates comment markers in the target (`<!--?start name="..."-->` / `<!--?end-->`)
 4. For each item in the iterable:
    - Clones the template
-   - Calls `assignFrom(clone, assignToFragment, { from: item, ...withOptions })`
-   - If `fromSource` is configured, also calls `assignFrom(clone, fromSource.assignToFragment, { from: outerVM, ...fromSource.withOptions })`
+   - Calls `assignFrom(clone, toClone, { from: item, ...withOptions })`
+   - If `fromSource` is configured, also calls `assignFrom(clone, fromSource.toClone, { from: outerVM, ...fromSource.withOptions })`
    - Resolves the `key` from the item
 5. Buffers all clones into a DocumentFragment
 6. If `waitForSettled` is enabled, waits for async mutations to quiesce
@@ -147,7 +147,7 @@ Values from the outer VM (not from individual items) can be applied to each clon
 
 ```JavaScript
 fromSource: {
-    assignToFragment: {
+    toClone: {
         '?.querySelector?.[part~="totalMedalCount"]?.textContent': '?.totalMedalCount'
     },
     withOptions: { withMethods: ['querySelector'] }
@@ -220,7 +220,7 @@ When a template contains multiple top-level elements (e.g., two `<tr>` rows per 
 fromEachItem: {
     configs: [
         {
-            assignToFragment: {
+            toClone: {
                 '#[a]?.textContent': '?.id',
                 '#[b]?.textContent': '?.label',
             },
@@ -229,7 +229,7 @@ fromEachItem: {
             }
         },
         {
-            assignToFragment: {
+            toClone: {
                 '#[c]?.textContent': '?.description',
                 '#[d]?.textContent': '?.status'
             },
@@ -245,17 +245,17 @@ fromEachItem: {
 **How it works:**
 
 - Each entry in `configs` is zipped with the corresponding top-level element in the cloned template (config[0] → first element, config[1] → second element).
-- Each config has its own `assignToFragment` and `withOptions` — coordinates in `at` are relative to *that* element.
+- Each config has its own `toClone` and `withOptions` — coordinates in `at` are relative to *that* element.
 - `resolve` stays at the top level (shared key for reconciliation — all elements belong to the same item).
 - Mismatch handling: if there are more template elements than configs, extras get no assignment. If there are more configs than elements, extras are ignored.
 
 **Without `configs` (single-element templates):**
 
-The existing syntax still works unchanged — `assignToFragment` and `withOptions` at the top level of `fromEachItem` apply to the first element:
+The existing syntax still works unchanged — `toClone` and `withOptions` at the top level of `fromEachItem` apply to the first element:
 
 ```JavaScript
 fromEachItem: {
-    assignToFragment: { '#[a]?.textContent': '?.id' },
+    toClone: { '#[a]?.textContent': '?.id' },
     withOptions: { at: { a: [0] } },
     resolve: { key: '?.id' }
 }
@@ -274,7 +274,7 @@ The handler works with all `assignFrom` features inside `withOptions`:
 
 ```TypeScript
 fromEachItem: {
-    assignToFragment: {
+    toClone: {
         '#[a]?.textContent': '?.id',
         '#[b]?.textContent': '?.label'
     },
@@ -314,7 +314,7 @@ const config = {
             forget: true,
         },
         fromEachItem: {
-            assignToFragment: {
+            toClone: {
                 '?.cells?.0?.textContent': '?.id',
                 '?.cells?.1?.textContent': '?.label'
             },

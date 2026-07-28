@@ -317,10 +317,10 @@ export class LazyLoadHandler implements AssignFromHandler {
             const len = Math.min(elements.length, assign.configs.length);
             for (let j = 0; j < len; j++) {
                 const cfg = assign.configs[j];
-                assignFrom(elements[j], cfg.assignToFragment ?? {}, { from, ...cfg.withOptions });
+                assignFrom(elements[j], cfg.toClone ?? {}, { from, ...cfg.withOptions });
             }
-        } else if (assign.assignToFragment) {
-            assignFrom(elements[0], assign.assignToFragment, { from, ...assign.withOptions });
+        } else if (assign.toClone) {
+            assignFrom(elements[0], assign.toClone, { from, ...assign.withOptions });
         }
     }
 

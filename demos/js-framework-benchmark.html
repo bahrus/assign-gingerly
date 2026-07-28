@@ -117,17 +117,13 @@
                     forget: true,
                 },
                 fromEachItem: {
-                    // assignToFragment: {
-                    //     '?.cells?.0?.textContent': '?.id',
-                    //     '?.cells?.1?.textContent': '?.label'
-                    // },
+                    // '?.cells?.0?.textContent': '?.id',
+                    // '?.cells?.1?.textContent': '?.label',
                     // withOptions: {
                     //     infer: { byItemprop: true }
                     // },
-                    assignToFragment: {
-                        '#[a]?.textContent': '?.id',
-                        '#[b]?.textContent': '?.label'
-                    },
+                    '#[a]?.textContent': '?.id',
+                    '#[b]?.textContent': '?.label',
                     withOptions:{
                         pin: {
                             a: { path: [0], expect: '.a', fallback: true },

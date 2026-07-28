@@ -17,7 +17,7 @@
  *             instantiate: 'globalThis://country-ranking',
  *         },
  *         fromEachItem: {
- *             assignToFragment: { '?.querySelector?.tr?.ish': '?.' },
+ *             '?.querySelector?.tr?.ish': '?.',
  *             withOptions: { withMethods: ['querySelector'], infer: true },
  *             resolve: { key: '?.rank' }
  *         }
@@ -28,6 +28,24 @@ import { findMarkers, createMarkers } from '../markerUtils.js';
 import { resolveValue } from '../resolveValues.js';
 import { assignFrom } from '../assignFrom.js';
 import { processInferredAssignments } from '../inferredAssignments.js';
+/**
+ * Reserved keys in fromEachItem config — not treated as shorthand patterns.
+ */
+const RESERVED_KEYS = new Set(['toClone', 'assignToFragment', 'withOptions', 'resolve', 'get', 'configs']);
+/**
+ * Extract shorthand patterns from fromEachItem config (non-reserved keys → toClone).
+ */
+function extractToClone(config) {
+    if (!config)
+        return {};
+    const result = {};
+    for (const key of Object.keys(config)) {
+        if (!RESERVED_KEYS.has(key)) {
+            result[key] = config[key];
+        }
+    }
+    return result;
+}
 const listStateMap = new WeakMap();
 /**
  * ManageTemplateListHandler — clones a template per iterable item with keyed reconciliation.
@@ -48,18 +66,19 @@ export class ManageTemplateListHandler {
         }
         const fromEachItem = this.config.fromEachItem;
         const configs = fromEachItem?.configs; // Array form for multi-element templates
-        const assignToFragment = fromEachItem?.assignToFragment ?? {};
         const withOptions = fromEachItem?.withOptions ?? {};
-        const perItemResolve = fromEachItem?.resolve ?? {};
+        const perItemResolve = fromEachItem?.resolve ?? fromEachItem?.get ?? {};
         const keyPath = perItemResolve.key; // e.g., '?.rank'
+        // Resolve toClone patterns: explicit `toClone` key, or shorthand (non-reserved keys)
+        const toClone = fromEachItem?.toClone ?? fromEachItem?.assignToFragment ?? extractToClone(fromEachItem);
         // fromSource config — assigns from the outer `from` (parent VM) to each clone
         const fromSource = this.config.fromSource;
-        const sourceAssignToFragment = fromSource?.assignToFragment;
+        const sourceToClone = fromSource?.toClone ?? fromSource?.assignToFragment;
         const sourceWithOptions = fromSource?.withOptions ?? {};
-        // Detect fast path: no assignToFragment patterns, just infer (only for non-configs mode)
-        const hasAssignPatterns = !configs && Object.keys(assignToFragment).length > 0;
+        // Detect fast path: no toClone patterns, just infer (only for non-configs mode)
+        const hasAssignPatterns = !configs && Object.keys(toClone).length > 0;
         const inferredConfig = !configs && withOptions.infer;
-        const useFastPath = !configs && !hasAssignPatterns && inferredConfig && !sourceAssignToFragment;
+        const useFastPath = !configs && !hasAssignPatterns && inferredConfig && !sourceToClone;
         const name = markerName ?? getMarkerName(instantiate) ?? 'templateList';
         // Find or create markers
         let [startMarker, endMarker] = findMarkers(lhsTarget, name);
@@ -122,7 +141,7 @@ export class ManageTemplateListHandler {
                     const len = Math.min(elements.length, configs.length);
                     for (let j = 0; j < len; j++) {
                         const cfg = configs[j];
-                        assignFrom(elements[j], cfg.assignToFragment ?? {}, { from: item, ...cfg.withOptions });
+                        assignFrom(elements[j], cfg.toClone ?? {}, { from: item, ...cfg.withOptions });
                     }
                 }
                 else {
@@ -132,10 +151,10 @@ export class ManageTemplateListHandler {
                             processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                         }
                         else {
-                            assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                            assignFrom(rootEl, toClone, { from: item, ...withOptions });
                         }
-                        if (sourceAssignToFragment && options?.from) {
-                            assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                        if (sourceToClone && options?.from) {
+                            assignFrom(rootEl, sourceToClone, { from: options.from, ...sourceWithOptions });
                         }
                     }
                 }
@@ -168,7 +187,7 @@ export class ManageTemplateListHandler {
                     const len = Math.min(elements.length, configs.length);
                     for (let j = 0; j < len; j++) {
                         const cfg = configs[j];
-                        assignFrom(elements[j], cfg.assignToFragment ?? {}, { from: item, ...cfg.withOptions });
+                        assignFrom(elements[j], cfg.toClone ?? {}, { from: item, ...cfg.withOptions });
                     }
                 }
                 else {
@@ -180,10 +199,10 @@ export class ManageTemplateListHandler {
                             processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                         }
                         else {
-                            assignFrom(rootEl, assignToFragment, { from: item, ...withOptions });
+                            assignFrom(rootEl, toClone, { from: item, ...withOptions });
                         }
-                        if (sourceAssignToFragment && options?.from) {
-                            assignFrom(rootEl, sourceAssignToFragment, { from: options.from, ...sourceWithOptions });
+                        if (sourceToClone && options?.from) {
+                            assignFrom(rootEl, sourceToClone, { from: options.from, ...sourceWithOptions });
                         }
                     }
                 }

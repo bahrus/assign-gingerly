@@ -3918,7 +3918,7 @@ await assignFromAsync(container, {
             if: '?.showPanel',
             instantiate: 'globalThis://panelTemplate',
             assign: {
-                assignToFragment: {
+                toClone: {
                     '#[title]?.textContent': '?.panelTitle',
                     '#[body]?.textContent': '?.panelContent'
                 },
@@ -3931,7 +3931,7 @@ await assignFromAsync(container, {
 }, { from: vm, withMethods: ['querySelector'], protocols: { globalThis: k => globalThis[k] } });
 ```
 
-The `assign.assignToFragment` paths resolve against `options.from` (the same source that drives the `if` condition). For multi-element templates, use `assign.configs` (same zip semantics as `manageTemplateList`).
+The `assign.toClone` paths resolve against `options.from` (the same source that drives the `if` condition). For multi-element templates, use `assign.configs` (same zip semantics as `manageTemplateList`).
 
 ### View Transitions
 
@@ -4248,7 +4248,7 @@ assignFrom(document.body, {
             instantiate: 'globalThis://country-ranking',
         },
         fromEachItem: {
-            assignToFragment: { '?.querySelector?.tr?.ish': '?.' },
+            toClone: { '?.querySelector?.tr?.ish': '?.' },
             withOptions: { withMethods: ['querySelector'], infer: true },
             get: { key: '?.rank' }
         }
@@ -4264,7 +4264,7 @@ assignFrom(document.body, {
 
 1. Resolves `forEach` (iterable) and `instantiate` (template) from the `resolve` block
 2. Clones the template once per item, buffering all clones into a `DocumentFragment`
-3. For each clone, calls `assignFrom(clone, assignToFragment, { from: item, ...withOptions })` — distributing the item's data
+3. For each clone, calls `assignFrom(clone, toClone, { from: item, ...withOptions })` — distributing the item's data
 4. Inserts the fragment between comment markers in one DOM operation
 5. On subsequent calls, reconciles by `key` — adds new items, removes missing ones, updates existing clones in place
 
@@ -4283,7 +4283,7 @@ Pass data from the outer VM into each clone (e.g., aggregate totals):
 
 ```JavaScript
 fromSource: {
-    assignToFragment: {
+    toClone: {
         '?.querySelector?.[part~="totalMedalCount"]?.textContent': '?.totalMedalCount'
     },
     withOptions: { withMethods: ['querySelector'] }

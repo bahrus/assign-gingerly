@@ -191,3 +191,16 @@ fromEachItem: {
 ```
 
 This parallels the event binding design exactly. Clean.
+
+---
+
+## Human Response
+
+Please implement
+
+| Step | Verdict | Action |
+|------|---------|--------|
+| `assignToFragment` → `toClone` | ✓ Yes | Rename — cleaner, consistent |
+| Shorthand (inline patterns in `fromEachItem`) | ✓ Yes | Same mechanism as event binding |
+
+and update the README.md as well as the demos/js-framework-benchmark.html, demos/multi-row-template.html
