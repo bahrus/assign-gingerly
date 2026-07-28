@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Experiments With aliases</title>
+</head>
+<body>
+    <div id="div">
+        <span>thing 1</span>
+        <span>thing 2</span>
+        <span>thing 3</span>
+    </div>
+    <script type="module">
+        import {assignGingerly} from '/assignGingerly.js';
+        assignGingerly(div, {
+            '?.🧺?.span?.@each?.classList?.add': 'hello'
+        }, {
+            withMethods: ['add'],
+            akaMethods: {
+                '🧺': 'querySelectorAll'
+            }
+        });
+    </script>
+    <style>
+        .hello {
+            color: green;
+        }
+    </style>
+</body>
+</html>

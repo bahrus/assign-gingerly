@@ -4,7 +4,7 @@
 
 ## Human Ask
 
-As mentioned in [LHSElementRhsObject](./LHSElementRhsObject.md), the += operator can also add event handlers when the LHS is a DOM element and the RHS is an object or array of objects.
+As mentioned in [AddEventListener](../AddEventListener.md), the += operator can also add event handlers when the LHS is a DOM element and the RHS is an object or array of objects.
 
 This planning chat is to allow the matching element to dispatch an event with a unique name for more targeted event handling.
 
