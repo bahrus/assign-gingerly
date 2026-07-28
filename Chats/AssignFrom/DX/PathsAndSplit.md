@@ -239,7 +239,7 @@ The implicit `toString` approach (Option 1) is clever but fragile — it breaks 
 ### Questions
 
 1. **Does `.path` (or `.p`) feel acceptable ergonomically?** It's the safest approach.
-2. **Should this live in this package (`assign-gingerly/paths.js`) or is it general utility?**
+2. **Should this live in this package (`assign-gingerly/DX/paths.js`) or is it general utility?**
 3. **Do you want this now, or park it for the `tags.js` authoring story later?**
 
 ---

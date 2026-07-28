@@ -7,7 +7,7 @@
 I think [the efforts we've made so far](../RoundaboutDX/BetterDXForRoundabout.md) are good, but I still wonder if this could be made easier:
 
 ```ts
-import { paths, set, smoothOver } from 'assign-gingerly/paths.js';
+import { paths, set, smoothOver } from 'assign-gingerly/DX/paths.js';
 
 interface MyVM extends HTMLElement { /* ... */ }
 const aka = { q: 'querySelector' };
@@ -32,7 +32,7 @@ In particular, the ... is a bit jarring.
 I wonder if, with the help of smoothOver, we can make it read more intuitively, something like:
 
 ```ts
-import { paths, set, smoothOver } from 'assign-gingerly/paths.js';
+import { paths, set, smoothOver } from 'assign-gingerly/DX/paths.js';
 
 interface MyVM extends HTMLElement { /* ... */ }
 const aka = { q: 'querySelector' };

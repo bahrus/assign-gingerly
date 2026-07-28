@@ -4,7 +4,7 @@
  * Provides compile-time autocomplete and type safety for `?.`-prefixed path strings.
  * 
  * @example
- * import { paths, sp } from 'assign-gingerly/paths.js';
+ * import { paths, sp } from 'assign-gingerly/DX/paths.js';
  * 
  * interface Person {
  *     firstName?: string;

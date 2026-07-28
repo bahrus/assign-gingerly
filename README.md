@@ -4220,7 +4220,7 @@ Uses comment markers (`<!--?start name="microDataJoin"-->` / `<!--?end-->`) to t
 The `md` tagged template literal produces the `{prop, val}` structure from proxy objects — full autocomplete and type safety:
 
 ```TypeScript
-import { paths, md } from 'assign-gingerly/paths.js';
+import { paths, md } from 'assign-gingerly/DX/paths.js';
 
 interface Person { firstName: string; lastName: string; birthDT: Date; age: number; }
 const $ = paths<Person>();
@@ -4345,7 +4345,7 @@ assignFrom(element, {
 For JSON generated config files generated from TypeScript/`.mts`/`mjs` files during a build or server-side rendering, the `paths` utility provides compile-time autocomplete and type safety for `?.`-prefixed path strings. The `sp` tagged template literal ("split into parts") produces arrays suitable for `builtIns.join`. The `md` tagged template literal produces `{prop, val}` objects suitable for `builtIns.microDataJoin`.
 
 ```TypeScript
-import { paths, sp } from 'assign-gingerly/paths.js';
+import { paths, sp } from 'assign-gingerly/DX/paths.js';
 
 interface Person {
     firstName?: string;
@@ -4421,7 +4421,7 @@ const pattern = {
 The `md` tag produces `{prop, val}` objects for `builtIns.microDataJoin`:
 
 ```TypeScript
-import { paths, md } from 'assign-gingerly/paths.js';
+import { paths, md } from 'assign-gingerly/DX/paths.js';
 
 interface Person { firstName: string; lastName: string; birthDT: Date; age: number; }
 const $ = paths<Person>();

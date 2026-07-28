@@ -87,7 +87,7 @@ Looking at the `merges` config, the DX friction comes from:
 You already have `paths<T>()`. The key insight is that in `roundabout` merges, the **source and target are the same object** (the VM itself). So one proxy serves both sides:
 
 ```ts
-import { paths } from 'assign-gingerly/paths.js';
+import { paths } from 'assign-gingerly/DX/paths.js';
 
 interface MyVM {
     template: HTMLTemplateElement;
@@ -137,7 +137,7 @@ Hmm — but this doesn't work well because LHS paths often use `withMethods` + `
 Since LHS paths navigate the *target element* (with methods/aliases) while RHS paths navigate the *VM*, they're conceptually different:
 
 ```ts
-import { paths } from 'assign-gingerly/paths.js';
+import { paths } from 'assign-gingerly/DX/paths.js';
 
 // RHS proxy — navigates the VM
 const $ = paths<MyVM>();
@@ -217,7 +217,7 @@ The RHS is type-safe (`from($.username)` catches typos), but the LHS stays as ma
 After thinking through all the options, here's what I think actually helps for this specific pattern:
 
 ```ts
-import { paths } from 'assign-gingerly/paths.js';
+import { paths } from 'assign-gingerly/DX/paths.js';
 
 interface MyVM { username: string; count: number; statusClassName: string; statusMessageText: string; clone: any; renderCount: number; }
 const $ = paths<MyVM>();
@@ -263,7 +263,7 @@ merges: [
 
 ### What This Package Could Export
 
-From `assign-gingerly/paths.js`:
+From `assign-gingerly/DX/paths.js`:
 
 ```ts
 export { paths, sp, md, kv };
@@ -281,7 +281,7 @@ export function kv(lhs: string, rhs: any): Record<string, any> {
 ### The Full Roundabout Example Rewritten
 
 ```ts
-import { paths, kv } from 'assign-gingerly/paths.js';
+import { paths, kv } from 'assign-gingerly/DX/paths.js';
 
 interface CounterVM {
     template: HTMLTemplateElement;
@@ -591,7 +591,7 @@ call($.appendChild, $.clone)
 ### Putting It All Together — Realistic Version
 
 ```ts
-import { paths, assign, call } from 'assign-gingerly/paths.js';
+import { paths, assign, call } from 'assign-gingerly/DX/paths.js';
 
 interface MyVM extends HTMLElement { /* ... */ }
 const aka = { q: 'querySelector' };
@@ -860,7 +860,7 @@ You're right — `set($.appendChild).to($.clone)` is just as clear as `call($.ap
 ### The Full Example Revisited
 
 ```ts
-import { paths, set, smoothOver } from 'assign-gingerly/paths.js';
+import { paths, set, smoothOver } from 'assign-gingerly/DX/paths.js';
 
 interface MyVM extends HTMLElement { /* ... */ }
 const aka = { q: 'querySelector' };
