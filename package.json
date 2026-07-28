@@ -111,6 +111,10 @@
       "default": "./DX/paths.js",
       "types": "./DX/paths.ts"
     },
+    "./DX/IterableMixin.js": {
+      "default": "./DX/IterableMixin.js",
+      "types": "./DX/IterableMixin.ts"
+    },
     "./enhanceAll.js": {
       "default": "./enhanceAll.js",
       "types": "./enhanceAll.ts"

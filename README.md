@@ -4790,6 +4790,18 @@ console.log(app.todos.title); // 'My Todos'
 console.log([...app.todos]); // ['Buy milk', 'Walk dog'] (list unchanged)
 ```
 
+This pattern seems useful and reusable enough that this package provides a DX utility mixin to add this functionality to any class definition:
+
+```JS
+import {IterableMixin} from 'assign-gingerly/DX/IterableMixin.js';
+
+class PlainList extends IterableMixin<number>()(class {}) {}
+
+class MyIterableCustomElement extends IterableMixin<string>()(HTMLElement) {}
+
+class Combined extends OtherMixin()(IterableMixin<string>()(HTMLElement)) {}
+```
+
 ### Use case: Validation on assignment
 
 ```JavaScript
@@ -4834,7 +4846,7 @@ Only classes that explicitly define their own `assignTo` are affected. The check
 `installForwarding` installs getter/setter pairs on a class prototype that delegate to nested paths on the instance. This is useful for exposing deeply nested properties at the top level of an object — particularly for custom elements that delegate behavior to compositional feature classes.
 
 ```JavaScript
-import { installForwarding } from 'assign-gingerly/installForwarding.js';
+import { installForwarding } from 'assign-gingerly/DX/installForwarding.js';
 ```
 
 ### Basic usage
@@ -5932,7 +5944,7 @@ assignGingerly(el, {
 
 ```JavaScript
 import { PropertyBag, assignFeatures } from 'assign-gingerly/assignFeatures.js';
-import { installForwarding } from 'assign-gingerly/installForwarding.js';
+import { installForwarding } from 'assign-gingerly/DX/installForwarding.js';
 
 // 1. Define a feature container by subclassing PropertyBag
 class ClubMemberBehaviors extends PropertyBag {

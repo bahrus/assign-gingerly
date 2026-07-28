@@ -12,7 +12,8 @@
 		"index.ts",
 		"types/global.d.ts",
 		"emojis.ts",
-		"DX/paths.ts"
+		"DX/paths.ts",
+		"DX/IterableMixin.ts",
 	],
 	"exclude":[
 		"node_modules/*"
