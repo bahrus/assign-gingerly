@@ -11,7 +11,8 @@
 	"include": [
 		"index.ts",
 		"types/global.d.ts",
-		"emojis.ts"
+		"emojis.ts",
+		"DX/paths.ts"
 	],
 	"exclude":[
 		"node_modules/*"

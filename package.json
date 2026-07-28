@@ -17,6 +17,7 @@
   "files": [
     "*.js",
     "*.ts",
+    "DX/**",
     "handlers/**",
     "inferencer/**",
     "README.md",
@@ -106,9 +107,9 @@
       "default": "./handlers/manageTemplateList.js",
       "types": "./handlers/manageTemplateList.ts"
     },
-    "./paths.js": {
-      "default": "./paths.js",
-      "types": "./paths.ts"
+    "./DX/paths.js": {
+      "default": "./DX/paths.js",
+      "types": "./DX/paths.ts"
     },
     "./enhanceAll.js": {
       "default": "./enhanceAll.js",
