@@ -33,8 +33,16 @@ export const builtInEmoji: Record<string, string> = {
 
 export const akaMethods: Record<string, string> = {
     '🔍': 'querySelector',
-    '🧺': 'querySelectorAll'
+    '🧺': 'querySelectorAll',
+    '+': 'add',
+    '🧬': 'cloneNode'
 };
+
+export const aka: Record<string, string> = {
+    '©️': 'content?.cloneNode?.true',
+    //'🔎': 'clone?.querySelector'
+};
+
 
 export const emojis = {
     builtInEmoji,

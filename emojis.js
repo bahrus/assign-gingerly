@@ -31,7 +31,13 @@ export const builtInEmoji = {
 };
 export const akaMethods = {
     '🔍': 'querySelector',
-    '🧺': 'querySelectorAll'
+    '🧺': 'querySelectorAll',
+    '+': 'add',
+    '🧬': 'cloneNode'
+};
+export const aka = {
+    '©️': 'content?.cloneNode?.true',
+    //'🔎': 'clone?.querySelector'
 };
 export const emojis = {
     builtInEmoji,
