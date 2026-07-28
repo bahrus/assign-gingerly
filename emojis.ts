@@ -36,4 +36,9 @@ export const akaMethods: Record<string, string> = {
     '🧺': 'querySelectorAll'
 };
 
-export default builtInEmoji;
+export const emojis = {
+    builtInEmoji,
+    akaMethods,
+}
+
+export default emojis;

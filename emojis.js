@@ -33,4 +33,8 @@ export const akaMethods = {
     '🔍': 'querySelector',
     '🧺': 'querySelectorAll'
 };
-export default builtInEmoji;
+export const emojis = {
+    builtInEmoji,
+    akaMethods,
+};
+export default emojis;
