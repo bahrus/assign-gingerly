@@ -21,8 +21,8 @@
  * // Now el.command delegates to el.behaviors.commandBehavior.command
  */
 
-import { resolveValue, ResolveValuesOptions } from './resolveValues.js';
-import assignGingerly, { IAssignGingerlyOptions } from './assignGingerly.js';
+import { resolveValue, ResolveValuesOptions } from '../resolveValues.js';
+import assignGingerly, { IAssignGingerlyOptions } from '../assignGingerly.js';
 
 export interface InstallForwardingOptions extends ResolveValuesOptions, IAssignGingerlyOptions {}
 

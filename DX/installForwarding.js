@@ -20,8 +20,8 @@
  * installForwarding(ClubMember);
  * // Now el.command delegates to el.behaviors.commandBehavior.command
  */
-import { resolveValue } from './resolveValues.js';
-import assignGingerly from './assignGingerly.js';
+import { resolveValue } from '../resolveValues.js';
+import assignGingerly from '../assignGingerly.js';
 /**
  * Installs property forwarding on a class prototype based on `static propLinks`.
  *

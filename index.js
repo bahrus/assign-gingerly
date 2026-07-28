@@ -11,7 +11,7 @@ export { resolveValues, resolveValue } from './resolveValues.js';
 export { assignFromAsync } from './assignFromAsync.js';
 export { assignFrom } from './assignFrom.js';
 export { assignFeatures, FeaturesRegistry, captureFeatureInitVals, PropertyBag, suggestFeatureInfo, getFeatureInfoSuggestions } from './assignFeatures.js';
-export { installForwarding } from './installForwarding.js';
+export { installForwarding } from './DX/installForwarding.js';
 export { defineWithFeatures } from './defineWithFeatures.js';
 export { resolveAndAssignFeatures } from './resolveAndAssignFeatures.js';
 export { nudge } from './handlers/nudge.js';
