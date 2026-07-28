@@ -47,19 +47,3 @@ export function IterableMixin() {
         return WithIterableStatics;
     };
 }
-/* ---------------------------------------------------------------- */
-/* Usage examples                                                    */
-/* ---------------------------------------------------------------- */
-// 1) Custom element — same call shape as the original class.
-// class MyIterableCustomElement extends IterableMixin<string>()(HTMLElement) {}
-// const el = new MyIterableCustomElement();
-// el.addEventListener('items-changed', () => console.log('list changed!'));
-// MyIterableCustomElement.setItems(el, ['a', 'b', 'c']);
-// console.log(MyIterableCustomElement.getItems(el));
-// // 2) Plain class, no DOM dependency — dispatch is skipped, no error.
-// class PlainList extends IterableMixin<number>()(class {}) {}
-// const plain = new PlainList();
-// PlainList.setItems(plain, [1, 2, 3]);
-// console.log(PlainList.getItems(plain));
-// 3) Composable with other mixins the usual way:
-// class Combined extends OtherMixin()(IterableMixin<string>()(HTMLElement)) {}
