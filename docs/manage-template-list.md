@@ -91,7 +91,7 @@ await assignFrom(document.getElementById('rankings-body') /** this is the target
     },
 
     // Shared data from the outer source (optional)
-    fromSource: {
+    fromHost: {
         toClone: {
             '?.querySelector?.[part~="total"]?.textContent': '?.totalMedalCount'
         },
@@ -112,7 +112,7 @@ await assignFrom(document.getElementById('rankings-body') /** this is the target
 4. For each item in the iterable:
    - Clones the template
    - Calls `assignFrom(clone, toClone, { from: item, ...withOptions })`
-   - If `fromSource` is configured, also calls `assignFrom(clone, fromSource.toClone, { from: outerVM, ...fromSource.withOptions })`
+   - If `fromHost` is configured, also calls `assignFrom(clone, fromHost.toClone, { from: outerVM, ...fromHost.withOptions })`
    - Resolves the `key` from the item
 5. Buffers all clones into a DocumentFragment
 6. If `waitForSettled` is enabled, waits for async mutations to quiesce
@@ -141,12 +141,12 @@ resolve: { key: '?.rank' }    // Use item.rank as the key
 
 Without `key`, positional matching is used (item[0] → clone[0], item[1] → clone[1]). This works for static lists but breaks when items are inserted/removed from the middle.
 
-## Shared Parent Data (`fromSource`)
+## Shared Parent Data (`fromHost`)
 
 Values from the outer VM (not from individual items) can be applied to each clone:
 
 ```JavaScript
-fromSource: {
+fromHost: {
     toClone: {
         '?.querySelector?.[part~="totalMedalCount"]?.textContent': '?.totalMedalCount'
     },

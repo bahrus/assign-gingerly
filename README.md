@@ -4277,12 +4277,12 @@ The `key` field (in `fromEachItem.get`) identifies each item for stable identity
 
 Without `key`, positional matching is used (item[i] → clone[i]).
 
-**Shared parent data (`fromSource`):**
+**Shared parent data (`fromHost`):**
 
 Pass data from the outer VM into each clone (e.g., aggregate totals):
 
 ```JavaScript
-fromSource: {
+fromHost: {
     toClone: {
         '?.querySelector?.[part~="totalMedalCount"]?.textContent': '?.totalMedalCount'
     },

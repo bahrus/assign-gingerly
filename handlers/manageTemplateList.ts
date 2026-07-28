@@ -35,7 +35,7 @@ import { processInferredAssignments } from '../inferredAssignments.js';
 /**
  * Reserved keys in fromEachItem config — not treated as shorthand patterns.
  */
-const RESERVED_KEYS = new Set(['toClone', 'assignToFragment', 'withOptions', 'resolve', 'get', 'configs']);
+const RESERVED_KEYS = new Set(['toClone', 'withOptions', 'resolve', 'get', 'configs']);
 
 /**
  * Extract shorthand patterns from fromEachItem config (non-reserved keys → toClone).
@@ -93,24 +93,27 @@ export class ManageTemplateListHandler implements AssignFromHandler {
             return; // Nothing to iterate
         }
 
-        const fromEachItem = this.config.fromEachItem;
+        const { fromEachItem, fromHost: fromHostConfig, fromTarget: fromTargetConfig } = this.config;
         const configs = fromEachItem?.configs; // Array form for multi-element templates
         const withOptions = fromEachItem?.withOptions ?? {};
         const perItemResolve = fromEachItem?.resolve ?? fromEachItem?.get ?? {};
-        const keyPath = perItemResolve.key; // e.g., '?.rank'
+        const { key: keyPath } = perItemResolve; // e.g., '?.rank'
 
         // Resolve toClone patterns: explicit `toClone` key, or shorthand (non-reserved keys)
-        const toClone = fromEachItem?.toClone ?? fromEachItem?.assignToFragment ?? extractToClone(fromEachItem);
+        const toClone = fromEachItem?.toClone ?? extractToClone(fromEachItem);
 
-        // fromSource config — assigns from the outer `from` (parent VM) to each clone
-        const fromSource = this.config.fromSource;
-        const sourceToClone = fromSource?.toClone ?? fromSource?.assignToFragment;
-        const sourceWithOptions = fromSource?.withOptions ?? {};
+        // fromHost config — assigns from options.from (host/VM) to each clone
+        const hostToClone = fromHostConfig ? (fromHostConfig.toClone ?? extractToClone(fromHostConfig)) : undefined;
+        const hostWithOptions = fromHostConfig?.withOptions ?? {};
+
+        // fromTarget config — assigns from the target element to each clone
+        const targetToClone = fromTargetConfig ? (fromTargetConfig.toClone ?? extractToClone(fromTargetConfig)) : undefined;
+        const targetWithOptions = fromTargetConfig?.withOptions ?? {};
 
         // Detect fast path: no toClone patterns, just infer (only for non-configs mode)
         const hasAssignPatterns = !configs && Object.keys(toClone).length > 0;
         const inferredConfig = !configs && withOptions.infer;
-        const useFastPath = !configs && !hasAssignPatterns && inferredConfig && !sourceToClone;
+        const useFastPath = !configs && !hasAssignPatterns && inferredConfig && !hostToClone && !targetToClone;
 
         const name = markerName ?? getMarkerName(instantiate) ?? 'templateList';
 
@@ -190,8 +193,11 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                         } else {
                             assignFrom(rootEl, toClone, { from: item, ...withOptions });
                         }
-                        if (sourceToClone && options?.from) {
-                            assignFrom(rootEl, sourceToClone, { from: options.from, ...sourceWithOptions });
+                        if (hostToClone && options?.from) {
+                            assignFrom(rootEl, hostToClone, { from: options.from, ...hostWithOptions });
+                        }
+                        if (targetToClone) {
+                            assignFrom(rootEl, targetToClone, { from: lhsTarget, ...targetWithOptions });
                         }
                     }
                 }
@@ -236,8 +242,11 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                             assignFrom(rootEl, toClone, { from: item, ...withOptions });
                         }
 
-                        if (sourceToClone && options?.from) {
-                            assignFrom(rootEl, sourceToClone, { from: options.from, ...sourceWithOptions });
+                        if (hostToClone && options?.from) {
+                            assignFrom(rootEl, hostToClone, { from: options.from, ...hostWithOptions });
+                        }
+                        if (targetToClone) {
+                            assignFrom(rootEl, targetToClone, { from: lhsTarget, ...targetWithOptions });
                         }
                     }
                 }
