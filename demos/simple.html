@@ -13,6 +13,7 @@
     </div>
     <script type="module">
         import {assignGingerly} from '/assignGingerly.js';
+        import {akaMethods} from '/emojis.js';
         assignGingerly(div, {
             '?.🧺?.span?.+': 'hello'
         }, {
@@ -20,9 +21,7 @@
             aka: {
                 '+': '@each?.classList?.add'
             },
-            akaMethods: {
-                '🧺': 'querySelectorAll'
-            }
+            akaMethods
         });
     </script>
     <style>
