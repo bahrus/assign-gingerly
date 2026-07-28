@@ -35,7 +35,7 @@ const vm = {
     ]
 };
 
-await assignFrom(document.getElementById('rankings-body'), {
+await assignFrom(document.getElementById('rankings-body') /** this is the target **/, {
     '?. =>': {
         do: 'builtIns.manageTemplateList',
         resolve: {
@@ -52,7 +52,7 @@ await assignFrom(document.getElementById('rankings-body'), {
         }
     }
 }, {
-    from: vm,
+    from: vm, /** this is the host **/
     protocols: { globalThis: k => globalThis[k] }
 });
 ```
