@@ -4,7 +4,9 @@
 
 ## Human Ask
 
-The ternary operator ?= supports:
+This package supports [ternary assignment](/docs/ternary-assignment.md)
+
+As explained in that document, the ternary operator ?= supports:
 
 [cond, then, else]
 
@@ -17,8 +19,6 @@ It would be more convenient to allow for:
 [cond, '??', else]
 
 if condition is truthy, return the actual condition.  Otherwise return the else.
-
-Else return the else.
 
 In fact, I could see the following being useful, the equivalent of
 
