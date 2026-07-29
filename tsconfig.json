@@ -11,7 +11,7 @@
 	"include": [
 		"index.ts",
 		"types/global.d.ts",
-		"emojis.ts",
+		"DX/emojis.ts",
 		"DX/paths.ts",
 		"DX/IterableMixin.ts",
 	],

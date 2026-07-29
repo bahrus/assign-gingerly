@@ -163,9 +163,9 @@
       "default": "./assignFromAsync-extension.js",
       "types": "./assignFromAsync-extension.ts"
     },
-    "./emojis.js": {
-      "default": "./emojis.js",
-      "types": "./emojis.ts"
+    "./DX/emojis.js": {
+      "default": "./DX/emojis.js",
+      "types": "./DX/emojis.ts"
     },
     "./assignFeatures.js": {
       "default": "./assignFeatures.js",
