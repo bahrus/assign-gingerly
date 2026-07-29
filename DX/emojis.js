@@ -33,7 +33,8 @@ export const akaMethods = {
     '🔍': 'querySelector',
     '🧺': 'querySelectorAll',
     '+': 'add',
-    '🧬': 'cloneNode'
+    '🧬': 'cloneNode',
+    '🔤': 'textContent',
 };
 export const aka = {
     '©️': 'content?.cloneNode?.true',
