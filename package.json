@@ -1,6 +1,6 @@
 {
   "name": "assign-gingerly",
-  "version": "0.0.69",
+  "version": "0.0.70",
   "description": "This package provides a utility function for carefully merging one object into another.",
   "homepage": "https://github.com/bahrus/assign-gingerly#readme",
   "bugs": {
@@ -191,7 +191,6 @@
       "default": "./evaluatePathWithAsyncMethods.js",
       "types": "./evaluatePathWithAsyncMethods.ts"
     }
-
   },
   "main": "index.js",
   "module": "index.js",
