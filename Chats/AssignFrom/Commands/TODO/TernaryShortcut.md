@@ -28,16 +28,14 @@ const answer = cond1 || cond2 || cond3 ...
 
 Is there a better alternative to '??'
 
-***
+I'm also interested in being able to extend what ternaries support to support nested conditions:
 
-### Gemma4 Thoughts on the Proposed Syntax
+```JS
+const answer = cond1 ? then1 : cond2 ? then2 : cond3 ? then3 : else
+```
 
-The proposed feature for enhancing the ternary assignment operator (`?=`) is very insightful and addresses genuine usability friction points when dealing with short-circuiting logic or successive fallbacks.
+Supporting this latter feature is outside the scope of this proposal, but I want to make sure that supporting:
 
-1.  **`[cond, cond, else]`**: This is a clear request for behavior similar to logical OR (`||`). In JavaScript/TypeScript, `A || B` evaluates to the first truthy value (or the last one if all are falsy). If the goal is simply to return the first defined non-nullish value, this functionality could perhaps be best achieved by creating a dedicated function or helper that mimics `Array.prototype.find()` logic on an array of possibilities:
+[cond1, '??', cond2, '??', cond3, ...]
 
----
-
-## Human Response I
-
-Looks like Gemma4 has a long way to go.
+won't create a "checkmate" as far as supporting nested conditions.
