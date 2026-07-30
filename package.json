@@ -111,6 +111,26 @@
       "default": "./handlers/manageTemplateList.js",
       "types": "./handlers/manageTemplateList.ts"
     },
+    "./handlers/nudge.js": {
+      "default": "./handlers/nudge.js",
+      "types": "./handlers/nudge.ts"
+    },
+    "./handlers/arr.js": {
+      "default": "./handlers/arr.js",
+      "types": "./handlers/arr.ts"
+    },
+    "./inferencer/inferencer.js": {
+      "default": "./inferencer/inferencer.js",
+      "types": "./inferencer/inferencer.ts"
+    },
+    "./inferencer/upSearch.js": {
+      "default": "./inferencer/upSearch.js",
+      "types": "./inferencer/upSearch.ts"
+    },
+    "./inferencer/withScopePerimeter.js": {
+      "default": "./inferencer/withScopePerimeter.js",
+      "types": "./inferencer/withScopePerimeter.ts"
+    },
     "./DX/paths.js": {
       "default": "./DX/paths.js",
       "types": "./DX/paths.ts"
@@ -143,14 +163,6 @@
       "default": "./beVigilant.js",
       "types": "./beVigilant.ts"
     },
-    "./inferencer/inferencer.js": {
-      "default": "./inferencer/inferencer.js",
-      "types": "./inferencer/inferencer.ts"
-    },
-    "./inferencer/withScopePerimeter.js": {
-      "default": "./inferencer/withScopePerimeter.js",
-      "types": "./inferencer/withScopePerimeter.ts"
-    },
     "./assignFromAsync.js": {
       "default": "./assignFromAsync.js",
       "types": "./assignFromAsync.ts"
@@ -178,15 +190,8 @@
     "./evaluatePathWithAsyncMethods.js": {
       "default": "./evaluatePathWithAsyncMethods.js",
       "types": "./evaluatePathWithAsyncMethods.ts"
-    },
-    "./handlers/nudge.js": {
-      "default": "./handlers/nudge.js",
-      "types": "./handlers/nudge.ts"
-    },
-    "./handlers/arr.js": {
-      "default": "./handlers/arr.js",
-      "types": "./handlers/arr.ts"
     }
+
   },
   "main": "index.js",
   "module": "index.js",
