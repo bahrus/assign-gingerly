@@ -174,6 +174,35 @@ assignFrom(alert, {
 // alert.hidden = false (shows the alert)
 ```
 
+### Nested ternaries — `[c1, t1, [c2, t2, e2]]`
+
+Any result position (then/else/neither, comparison results, chain candidates) can itself be a ternary expression, enabling chained conditions:
+
+```JS
+// cond1 ? then1 : cond2 ? then2 : else
+const vm = { isVip: false, isLoggedIn: true };
+
+assignFrom(element, {
+    '?.textContent ?=': ['?.isVip', 'Welcome, VIP!', ['?.isLoggedIn', 'Welcome back!', 'Please log in']]
+}, { from: vm });
+// element.textContent = 'Welcome back!'
+```
+
+A nested array is treated as a ternary when it has **at least 2 elements** and its first element is either a `?.`-prefixed string (truthiness mode) or an array (comparison mode). Any other array is assigned as a literal value.
+
+```JS
+// Comparison-mode nesting: cond1 ? then1 : (a === b ? 'match' : 'no match')
+'?.textContent ?=': ['?.c1', 'then1', [['?.a', '?.b'], 'match', 'no match']]
+```
+
+Semantics and edge cases:
+
+- Nesting recurses to any depth: `[c1, t1, [c2, t2, [c3, t3, e]]]`.
+- A skip from a nested guard **propagates outward**: in `[c1, [guard, v], else]`, if `c1` is truthy but `guard` is falsy, the whole assignment is skipped — the outer `else` is *not* assigned.
+- Chain candidates may be nested ternaries (`['?.a', '||', ['?.b', '?.c', '?.d']]`). A nested guard that skips counts as a failed candidate and the chain continues.
+- Literal/protocol conditions don't trigger nesting — only `?.`-prefixed strings and arrays (comparison mode) do.
+- Consequence of the trigger: a literal array whose first element is a `?.`-prefixed string (or an array) cannot be assigned in a result position — it will be interpreted as a nested ternary.
+
 ## Mixing with other keys
 
 `?=` works alongside normal assignments, `Y=`, `+=`, and handlers in the same call:

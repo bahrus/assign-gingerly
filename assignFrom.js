@@ -69,6 +69,29 @@ function resolveTernaryValue(value, source, options) {
     return value;
 }
 /**
+ * Check if a value in a result position is a nested ternary expression.
+ * Trigger: an array of length ≥ 2 whose first element is a `?.`-prefixed
+ * string (truthiness mode) or an array (comparison mode). Other arrays
+ * are treated as literal values.
+ */
+function isNestedTernary(value) {
+    if (!Array.isArray(value) || value.length < 2)
+        return false;
+    const first = value[0];
+    return Array.isArray(first) || (typeof first === 'string' && first.startsWith('?.'));
+}
+/**
+ * Resolve a value in a result position (then/else/neither, comparison results,
+ * chain candidates). Nested ternary expressions are evaluated recursively;
+ * everything else goes through resolveTernaryValue.
+ */
+function resolveResult(value, source, options) {
+    if (isNestedTernary(value)) {
+        return evaluateTernary(value, source, options);
+    }
+    return resolveTernaryValue(value, source, options);
+}
+/**
  * Evaluate a ?= ternary expression.
  *
  * Supported forms:
@@ -79,8 +102,10 @@ function resolveTernaryValue(value, source, options) {
  * - [[lhs, rhs], ifEqual]                          — equality guard
  * - [c1, '||', c2, '||', c3, ...]                  — first truthy candidate (c1 || c2 || c3)
  * - [c1, '??', c2, '??', c3, ...]                  — first non-nullish candidate (c1 ?? c2 ?? c3)
+ * - [c1, t1, [c2, t2, e2]]                         — nested ternary in any result position
  *
- * Returns undefined to signal "skip assignment" (guard forms when condition not met).
+ * Returns TERNARY_SKIP to signal "skip assignment" (guard forms when condition
+ * not met). A skip from a nested guard propagates outward.
  */
 const TERNARY_SKIP = Symbol('ternary-skip');
 function evaluateTernary(arr, source, options) {
@@ -92,10 +117,10 @@ function evaluateTernary(arr, source, options) {
             // Equality: [[lhs, rhs], result, elseResult?]
             const rhs = resolveTernaryValue(condition[1], source, options);
             if (lhs === rhs) {
-                return resolveTernaryValue(arr[1], source, options);
+                return resolveResult(arr[1], source, options);
             }
             else {
-                return arr.length > 2 ? resolveTernaryValue(arr[2], source, options) : TERNARY_SKIP;
+                return arr.length > 2 ? resolveResult(arr[2], source, options) : TERNARY_SKIP;
             }
         }
         else {
@@ -104,10 +129,10 @@ function evaluateTernary(arr, source, options) {
             const rhs = resolveTernaryValue(condition[2], source, options);
             const satisfied = compareWithOp(lhs, op, rhs);
             if (satisfied) {
-                return resolveTernaryValue(arr[1], source, options);
+                return resolveResult(arr[1], source, options);
             }
             else {
-                return arr.length > 2 ? resolveTernaryValue(arr[2], source, options) : TERNARY_SKIP;
+                return arr.length > 2 ? resolveResult(arr[2], source, options) : TERNARY_SKIP;
             }
         }
     }
@@ -123,16 +148,16 @@ function evaluateTernary(arr, source, options) {
         if (arr.length === 4) {
             // [ifTrue, trueResult, falseResult, neitherResult]
             if (resolved == null)
-                return resolveTernaryValue(arr[3], source, options);
-            return resolved ? resolveTernaryValue(arr[1], source, options) : resolveTernaryValue(arr[2], source, options);
+                return resolveResult(arr[3], source, options);
+            return resolved ? resolveResult(arr[1], source, options) : resolveResult(arr[2], source, options);
         }
         else if (arr.length === 3) {
             // [ifTruthy, thenResult, elseResult]
-            return resolved ? resolveTernaryValue(arr[1], source, options) : resolveTernaryValue(arr[2], source, options);
+            return resolved ? resolveResult(arr[1], source, options) : resolveResult(arr[2], source, options);
         }
         else {
             // [ifTruthy, thenResult] — guard, skip if falsy
-            return resolved ? resolveTernaryValue(arr[1], source, options) : TERNARY_SKIP;
+            return resolved ? resolveResult(arr[1], source, options) : TERNARY_SKIP;
         }
     }
 }
@@ -153,6 +178,10 @@ function evaluateTernary(arr, source, options) {
  *   nothing to assign (TERNARY_SKIP).
  *
  * Mixing marker types in one chain is not supported; the first marker sets the mode.
+ *
+ * Candidates may themselves be nested ternaries (see resolveResult). A nested
+ * guard that skips counts as a failed candidate — the chain continues; if it
+ * was the final fallback, the skip propagates.
  */
 function evaluateChain(arr, source, options) {
     const isNullish = arr[1] === '??';
@@ -161,7 +190,9 @@ function evaluateChain(arr, source, options) {
     const lastCandidateIdx = n - (endsWithMarker || n % 2 === 0 ? 2 : 1);
     let lastVal;
     for (let i = 0; i <= lastCandidateIdx; i += 2) {
-        lastVal = resolveTernaryValue(arr[i], source, options);
+        lastVal = resolveResult(arr[i], source, options);
+        if (lastVal === TERNARY_SKIP)
+            continue; // nested guard skipped — try next candidate
         const pass = isNullish ? lastVal != null : !!lastVal;
         if (pass)
             return lastVal;
@@ -169,7 +200,7 @@ function evaluateChain(arr, source, options) {
     if (endsWithMarker)
         return TERNARY_SKIP;
     // Odd count: last candidate doubles as fallback. Even count: explicit trailing fallback.
-    return n % 2 === 1 ? lastVal : resolveTernaryValue(arr[n - 1], source, options);
+    return n % 2 === 1 ? lastVal : resolveResult(arr[n - 1], source, options);
 }
 /**
  * Compare two values with a given operator.

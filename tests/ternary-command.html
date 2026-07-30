@@ -365,6 +365,97 @@
             expect(target.value).toBe(false);
         });
 
+        // Form 8: nested ternaries — [c1, t1, [c2, t2, e2]]
+        test('nested: else-position nesting picks nested then-value', () => {
+            const target = { textContent: '' };
+            const vm = { c1: false, c2: true };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.c1', 'then1', ['?.c2', 'then2', 'else']]
+            }, { from: vm });
+            expect(target.textContent).toBe('then2');
+        });
+
+        test('nested: else-position nesting falls to innermost else', () => {
+            const target = { textContent: '' };
+            const vm = { c1: false, c2: false };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.c1', 'then1', ['?.c2', 'then2', 'else']]
+            }, { from: vm });
+            expect(target.textContent).toBe('else');
+        });
+
+        test('nested: then-position nesting evaluates when outer condition truthy', () => {
+            const target = { textContent: '' };
+            const vm = { c1: true, c2: false };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.c1', ['?.c2', 'then2', 'else2'], 'else1']
+            }, { from: vm });
+            expect(target.textContent).toBe('else2');
+        });
+
+        test('nested: three levels deep', () => {
+            const target = { textContent: '' };
+            const vm = { c1: false, c2: false, c3: true };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.c1', 't1', ['?.c2', 't2', ['?.c3', 't3', 'e']]]
+            }, { from: vm });
+            expect(target.textContent).toBe('t3');
+        });
+
+        test('nested: comparison-mode nesting in else position', () => {
+            const target = { textContent: '' };
+            const vm = { c1: false, a: 'foo', b: 'foo' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.c1', 'then1', [['?.a', '?.b'], 'match', 'no match']]
+            }, { from: vm });
+            expect(target.textContent).toBe('match');
+        });
+
+        test('nested: literal array value (no ?. trigger) passes through', () => {
+            const target = { value: null };
+            const vm = { x: true };
+            assignFrom(target, {
+                '?.value ?=': ['?.x', ['a', 'b'], 'no']
+            }, { from: vm });
+            expect(target.value).toEqual(['a', 'b']);
+        });
+
+        test('nested: length-1 array is a literal, not a ternary', () => {
+            const target = { value: null };
+            const vm = { x: true };
+            assignFrom(target, {
+                '?.value ?=': ['?.x', ['?.a'], 'no']
+            }, { from: vm });
+            expect(target.value).toEqual(['?.a']);
+        });
+
+        test('nested: guard skip in selected branch skips whole assignment', () => {
+            const target = { textContent: 'original' };
+            const vm = { c1: true, guard: false, v: 'val' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.c1', ['?.guard', '?.v'], 'else1']
+            }, { from: vm });
+            expect(target.textContent).toBe('original');
+        });
+
+        test('nested: chain candidate can be a nested ternary', () => {
+            const target = { textContent: '' };
+            const vm = { a: '', b: true, c: 'see', d: 'dee' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.a', '||', ['?.b', '?.c', '?.d']]
+            }, { from: vm });
+            expect(target.textContent).toBe('see');
+        });
+
+        test('nested: chain continues past a nested guard that skips', () => {
+            const target = { textContent: '' };
+            const vm = { g: false, v: 'val' };
+            assignFrom(target, {
+                '?.textContent ?=': [['?.g', '?.v'], '||', 'fallback']
+            }, { from: vm });
+            expect(target.textContent).toBe('fallback');
+        });
+
         // Display results
         const total = passed + failed;
         const statusEl = document.getElementById('status');
