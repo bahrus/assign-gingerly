@@ -20,7 +20,8 @@
  * // target is now { color: 'red', text: 'Hello' }
  */
 import { resolveValues } from './resolveValues.js';
-import assignGingerly, { IAssignGingerlyOptions } from './assignGingerly.js';
+import {IAssignGingerlyOptions} from './types/assign-gingerly/types.js';
+import assignGingerly from './assignGingerly.js';
 import type { AssignPermissions } from './isAllowedImportPath.js';
 import type { AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
 import {

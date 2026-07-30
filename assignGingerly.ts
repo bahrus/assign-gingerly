@@ -1,7 +1,7 @@
 
 
 import { EnhancementConfig } from "./types/assign-gingerly/types";
-import type { AssignFromOptions, FeatureConfigsMap } from "./types/assign-gingerly/types";
+import type { AssignFromOptions, FeatureConfigsMap, IAssignGingerlyOptions } from "./types/assign-gingerly/types";
 import type { AssignPermissions } from "./isAllowedImportPath.js";
 import { normalizeAliasOptions } from './getValues.js';
 
@@ -32,113 +32,6 @@ export interface ItemscopeManagerConfig<T = any> {
   };
 }
 
-/**
- * Interface for the options passed to assignGingerly
- */
-export interface IAssignGingerlyOptions {
-  registry?: typeof EnhancementRegistry | EnhancementRegistry;
-  bypassChecks?: boolean;
-  
-  /**
-   * List of property names that should be treated as methods to call
-   * rather than properties to assign.
-   * 
-   * When a path segment matches a name in this array/set:
-   * - If the property is a function, call it with appropriate arguments
-   * - For the last segment: use RHS value as argument (spread if array)
-   * - For middle segments: use next segment as string argument (if next is not also a method)
-   * - If consecutive segments are both methods, first is called with no arguments
-   * - If the property is not a function, silently skip
-   * 
-   * Example:
-   * assignGingerly(element, {
-   *   '?.classList?.add': 'myClass'
-   * }, { withMethods: ['add'] });
-   * // Calls: element.classList.add('myClass')
-   * 
-   * Chained methods:
-   * assignGingerly(elementRef, {
-   *   '?.deref?.querySelector?.myElement?.classList?.add': 'active'
-   * }, { withMethods: ['deref', 'querySelector', 'add'] });
-   * // Calls: elementRef.deref().querySelector('myElement').classList.add('active')
-   */
-  withMethods?: string[] | Set<string>;
-  
-  /**
-   * Alias mappings for property and method names.
-   * Allows shorter, customizable shortcuts in path expressions.
-   * 
-   * Aliases are substituted before path evaluation, matching complete tokens
-   * between `?.` delimiters (not substrings).
-   * 
-   * Reserved characters (cannot be used in aliases): space, backtick (`)
-   * 
-   * Example:
-   * assignGingerly(element, {
-   *   '?.$?.my-element?.c?.+': 'highlighted'
-   * }, { 
-   *   withMethods: ['querySelector', 'add'],
-   *   aka: { '$': 'querySelector', 'c': 'classList', '+': 'add' }
-   * });
-   * // Equivalent to: element.querySelector('my-element').classList.add('highlighted')
-   */
-  aka?: Record<string, string>;
-
-  /**
-   * Shorthand for binding method aliases from the source object.
-   * Each entry maps an alias to a method name, and is normalized into
-   * the existing withMethods + aka behavior.
-   */
-  akaMethods?: Record<string, string>;
-  
-  /**
-   * AbortSignal for cleaning up reactive subscriptions (@eachTime)
-   * Required when using @eachTime symbol for reactive iteration
-   * When the signal is aborted, all event listeners are automatically removed
-   * 
-   * Example:
-   * const controller = new AbortController();
-   * assignGingerly(div, {
-   *   '?.mountObserver?.@eachTime?.classList?.add': 'highlighted'
-   * }, { 
-   *   withMethods: ['add'],
-   *   signal: controller.signal
-   * });
-   * // Later: controller.abort(); // Cleanup all listeners
-   */
-  signal?: AbortSignal;
-
-  /**
-   * List of property names that should be treated as async methods.
-   * Works together with withMethods — async methods are awaited before
-   * continuing the chain.
-   * 
-   * The path evaluation for keys containing async methods is fire-and-forget:
-   * assignGingerly remains synchronous and returns immediately. The async
-   * chain completes in the background.
-   * 
-   * NOTE: Interaction with @each and @eachTime is not yet implemented.
-   * 
-   * Example:
-   * assignGingerly(el, {
-   *   '?.whenFeatureReady?.photoTaker?.someProp': 'hello'
-   * }, { withAsyncMethods: ['whenFeatureReady'] });
-   * // Calls: (await el.whenFeatureReady('photoTaker')).someProp = 'hello'
-   */
-  withAsyncMethods?: string[] | Set<string>;
-
-  /**
-   * Bulk enhancement application via EMC JSON configs.
-   * Finds matching elements and spawns enhancements on them.
-   * Fire-and-forget (async) — assignGingerly remains synchronous.
-   * 
-   * @example
-   * enhance: [
-   *     { emc: 'be-bound/emc.json', matching: '[name]' },
-   * ]
-   */
-  enhance?: Array<{ emc: string; matching?: string; parse?: boolean }>;
-}
 
 /**
  * GUID for global instance map storage to ensure uniqueness across package versions

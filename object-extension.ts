@@ -1,4 +1,5 @@
-import assignGingerly, { EnhancementRegistry, ItemscopeRegistry, IAssignGingerlyOptions, getInstanceMap, INSTANCE_MAP_GUID } from './assignGingerly.js';
+import assignGingerly, { EnhancementRegistry, ItemscopeRegistry,  getInstanceMap } from './assignGingerly.js';
+import {IAssignGingerlyOptions,} from './types/assign-gingerly/types.js';
 import assignTentatively from './assignTentatively.js';
 import type { IAssignTentativelyOptions } from './types/assign-gingerly/types.js';
 import { EnhancementConfig, SpawnContext } from './types/assign-gingerly/types.js';

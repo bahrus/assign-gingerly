@@ -4,7 +4,7 @@
  * Provides event-driven iteration over elements as they mount
  */
 
-import type { IAssignGingerlyOptions } from './assignGingerly.js';
+import type { IAssignGingerlyOptions } from './types/assign-gingerly/types.js';
 
 /**
  * Check if a value is an EventTarget
