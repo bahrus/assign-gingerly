@@ -1,7 +1,7 @@
 
 
 import { EnhancementConfig } from "./types/assign-gingerly/types";
-import type { FeatureConfigsMap } from "./types/assign-gingerly/types";
+import type { AssignFromOptions, FeatureConfigsMap } from "./types/assign-gingerly/types";
 import type { AssignPermissions } from "./isAllowedImportPath.js";
 import { normalizeAliasOptions } from './getValues.js';
 
@@ -898,7 +898,7 @@ export function assignGingerly(
             const capturedLhs = target[path];
             const capturedValue = value;
             const capturedTarget = target;
-            const capturedOptions = options;
+            const capturedOptions = options as AssignFromOptions | undefined;
             import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
               attachEventListener(capturedLhs, capturedValue, capturedTarget, capturedOptions?.from ?? capturedTarget, capturedOptions ?? {});
             });
