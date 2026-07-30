@@ -653,6 +653,7 @@ export function assignGingerly(target, source, options, permissions) {
                         lhsParent = ensureNestedPath(target, pathParts);
                         lhsValue = lhsParent[lhsKey];
                     }
+                    //TODO:  this logic seems to occur twice at least.  Maybe make it a method?
                     // Event handler: Element LHS + object RHS with 'on' property
                     if (lhsValue instanceof Element && value && typeof value === 'object' && !Array.isArray(value) && 'on' in value) {
                         const capturedLhs = lhsValue;

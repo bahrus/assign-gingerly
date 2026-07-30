@@ -867,12 +867,13 @@ export function assignGingerly(
             lhsValue = lhsParent[lhsKey];
           }
 
+          //TODO:  this logic seems to occur twice at least.  Maybe make it a method?
           // Event handler: Element LHS + object RHS with 'on' property
           if (lhsValue instanceof Element && value && typeof value === 'object' && !Array.isArray(value) && 'on' in value) {
             const capturedLhs = lhsValue;
             const capturedValue = value;
             const capturedTarget = target;
-            const capturedOptions = options;
+            const capturedOptions = options as AssignFromOptions | undefined;
             import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
               attachEventListener(capturedLhs, capturedValue, capturedTarget, capturedOptions?.from ?? capturedTarget, capturedOptions ?? {});
             });

@@ -14,7 +14,7 @@ function computeChildPath(root: Element, target: Element): number[] | null {
     let current: Element | null = target;
 
     while (current && current !== root) {
-        const parent = current.parentElement;
+        const parent = current.parentElement as HTMLElement | null;
         if (!parent) return null;
         const idx = Array.prototype.indexOf.call(parent.children, current);
         if (idx === -1) return null;
