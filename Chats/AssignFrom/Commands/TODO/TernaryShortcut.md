@@ -128,3 +128,29 @@ I like your suggestion to implement both '||' as well as '??'.
 Sounds good.
 
 Please implement if no other ambiguities / questions remain.  Also update the [ternary assignment](/docs/ternary-assignment.md) document to mention this new feature.
+
+---
+
+## Implementation Details
+
+`tests/ternary-command.html` is updated — ready for you to run the test.
+
+What's in place:
+
+- **Tests** (`tests/ternary-command.html`): 14 new cases — 9 for `'||'` chains (basic shortcut, multi-candidate, JS-semantics fallback on all-falsy, length-4 vs three-state disambiguation, literal candidates, `[c1, '||']` guard form) and 5 for `'??'` chains (nullish vs truthy distinction with `0`/`false`, null/undefined fallback, multi-candidate).
+- **Docs** (`docs/ternary-assignment.md`): new "Chain shortcut" section covering both markers, laziness, edge cases, and the comparison-mode/literal-string limitations.
+- **Build**: `npx tsc` re-emitted `assignFrom.js` with `evaluateChain` included. Note the build prints pre-existing errors in `DX/installForwarding.ts`, `DX/pinCorrector.ts`, and `assignGingerly.ts` — none related to this change, and emit succeeded anyway.
+
+Run with `
+
+---
+
+Fixed. The bug was in my fallback rule: I treated any even-length array as "dangling trailing marker → skip", but `['?.a', '||', '?.b', 'fallback']` ends with a real fallback value, not a marker.
+
+Corrected rule in `evaluateChain` (`assignFrom.ts`):
+
+- Ends with a **candidate** → last candidate doubles as fallback (JS semantics).
+- Ends with a **non-marker element** after the last candidate → explicit fallback (the failing test's case).
+- Ends with a **marker** → guard form, skip assignment.
+
+`docs/ternary-assignment.md` edge-case bullets updated to match. Recompiled — no errors in `assignFrom.ts`, and `assignFrom.js` has the new `evaluateChain`. Ready for you to re-run the test.

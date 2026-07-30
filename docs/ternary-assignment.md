@@ -68,6 +68,51 @@ Semantics:
 - `condition` is truthy → assigns element [1]
 - `condition` is falsy (but not nullish) → assigns element [2]
 
+### Chain shortcut — `[c1, '||', c2, ...]` and `[c1, '??', c2, ...]`
+
+When the second element is the marker `'||'` or `'??'`, the array is a candidate chain instead of a ternary:
+
+- `'||'` assigns the **first truthy** candidate (equivalent to `c1 || c2 || c3`).
+- `'??'` assigns the **first non-nullish** candidate (equivalent to `c1 ?? c2 ?? c3`).
+
+```JS
+const vm = { nickname: '', name: 'Gingerly' };
+
+assignFrom(element, {
+    '?.textContent ?=': ['?.nickname', '||', '?.name']
+}, { from: vm });
+// element.textContent = 'Gingerly' — avoids writing ['?.nickname', '?.nickname', '?.name']
+```
+
+Longer chains work too:
+
+```JS
+// cond1 || cond2 || cond3
+'?.textContent ?=': ['?.cond1', '||', '?.cond2', '||', '?.cond3']
+```
+
+`'??'` only skips `null`/`undefined` — falsy values like `0` or `false` are returned:
+
+```JS
+const vm = { count: 0, fallback: 5 };
+
+assignFrom(element, {
+    '?.textContent ?=': ['?.count', '??', '?.fallback']
+}, { from: vm });
+// element.textContent = 0 (0 is not nullish — with '||' it would have been 5)
+```
+
+Semantics and edge cases:
+
+- Candidates are resolved lazily — evaluation stops at the first match, and each candidate is resolved at most once.
+- When the chain ends with a candidate (`['?.a', '||', '?.b']`), that candidate doubles as the fallback and is assigned even when it fails the test (matching JS `a || b`, which yields `b` regardless).
+- A trailing element after the last candidate with no marker between (`['?.a', '||', '?.b', 'fallback']`) is an explicit fallback, assigned when all candidates fail.
+- When the chain ends with a dangling marker (`['?.a', '||']` or `['?.a', '||', '?.b', '||']`), it acts as a guard: assigns the first passing candidate, skips otherwise.
+- The marker check takes precedence over the length-based forms, so a length-4 chain like `['?.a', '||', '?.b', 'fallback']` is not misread as the three-state form.
+- Markers are only recognized in the truthiness form — they are not supported in comparison mode (`[[lhs, rhs], ...]`).
+- Mixing `'||'` and `'??'` in one chain is not supported; the first marker sets the mode.
+- The literal strings `'||'` and `'??'` can no longer be used as a then-value in position 1.
+
 ### Equality guard — `[[lhs, rhs], result]`
 
 When the first element is an array, it's a comparison. Assigns `result` only when `lhs === rhs`. Skips otherwise.

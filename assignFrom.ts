@@ -149,25 +149,32 @@ function evaluateTernary(arr: any[], source: any, options: AssignFromOptions): a
  * - '||' returns the first truthy candidate (JS `c1 || c2 || c3`).
  * - '??' returns the first non-nullish candidate (JS `c1 ?? c2 ?? c3`).
  *
- * Candidates are resolved lazily — evaluation stops at the first match.
- * With an odd element count, the last candidate doubles as the fallback
- * (returned even when it fails the test, matching JS semantics).
- * An even count means a dangling trailing marker — nothing to assign (TERNARY_SKIP),
- * so [c1, '||'] acts as a guard: assign resolved c1 if truthy, else skip.
+ * Candidates sit at even indices and are resolved lazily — evaluation stops
+ * at the first match. What happens when no candidate passes depends on the
+ * trailing element:
+ * - Ends with a candidate ([c1, '||', c2]): the last candidate doubles as the
+ *   fallback (returned even when it fails the test, matching JS semantics).
+ * - Ends with a non-marker element after the last candidate ([c1, '||', c2, fb]):
+ *   that element is the explicit fallback.
+ * - Ends with a dangling marker ([c1, '||'] or [c1, '||', c2, '||']): guard form —
+ *   nothing to assign (TERNARY_SKIP).
  *
  * Mixing marker types in one chain is not supported; the first marker sets the mode.
  */
 function evaluateChain(arr: any[], source: any, options: AssignFromOptions): any {
     const isNullish = arr[1] === '??';
-    const hasFallback = arr.length % 2 === 1;
-    const lastCandidateIdx = hasFallback ? arr.length - 1 : arr.length - 2;
+    const n = arr.length;
+    const endsWithMarker = arr[n - 1] === '||' || arr[n - 1] === '??';
+    const lastCandidateIdx = n - (endsWithMarker || n % 2 === 0 ? 2 : 1);
+    let lastVal: any;
     for (let i = 0; i <= lastCandidateIdx; i += 2) {
-        const val = resolveTernaryValue(arr[i], source, options);
-        const pass = isNullish ? val != null : !!val;
-        if (pass) return val;
-        if (i === lastCandidateIdx) return hasFallback ? val : TERNARY_SKIP;
+        lastVal = resolveTernaryValue(arr[i], source, options);
+        const pass = isNullish ? lastVal != null : !!lastVal;
+        if (pass) return lastVal;
     }
-    return TERNARY_SKIP;
+    if (endsWithMarker) return TERNARY_SKIP;
+    // Odd count: last candidate doubles as fallback. Even count: explicit trailing fallback.
+    return n % 2 === 1 ? lastVal : resolveTernaryValue(arr[n - 1], source, options);
 }
 
 /**

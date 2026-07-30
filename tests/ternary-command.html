@@ -237,6 +237,134 @@
             expect(target.b).toBe('no');
         });
 
+        // Form 6: [c1, '||', c2, ...] — first truthy candidate
+        test("'||' chain: should return the condition itself when truthy", () => {
+            const target = { textContent: '' };
+            const vm = { nickname: 'Ginger', name: 'Gingerly' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.nickname', '||', '?.name']
+            }, { from: vm });
+            expect(target.textContent).toBe('Ginger');
+        });
+
+        test("'||' chain: should assign else-value when condition is falsy", () => {
+            const target = { textContent: '' };
+            const vm = { nickname: '', name: 'Gingerly' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.nickname', '||', '?.name']
+            }, { from: vm });
+            expect(target.textContent).toBe('Gingerly');
+        });
+
+        test("'||' chain: should pick first truthy across multiple candidates", () => {
+            const target = { textContent: '' };
+            const vm = { a: '', b: 'bee', c: 'cee' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.a', '||', '?.b', '||', '?.c']
+            }, { from: vm });
+            expect(target.textContent).toBe('bee');
+        });
+
+        test("'||' chain: should return last candidate even when falsy (JS semantics)", () => {
+            const target = { value: 'original' };
+            const vm = { a: false, b: '', c: 0 };
+            assignFrom(target, {
+                '?.value ?=': ['?.a', '||', '?.b', '||', '?.c']
+            }, { from: vm });
+            expect(target.value).toBe(0);
+        });
+
+        test("'||' chain: length-4 chain should not be misread as three-state", () => {
+            const target = { textContent: '' };
+            const vm = { a: '', b: 'bee' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.a', '||', '?.b', 'fallback']
+            }, { from: vm });
+            expect(target.textContent).toBe('bee');
+        });
+
+        test("'||' chain: length-4 chain should use fallback when all falsy", () => {
+            const target = { textContent: '' };
+            const vm = { a: '', b: '' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.a', '||', '?.b', 'fallback']
+            }, { from: vm });
+            expect(target.textContent).toBe('fallback');
+        });
+
+        test("'||' chain: should support literal candidates", () => {
+            const target = { textContent: '' };
+            const vm = { a: null };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.a', '||', 'literal fallback']
+            }, { from: vm });
+            expect(target.textContent).toBe('literal fallback');
+        });
+
+        test("'||' guard: [c1, '||'] should assign resolved condition when truthy", () => {
+            const target = { textContent: '' };
+            const vm = { msg: 'Hello' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.msg', '||']
+            }, { from: vm });
+            expect(target.textContent).toBe('Hello');
+        });
+
+        test("'||' guard: [c1, '||'] should skip when falsy", () => {
+            const target = { textContent: 'original' };
+            const vm = { msg: '' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.msg', '||']
+            }, { from: vm });
+            expect(target.textContent).toBe('original');
+        });
+
+        // Form 7: [c1, '??', c2, ...] — first non-nullish candidate
+        test("'??' chain: should return falsy-but-not-nullish condition (unlike '||')", () => {
+            const target = { value: 'original' };
+            const vm = { count: 0, fallback: 5 };
+            assignFrom(target, {
+                '?.value ?=': ['?.count', '??', '?.fallback']
+            }, { from: vm });
+            expect(target.value).toBe(0);
+        });
+
+        test("'??' chain: should assign else-value when condition is null", () => {
+            const target = { value: 'original' };
+            const vm = { count: null, fallback: 5 };
+            assignFrom(target, {
+                '?.value ?=': ['?.count', '??', '?.fallback']
+            }, { from: vm });
+            expect(target.value).toBe(5);
+        });
+
+        test("'??' chain: should assign else-value when condition is undefined", () => {
+            const target = { value: 'original' };
+            const vm = { fallback: 5 };
+            assignFrom(target, {
+                '?.value ?=': ['?.count', '??', '?.fallback']
+            }, { from: vm });
+            expect(target.value).toBe(5);
+        });
+
+        test("'??' chain: should pick first non-nullish across multiple candidates", () => {
+            const target = { textContent: '' };
+            const vm = { a: null, c: 'cee' };
+            assignFrom(target, {
+                '?.textContent ?=': ['?.a', '??', '?.b', '??', '?.c']
+            }, { from: vm });
+            expect(target.textContent).toBe('cee');
+        });
+
+        test("'??' chain: should return false when it is the first non-nullish candidate", () => {
+            const target = { value: 'original' };
+            const vm = { flag: false, fallback: true };
+            assignFrom(target, {
+                '?.value ?=': ['?.flag', '??', '?.fallback']
+            }, { from: vm });
+            expect(target.value).toBe(false);
+        });
+
         // Display results
         const total = passed + failed;
         const statusEl = document.getElementById('status');
