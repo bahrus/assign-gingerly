@@ -88,6 +88,8 @@ function resolveTernaryValue(value: any, source: any, options: AssignFromOptions
  * - [ifTrue, trueResult, falseResult, neither]     — three-state (true/false/nullish)
  * - [[lhs, rhs], ifEqual, ifNotEqual?]             — equality comparison
  * - [[lhs, rhs], ifEqual]                          — equality guard
+ * - [c1, '||', c2, '||', c3, ...]                  — first truthy candidate (c1 || c2 || c3)
+ * - [c1, '??', c2, '??', c3, ...]                  — first non-nullish candidate (c1 ?? c2 ?? c3)
  * 
  * Returns undefined to signal "skip assignment" (guard forms when condition not met).
  */
@@ -119,6 +121,12 @@ function evaluateTernary(arr: any[], source: any, options: AssignFromOptions): a
             }
         }
     } else {
+        // Chain shortcut: [c1, '||', c2, ...] or [c1, '??', c2, ...]
+        // Checked before the length-based dispatch so a length-4 chain
+        // isn't misread as the three-state form.
+        if (arr[1] === '||' || arr[1] === '??') {
+            return evaluateChain(arr, source, options);
+        }
         // Truthiness mode
         const resolved = resolveTernaryValue(condition, source, options);
         if (arr.length === 4) {
@@ -133,6 +141,33 @@ function evaluateTernary(arr: any[], source: any, options: AssignFromOptions): a
             return resolved ? resolveTernaryValue(arr[1], source, options) : TERNARY_SKIP;
         }
     }
+}
+
+/**
+ * Evaluate a chain shortcut: [c1, '||', c2, ...] or [c1, '??', c2, ...].
+ *
+ * - '||' returns the first truthy candidate (JS `c1 || c2 || c3`).
+ * - '??' returns the first non-nullish candidate (JS `c1 ?? c2 ?? c3`).
+ *
+ * Candidates are resolved lazily — evaluation stops at the first match.
+ * With an odd element count, the last candidate doubles as the fallback
+ * (returned even when it fails the test, matching JS semantics).
+ * An even count means a dangling trailing marker — nothing to assign (TERNARY_SKIP),
+ * so [c1, '||'] acts as a guard: assign resolved c1 if truthy, else skip.
+ *
+ * Mixing marker types in one chain is not supported; the first marker sets the mode.
+ */
+function evaluateChain(arr: any[], source: any, options: AssignFromOptions): any {
+    const isNullish = arr[1] === '??';
+    const hasFallback = arr.length % 2 === 1;
+    const lastCandidateIdx = hasFallback ? arr.length - 1 : arr.length - 2;
+    for (let i = 0; i <= lastCandidateIdx; i += 2) {
+        const val = resolveTernaryValue(arr[i], source, options);
+        const pass = isNullish ? val != null : !!val;
+        if (pass) return val;
+        if (i === lastCandidateIdx) return hasFallback ? val : TERNARY_SKIP;
+    }
+    return TERNARY_SKIP;
 }
 
 /**
