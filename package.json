@@ -87,6 +87,10 @@
       "default": "./resolveAndAssignFeatures.js",
       "types": "./resolveAndAssignFeatures.ts"
     },
+    "./handlers/addEventListener.js": {
+      "default": "./handlers/addEventListener.js",
+      "types": "./handlers/addEventListener.ts"
+    },
     "./handlers/lazyLoad.js": {
       "default": "./handlers/lazyLoad.js",
       "types": "./handlers/lazyLoad.ts"
