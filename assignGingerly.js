@@ -571,9 +571,9 @@ export function assignGingerly(target, source, options, permissions) {
         : undefined;
     const registry = options?.registry instanceof EnhancementRegistry
         ? options.registry
-        : options?.registry
-            ? new options.registry()
-            : undefined;
+        // : options?.registry
+        // ? new options.registry()
+        : undefined;
     // Convert Symbol.for string keys to actual symbols and apply aliases
     const processedSource = {};
     for (const key of Object.keys(source)) {
