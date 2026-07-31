@@ -29,6 +29,24 @@
             }
         }
 
+        // Async variant for fire-and-forget paths (withAsyncMethods)
+        const asyncTestPromises = [];
+        function asyncTest(name, fn) {
+            testCount++;
+            const p = (async () => {
+                try {
+                    await fn();
+                    passCount++;
+                    results.push(`✓ ${name}`);
+                    console.log(`✓ ${name}`);
+                } catch (error) {
+                    results.push(`✗ ${name}: ${error.message}`);
+                    console.error(`✗ ${name}:`, error);
+                }
+            })();
+            asyncTestPromises.push(p);
+        }
+
         // Test 1: Simple method call with string argument
         test('should call method with string argument', () => {
             const element = document.createElement('div');
@@ -331,6 +349,134 @@
                 throw new Error('Class was not added to chained querySelector result');
             }
         });
+
+        // Test 17: Zero-arg method call in middle of path via | marker
+        test('should call zero-arg method with | marker without consuming next segment', () => {
+            const elementRef = {
+                deref(...args) {
+                    this.derefArgs = args;
+                    return this.element;
+                },
+                element: document.createElement('div')
+            };
+
+            assignGingerly(elementRef, {
+                '?.deref|?.classList?.add': 'active'
+            }, { withMethods: ['deref', 'add'] });
+
+            if (!elementRef.derefArgs || elementRef.derefArgs.length !== 0) {
+                throw new Error(`deref should have been called with zero args, got ${JSON.stringify(elementRef.derefArgs)}`);
+            }
+            if (!elementRef.element.classList.contains('active')) {
+                throw new Error('Class was not added to dereferenced element');
+            }
+        });
+
+        // Test 18: Zero-arg method call as last segment via | marker (value ignored)
+        test('should call last-segment method with zero args when marked with |', () => {
+            const obj = {
+                called: false,
+                reset(...args) {
+                    this.called = true;
+                    this.resetArgs = args;
+                }
+            };
+
+            assignGingerly(obj, {
+                '?.reset|': 'ignored'
+            }, { withMethods: ['reset'] });
+
+            if (!obj.called) {
+                throw new Error('reset was not called');
+            }
+            if (obj.resetArgs.length !== 0) {
+                throw new Error(`reset should have been called with zero args, got ${JSON.stringify(obj.resetArgs)}`);
+            }
+        });
+
+        // Test 18b: Zero-arg marker on a non-nested key
+        test('should call non-nested key method with zero args when marked with |', () => {
+            const obj = {
+                reset(...args) {
+                    this.resetArgs = args;
+                }
+            };
+
+            assignGingerly(obj, {
+                'reset|': 'ignored'
+            }, { withMethods: ['reset'] });
+
+            if (!obj.resetArgs || obj.resetArgs.length !== 0) {
+                throw new Error(`reset should have been called with zero args, got ${JSON.stringify(obj.resetArgs)}`);
+            }
+        });
+
+        // Test 19: | on a segment not listed in withMethods is a literal property name
+        test('should treat | as literal property name when segment is not in withMethods', () => {
+            const obj = {};
+
+            assignGingerly(obj, {
+                '?.foo|?.bar': 42
+            }, { withMethods: ['add'] });
+
+            if (!obj['foo|'] || obj['foo|'].bar !== 42) {
+                throw new Error(`Expected obj['foo|'].bar to be 42, got ${JSON.stringify(obj)}`);
+            }
+        });
+
+        // Test 20: Mixed chain - zero-arg method followed by argument-consuming method
+        test('should mix zero-arg marker with argument-consuming methods', () => {
+            const div = document.createElement('div');
+            div.innerHTML = '<my-element></my-element>';
+            const elementRef = {
+                deref(...args) {
+                    this.derefArgs = args;
+                    return div;
+                }
+            };
+
+            assignGingerly(elementRef, {
+                '?.deref|?.querySelector?.my-element?.classList?.add': 'highlighted'
+            }, { withMethods: ['deref', 'querySelector', 'add'] });
+
+            if (!elementRef.derefArgs || elementRef.derefArgs.length !== 0) {
+                throw new Error('deref should have been called with zero args');
+            }
+            if (!div.querySelector('my-element').classList.contains('highlighted')) {
+                throw new Error('Class was not added to chained result');
+            }
+        });
+
+        // Test 21: Zero-arg marker with async methods (fire-and-forget)
+        asyncTest('should call async method with zero args via | marker', async () => {
+            const obj = {
+                async load(...args) {
+                    obj.loadArgs = args;
+                    return obj.data;
+                },
+                data: { value: null }
+            };
+
+            assignGingerly(obj, {
+                '?.load|?.value': 99
+            }, { withAsyncMethods: ['load'] });
+
+            // Fire-and-forget - poll for completion
+            for (let i = 0; i < 100; i++) {
+                if (obj.loadArgs && obj.data.value === 99) break;
+                await new Promise(r => setTimeout(r, 10));
+            }
+
+            if (!obj.loadArgs || obj.loadArgs.length !== 0) {
+                throw new Error(`load should have been called with zero args, got ${JSON.stringify(obj.loadArgs)}`);
+            }
+            if (obj.data.value !== 99) {
+                throw new Error(`Expected value to be 99, got ${obj.data.value}`);
+            }
+        });
+
+        // Wait for fire-and-forget async tests before reporting
+        await Promise.all(asyncTestPromises);
 
         // Display results
         const resultsDiv = document.getElementById('results');

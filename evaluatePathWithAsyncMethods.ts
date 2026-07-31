@@ -16,6 +16,7 @@ export interface AsyncPathResult {
     lastKey: string;
     isMethod: boolean;
     isAsyncMethod: boolean;
+    isZeroArg: boolean;
 }
 
 /**
@@ -44,12 +45,20 @@ export async function evaluatePathWithAsyncMethods(
         const part = pathParts[i];
         const nextPart = pathParts[i + 1];
 
-        if (withAsyncMethods.has(part)) {
+        // A trailing | marks a zero-argument method call: 'deref|' calls deref()
+        // without consuming the next segment. Only applies to listed method names.
+        const isZeroArgSync = part.endsWith('|') && withMethods.has(part.slice(0, -1));
+        const isZeroArgAsync = part.endsWith('|') && withAsyncMethods.has(part.slice(0, -1));
+        const baseName = (isZeroArgSync || isZeroArgAsync) ? part.slice(0, -1) : part;
+        const nextIsMethod = withAsyncMethods.has(nextPart) || withMethods.has(nextPart)
+            || (nextPart.endsWith('|') && (withAsyncMethods.has(nextPart.slice(0, -1)) || withMethods.has(nextPart.slice(0, -1))));
+
+        if (withAsyncMethods.has(part) || isZeroArgAsync) {
             // Async method — call and await
-            const method = current[part];
+            const method = current[baseName];
             if (typeof method === 'function') {
-                if (withAsyncMethods.has(nextPart) || withMethods.has(nextPart)) {
-                    // Next is also a method — call current with no args
+                if (isZeroArgAsync || nextIsMethod) {
+                    // Zero-arg call — next is either a method or explicitly not an argument
                     current = await method.call(current);
                 } else {
                     // Call with next part as string arg, then await
@@ -58,17 +67,17 @@ export async function evaluatePathWithAsyncMethods(
                 }
             } else {
                 // Not a function — just access property
-                if (current[part] === undefined || current[part] === null) {
-                    current[part] = {};
+                if (current[baseName] === undefined || current[baseName] === null) {
+                    current[baseName] = {};
                 }
-                current = current[part];
+                current = current[baseName];
             }
-        } else if (withMethods.has(part)) {
+        } else if (withMethods.has(part) || isZeroArgSync) {
             // Sync method — same logic as evaluatePathWithMethods
-            const method = current[part];
+            const method = current[baseName];
             if (typeof method === 'function') {
-                if (withMethods.has(nextPart) || withAsyncMethods.has(nextPart)) {
-                    // Next is also a method — call current with no args
+                if (isZeroArgSync || nextIsMethod) {
+                    // Zero-arg call — next is either a method or explicitly not an argument
                     current = method.call(current);
                 } else {
                     // Call with next part as string arg
@@ -76,10 +85,10 @@ export async function evaluatePathWithAsyncMethods(
                     i++; // Skip next part since we consumed it as argument
                 }
             } else {
-                if (!(part in current) || typeof current[part] !== 'object' || current[part] === null) {
-                    current[part] = {};
+                if (!(baseName in current) || typeof current[baseName] !== 'object' || current[baseName] === null) {
+                    current[baseName] = {};
                 }
-                current = current[part];
+                current = current[baseName];
             }
         } else {
             // Not a method — normal property access
@@ -92,11 +101,17 @@ export async function evaluatePathWithAsyncMethods(
         i++;
     }
 
-    const lastKey = pathParts[pathParts.length - 1];
+    // Strip a trailing | from the last segment only when it names a listed method;
+    // otherwise it is a literal property name (e.g. an exotic key ending in |).
+    const rawLastKey = pathParts[pathParts.length - 1];
+    const isZeroArg = rawLastKey.endsWith('|')
+        && (withMethods.has(rawLastKey.slice(0, -1)) || withAsyncMethods.has(rawLastKey.slice(0, -1)));
+    const lastKey = isZeroArg ? rawLastKey.slice(0, -1) : rawLastKey;
     return {
         target: current,
         lastKey,
         isMethod: withMethods.has(lastKey),
-        isAsyncMethod: withAsyncMethods.has(lastKey)
+        isAsyncMethod: withAsyncMethods.has(lastKey),
+        isZeroArg
     };
 }

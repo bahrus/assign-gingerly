@@ -364,12 +364,17 @@ export function evaluatePathWithMethods(target, pathParts, value, withMethods) {
     while (i < pathParts.length - 1) {
         const part = pathParts[i];
         const nextPart = pathParts[i + 1];
-        if (withMethods.has(part)) {
-            const method = current[part];
+        // A trailing | marks a zero-argument method call: 'deref|' calls deref()
+        // without consuming the next segment. Only applies to names in withMethods.
+        const isZeroArgMethod = part.endsWith('|') && withMethods.has(part.slice(0, -1));
+        const nextIsMethod = withMethods.has(nextPart)
+            || (nextPart.endsWith('|') && withMethods.has(nextPart.slice(0, -1)));
+        if (withMethods.has(part) || isZeroArgMethod) {
+            const methodName = isZeroArgMethod ? part.slice(0, -1) : part;
+            const method = current[methodName];
             if (typeof method === 'function') {
-                // Check if next part is also a method
-                if (withMethods.has(nextPart)) {
-                    // Both are methods - call first with no args
+                if (isZeroArgMethod || nextIsMethod) {
+                    // Zero-arg call - next part is either a method or explicitly not an argument
                     current = method.call(current);
                 }
                 else {
@@ -380,10 +385,10 @@ export function evaluatePathWithMethods(target, pathParts, value, withMethods) {
             }
             else {
                 // Not a function - just access property (create if needed)
-                if (!(part in current) || typeof current[part] !== 'object' || current[part] === null) {
-                    current[part] = {};
+                if (!(methodName in current) || typeof current[methodName] !== 'object' || current[methodName] === null) {
+                    current[methodName] = {};
                 }
-                current = current[part];
+                current = current[methodName];
             }
         }
         else {
@@ -395,11 +400,16 @@ export function evaluatePathWithMethods(target, pathParts, value, withMethods) {
         }
         i++;
     }
-    const lastKey = pathParts[pathParts.length - 1];
+    // Strip a trailing | from the last segment only when it names a listed method;
+    // otherwise it is a literal property name (e.g. an exotic key ending in |).
+    const rawLastKey = pathParts[pathParts.length - 1];
+    const isZeroArg = rawLastKey.endsWith('|') && withMethods.has(rawLastKey.slice(0, -1));
+    const lastKey = isZeroArg ? rawLastKey.slice(0, -1) : rawLastKey;
     return {
         target: current,
         lastKey,
-        isMethod: withMethods.has(lastKey)
+        isMethod: withMethods.has(lastKey),
+        isZeroArg
     };
 }
 /**
@@ -465,13 +475,22 @@ function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, opti
             // Navigate to the nested iterable
             let current = item;
             for (const part of pathToForEach) {
-                if (withMethods.has(part)) {
-                    const method = current[part];
+                // A trailing | marks a zero-argument method call (only for names in withMethods)
+                const isZeroArgMethod = part.endsWith('|') && withMethods.has(part.slice(0, -1));
+                if (withMethods.has(part) || isZeroArgMethod) {
+                    const methodName = isZeroArgMethod ? part.slice(0, -1) : part;
+                    const method = current[methodName];
                     if (typeof method === 'function') {
+                        if (isZeroArgMethod) {
+                            current = method.call(current);
+                            continue;
+                        }
                         // For methods in the middle, we need to check the next part
                         const nextIndex = pathToForEach.indexOf(part) + 1;
                         const nextPart = pathToForEach[nextIndex];
-                        if (nextPart && withMethods.has(nextPart)) {
+                        const nextIsMethod = nextPart && (withMethods.has(nextPart)
+                            || (nextPart.endsWith('|') && withMethods.has(nextPart.slice(0, -1))));
+                        if (nextIsMethod) {
                             current = method.call(current);
                         }
                         else if (nextPart) {
@@ -484,7 +503,7 @@ function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, opti
                         }
                     }
                     else {
-                        current = current[part];
+                        current = current[methodName];
                     }
                 }
                 else {
@@ -503,7 +522,11 @@ function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, opti
                 // Last segment is a method - call it
                 const method = result.target[result.lastKey];
                 if (typeof method === 'function') {
-                    if (Array.isArray(value)) {
+                    if (result.isZeroArg) {
+                        // Trailing | marker - call with no arguments, ignoring the value
+                        method.call(result.target);
+                    }
+                    else if (Array.isArray(value)) {
                         method.apply(result.target, value);
                     }
                     else {
@@ -895,7 +918,7 @@ export function assignGingerly(target, source, options, permissions) {
             }
             // No @each in path - handle normally
             // Check if we need to handle async methods (fire-and-forget)
-            if (withAsyncMethodsSet && pathParts.some(p => withAsyncMethodsSet.has(p))) {
+            if (withAsyncMethodsSet && pathParts.some(p => withAsyncMethodsSet.has(p) || (p.endsWith('|') && withAsyncMethodsSet.has(p.slice(0, -1))))) {
                 // Fire-and-forget: dynamically import the async evaluator and run the chain
                 const capturedTarget = target;
                 const capturedPathParts = pathParts;
@@ -909,9 +932,12 @@ export function assignGingerly(target, source, options, permissions) {
                         // Last segment is a method — call it
                         const method = result.target[result.lastKey];
                         if (typeof method === 'function') {
-                            const returnVal = Array.isArray(capturedValue)
-                                ? method.apply(result.target, capturedValue)
-                                : method.call(result.target, capturedValue);
+                            // Trailing | marker - call with no arguments, ignoring the value
+                            const returnVal = result.isZeroArg
+                                ? method.call(result.target)
+                                : Array.isArray(capturedValue)
+                                    ? method.apply(result.target, capturedValue)
+                                    : method.call(result.target, capturedValue);
                             // If it's an async method, await it (for side effects)
                             if (result.isAsyncMethod)
                                 await returnVal;
@@ -947,7 +973,11 @@ export function assignGingerly(target, source, options, permissions) {
                     // Last segment is a method - call it
                     const method = result.target[result.lastKey];
                     if (typeof method === 'function') {
-                        if (Array.isArray(value)) {
+                        if (result.isZeroArg) {
+                            // Trailing | marker - call with no arguments, ignoring the value
+                            method.call(result.target);
+                        }
+                        else if (Array.isArray(value)) {
                             method.apply(result.target, value);
                         }
                         else {
@@ -1013,11 +1043,17 @@ export function assignGingerly(target, source, options, permissions) {
         }
         else {
             // Non-nested path
-            // Check if this is a method call
-            if (withMethodsSet && withMethodsSet.has(key)) {
-                const method = target[key];
+            // Check if this is a method call (a trailing | marks a zero-argument call)
+            const isZeroArgKey = key.endsWith('|') && withMethodsSet !== undefined && withMethodsSet.has(key.slice(0, -1));
+            if (withMethodsSet && (withMethodsSet.has(key) || isZeroArgKey)) {
+                const methodName = isZeroArgKey ? key.slice(0, -1) : key;
+                const method = target[methodName];
                 if (typeof method === 'function') {
-                    if (Array.isArray(value)) {
+                    if (isZeroArgKey) {
+                        // Trailing | marker - call with no arguments, ignoring the value
+                        method.call(target);
+                    }
+                    else if (Array.isArray(value)) {
                         method.apply(target, value);
                     }
                     else {

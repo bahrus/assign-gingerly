@@ -65,7 +65,11 @@ export async function handleEachTime(target, pathParts, forEachIndex, value, wit
                         // Last segment is a method - call it
                         const method = result.target[result.lastKey];
                         if (typeof method === 'function') {
-                            if (Array.isArray(value)) {
+                            if (result.isZeroArg) {
+                                // Trailing | marker - call with no arguments, ignoring the value
+                                method.call(result.target);
+                            }
+                            else if (Array.isArray(value)) {
                                 method.apply(result.target, value);
                             }
                             else {

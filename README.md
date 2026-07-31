@@ -380,6 +380,30 @@ When a path segment matches a name in the `withMethods` array/set:
 - If it's a **middle segment** and the next segment is NOT a method: called with the next segment as a string argument
 - If the property is not a function: silently skipped
 
+**Zero-argument calls (`|` marker):**
+
+Append `|` to a segment to call a listed method with no arguments, without consuming the next segment:
+
+```TypeScript
+assignGingerly(elementRef, {
+  '?.deref|?.classList?.add': 'active'
+}, { withMethods: ['deref', 'add'] });
+
+// Equivalent to: elementRef.deref().classList.add('active')
+```
+
+On the **last segment**, `|` calls the method with no arguments and ignores the RHS value:
+
+```TypeScript
+assignGingerly(form, {
+  '?.reset|': true
+}, { withMethods: ['reset'] });
+
+// Equivalent to: form.reset()
+```
+
+The `|` suffix only applies to names listed in `withMethods` — on any other segment it is treated as part of a literal property name.
+
 **Array arguments:**
 
 Arrays are spread as multiple arguments:
@@ -403,7 +427,7 @@ const elementRef = {
 };
 
 assignGingerly(elementRef, {
-  '?.deref?.classList?.add': 'active'
+  '?.deref|?.classList?.add': 'active'
 }, { withMethods: ['deref', 'add'] });
 
 // Equivalent to: elementRef.deref().classList.add('active')

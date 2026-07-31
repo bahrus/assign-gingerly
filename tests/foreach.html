@@ -349,6 +349,32 @@
             }
         });
 
+        // Test 16: Zero-arg method marker in nested forEach path
+        test('should support zero-arg method marked with | in nested forEach path', () => {
+            const div = document.createElement('div');
+            div.innerHTML = '<group></group><group></group>';
+            const groups = div.querySelectorAll('group');
+            groups[0].getItems = function (...args) { this.getItemsArgs = args; return this.items; };
+            groups[0].items = [{ value: null }, { value: null }];
+            groups[1].getItems = function (...args) { this.getItemsArgs = args; return this.items; };
+            groups[1].items = [{ value: null }];
+
+            assignGingerly(div, {
+                '?.querySelectorAll?.group?.@each?.getItems|?.@each?.value': 'nested'
+            }, { withMethods: ['querySelectorAll', 'getItems'] });
+
+            for (const group of groups) {
+                if (!group.getItemsArgs || group.getItemsArgs.length !== 0) {
+                    throw new Error('getItems should have been called with zero args');
+                }
+                for (const item of group.items) {
+                    if (item.value !== 'nested') {
+                        throw new Error(`Expected 'nested', got '${item.value}'`);
+                    }
+                }
+            }
+        });
+
         // Display results
         const resultsDiv = document.getElementById('results');
         resultsDiv.innerHTML = `
