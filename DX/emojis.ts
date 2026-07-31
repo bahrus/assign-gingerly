@@ -36,12 +36,15 @@ export const akaMethods: Record<string, string> = {
     '🧺': 'querySelectorAll',
     '+': 'add',
     '🧬': 'cloneNode',
-    '🔤': 'textContent',
 };
 
 export const aka: Record<string, string> = {
     '©️': 'content?.cloneNode?.true',
     //'🔎': 'clone?.querySelector'
+    // textContent is a property, not a method — aliasing it via akaMethods
+    // would add it to withMethods and turn `?.textContent` assignments into
+    // silently-skipped method calls.
+    '🔤': 'textContent',
 };
 
 

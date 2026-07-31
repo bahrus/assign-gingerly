@@ -11,6 +11,7 @@
 
     <script type="module">
         import assignGingerly from '../assignGingerly.js';
+        import { akaMethods as emojiAkaMethods, aka as emojiAka } from '../DX/emojis.js';
 
         const results = [];
         let testCount = 0;
@@ -338,6 +339,47 @@
             const myElement = div.querySelector('my-element');
             if (!myElement?.classList.contains('highlighted')) {
                 throw new Error('Method alias shorthand failed');
+            }
+        });
+
+        // Test 17: textContent property assignment works with built-in emoji akaMethods
+        // Regression test: akaMethods targets are added to withMethods, so an entry
+        // like '🔤': 'textContent' must not turn the textContent *property* into a
+        // silently-skipped method call.
+        test('should assign textContent property with built-in emoji akaMethods', () => {
+            const div = document.createElement('div');
+            div.innerHTML = '<span class="status-text"></span>';
+
+            assignGingerly(div, {
+                '?.🔍?..status-text?.textContent': 'Low count'
+            }, {
+                withMethods: ['appendChild'],
+                akaMethods: emojiAkaMethods,
+                aka: emojiAka,
+            });
+
+            const span = div.querySelector('.status-text');
+            if (span.textContent !== 'Low count') {
+                throw new Error(`Expected span textContent 'Low count', got '${span.textContent}'`);
+            }
+        });
+
+        // Test 18: 🔤 alias resolves to the textContent property
+        test('should assign via the 🔤 textContent alias', () => {
+            const div = document.createElement('div');
+            div.innerHTML = '<span class="status-text"></span>';
+
+            assignGingerly(div, {
+                '?.🔍?..status-text?.🔤': 'Medium count'
+            }, {
+                withMethods: ['appendChild'],
+                akaMethods: emojiAkaMethods,
+                aka: emojiAka,
+            });
+
+            const span = div.querySelector('.status-text');
+            if (span.textContent !== 'Medium count') {
+                throw new Error(`Expected span textContent 'Medium count', got '${span.textContent}'`);
             }
         });
 

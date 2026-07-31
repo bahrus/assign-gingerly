@@ -34,11 +34,14 @@ export const akaMethods = {
     '🧺': 'querySelectorAll',
     '+': 'add',
     '🧬': 'cloneNode',
-    '🔤': 'textContent',
 };
 export const aka = {
     '©️': 'content?.cloneNode?.true',
     //'🔎': 'clone?.querySelector'
+    // textContent is a property, not a method — aliasing it via akaMethods
+    // would add it to withMethods and turn `?.textContent` assignments into
+    // silently-skipped method calls.
+    '🔤': 'textContent',
 };
 export const emojis = {
     builtInEmoji,
