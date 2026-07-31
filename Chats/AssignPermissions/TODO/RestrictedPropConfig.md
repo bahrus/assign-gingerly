@@ -18,6 +18,7 @@ So I would like to support nuanced prop setting restrictions:
         },
         {
             prop: 'src',
+            attr: 'src',
             allowFromSameHost: true,
             allowCrossDomain: false,
         }

@@ -38,6 +38,13 @@ export const akaMethods: Record<string, string> = {
     '-': 'remove',
     '🧬': 'cloneNode',
     '🔄️': 'reset',
+    '🎯': 'closest',
+    '✅': 'matches',
+    '☑️': 'checkValidity',
+    '📤': 'submit',
+    '🎚️': 'toggle',
+    '📦': 'contains',
+    //'🧩': 'includes'
 };
 
 export const aka: Record<string, string> = {
