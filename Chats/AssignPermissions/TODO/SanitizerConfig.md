@@ -1,0 +1,7 @@
+# Sanitizer Config
+
+```JS
+{
+    
+}
+```

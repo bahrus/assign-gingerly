@@ -46,3 +46,9 @@ So the work is: extend the interface with `blockedProps`, then both *enforce* it
 - `assignTentatively` blocks, and a blocked assignment leaves no `reversal` entry (so reversal doesn't "restore" a value that was never set).
 - `-=` on a blocked prop still works (locks in decision 2).
 - Method bypass documented behavior: `setAttribute` with a blocked prop name still goes through (or whatever decision 3 lands on — just lock it in with a test).
+
+---
+
+## Human Response I
+
+First, I would like to rename it "restrictedPropSetting".  There's another, phase II request, to be able to configure how property setting should be restricted.
