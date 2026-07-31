@@ -35,7 +35,9 @@ export const akaMethods: Record<string, string> = {
     '🔍': 'querySelector',
     '🧺': 'querySelectorAll',
     '+': 'add',
+    '-': 'remove',
     '🧬': 'cloneNode',
+    '🔄️': 'reset',
 };
 
 export const aka: Record<string, string> = {

@@ -79,3 +79,5 @@ This means the sketch above needs restructuring: the `assign` step moves *inside
 ### On the assignFrom follow-up
 
 Deferring is right. The `assign` field as specified is a plain `assignGingerly` source; a future `assignFrom` variant would add a `from` context for RHS path resolution (pulling values from a viewModel instead of literals). Keeping `assign` minimal now leaves that door open — e.g. a sibling `assignFrom` config key rather than breaking the `assign` shape later.
+
+
