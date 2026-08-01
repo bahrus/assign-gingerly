@@ -1,4 +1,4 @@
-# Restricted Prop Setting Phase III
+# Restricted Prop Settings Phase III
 
 
 ---

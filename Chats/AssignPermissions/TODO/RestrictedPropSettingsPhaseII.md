@@ -1,4 +1,8 @@
-# Restricted Prop Setting Phase II
+# Restricted Prop Settings Phase II
+
+---
+
+## Human Ask
 
 ```JS
 {

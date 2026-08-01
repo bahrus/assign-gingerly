@@ -1,4 +1,4 @@
-# Restricted Prop Setting Phase I
+# Restricted Prop Settings Phase I
 
 ---
 
@@ -74,7 +74,9 @@ Second,  based on your feedback, I would like to add support for more  nuanced p
             allowCrossDomain: false, //no holds barred
         }
     ],
-    sanitizerOptions: {...},
+    customSettings{
+        sanitizerOptions: {...},
+    },
     restrictedMethodSettings: [
         //Phase IV
         'setHTMLUnsafe', //not allowed at all
