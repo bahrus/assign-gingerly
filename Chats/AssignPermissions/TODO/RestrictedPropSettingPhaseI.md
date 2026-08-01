@@ -123,3 +123,199 @@ Correct.  I do think after all the phases are done, we will want to define a sta
 > **Symbols**: registry/DI symbol keys are unaffected — `blockedProps` is string-matched, and that path is trusted-script-driven anyway.
 
 Good insight.
+
+---
+
+## AI Response II
+
+### On `-=` (delete) and the exception logic concern
+
+Your instinct is right. The recommendation "don't block `-=`" requires **zero new code** — we simply don't add a check at the delete sites. No additional logical branch, no `if (isDeleteCommand)` escape. The block check only appears at assignment sites. So: no extra code, easier to reason about. Done.
+
+### On the Set approach for performance
+
+Agreed — a `Set<string>` is the right structure, O(1) lookup vs. O(n) on an array. Your naming suggestion `checkPermissions` is better than `isBlockedProp` — it's forward-looking for when multiple check types (props, methods, sanitizer) live together.
+
+For Phase I, I'd suggest:
+
+```TS
+// Normalize once at the top-level call site
+const blockedPropSet: Set<string> | undefined = permissions?.restrictedPropSettings?.length
+    ? new Set(
+        permissions.restrictedPropSettings
+            .filter(x => typeof x === 'string')
+            .map(x => x as string)
+      )
+    : undefined;
+```
+
+This extracts only the simple string entries (Phase I), ignores `{ prop, useMethod }` objects (future phases), and produces `undefined` when nothing is blocked — so every call site can cheaply bail with `if (!blockedPropSet) return;`.
+
+Pass `blockedPropSet` alongside `permissions` everywhere it threads. No need to re-filter on every recursive call.
+
+### On `console.warn` + what to say
+
+For the warn message, suggest:
+
+```
+assignGingerly: property '${key}' is in restrictedPropSettings — assignment skipped.
+```
+
+One warn per blocked-key per call (not per item in a loop). Achievable by checking `if (blockedPropSet.has(key))` then warning and continuing — the Set ensures we don't do it twice for the same key if it appears in multiple patterns, since the `continue` exits after the first hit.
+
+Actually — in a hot loop (`@each` over 1000 rows), that's 1000 warnings for the same misconfiguration. Would you accept a module-level `warned` Set that de-dupes across calls? Something like:
+
+```TS
+const warnedOnce = new Set<string>();
+function warnBlocked(key: string) {
+    if (!warnedOnce.has(key)) {
+        warnedOnce.add(key);
+        console.warn(`assignGingerly: property '${key}' is in restrictedPropSettings — assignment skipped.`);
+    }
+}
+```
+
+This makes it a "warn once per process lifetime per key" — clean signal, no spam. Clear decision needed before implementation.
+
+### On recursive threading — the hard part
+
+This is the most labor-intensive piece. The sites where `permissions` currently drops:
+
+| File | Location | Notes |
+|------|----------|-------|
+| `assignGingerly.ts` | readonly-merge recursions (`assignGingerly(currentValue, value, options)`) | ~3 sites |
+| `assignGingerly.ts` | `applyToEach` — takes `options` but not `permissions` as a param | Need to add `permissions` to its signature |
+| `eachTime.ts` | Calls `handleEachTime` → eventually calls `assignGingerly` | Need to thread through |
+| `assignFrom.ts` | Four `assignGingerly(...)` calls | Add `permissions` arg |
+| `assignFromAsync.ts` | Same | Same |
+| `assignTentatively.ts` | No `permissions` parameter at all | New 4th param, thread through recursion |
+| `handlers/addEventListener.ts` | Inner `assignGingerly`/`assignFrom` calls | Thread `inheritedOptions` or a separate permissions param |
+
+**Biggest threading gap**: `processHandlerCommands.ts` — the event handler dispatch calls `assignFrom(dest, pattern, { from: source, ... })` inside the event callback, assembled from `inheritedOptions`. For handlers invoked via `=>` and `+=` event binding, `permissions` needs to be part of what flows through. This is the "as far and as deeply nested as the code goes" requirement.
+
+### On `AssignPermissions` location
+
+Currently in `isAllowedImportPath.ts`. Per `AGENTS.md` (and your types steering rule), it should move to `types/assign-gingerly/types.d.ts`. Worth doing as part of this change — it's a small move but brings it in line.
+
+### Phase I type shape
+
+```TS
+export interface AssignPermissions {
+    /** Allow imports from cross-domain URLs (default: false) */
+    crossDomainImports?: boolean;
+
+    /**
+     * Restricted property settings.
+     * Phase I: string entries are property names that cannot be assigned.
+     * Phase II+: object entries add useMethod/attr/sanitizer support.
+     * 
+     * NOTE: This is a property-assignment guard only. Method calls (setAttribute, etc.)
+     * and event-handler assignments are not blocked by this setting — see Phase III+.
+     */
+    restrictedPropSettings?: Array<string | RestrictedPropSetting | RestrictedMethodSetting>;
+
+    /** Sanitizer options (Phase III+) */
+    sanitizerOptions?: Record<string, any>;
+
+    /** Restricted method settings (Phase IV+) */
+    restrictedMethodSettings?: Array<string | RestrictedMethodConfig>;
+}
+
+// Forward-declare Phase II+ shapes so the hooks are there
+export interface RestrictedPropSetting {
+    prop: string;
+    useMethod?: string;         // Phase II
+    attr?: string;              // Phase III
+    allowFromSameHost?: boolean; // Phase III
+    allowCrossDomain?: boolean;  // Phase III
+}
+
+export interface RestrictedMethodConfig {
+    method: string;
+    addArgs?: string[];         // Phase V
+}
+```
+
+### Summary of open decisions
+
+| Decision | My recommendation |
+|----------|------------------|
+| Warn dedup | Module-level `warnedOnce` Set — one warn per key per process |
+| `-=` | Not blocked — no code added at delete sites |
+| `AssignPermissions` location | Move to `types.d.ts` as part of this change |
+| Phase I Set normalization | Filter `typeof x === 'string'` entries only |
+| `blockedPropSet` threading | Pass as a separate argument alongside `permissions` throughout |
+
+Resolve the warn-dedup question and I'm ready to implement Phase I.
+
+---
+
+## Human Response II
+
+> Module-level `warnedOnce` Set — one warn per key per process
+
+All recommendations sound good.  I prefer the name "restrictedPropSet' vs blockedPropSet, though I doubt this will affect the end user, but I think it would be clearer as we move forward.
+
+Please implement.
+
+## Implementation Notes
+
+Let me implement Phase I directly. I'll work through it systematically.
+
+Now I have a clear picture. Let me implement Phase I step by step.
+
+**Step 1: Update `types.d.ts` with the new interface shapes**
+
+Step 2: move `AssignPermissions` from `isAllowedImportPath.ts` to `types.d.ts` (already done above), update `isAllowedImportPath.ts` to import it from types, and add the `restrictedPropSet` normalization + `warnedOnce` dedup helper.
+
+Now add the `restrictedPropSet` normalization helper and `warnedOnce` dedup to `isAllowedImportPath.ts` — this is the natural home since it's already the permissions utility module:
+
+Now update the JS file:
+
+
+
+Step 3: wire `checkRestrictedProp` into `assignGingerly.ts` at all assignment sites, add `permissions` threading to `applyToEach`, and add `buildRestrictedPropSet` at the entry point.
+
+Now add `permissions` to `applyToEach` and thread `restrictedPropSet` through it:
+
+Now find and update the recursive `applyToEach` call inside itself:
+
+Yes — several more. Let me find all the remaining assignment sites and threading gaps:
+
+Now I need to:
+
+1. Add `buildRestrictedPropSet` call at the start of the main `assignGingerly` function
+2. Add `checkRestrictedProp` at each assignment site
+3. Thread `permissions` to the second `applyToEach` call (line 1030)
+4. Thread `permissions` to recursive `assignGingerly` calls (the readonly-merge recursions)
+
+Let me read the main function entry to add the normalization:
+
+Now add the checks at the `+=` sites (lhsParent and target[path]):
+
+Not yet — let me add the checks now. I need to add `checkRestrictedProp` before each assignment block:
+
+Now the toggle `=!`, delete (skip), Y= merge, and the main nested/plain assignment blocks. Let me find and update those:
+
+Now the Y= merge command — it recursively calls `assignGingerly`, and the final assignment is done by the recursive call, so I need to check the key before merging:
+
+The Y= merge recursively calls `assignGingerly(mergeTarget, value, options, permissions)` — the `permissions` already threads through, so the checks will fire inside the recursive call. No check needed at the Y= level itself (the path is the container, not the property being set). The individual property assignments inside the merge will be checked.
+
+Now the main nested path and plain key assignment sites (lines ~1127-1160). Let me read and fix those:
+
+Now I'll add the checks at all four remaining assignment blocks. I'll add `checkRestrictedProp` just before `tryAssignTo` at each site, since the key/lastKey is known at that point:
+
+**Site 1 & 2: nested path with/without withMethods**
+
+**Site 3: non-nested plain key**
+
+Now fix the `applyToEach` assignment sites inside `applyToEach` itself, and thread `permissions` to its outer call (line 1030):
+
+Not quite — I also need to add the `checkRestrictedProp` check inside `applyToEach` itself at its assignment sites (the `parent[lastKey] = value` lines). Let me find and fix those:
+
+The `permissions` is available in `applyToEach` but there's no `restrictedPropSet` yet — I need to build it from `permissions` inside `applyToEach` (since it's a helper that can be called without going through the main function entry). Actually, it's cleaner to pass the already-built `restrictedPropSet` as a parameter instead of rebuilding it:
+
+Now add the check at the assignment sites inside `applyToEach` and thread `restrictedPropSet` to recursive calls:
+
+Now update both `applyToEach` call sites to pass `restrictedPropSet`:
+

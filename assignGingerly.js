@@ -1,3 +1,4 @@
+import { buildRestrictedPropSet, checkRestrictedProp } from './isAllowedImportPath.js';
 import { normalizeAliasOptions } from './getValues.js';
 /**
  * GUID for global instance map storage to ensure uniqueness across package versions
@@ -456,7 +457,7 @@ function isReactiveForEachSymbol(segment, aliasMap) {
 /**
  * Apply a path to each item in an iterable
  */
-function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, options) {
+function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, options, permissions, restrictedPropSet) {
     // Convert to array for iteration
     const items = Array.isArray(iterable) ? iterable : Array.from(iterable);
     // Apply the remaining path to each item
@@ -512,7 +513,7 @@ function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, opti
             }
             // Recursively apply to the nested iterable
             if (isIterable(current)) {
-                applyToEach(current, pathAfterForEach, value, withMethods, aliasMap, options);
+                applyToEach(current, pathAfterForEach, value, withMethods, aliasMap, options, permissions, restrictedPropSet);
             }
         }
         else {
@@ -538,13 +539,16 @@ function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, opti
                 // Normal assignment
                 const lastKey = result.lastKey;
                 const parent = result.target;
-                if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                if (checkRestrictedProp(restrictedPropSet, lastKey)) {
+                    // skip
+                }
+                else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                     if (lastKey in parent && isReadonlyProperty(parent, lastKey)) {
                         const currentValue = parent[lastKey];
                         if (typeof currentValue !== 'object' || currentValue === null) {
                             throw new Error(`Cannot merge object into readonly primitive property '${String(lastKey)}'`);
                         }
-                        assignGingerly(currentValue, value, options);
+                        assignGingerly(currentValue, value, options, permissions);
                     }
                     else {
                         parent[lastKey] = value;
@@ -586,6 +590,8 @@ export function assignGingerly(target, source, options, permissions) {
         return target;
     }
     const { aliasMap, withMethods: withMethodsSet } = normalizeAliasOptions(options);
+    // Normalize restrictedPropSettings once per top-level call
+    const restrictedPropSet = buildRestrictedPropSet(permissions);
     // Convert withAsyncMethods array to Set for O(1) lookup
     const withAsyncMethodsSet = options?.withAsyncMethods
         ? options.withAsyncMethods instanceof Set
@@ -688,7 +694,10 @@ export function assignGingerly(target, source, options, permissions) {
                         });
                         continue;
                     }
-                    if (!(lhsKey in lhsParent)) {
+                    if (checkRestrictedProp(restrictedPropSet, lhsKey)) {
+                        // skip assignment
+                    }
+                    else if (!(lhsKey in lhsParent)) {
                         lhsParent[lhsKey] = value;
                     }
                     else if (Array.isArray(lhsValue)) {
@@ -717,7 +726,10 @@ export function assignGingerly(target, source, options, permissions) {
                         });
                         continue;
                     }
-                    if (!(path in target)) {
+                    if (checkRestrictedProp(restrictedPropSet, path)) {
+                        // skip assignment
+                    }
+                    else if (!(path in target)) {
                         target[path] = value;
                     }
                     else if (Array.isArray(target[path])) {
@@ -786,8 +798,10 @@ export function assignGingerly(target, source, options, permissions) {
                         valueToNegate = (rhsPath in target) ? target[rhsPath] : true;
                     }
                 }
-                // Apply negation to LHS
-                lhsParent[lhsLastKey] = !valueToNegate;
+                // Apply negation to LHS — check restriction first
+                if (!checkRestrictedProp(restrictedPropSet, lhsLastKey)) {
+                    lhsParent[lhsLastKey] = !valueToNegate;
+                }
             }
             continue;
         }
@@ -911,7 +925,7 @@ export function assignGingerly(target, source, options, permissions) {
                 }
                 // Apply to each item in the iterable
                 if (isIterable(current)) {
-                    applyToEach(current, pathAfterForEach, value, withMethodsSet || new Set(), aliasMap, options);
+                    applyToEach(current, pathAfterForEach, value, withMethodsSet || new Set(), aliasMap, options, permissions);
                 }
                 // If not iterable, let JavaScript throw error naturally when trying to iterate
                 continue;
@@ -994,14 +1008,17 @@ export function assignGingerly(target, source, options, permissions) {
                 if (lastKey in parent && tryAssignTo(parent[lastKey], value, parent, lastKey)) {
                     continue;
                 }
-                if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                if (checkRestrictedProp(restrictedPropSet, lastKey)) {
+                    // skip
+                }
+                else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                     // Check if property exists and is readonly
                     if (lastKey in parent && isReadonlyProperty(parent, lastKey)) {
                         const currentValue = parent[lastKey];
                         if (typeof currentValue !== 'object' || currentValue === null) {
                             throw new Error(`Cannot merge object into readonly primitive property '${String(lastKey)}'`);
                         }
-                        assignGingerly(currentValue, value, options);
+                        assignGingerly(currentValue, value, options, permissions);
                     }
                     else {
                         // Property is writable - replace it
@@ -1020,7 +1037,10 @@ export function assignGingerly(target, source, options, permissions) {
                 if (lastKey in parent && tryAssignTo(parent[lastKey], value, parent, lastKey)) {
                     continue;
                 }
-                if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                if (checkRestrictedProp(restrictedPropSet, lastKey)) {
+                    // skip
+                }
+                else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                     // Check if property exists and is readonly
                     if (lastKey in parent && isReadonlyProperty(parent, lastKey)) {
                         // Property is readonly - check if current value is an object
@@ -1029,7 +1049,7 @@ export function assignGingerly(target, source, options, permissions) {
                             throw new Error(`Cannot merge object into readonly primitive property '${String(lastKey)}'`);
                         }
                         // Recursively apply assignGingerly to the readonly object
-                        assignGingerly(currentValue, value, options);
+                        assignGingerly(currentValue, value, options, permissions);
                     }
                     else {
                         // Property is writable - replace it
@@ -1068,7 +1088,10 @@ export function assignGingerly(target, source, options, permissions) {
             if (key in target && tryAssignTo(target[key], value, target, key)) {
                 continue;
             }
-            if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            if (checkRestrictedProp(restrictedPropSet, key)) {
+                // skip
+            }
+            else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                 // Check if property exists and is readonly
                 if (key in target && isReadonlyProperty(target, key)) {
                     // Property is readonly - check if current value is an object
@@ -1077,7 +1100,7 @@ export function assignGingerly(target, source, options, permissions) {
                         throw new Error(`Cannot merge object into readonly primitive property '${String(key)}'`);
                     }
                     // Recursively apply assignGingerly to the readonly object
-                    assignGingerly(currentValue, value, options);
+                    assignGingerly(currentValue, value, options, permissions);
                 }
                 else {
                     // Property is writable - replace it

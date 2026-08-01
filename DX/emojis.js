@@ -33,7 +33,21 @@ export const akaMethods = {
     '🔍': 'querySelector',
     '🧺': 'querySelectorAll',
     '+': 'add',
+    '-': 'remove',
     '🧬': 'cloneNode',
+    '🔄️': 'reset',
+    '🎯': 'closest',
+    '✅': 'matches',
+    '☑️': 'checkValidity',
+    '📤': 'submit',
+    '🎚️': 'toggle',
+    '📦': 'contains',
+    '🏷️': 'setAttribute',
+    '✂️': 'removeAttribute',
+    '📝': 'log',
+    '⚠️': 'warn',
+    '🚨': 'error',
+    //'🧩': 'includes'
 };
 export const aka = {
     '©️': 'content?.cloneNode?.true',
@@ -46,5 +60,6 @@ export const aka = {
 export const emojis = {
     builtInEmoji,
     akaMethods,
+    aka
 };
 export default emojis;

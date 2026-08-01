@@ -16,14 +16,45 @@
  * isAllowedImportPath('//cdn.example.com/x.js'); // false
  */
 
+// Re-export AssignPermissions from canonical location for backwards compatibility
+export type { AssignPermissions } from './types/assign-gingerly/types.js';
+import type { AssignPermissions } from './types/assign-gingerly/types.js';
+
 /**
- * Permissions interface for controlling security-sensitive operations.
- * Passed as the last parameter to assignGingerly, assignFrom, and enhanceAll.
- * Only trusted script can set these — they are never parsed from HTML attributes.
+ * Module-level warn dedup — one warning per property key per process lifetime.
  */
-export interface AssignPermissions {
-    /** Allow imports from cross-domain URLs (default: false) */
-    crossDomainImports?: boolean;
+const warnedOnce = new Set<string>();
+
+/**
+ * Warn once per key that a restricted property assignment was skipped.
+ */
+function warnRestricted(key: string): void {
+    if (!warnedOnce.has(key)) {
+        warnedOnce.add(key);
+        console.warn(`assignGingerly: property '${key}' is in restrictedPropSettings — assignment skipped.`);
+    }
+}
+
+/**
+ * Normalize the restrictedPropSettings from permissions into a fast-lookup Set.
+ * Phase I: extracts string entries only (object entries are Phase II+).
+ * Returns undefined when nothing is restricted (fast-bail in callers).
+ */
+export function buildRestrictedPropSet(permissions: AssignPermissions | undefined): Set<string> | undefined {
+    const settings = permissions?.restrictedPropSettings;
+    if (!settings || settings.length === 0) return undefined;
+    const strings = settings.filter((x): x is string => typeof x === 'string');
+    return strings.length > 0 ? new Set(strings) : undefined;
+}
+
+/**
+ * Check if a property key is restricted. If so, warn (once) and return true.
+ * Call sites should `continue` or skip the assignment when this returns true.
+ */
+export function checkRestrictedProp(restrictedPropSet: Set<string> | undefined, key: string): boolean {
+    if (!restrictedPropSet || !restrictedPropSet.has(key)) return false;
+    warnRestricted(key);
+    return true;
 }
 
 /**
