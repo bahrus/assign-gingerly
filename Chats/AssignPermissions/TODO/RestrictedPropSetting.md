@@ -59,12 +59,14 @@ Second,  based on your feedback, I would like to add support nuanced prop settin
 {
     sanitizerOptions: {...},
     restrictedPropSettings: [
+        //Phase I
         'innerHTML' /** not allowed, don't worry about consistency with anything else **/, 
+        //Phase II
         {
             prop: 'outerHTML',
             useMethod: 'replaceWithHTML',
-            withOptions: '?.sanitizerOptions',
         },
+        //Phase III
         {
             prop: 'src',
             //if not specified, don't check for calls to setAttribute
@@ -73,13 +75,21 @@ Second,  based on your feedback, I would like to add support nuanced prop settin
             allowCrossDomain: false,
         }
     ],
-    //Phase II
-    methodOptions: {
-
-    }
+    
+    restrictedMethodSettings: [
+        //Phase IV
+        'setHTMLUnsafe',
+        {
+            //Phase V
+            method: 'replaceWithHTML',
+            //forced parameter by index
+            [1]: '?.sanitizerOptions'
+        }
+    ]
+    
 }
 ```
 
 >  A tiny `isBlockedProp(permissions, key)` helper, applied at every assignment site
 
-I'm hoping that a Set object can be passed everywhere it needs to go, that lists all the values that need checking, before calling the method, if you agree this would run a bit faster.
+I'm hoping that a Set object can be passed everywhere it needs to go, that lists all the values that need checking, before calling the method, above if you agree this would run a bit faster.  And I think it should be renamed to something like checkPermissions
