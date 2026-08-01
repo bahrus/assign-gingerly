@@ -591,7 +591,7 @@ assignGingerly(div, {
   aka: {
     //not a method!
     '🎨': 'classList',
-  }
+  },
   akaMethods: {
     '🔍': 'querySelector',
     '+': 'add',
