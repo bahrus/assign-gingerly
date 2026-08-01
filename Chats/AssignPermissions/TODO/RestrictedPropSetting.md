@@ -51,4 +51,35 @@ So the work is: extend the interface with `blockedProps`, then both *enforce* it
 
 ## Human Response I
 
-First, I would like to rename it "restrictedPropSetting".  There's another, phase II request, to be able to configure how property setting should be restricted.
+First, I would like to rename it "restrictedPropSetting", the reason for this hopefully clarified below. 
+
+Second,  based on your feedback, I would like to add support nuanced prop setting restrictions:
+
+```JS
+{
+    sanitizerOptions: {...},
+    restrictedPropSettings: [
+        'innerHTML' /** not allowed, don't worry about consistency with anything else **/, 
+        {
+            prop: 'outerHTML',
+            useMethod: 'replaceWithHTML',
+            withOptions: '?.sanitizerOptions',
+        },
+        {
+            prop: 'src',
+            //if not specified, don't check for calls to setAttribute
+            attr: 'src', //watches for setAttribute method call
+            allowFromSameHost: true,
+            allowCrossDomain: false,
+        }
+    ],
+    //Phase II
+    methodOptions: {
+
+    }
+}
+```
+
+>  A tiny `isBlockedProp(permissions, key)` helper, applied at every assignment site
+
+I'm hoping that a Set object can be passed everywhere it needs to go, that lists all the values that need checking, before calling the method, if you agree this would run a bit faster.

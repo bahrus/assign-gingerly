@@ -44,6 +44,11 @@ export const akaMethods: Record<string, string> = {
     '📤': 'submit',
     '🎚️': 'toggle',
     '📦': 'contains',
+    '🏷️': 'setAttribute',
+    '✂️': 'removeAttribute',
+    '📝': 'log',
+    '⚠️': 'warn',
+    '🚨': 'error',
     //'🧩': 'includes'
 };
 
@@ -60,6 +65,7 @@ export const aka: Record<string, string> = {
 export const emojis = {
     builtInEmoji,
     akaMethods,
+    aka
 }
 
 export default emojis;
