@@ -49,6 +49,7 @@ export const akaMethods: Record<string, string> = {
     '📝': 'log',
     '⚠️': 'warn',
     '🚨': 'error',
+    '🤱': 'appendChild'
     //'🧩': 'includes'
 };
 
