@@ -1,4 +1,4 @@
-# Blocked Props
+# Restricted Prop Setting Phase I
 
 ---
 
@@ -53,7 +53,7 @@ So the work is: extend the interface with `blockedProps`, then both *enforce* it
 
 First, I would like to rename it "restrictedPropSetting", the reason for this hopefully clarified below. 
 
-Second,  based on your feedback, I would like to add support nuanced prop setting restrictions:
+Second,  based on your feedback, I would like to add support for more  nuanced prop and method setting restrictions:
 
 ```JS
 {
@@ -78,7 +78,7 @@ Second,  based on your feedback, I would like to add support nuanced prop settin
     
     restrictedMethodSettings: [
         //Phase IV
-        'setHTMLUnsafe',
+        'setHTMLUnsafe', //not allowed at all
         {
             //Phase V
             method: 'replaceWithHTML',
@@ -93,3 +93,7 @@ Second,  based on your feedback, I would like to add support nuanced prop settin
 >  A tiny `isBlockedProp(permissions, key)` helper, applied at every assignment site
 
 I'm hoping that a Set object can be passed everywhere it needs to go, that lists all the values that need checking, before calling the method, above if you agree this would run a bit faster.  And I think it should be renamed to something like checkPermissions
+
+I will create separate chats for everything beyond Phase I.  But please provide the needed hooks in anticipation of those phases coming next.
+
+Please focus any issues I didn't address with Phase I below.
