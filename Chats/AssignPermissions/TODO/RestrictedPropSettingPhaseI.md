@@ -272,6 +272,16 @@ Now add the `restrictedPropSet` normalization helper and `warnedOnce` dedup to `
 
 Now update the JS file:
 
+---
+
+## Human Prodding I On Too Busy Error
+
+Just so you know, it seems traffic is high.  I have the typescript compiler running, so no need to work on generating/updating the js files, only the ts, hopefully that helps a little.  isAllowedImportPath.js created by the tsc compiler
+
+---
+
+## AI Implementation Notes, continued...
+
 
 
 Step 3: wire `checkRestrictedProp` into `assignGingerly.ts` at all assignment sites, add `permissions` threading to `applyToEach`, and add `buildRestrictedPropSet` at the entry point.
@@ -279,6 +289,16 @@ Step 3: wire `checkRestrictedProp` into `assignGingerly.ts` at all assignment si
 Now add `permissions` to `applyToEach` and thread `restrictedPropSet` through it:
 
 Now find and update the recursive `applyToEach` call inside itself:
+
+---
+
+## Human Prodding II On Too Busy Error
+
+Making progress.  Any more edits to assignGingerly.ts remaining?
+
+---
+
+## AI Implementation Notes, continued...
 
 Yes — several more. Let me find all the remaining assignment sites and threading gaps:
 
@@ -293,11 +313,29 @@ Let me read the main function entry to add the normalization:
 
 Now add the checks at the `+=` sites (lhsParent and target[path]):
 
+---
+
+## Human Prodding III On Too Busy Error
+
+Did you finish adding checks at the += sites?
+
+---
+
+## AI Implementation Notes, continued...
+
 Not yet — let me add the checks now. I need to add `checkRestrictedProp` before each assignment block:
 
 Now the toggle `=!`, delete (skip), Y= merge, and the main nested/plain assignment blocks. Let me find and update those:
 
 Now the Y= merge command — it recursively calls `assignGingerly`, and the final assignment is done by the recursive call, so I need to check the key before merging:
+
+---
+
+## Human Prodding IV On Too Busy Error
+
+You were Finding the Y= merge command assignment sites....?
+
+## AI Implementation Notes, continued...
 
 The Y= merge recursively calls `assignGingerly(mergeTarget, value, options, permissions)` — the `permissions` already threads through, so the checks will fire inside the recursive call. No check needed at the Y= level itself (the path is the container, not the property being set). The individual property assignments inside the merge will be checked.
 
@@ -311,6 +349,17 @@ Now I'll add the checks at all four remaining assignment blocks. I'll add `check
 
 Now fix the `applyToEach` assignment sites inside `applyToEach` itself, and thread `permissions` to its outer call (line 1030):
 
+
+---
+
+## Human Prodding V On Too Busy Error
+
+Looks like you finished editing applyToEach?
+
+---
+
+## AI Implementation Notes, continued...
+
 Not quite — I also need to add the `checkRestrictedProp` check inside `applyToEach` itself at its assignment sites (the `parent[lastKey] = value` lines). Let me find and fix those:
 
 The `permissions` is available in `applyToEach` but there's no `restrictedPropSet` yet — I need to build it from `permissions` inside `applyToEach` (since it's a helper that can be called without going through the main function entry). Actually, it's cleaner to pass the already-built `restrictedPropSet` as a parameter instead of rebuilding it:
@@ -318,4 +367,12 @@ The `permissions` is available in `applyToEach` but there's no `restrictedPropSe
 Now add the check at the assignment sites inside `applyToEach` and thread `restrictedPropSet` to recursive calls:
 
 Now update both `applyToEach` call sites to pass `restrictedPropSet`:
+
+---
+
+## Human Summary
+
+Out of free tokens with the alternative AI service.
+
+Please resume from where things were left off above.
 
