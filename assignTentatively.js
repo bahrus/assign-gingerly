@@ -14,6 +14,23 @@ function parseIncCommand(key) {
     return key.substring(0, key.length - 3); // Remove ' +=' suffix
 }
 /**
+ * Apply the scalar and array semantics of the += command.
+ */
+function addValue(lhs, rhs) {
+    if (Array.isArray(lhs)) {
+        return Array.isArray(rhs) ? [...lhs, ...rhs] : [...lhs, rhs];
+    }
+    if (typeof lhs === 'number' && typeof rhs === 'string') {
+        const parsed = Number(rhs);
+        return Number.isNaN(parsed) ? lhs + rhs : lhs + parsed;
+    }
+    if (typeof lhs === 'string' && typeof rhs === 'number') {
+        const parsed = Number(lhs);
+        return Number.isNaN(parsed) ? lhs + rhs : (parsed + rhs).toString();
+    }
+    return lhs + rhs;
+}
+/**
  * Helper function to check if a key represents a =! command
  */
 function isToggleCommand(key) {
@@ -124,18 +141,7 @@ export function assignTentatively(target, source, options) {
                         if (!(fullPath in reversal)) {
                             reversal[fullPath] = parent[lastKey];
                         }
-                        if (Array.isArray(parent[lastKey])) {
-                            parent[lastKey] = Array.isArray(value)
-                                ? [...parent[lastKey], ...value]
-                                : [...parent[lastKey], value];
-                        }
-                        else if (typeof parent[lastKey] === 'number' && typeof value === 'string') {
-                            const parsed = Number(value);
-                            parent[lastKey] = isNaN(parsed) ? parent[lastKey] + value : parent[lastKey] + parsed;
-                        }
-                        else {
-                            parent[lastKey] += value;
-                        }
+                        parent[lastKey] = addValue(parent[lastKey], value);
                     }
                     else {
                         // Property doesn't exist, create it with the value
@@ -148,18 +154,7 @@ export function assignTentatively(target, source, options) {
                         if (!(path in reversal)) {
                             reversal[path] = target[path];
                         }
-                        if (Array.isArray(target[path])) {
-                            target[path] = Array.isArray(value)
-                                ? [...target[path], ...value]
-                                : [...target[path], value];
-                        }
-                        else if (typeof target[path] === 'number' && typeof value === 'string') {
-                            const parsed = Number(value);
-                            target[path] = isNaN(parsed) ? target[path] + value : target[path] + parsed;
-                        }
-                        else {
-                            target[path] += value;
-                        }
+                        target[path] = addValue(target[path], value);
                     }
                     else {
                         target[path] = value;

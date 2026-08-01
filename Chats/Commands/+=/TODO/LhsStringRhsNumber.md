@@ -89,3 +89,26 @@ numeric string, a non-numeric fallback (`'12px' += 13` -> `'12px13'`), decimals,
 negative values, and the chosen empty-string behavior.  The README's `+=`
 table should replace the unconditional `string | any | string concatenation`
 row with the more specific numeric-string/number case plus the fallback.
+
+---
+
+## Human Response I
+
+Your feedback seems quite apt and on target.  Please implement.
+
+---
+
+## Implementation Notes
+
+Implemented the feature in TypeScript:
+
+- Numeric string LHS + numeric RHS now adds numerically and returns a string (`'12' += 13` → `'25'`).
+- Nonnumeric strings retain native concatenation (`'12px' += 13` → `'12px13'`).
+- Centralized `+=` behavior in helpers in [assignGingerly.ts](C:\git\assign-gingerly\assignGingerly.ts) and [assignTentatively.ts](C:\git\assign-gingerly\assignTentatively.ts).
+- Added browser-test coverage, including the `dataset.diff` example.
+
+Your compiler regenerated the `.js` outputs; I did not edit them directly.
+
+Yes—`AGENTS.md` is automatically adopted for this repository, including its nested-path applicability. It is the right format; no translation is needed. Other files can document guidance, but `AGENTS.md` is the convention I can reliably treat as operative instructions.
+
+`git diff --check` passes. The focused Playwright run did not finish within its timeout, and it left generated artifacts under `test-results/`; cleanup was blocked by the safety gate, so please remove or restore those before committing.

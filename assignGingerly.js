@@ -199,6 +199,23 @@ function parseIncCommand(key) {
     return key.substring(0, key.length - 3); // Remove ' +=' suffix
 }
 /**
+ * Apply the scalar and array semantics of the += command.
+ */
+function addValue(lhs, rhs) {
+    if (Array.isArray(lhs)) {
+        return Array.isArray(rhs) ? [...lhs, ...rhs] : [...lhs, rhs];
+    }
+    if (typeof lhs === 'number' && typeof rhs === 'string') {
+        const parsed = Number(rhs);
+        return Number.isNaN(parsed) ? lhs + rhs : lhs + parsed;
+    }
+    if (typeof lhs === 'string' && typeof rhs === 'number') {
+        const parsed = Number(lhs);
+        return Number.isNaN(parsed) ? lhs + rhs : (parsed + rhs).toString();
+    }
+    return lhs + rhs;
+}
+/**
  * Helper function to check if a key represents a =! command
  */
 function isToggleCommand(key) {
@@ -700,17 +717,8 @@ export function assignGingerly(target, source, options, permissions) {
                     else if (!(lhsKey in lhsParent)) {
                         lhsParent[lhsKey] = value;
                     }
-                    else if (Array.isArray(lhsValue)) {
-                        lhsParent[lhsKey] = Array.isArray(value)
-                            ? [...lhsValue, ...value]
-                            : [...lhsValue, value];
-                    }
-                    else if (typeof lhsValue === 'number' && typeof value === 'string') {
-                        const parsed = Number(value);
-                        lhsParent[lhsKey] = isNaN(parsed) ? lhsValue + value : lhsValue + parsed;
-                    }
                     else {
-                        lhsParent[lhsKey] += value;
+                        lhsParent[lhsKey] = addValue(lhsValue, value);
                     }
                 }
                 else {
@@ -732,17 +740,8 @@ export function assignGingerly(target, source, options, permissions) {
                     else if (!(path in target)) {
                         target[path] = value;
                     }
-                    else if (Array.isArray(target[path])) {
-                        target[path] = Array.isArray(value)
-                            ? [...target[path], ...value]
-                            : [...target[path], value];
-                    }
-                    else if (typeof target[path] === 'number' && typeof value === 'string') {
-                        const parsed = Number(value);
-                        target[path] = isNaN(parsed) ? target[path] + value : target[path] + parsed;
-                    }
                     else {
-                        target[path] += value;
+                        target[path] = addValue(target[path], value);
                     }
                 }
             }

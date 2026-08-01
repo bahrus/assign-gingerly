@@ -125,6 +125,14 @@
             expect(reversal).toEqual({ '?.a?.b?.c': 5 });
         });
 
+        test('should add a number to a numeric string and preserve its type', () => {
+            const obj = { value: '12' };
+            const reversal = {};
+            assignTentatively(obj, { 'value +=': 13 }, { reversal });
+            expect(obj.value).toBe('25');
+            expect(reversal).toEqual({ value: '12' });
+        });
+
         test('should support += command on non-existent path', () => {
             const obj = {};
             const reversal = {};

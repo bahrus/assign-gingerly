@@ -144,6 +144,29 @@
             expect(obj.value).toBe(8);
         });
 
+        test('should parse numeric string LHS and preserve it as a string', () => {
+            const obj = { value: '12' };
+            assignGingerly(obj, { 'value +=': 13 });
+            expect(obj.value).toBe('25');
+        });
+
+        test('should increment a numeric dataset value', () => {
+            const button = document.createElement('button');
+            button.dataset.diff = '12';
+            assignGingerly(button, {
+                dataset: {
+                    '?.diff +=': 13
+                }
+            });
+            expect(button.dataset.diff).toBe('25');
+        });
+
+        test('should concatenate a non-numeric string LHS with a number', () => {
+            const obj = { value: '12px' };
+            assignGingerly(obj, { 'value +=': 13 });
+            expect(obj.value).toBe('12px13');
+        });
+
         test('should concatenate when LHS is number and RHS is non-numeric string', () => {
             const obj = { value: 5 };
             assignGingerly(obj, { 'value +=': 'px' });
