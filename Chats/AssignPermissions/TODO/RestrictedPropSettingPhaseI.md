@@ -4,7 +4,7 @@
 
 ## Human Ask
 
-assignFrom supports a 4th parameter, AssignPermissions.  This should b added tp assignGingerly and assignTentatively.
+assignFrom supports a 4th parameter, AssignPermissions.  This should be added to assignGingerly and assignTentatively.
 
 We should add a property, "blockedProps" that supports an array of properties that cannot be set during the assigning process.  Examples would be src, innerHTML, outerHTML.
 ---
@@ -51,7 +51,7 @@ So the work is: extend the interface with `blockedProps`, then both *enforce* it
 
 ## Human Response I
 
-First, I would like to rename it "restrictedPropSetting", the reason for this is hopefully clarified below. 
+First, I would like to rename "blockedProps" to "restrictedPropSettings". The reason for this is hopefully clarified below. 
 
 Second,  based on your feedback, I would like to add support for more  nuanced prop and method setting restrictions:
 
@@ -92,7 +92,7 @@ Second,  based on your feedback, I would like to add support for more  nuanced p
 
 >  A tiny `isBlockedProp(permissions, key)` helper, applied at every assignment site
 
-I'm hoping that a Set object can be passed everywhere it needs to go, that lists all the values that need checking, before calling the method above, if you agree this would run a bit faster.  And I think it should be renamed to something like checkPermissions
+I'm hoping that a Set object can be passed everywhere it needs to go, that lists all the values that need checking, before calling the method above, if you agree this would run a bit faster.  And I think it should be renamed to something like checkPermissions.  Maybe two Sets -- one for props, the other for methods.
 
 I will create separate chats for everything beyond Phase I.  But please provide the needed hooks in anticipation of those phases coming next.
 
