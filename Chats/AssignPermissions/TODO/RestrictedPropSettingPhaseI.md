@@ -57,7 +57,6 @@ Second,  based on your feedback, I would like to add support for more  nuanced p
 
 ```JS
 {
-    sanitizerOptions: {...},
     restrictedPropSettings: [
         //Phase I
         'innerHTML' /** not allowed, don't worry about consistency with anything else **/, 
@@ -71,11 +70,11 @@ Second,  based on your feedback, I would like to add support for more  nuanced p
             prop: 'src',
             //if not specified, don't check for calls to setAttribute
             attr: 'src', //watches for setAttribute method call
-            allowFromSameHost: true,
-            allowCrossDomain: false,
+            allowFromSameHost: true, //use isAllowedImportPath?  change name to more generic?
+            allowCrossDomain: false, //no holds barred
         }
     ],
-    
+    sanitizerOptions: {...},
     restrictedMethodSettings: [
         //Phase IV
         'setHTMLUnsafe', //not allowed at all
@@ -93,8 +92,8 @@ Second,  based on your feedback, I would like to add support for more  nuanced p
 
 >  A tiny `isBlockedProp(permissions, key)` helper, applied at every assignment site
 
-I'm hoping that a Set object can be passed everywhere it needs to go, that lists all the values that need checking, before calling the method, above if you agree this would run a bit faster.  And I think it should be renamed to something like checkPermissions
+I'm hoping that a Set object can be passed everywhere it needs to go, that lists all the values that need checking, before calling the method above, if you agree this would run a bit faster.  And I think it should be renamed to something like checkPermissions
 
 I will create separate chats for everything beyond Phase I.  But please provide the needed hooks in anticipation of those phases coming next.
 
-Please focus any issues I didn't address with Phase I below.  My sense is that some of what Kimi recommended above becomes dead weight in light of the coming phases.
+Please focus on any issues I didn't address with Phase I for the remainder of this chat.  My sense is that some of what was recommended above becomes dead weight in light of the coming phases.
