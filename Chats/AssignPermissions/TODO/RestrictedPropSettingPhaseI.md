@@ -51,7 +51,7 @@ So the work is: extend the interface with `blockedProps`, then both *enforce* it
 
 ## Human Response I
 
-First, I would like to rename it "restrictedPropSetting", the reason for this hopefully clarified below. 
+First, I would like to rename it "restrictedPropSetting", the reason for this is hopefully clarified below. 
 
 Second,  based on your feedback, I would like to add support for more  nuanced prop and method setting restrictions:
 
@@ -82,8 +82,9 @@ Second,  based on your feedback, I would like to add support for more  nuanced p
         {
             //Phase V
             method: 'replaceWithHTML',
-            //forced parameter by index
-            [1]: '?.sanitizerOptions'
+            addArgs: [
+                '?.sanitizerOptions'
+            ]
         }
     ]
     
