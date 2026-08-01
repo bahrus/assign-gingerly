@@ -96,4 +96,30 @@ I'm hoping that a Set object can be passed everywhere it needs to go, that lists
 
 I will create separate chats for everything beyond Phase I.  But please provide the needed hooks in anticipation of those phases coming next.
 
-Please focus on any issues I didn't address with Phase I for the remainder of this chat.  My sense is that some of what was recommended above becomes dead weight in light of the coming phases.
+Please focus on any issues I didn't address with Phase I for the remainder of this chat.  My sense is that some of the dilemmas above may be addressed by later phases.
+
+> **What "set" means**: block when the final assigned property matches — plain keys, nested last segments, and all command forms (`src +=`, `innerHTML Y=`, `hidden =!`). I'd check only the final key, not middle path segments (a blocked name in the middle isn't being set).
+
+Sounds good.
+
+> 2. **Deletes**: recommend `-=` is *not* blocked. Deleting an own `innerHTML` data property just re-exposes the prototype setter — low risk, and `blockedProps` reads as "cannot be set."
+
+That's a tough call.  I'm concerned about percolation of exception logic.  If this means simply "don't put some new code in this location" I think I'm swayed to go along with your recommendation.  If it means "add an additional logical check for innerHTML', I'm more on the fence.
+
+> 3.  **The method bypass — must be documented**: `blockedProps: ['src']` stops `target.src = ...` but not `?.setAttribute` with `['src', url]` via `withMethods`, and not `src` set through an event-handler or `assignTo` protocol path. This is a property-assignment guard, not a DOM-effect guard. Fine for the stated purpose, but the README/JSDoc should say so plainly, or users will treat it as a sanitizer.
+
+So addressing setAttribute will come in a later phase as described above.  I'm hoping that the permissions check will get applied recursively and thoroughly, as far and as deeply nested as any of the code we support goes, including assignFrom handlers and += event binding.
+
+>  **Matching**.  Yes, case sensitive when applied to JS property names.  Case insensitive will be applied in a later phase when setAttribute is addressed.
+
+> **On block**: silently skip vs. `console.warn` vs. throw.
+
+This is another tough call.  Let's go with your recommendation.  We may revisit as we encounter real world scenarios.
+
+> **Defaults**: no built-in blocklist.
+
+Correct.  I do think after all the phases are done, we will want to define a standard setting applications can use in any scenario (and there are many) where these assign* functions are invoked from less secure JSON (like HTML attributes).
+
+> **Symbols**: registry/DI symbol keys are unaffected — `blockedProps` is string-matched, and that path is trusted-script-driven anyway.
+
+Good insight.
