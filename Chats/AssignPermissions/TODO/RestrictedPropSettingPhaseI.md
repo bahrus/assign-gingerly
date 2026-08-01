@@ -96,4 +96,4 @@ I'm hoping that a Set object can be passed everywhere it needs to go, that lists
 
 I will create separate chats for everything beyond Phase I.  But please provide the needed hooks in anticipation of those phases coming next.
 
-Please focus any issues I didn't address with Phase I below.
+Please focus any issues I didn't address with Phase I below.  My sense is that some of what Kimi recommended above becomes dead weight in light of the coming phases.
