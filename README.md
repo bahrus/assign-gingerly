@@ -588,10 +588,13 @@ div.innerHTML = `
 assignGingerly(div, {
   '?.🔍?.my-element?.🎨?.+': 'highlighted'
 }, {
+  aka: {
+    //not a method!
+    '🎨': 'classList',
+  }
   akaMethods: {
     '🔍': 'querySelector',
-    '🎨': 'classList',
-    '+': 'add'
+    '+': 'add',
   }
 });
 
