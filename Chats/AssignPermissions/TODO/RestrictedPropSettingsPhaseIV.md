@@ -2,7 +2,6 @@
 
 Focus is around this discussion in PhaseII:
 
-## Human Response I
 
 > I recommend that `+=`, `=!`, and `Y=` recognize the property as restricted but
 **do not redirect** in Phase II.  Their meanings do not map cleanly to
@@ -64,5 +63,4 @@ that avoids baking accidental semantics into a security API.  When that later
 request arrives, the implementation can add an operation-dispatch table beside
 the normalized property policy; no Phase II call sites need to become
 method-specific.
-
 

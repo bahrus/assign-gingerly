@@ -223,3 +223,23 @@ operations until their contracts are explicitly designed.
 ## Human Response II
 
 Sounds good.  Please implement if you feel ready.
+
+---
+
+## Implementation Notes
+
+Phase II is implemented.
+
+- Object policies such as `{ prop: 'outerHTML', useMethod: 'replaceWithHTML' }` redirect ordinary plain/nested assignments to the configured method.
+- Missing methods fail closed: no property setter fallback.
+- `+=`, `=!`, and `Y=` block object-form settings; `-=` remains unchanged.
+- Duplicate policies for one property throw during normalization.
+- Redirects flow through `assignFrom`, `@each`/`@eachTime`, handler return values, and event vectors.
+- `assignTentatively` remains fail-closed for object-form policies because invoking an arbitrary replacement method cannot produce a reliable reversal entry.
+
+Please refresh:
+
+- `http://localhost:8000/tests/restricted-prop-settings.html`
+
+It should now report **12/12 passing**. `git diff --check` passes for the implementation and test files; the only remaining whitespace warnings are in your in-progress Phase II chat text.
+
