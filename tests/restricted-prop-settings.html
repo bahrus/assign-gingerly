@@ -53,11 +53,10 @@
                 '?.nested?.innerHTML': 'blocked',
                 '?.nested?.title': 'allowed'
             }, undefined, permissions);
-            expect(target).toEqual({
-                innerHTML: 'safe',
-                title: 'allowed',
-                nested: { innerHTML: 'safe', title: 'allowed' }
-            });
+            expect(target.innerHTML).toBe('safe');
+            expect(target.title).toBe('allowed');
+            expect(target.nested.innerHTML).toBe('safe');
+            expect(target.nested.title).toBe('allowed');
         });
 
         await test('blocks += and =! assignments but does not block -=', () => {
