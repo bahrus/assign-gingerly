@@ -37,8 +37,15 @@ export function buildRestrictedPropSet(permissions) {
     const settings = permissions?.restrictedPropSettings;
     if (!settings || settings.length === 0)
         return undefined;
-    const strings = settings.filter((x) => typeof x === 'string');
-    return strings.length > 0 ? new Set(strings) : undefined;
+    const restrictedPropSet = new Map();
+    for (const setting of settings) {
+        const prop = typeof setting === 'string' ? setting : setting.prop;
+        if (restrictedPropSet.has(prop)) {
+            throw new Error(`assignGingerly: duplicate restrictedPropSettings entry for '${prop}'.`);
+        }
+        restrictedPropSet.set(prop, typeof setting === 'string' ? undefined : setting);
+    }
+    return restrictedPropSet;
 }
 /**
  * Check if a property key is restricted. If so, warn (once) and return true.
@@ -48,6 +55,26 @@ export function checkRestrictedProp(restrictedPropSet, key) {
     if (!restrictedPropSet || !restrictedPropSet.has(key))
         return false;
     warnRestricted(key);
+    return true;
+}
+/**
+ * Redirect an ordinary assignment through its configured safe method.
+ * Returns true when the property is restricted, whether redirected or skipped.
+ */
+export function redirectRestrictedProp(restrictedPropSet, target, key, value) {
+    if (!restrictedPropSet || !restrictedPropSet.has(key))
+        return false;
+    const setting = restrictedPropSet.get(key);
+    if (!setting?.useMethod) {
+        warnRestricted(key);
+        return true;
+    }
+    const method = target?.[setting.useMethod];
+    if (typeof method !== 'function') {
+        warnRestricted(key);
+        return true;
+    }
+    method.call(target, value);
     return true;
 }
 /**

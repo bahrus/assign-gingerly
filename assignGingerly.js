@@ -1,4 +1,4 @@
-import { buildRestrictedPropSet, checkRestrictedProp } from './isAllowedImportPath.js';
+import { buildRestrictedPropSet, checkRestrictedProp, redirectRestrictedProp } from './isAllowedImportPath.js';
 import { normalizeAliasOptions } from './getValues.js';
 /**
  * GUID for global instance map storage to ensure uniqueness across package versions
@@ -556,7 +556,7 @@ function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, opti
                 // Normal assignment
                 const lastKey = result.lastKey;
                 const parent = result.target;
-                if (checkRestrictedProp(restrictedPropSet, lastKey)) {
+                if (redirectRestrictedProp(restrictedPropSet, parent, lastKey, value)) {
                     // skip
                 }
                 else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
@@ -700,6 +700,9 @@ export function assignGingerly(target, source, options, permissions) {
                         lhsValue = lhsParent[lhsKey];
                     }
                     //TODO:  this logic seems to occur twice at least.  Maybe make it a method?
+                    if (checkRestrictedProp(restrictedPropSet, lhsKey)) {
+                        continue;
+                    }
                     // Event handler: Element LHS + object RHS with 'on' property
                     if (lhsValue instanceof Element && value && typeof value === 'object' && !Array.isArray(value) && 'on' in value) {
                         const capturedLhs = lhsValue;
@@ -711,10 +714,7 @@ export function assignGingerly(target, source, options, permissions) {
                         });
                         continue;
                     }
-                    if (checkRestrictedProp(restrictedPropSet, lhsKey)) {
-                        // skip assignment
-                    }
-                    else if (!(lhsKey in lhsParent)) {
+                    if (!(lhsKey in lhsParent)) {
                         lhsParent[lhsKey] = value;
                     }
                     else {
@@ -723,6 +723,9 @@ export function assignGingerly(target, source, options, permissions) {
                 }
                 else {
                     // Plain key - direct operation on target
+                    if (checkRestrictedProp(restrictedPropSet, path)) {
+                        continue;
+                    }
                     // Event handler: Element LHS + object RHS with 'on' property
                     if (target[path] instanceof Element && value && typeof value === 'object' && !Array.isArray(value) && 'on' in value) {
                         const capturedLhs = target[path];
@@ -734,10 +737,7 @@ export function assignGingerly(target, source, options, permissions) {
                         });
                         continue;
                     }
-                    if (checkRestrictedProp(restrictedPropSet, path)) {
-                        // skip assignment
-                    }
-                    else if (!(path in target)) {
+                    if (!(path in target)) {
                         target[path] = value;
                     }
                     else {
@@ -853,6 +853,11 @@ export function assignGingerly(target, source, options, permissions) {
         if (isMergeCommand(key)) {
             const path = parseMergeCommand(key);
             if (path) {
+                const pathParts = isNestedPath(path) ? parsePath(path) : [path];
+                const lastKey = pathParts[pathParts.length - 1];
+                if (checkRestrictedProp(restrictedPropSet, lastKey)) {
+                    continue;
+                }
                 // Navigate to the target sub-object
                 let mergeTarget;
                 if (isNestedPath(path)) {
@@ -962,7 +967,7 @@ export function assignGingerly(target, source, options, permissions) {
                         // Not a method — assign the value
                         const lastKey = result.lastKey;
                         const parent = result.target;
-                        if (checkRestrictedProp(capturedRestrictedPropSet, lastKey)) {
+                        if (redirectRestrictedProp(capturedRestrictedPropSet, parent, lastKey, capturedValue)) {
                             // skip
                         }
                         else if (typeof capturedValue === 'object' && capturedValue !== null && !Array.isArray(capturedValue)) {
@@ -1008,7 +1013,7 @@ export function assignGingerly(target, source, options, permissions) {
                 // Not a method - proceed with normal assignment using evaluated target
                 const lastKey = result.lastKey;
                 const parent = result.target;
-                if (checkRestrictedProp(restrictedPropSet, lastKey)) {
+                if (redirectRestrictedProp(restrictedPropSet, parent, lastKey, value)) {
                     // skip
                     // Check for static assignTo protocol
                 }
@@ -1037,7 +1042,7 @@ export function assignGingerly(target, source, options, permissions) {
                 // No withMethods - use original logic
                 const lastKey = pathParts[pathParts.length - 1];
                 const parent = ensureNestedPath(target, pathParts);
-                if (checkRestrictedProp(restrictedPropSet, lastKey)) {
+                if (redirectRestrictedProp(restrictedPropSet, parent, lastKey, value)) {
                     // skip
                     // Check for static assignTo protocol
                 }
@@ -1087,7 +1092,7 @@ export function assignGingerly(target, source, options, permissions) {
                 // Silently skip if not a function
                 continue;
             }
-            if (checkRestrictedProp(restrictedPropSet, key)) {
+            if (redirectRestrictedProp(restrictedPropSet, target, key, value)) {
                 // skip
                 // Check for static assignTo protocol
             }

@@ -7,7 +7,7 @@
 import { resolveValues } from './resolveValues.js';
 import { getValues } from './getValues.js';
 import { evaluatePathWithMethods } from './assignGingerly.js';
-import { buildRestrictedPropSet, checkRestrictedProp, isAllowedImportPath } from './isAllowedImportPath.js';
+import { buildRestrictedPropSet, isAllowedImportPath, redirectRestrictedProp } from './isAllowedImportPath.js';
 import type { AssignPermissions } from './isAllowedImportPath.js';
 import type { AssignFromOptions, AssignFromHandlerConstructor } from './assignFromAsync.js';
 
@@ -244,7 +244,7 @@ export async function processHandlerCommands(
             // Return-value protocol: if handler returns a non-undefined value,
             // assign it back to the LHS path
             if (result !== undefined && lhsParent != null && lhsKey != null
-                && !checkRestrictedProp(restrictedPropSet, lhsKey)) {
+                && !redirectRestrictedProp(restrictedPropSet, lhsParent, lhsKey, result)) {
                 lhsParent[lhsKey] = result;
             }
         }

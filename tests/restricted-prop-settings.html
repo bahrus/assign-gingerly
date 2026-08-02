@@ -107,6 +107,78 @@
             expect(target).toEqual({ innerHTML: 'safe', title: 'allowed' });
         });
 
+        await test('redirects direct and nested ordinary assignments to the configured method', () => {
+            const calls = [];
+            const target = {
+                replaceWithHTML(value) { calls.push(['root', value]); },
+                nested: {
+                    replaceWithHTML(value) { calls.push(['nested', value]); }
+                }
+            };
+            const redirectPermissions = {
+                restrictedPropSettings: [{ prop: 'outerHTML', useMethod: 'replaceWithHTML' }]
+            };
+            assignGingerly(target, {
+                outerHTML: '<p>root</p>',
+                '?.nested?.outerHTML': '<p>nested</p>'
+            }, undefined, redirectPermissions);
+            expect(calls).toEqual([['root', '<p>root</p>'], ['nested', '<p>nested</p>']]);
+        });
+
+        await test('fails closed when a configured redirect method is unavailable', () => {
+            const target = { outerHTML: 'safe' };
+            const redirectPermissions = {
+                restrictedPropSettings: [{ prop: 'outerHTML', useMethod: 'replaceWithHTML' }]
+            };
+            assignGingerly(target, { outerHTML: 'blocked' }, undefined, redirectPermissions);
+            expect(target.outerHTML).toBe('safe');
+        });
+
+        await test('blocks commands for redirected properties', () => {
+            const calls = [];
+            const target = {
+                outerHTML: 'safe',
+                replaceWithHTML(value) { calls.push(value); }
+            };
+            const redirectPermissions = {
+                restrictedPropSettings: [{ prop: 'outerHTML', useMethod: 'replaceWithHTML' }]
+            };
+            assignGingerly(target, {
+                'outerHTML +=': ' appended',
+                'outerHTML =!': '.',
+                'outerHTML Y=': { value: 'ignored' }
+            }, undefined, redirectPermissions);
+            expect(target.outerHTML).toBe('safe');
+            expect(calls).toEqual([]);
+        });
+
+        await test('assignFrom retains a redirect policy', () => {
+            const calls = [];
+            const target = {
+                replaceWithHTML(value) { calls.push(value); }
+            };
+            const redirectPermissions = {
+                restrictedPropSettings: [{ prop: 'outerHTML', useMethod: 'replaceWithHTML' }]
+            };
+            assignFrom(target, { outerHTML: '?.html' }, { from: { html: '<p>resolved</p>' } }, redirectPermissions);
+            expect(calls).toEqual(['<p>resolved</p>']);
+        });
+
+        await test('rejects duplicate property policies', () => {
+            let didThrow = false;
+            try {
+                assignGingerly({}, { outerHTML: 'blocked' }, undefined, {
+                    restrictedPropSettings: [
+                        'outerHTML',
+                        { prop: 'outerHTML', useMethod: 'replaceWithHTML' }
+                    ]
+                });
+            } catch (error) {
+                didThrow = true;
+            }
+            expect(didThrow).toBe(true);
+        });
+
         const statusEl = document.getElementById('status');
         const resultsEl = document.getElementById('results');
         const completeEl = document.getElementById('test-complete');

@@ -3,7 +3,7 @@
  * This module is dynamically loaded only when @eachTime is encountered
  * Provides event-driven iteration over elements as they mount
  */
-import { checkRestrictedProp } from './isAllowedImportPath.js';
+import { redirectRestrictedProp } from './isAllowedImportPath.js';
 /**
  * Check if a value is an EventTarget
  */
@@ -82,7 +82,7 @@ export async function handleEachTime(target, pathParts, forEachIndex, value, wit
                         // Normal assignment
                         const lastKey = result.lastKey;
                         const parent = result.target;
-                        if (checkRestrictedProp(restrictedPropSet, lastKey)) {
+                        if (redirectRestrictedProp(restrictedPropSet, parent, lastKey, value)) {
                             // skip
                         }
                         else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {

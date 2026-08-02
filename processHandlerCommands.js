@@ -6,7 +6,7 @@
 import { resolveValues } from './resolveValues.js';
 import { getValues } from './getValues.js';
 import { evaluatePathWithMethods } from './assignGingerly.js';
-import { buildRestrictedPropSet, checkRestrictedProp, isAllowedImportPath } from './isAllowedImportPath.js';
+import { buildRestrictedPropSet, isAllowedImportPath, redirectRestrictedProp } from './isAllowedImportPath.js';
 /**
  * Map of built-in handler names to their module paths.
  * These are auto-loaded on demand — no explicit import required.
@@ -217,7 +217,7 @@ export async function processHandlerCommands(target, handlerKeys, pattern, optio
             // Return-value protocol: if handler returns a non-undefined value,
             // assign it back to the LHS path
             if (result !== undefined && lhsParent != null && lhsKey != null
-                && !checkRestrictedProp(restrictedPropSet, lhsKey)) {
+                && !redirectRestrictedProp(restrictedPropSet, lhsParent, lhsKey, result)) {
                 lhsParent[lhsKey] = result;
             }
         }

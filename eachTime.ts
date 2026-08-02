@@ -5,8 +5,8 @@
  */
 
 import type { IAssignGingerlyOptions } from './types/assign-gingerly/types.js';
-import type { AssignPermissions } from './isAllowedImportPath.js';
-import { checkRestrictedProp } from './isAllowedImportPath.js';
+import type { AssignPermissions, RestrictedPropSettingsMap } from './isAllowedImportPath.js';
+import { redirectRestrictedProp } from './isAllowedImportPath.js';
 
 /**
  * Check if a value is an EventTarget
@@ -35,7 +35,7 @@ export async function handleEachTime(
   aliasMap: Map<string, string>,
   options?: IAssignGingerlyOptions,
   permissions?: AssignPermissions,
-  restrictedPropSet?: Set<string>
+  restrictedPropSet?: RestrictedPropSettingsMap
 ): Promise<void> {
   // Validate signal - required for cleanup
   if (!options?.signal) {
@@ -110,7 +110,7 @@ export async function handleEachTime(
             const lastKey = result.lastKey;
             const parent = result.target;
             
-            if (checkRestrictedProp(restrictedPropSet, lastKey)) {
+            if (redirectRestrictedProp(restrictedPropSet, parent, lastKey, value)) {
               // skip
             } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
               // Check if property exists and is readonly

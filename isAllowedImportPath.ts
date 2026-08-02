@@ -18,7 +18,9 @@
 
 // Re-export AssignPermissions from canonical location for backwards compatibility
 export type { AssignPermissions } from './types/assign-gingerly/types.js';
-import type { AssignPermissions } from './types/assign-gingerly/types.js';
+import type { AssignPermissions, RestrictedPropSetting } from './types/assign-gingerly/types.js';
+
+export type RestrictedPropSettingsMap = Map<string, RestrictedPropSetting | undefined>;
 
 /**
  * Module-level warn dedup — one warning per property key per process lifetime.
@@ -40,20 +42,52 @@ function warnRestricted(key: string): void {
  * Phase I: extracts string entries only (object entries are Phase II+).
  * Returns undefined when nothing is restricted (fast-bail in callers).
  */
-export function buildRestrictedPropSet(permissions: AssignPermissions | undefined): Set<string> | undefined {
+export function buildRestrictedPropSet(permissions: AssignPermissions | undefined): RestrictedPropSettingsMap | undefined {
     const settings = permissions?.restrictedPropSettings;
     if (!settings || settings.length === 0) return undefined;
-    const strings = settings.filter((x): x is string => typeof x === 'string');
-    return strings.length > 0 ? new Set(strings) : undefined;
+    const restrictedPropSet: RestrictedPropSettingsMap = new Map();
+    for (const setting of settings) {
+        const prop = typeof setting === 'string' ? setting : setting.prop;
+        if (restrictedPropSet.has(prop)) {
+            throw new Error(`assignGingerly: duplicate restrictedPropSettings entry for '${prop}'.`);
+        }
+        restrictedPropSet.set(prop, typeof setting === 'string' ? undefined : setting);
+    }
+    return restrictedPropSet;
 }
 
 /**
  * Check if a property key is restricted. If so, warn (once) and return true.
  * Call sites should `continue` or skip the assignment when this returns true.
  */
-export function checkRestrictedProp(restrictedPropSet: Set<string> | undefined, key: string): boolean {
+export function checkRestrictedProp(restrictedPropSet: RestrictedPropSettingsMap | undefined, key: string): boolean {
     if (!restrictedPropSet || !restrictedPropSet.has(key)) return false;
     warnRestricted(key);
+    return true;
+}
+
+/**
+ * Redirect an ordinary assignment through its configured safe method.
+ * Returns true when the property is restricted, whether redirected or skipped.
+ */
+export function redirectRestrictedProp(
+    restrictedPropSet: RestrictedPropSettingsMap | undefined,
+    target: any,
+    key: string,
+    value: any
+): boolean {
+    if (!restrictedPropSet || !restrictedPropSet.has(key)) return false;
+    const setting = restrictedPropSet.get(key);
+    if (!setting?.useMethod) {
+        warnRestricted(key);
+        return true;
+    }
+    const method = target?.[setting.useMethod];
+    if (typeof method !== 'function') {
+        warnRestricted(key);
+        return true;
+    }
+    method.call(target, value);
     return true;
 }
 
