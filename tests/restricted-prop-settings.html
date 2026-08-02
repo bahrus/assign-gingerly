@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>assignGingerly - Restricted Property Settings</title>
+</head>
+<body>
+    <h1>Restricted Property Settings — Phase I Tests</h1>
+    <div id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0"></div>
+
+    <script type="module">
+        import assignGingerly from '../assignGingerly.js';
+        import { assignFrom } from '../assignFrom.js';
+        import assignTentatively from '../assignTentatively.js';
+        import { attachEventListener } from '../handlers/addEventListener.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+        const permissions = { restrictedPropSettings: ['innerHTML', 'src'] };
+
+        async function test(name, fn) {
+            try {
+                await fn();
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+        }
+
+        function expect(actual) {
+            return {
+                toBe(expected) {
+                    if (actual !== expected) throw new Error(`Expected ${expected} but got ${actual}`);
+                },
+                toEqual(expected) {
+                    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                }
+            };
+        }
+
+        await test('blocks plain and nested property assignments while allowing siblings', () => {
+            const target = { innerHTML: 'safe', nested: { innerHTML: 'safe' } };
+            assignGingerly(target, {
+                innerHTML: 'blocked',
+                title: 'allowed',
+                '?.nested?.innerHTML': 'blocked',
+                '?.nested?.title': 'allowed'
+            }, undefined, permissions);
+            expect(target).toEqual({
+                innerHTML: 'safe',
+                title: 'allowed',
+                nested: { innerHTML: 'safe', title: 'allowed' }
+            });
+        });
+
+        await test('blocks += and =! assignments but does not block -=', () => {
+            const target = { src: 'a', innerHTML: true };
+            assignGingerly(target, {
+                'src +=': 'b',
+                'innerHTML =!': '.',
+                ' -=': 'innerHTML'
+            }, undefined, permissions);
+            expect(target).toEqual({ src: 'a' });
+        });
+
+        await test('preserves restrictions during readonly recursive merges', () => {
+            const target = {};
+            Object.defineProperty(target, 'config', { value: { innerHTML: 'safe' }, writable: false });
+            assignGingerly(target, { config: { innerHTML: 'blocked', title: 'allowed' } }, undefined, permissions);
+            expect(target.config).toEqual({ innerHTML: 'safe', title: 'allowed' });
+        });
+
+        await test('preserves restrictions through @each', () => {
+            const target = { rows: [{ innerHTML: 'safe' }, { innerHTML: 'safe' }] };
+            assignGingerly(target, { '?.rows?.@each?.innerHTML': 'blocked' }, undefined, permissions);
+            expect(target.rows).toEqual([{ innerHTML: 'safe' }, { innerHTML: 'safe' }]);
+        });
+
+        await test('assignFrom forwards permissions to resolved assignments', () => {
+            const target = { innerHTML: 'safe' };
+            assignFrom(target, { innerHTML: '?.value', title: '?.value' }, { from: { value: 'blocked' } }, permissions);
+            expect(target).toEqual({ innerHTML: 'safe', title: 'blocked' });
+        });
+
+        await test('assignTentatively skips restricted settings without a reversal entry', () => {
+            const target = { innerHTML: 'safe', title: 'old' };
+            const reversal = {};
+            assignTentatively(target, { innerHTML: 'blocked', title: 'new' }, { reversal }, permissions);
+            expect(target).toEqual({ innerHTML: 'safe', title: 'new' });
+            expect(reversal).toEqual({ title: 'old' });
+        });
+
+        await test('event-vector assignments inherit permissions', () => {
+            const button = document.createElement('button');
+            const target = { innerHTML: 'safe' };
+            attachEventListener(button, {
+                on: 'click',
+                toTarget: { innerHTML: 'blocked', title: 'allowed' }
+            }, target, target, {}, permissions);
+            button.click();
+            expect(target).toEqual({ innerHTML: 'safe', title: 'allowed' });
+        });
+
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const completeEl = document.getElementById('test-complete');
+        statusEl.textContent = `${passed}/${passed + failed} tests passed`;
+        for (const result of results) {
+            const div = document.createElement('div');
+            div.textContent = `${result.status}: ${result.name}${result.error ? ` — ${result.error}` : ''}`;
+            resultsEl.append(div);
+        }
+        completeEl.setAttribute('data-passed', passed.toString());
+        completeEl.setAttribute('data-failed', failed.toString());
+        completeEl.setAttribute('data-total', (passed + failed).toString());
+    </script>
+</body>
+</html>

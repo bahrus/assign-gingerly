@@ -31,6 +31,7 @@ import { findMarkers, createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX
 import { resolveValue } from '../resolveValues.js';
 import { assignFrom } from '../assignFrom.js';
 import { processInferredAssignments } from '../inferredAssignments.js';
+import type { AssignPermissions } from '../isAllowedImportPath.js';
 
 /**
  * Reserved keys in fromEachItem config — not treated as shorthand patterns.
@@ -74,7 +75,7 @@ export class ManageTemplateListHandler implements AssignFromHandler {
         this.config = config;
     }
 
-    async assign(lhsTarget: any, resolvedParams: ManageTemplateListResolvedParams, options?: any): Promise<void> {
+    async assign(lhsTarget: any, resolvedParams: ManageTemplateListResolvedParams, options?: any, permissions?: AssignPermissions): Promise<void> {
         //return;
         const {
             forEach: items,
@@ -183,7 +184,7 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                     const len = Math.min(elements.length, configs.length);
                     for (let j = 0; j < len; j++) {
                         const cfg = configs[j];
-                        assignFrom(elements[j], cfg.toClone ?? {}, { from: item, ...cfg.withOptions });
+                        assignFrom(elements[j], cfg.toClone ?? {}, { from: item, ...cfg.withOptions }, permissions);
                     }
                 } else {
                     const rootEl = existingNodes.find(n => n instanceof Element) as Element | undefined;
@@ -191,13 +192,13 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                         if (processInferred) {
                             processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                         } else {
-                            assignFrom(rootEl, toClone, { from: item, ...withOptions });
+                            assignFrom(rootEl, toClone, { from: item, ...withOptions }, permissions);
                         }
                         if (hostToClone && options?.from) {
-                            assignFrom(rootEl, hostToClone, { from: options.from, ...hostWithOptions });
+                            assignFrom(rootEl, hostToClone, { from: options.from, ...hostWithOptions }, permissions);
                         }
                         if (targetToClone) {
-                            assignFrom(rootEl, targetToClone, { from: lhsTarget, ...targetWithOptions });
+                            assignFrom(rootEl, targetToClone, { from: lhsTarget, ...targetWithOptions }, permissions);
                         }
                     }
                 }
@@ -228,7 +229,7 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                     const len = Math.min(elements.length, configs.length);
                     for (let j = 0; j < len; j++) {
                         const cfg = configs[j];
-                        assignFrom(elements[j], cfg.toClone ?? {}, { from: item, ...cfg.withOptions });
+                        assignFrom(elements[j], cfg.toClone ?? {}, { from: item, ...cfg.withOptions }, permissions);
                     }
                 } else {
                     const rootEl = clonedNodes.find(n => n instanceof Element) as Element | undefined;
@@ -239,14 +240,14 @@ export class ManageTemplateListHandler implements AssignFromHandler {
                         if (processInferred) {
                             processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                         } else {
-                            assignFrom(rootEl, toClone, { from: item, ...withOptions });
+                            assignFrom(rootEl, toClone, { from: item, ...withOptions }, permissions);
                         }
 
                         if (hostToClone && options?.from) {
-                            assignFrom(rootEl, hostToClone, { from: options.from, ...hostWithOptions });
+                            assignFrom(rootEl, hostToClone, { from: options.from, ...hostWithOptions }, permissions);
                         }
                         if (targetToClone) {
-                            assignFrom(rootEl, targetToClone, { from: lhsTarget, ...targetWithOptions });
+                            assignFrom(rootEl, targetToClone, { from: lhsTarget, ...targetWithOptions }, permissions);
                         }
                     }
                 }

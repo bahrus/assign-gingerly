@@ -77,7 +77,7 @@ export async function assignFromAsync(
     // Recursively handle "..." spread keys at all nesting levels
     handleSpreads(resolved);
 
-    assignGingerly(target, resolved, options);
+    assignGingerly(target, resolved, options, permissions);
   }
 
   // Process #[x] normal keys — resolve element, then apply remaining path + value
@@ -100,7 +100,7 @@ export async function assignFromAsync(
           { withMethods, aka, akaMethods, protocols, root: el }
         );
         // Apply remaining path on the resolved element
-        assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options);
+        assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissions);
       } else {
         // No remaining path — resolve and assign directly to the element
         const resolvedValue = await resolveValues(
@@ -111,7 +111,7 @@ export async function assignFromAsync(
         if ('__v' in resolvedValue) {
           // Single value — can't assign to element root without a path
         } else {
-          assignGingerly(el, resolvedValue, options);
+          assignGingerly(el, resolvedValue, options, permissions);
         }
       }
     }

@@ -377,7 +377,7 @@ function getEffectiveIds(options) {
 /**
  * Process #[x] normal keys synchronously.
  */
-function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, options) {
+function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, options, permissions) {
     const ids = getEffectiveIds(options);
     if (!ids)
         return;
@@ -392,12 +392,12 @@ function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, option
         const value = expandedPattern[key];
         if (parsed.remainingPath) {
             const resolvedValue = getValues({ __v: value }, from, { withMethods, aka, akaMethods, protocols, root: target });
-            assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options);
+            assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissions);
         }
         else {
             const resolvedValue = getValues(typeof value === 'object' && value !== null ? value : { __v: value }, from, { withMethods, aka, akaMethods, protocols, root: target });
             if (!('__v' in resolvedValue)) {
-                assignGingerly(el, resolvedValue, options);
+                assignGingerly(el, resolvedValue, options, permissions);
             }
         }
     }
@@ -436,7 +436,7 @@ export function assignFrom(target, pattern, options, permissions) {
             }
         }
         if (Object.keys(ternaryResolved).length > 0) {
-            assignGingerly(target, ternaryResolved, options);
+            assignGingerly(target, ternaryResolved, options, permissions);
         }
     }
     // Process normal keys via getValues (sync) + assignGingerly
@@ -472,11 +472,11 @@ export function assignFrom(target, pattern, options, permissions) {
         }
         const resolved = getValues(normalPattern, options.from, resolveOptions);
         handleSpreads(resolved);
-        assignGingerly(target, resolved, options);
+        assignGingerly(target, resolved, options, permissions);
     }
     // Process #[x] normal keys (sync)
     if (idRefNormalKeys.length > 0) {
-        processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, options);
+        processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, options, permissions);
     }
     // Process handler commands — fire-and-forget (async)
     if (handlerKeys.length > 0) {

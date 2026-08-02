@@ -23,6 +23,7 @@
 
 import type { AssignFromHandler } from '../assignFromAsync.js';
 import assignGingerly from '../assignGingerly.js';
+import type { AssignPermissions } from '../isAllowedImportPath.js';
 
 /**
  * Operator keys recognized in case objects.
@@ -72,7 +73,7 @@ export class RangeSelectorHandler implements AssignFromHandler {
         this.config = config;
     }
 
-    async assign(lhsTarget: any, resolvedParams: any): Promise<void> {
+    async assign(lhsTarget: any, resolvedParams: any, _options?: any, permissions?: AssignPermissions): Promise<void> {
         const { value, when } = resolvedParams;
 
         if (!Array.isArray(when)) return;
@@ -81,7 +82,7 @@ export class RangeSelectorHandler implements AssignFromHandler {
         for (const caseObj of when) {
             if (caseMatches(value, caseObj)) {
                 if (caseObj.merge && typeof caseObj.merge === 'object') {
-                    assignGingerly(lhsTarget, caseObj.merge);
+                    assignGingerly(lhsTarget, caseObj.merge, undefined, permissions);
                 }
                 return; // First match wins
             }

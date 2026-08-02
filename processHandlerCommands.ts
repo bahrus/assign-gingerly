@@ -7,7 +7,7 @@
 import { resolveValues } from './resolveValues.js';
 import { getValues } from './getValues.js';
 import { evaluatePathWithMethods } from './assignGingerly.js';
-import { isAllowedImportPath } from './isAllowedImportPath.js';
+import { buildRestrictedPropSet, checkRestrictedProp, isAllowedImportPath } from './isAllowedImportPath.js';
 import type { AssignPermissions } from './isAllowedImportPath.js';
 import type { AssignFromOptions, AssignFromHandlerConstructor } from './assignFromAsync.js';
 
@@ -126,7 +126,8 @@ export async function processHandlerCommands(
     options: AssignFromOptions,
     permissions?: AssignPermissions
 ): Promise<void> {
-    
+    const restrictedPropSet = buildRestrictedPropSet(permissions);
+
     for (const key of handlerKeys) {
         const lhsPath = key.substring(0, key.length - 3); // Remove ' =>'
         const rhs = pattern[key];
@@ -238,11 +239,12 @@ export async function processHandlerCommands(
             // Instantiate and invoke the handler
             const handler = new HandlerClass(config);
             //return; //1.5ms
-            const result = await handler.assign(lhsTarget, resolvedParams, options);
+            const result = await handler.assign(lhsTarget, resolvedParams, options, permissions);
             //return; //1.5ms
             // Return-value protocol: if handler returns a non-undefined value,
             // assign it back to the LHS path
-            if (result !== undefined && lhsParent != null && lhsKey != null) {
+            if (result !== undefined && lhsParent != null && lhsKey != null
+                && !checkRestrictedProp(restrictedPropSet, lhsKey)) {
                 lhsParent[lhsKey] = result;
             }
         }

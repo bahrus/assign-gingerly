@@ -707,7 +707,7 @@ export function assignGingerly(target, source, options, permissions) {
                         const capturedTarget = target;
                         const capturedOptions = options;
                         import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
-                            attachEventListener(capturedLhs, capturedValue, capturedTarget, capturedOptions?.from ?? capturedTarget, capturedOptions ?? {});
+                            attachEventListener(capturedLhs, capturedValue, capturedTarget, capturedOptions?.from ?? capturedTarget, capturedOptions ?? {}, permissions);
                         });
                         continue;
                     }
@@ -730,7 +730,7 @@ export function assignGingerly(target, source, options, permissions) {
                         const capturedTarget = target;
                         const capturedOptions = options;
                         import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
-                            attachEventListener(capturedLhs, capturedValue, capturedTarget, capturedOptions?.from ?? capturedTarget, capturedOptions ?? {});
+                            attachEventListener(capturedLhs, capturedValue, capturedTarget, capturedOptions?.from ?? capturedTarget, capturedOptions ?? {}, permissions);
                         });
                         continue;
                     }
@@ -896,7 +896,7 @@ export function assignGingerly(target, source, options, permissions) {
                     (async () => {
                         try {
                             const { handleEachTime } = await import('./eachTime.js');
-                            await handleEachTime(target, pathParts, forEachIndex, value, withMethodsSet, aliasMap, options);
+                            await handleEachTime(target, pathParts, forEachIndex, value, withMethodsSet, aliasMap, options, permissions, restrictedPropSet);
                         }
                         catch (error) {
                             console.error('Error in @eachTime:', error);
@@ -924,7 +924,7 @@ export function assignGingerly(target, source, options, permissions) {
                 }
                 // Apply to each item in the iterable
                 if (isIterable(current)) {
-                    applyToEach(current, pathAfterForEach, value, withMethodsSet || new Set(), aliasMap, options, permissions);
+                    applyToEach(current, pathAfterForEach, value, withMethodsSet || new Set(), aliasMap, options, permissions, restrictedPropSet);
                 }
                 // If not iterable, let JavaScript throw error naturally when trying to iterate
                 continue;
@@ -938,6 +938,8 @@ export function assignGingerly(target, source, options, permissions) {
                 const capturedValue = value;
                 const capturedWithMethodsSet = withMethodsSet || new Set();
                 const capturedOptions = options;
+                const capturedPermissions = permissions;
+                const capturedRestrictedPropSet = restrictedPropSet;
                 (async () => {
                     const { evaluatePathWithAsyncMethods } = await import('./evaluatePathWithAsyncMethods.js');
                     const result = await evaluatePathWithAsyncMethods(capturedTarget, capturedPathParts, capturedValue, capturedWithMethodsSet, withAsyncMethodsSet);
@@ -960,13 +962,16 @@ export function assignGingerly(target, source, options, permissions) {
                         // Not a method — assign the value
                         const lastKey = result.lastKey;
                         const parent = result.target;
-                        if (typeof capturedValue === 'object' && capturedValue !== null && !Array.isArray(capturedValue)) {
+                        if (checkRestrictedProp(capturedRestrictedPropSet, lastKey)) {
+                            // skip
+                        }
+                        else if (typeof capturedValue === 'object' && capturedValue !== null && !Array.isArray(capturedValue)) {
                             if (lastKey in parent && isReadonlyProperty(parent, lastKey)) {
                                 const currentValue = parent[lastKey];
                                 if (typeof currentValue !== 'object' || currentValue === null) {
                                     throw new Error(`Cannot merge object into readonly primitive property '${String(lastKey)}'`);
                                 }
-                                assignGingerly(currentValue, capturedValue, capturedOptions);
+                                assignGingerly(currentValue, capturedValue, capturedOptions, capturedPermissions);
                             }
                             else {
                                 parent[lastKey] = capturedValue;
@@ -1003,12 +1008,12 @@ export function assignGingerly(target, source, options, permissions) {
                 // Not a method - proceed with normal assignment using evaluated target
                 const lastKey = result.lastKey;
                 const parent = result.target;
-                // Check for static assignTo protocol
-                if (lastKey in parent && tryAssignTo(parent[lastKey], value, parent, lastKey)) {
-                    continue;
-                }
                 if (checkRestrictedProp(restrictedPropSet, lastKey)) {
                     // skip
+                    // Check for static assignTo protocol
+                }
+                else if (lastKey in parent && tryAssignTo(parent[lastKey], value, parent, lastKey)) {
+                    continue;
                 }
                 else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                     // Check if property exists and is readonly
@@ -1032,12 +1037,12 @@ export function assignGingerly(target, source, options, permissions) {
                 // No withMethods - use original logic
                 const lastKey = pathParts[pathParts.length - 1];
                 const parent = ensureNestedPath(target, pathParts);
-                // Check for static assignTo protocol
-                if (lastKey in parent && tryAssignTo(parent[lastKey], value, parent, lastKey)) {
-                    continue;
-                }
                 if (checkRestrictedProp(restrictedPropSet, lastKey)) {
                     // skip
+                    // Check for static assignTo protocol
+                }
+                else if (lastKey in parent && tryAssignTo(parent[lastKey], value, parent, lastKey)) {
+                    continue;
                 }
                 else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                     // Check if property exists and is readonly
@@ -1082,13 +1087,12 @@ export function assignGingerly(target, source, options, permissions) {
                 // Silently skip if not a function
                 continue;
             }
-            // Normal assignment
-            // Check for static assignTo protocol
-            if (key in target && tryAssignTo(target[key], value, target, key)) {
-                continue;
-            }
             if (checkRestrictedProp(restrictedPropSet, key)) {
                 // skip
+                // Check for static assignTo protocol
+            }
+            else if (key in target && tryAssignTo(target[key], value, target, key)) {
+                continue;
             }
             else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                 // Check if property exists and is readonly

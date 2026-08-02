@@ -390,7 +390,8 @@ function processIdRefNormalKeys(
   idRefNormalKeys: string[],
   expandedPattern: Record<string, any>,
   target: any,
-  options: AssignFromOptions
+  options: AssignFromOptions,
+  permissions?: AssignPermissions
 ): void {
   const ids = getEffectiveIds(options);
   if (!ids) return;
@@ -409,7 +410,7 @@ function processIdRefNormalKeys(
         { __v: value }, from,
         { withMethods, aka, akaMethods, protocols, root: target }
       );
-      assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options);
+      assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissions);
     } else {
       const resolvedValue = getValues(
         typeof value === 'object' && value !== null ? value : { __v: value },
@@ -417,7 +418,7 @@ function processIdRefNormalKeys(
         { withMethods, aka, akaMethods, protocols, root: target }
       );
       if (!('__v' in resolvedValue)) {
-        assignGingerly(el, resolvedValue, options);
+        assignGingerly(el, resolvedValue, options, permissions);
       }
     }
   }
@@ -463,7 +464,7 @@ export function assignFrom(
       }
     }
     if (Object.keys(ternaryResolved).length > 0) {
-      assignGingerly(target, ternaryResolved, options);
+      assignGingerly(target, ternaryResolved, options, permissions);
     }
   }
 
@@ -501,12 +502,12 @@ export function assignFrom(
     const resolved = getValues(normalPattern, options.from, resolveOptions);
 
     handleSpreads(resolved);
-    assignGingerly(target, resolved, options);
+    assignGingerly(target, resolved, options, permissions);
   }
 
   // Process #[x] normal keys (sync)
   if (idRefNormalKeys.length > 0) {
-    processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, options);
+    processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, options, permissions);
   }
 
   // Process handler commands — fire-and-forget (async)

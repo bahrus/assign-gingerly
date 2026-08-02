@@ -24,6 +24,7 @@ import type { LazyLoadResolvedParams, LazyLoadInstantiatedContext } from '../typ
 import { withTransition, ensureHideStyle, DEFAULT_HIDE_CLASS } from '../transitionHelper.js';
 import { findMarkers, createMarkers, getNodesBetweenMarkers, findMarkersSibling, createMarkersSibling, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 import { assignFrom } from '../assignFrom.js';
+import type { AssignPermissions } from '../isAllowedImportPath.js';
 
 export type { LazyLoadResolvedParams, LazyLoadInstantiatedContext };
 
@@ -48,14 +49,16 @@ function getMarkerName(templateEl: any): string {
 export class LazyLoadHandler implements AssignFromHandler {
     config: any;
     _options: any;
+    _permissions?: AssignPermissions;
     static #markerCounter = 0;
 
     constructor(config: any) {
         this.config = config;
     }
 
-    async assign(lhsTarget: any, resolvedParams: LazyLoadResolvedParams, options?: any): Promise<void> {
+    async assign(lhsTarget: any, resolvedParams: LazyLoadResolvedParams, options?: any, permissions?: AssignPermissions): Promise<void> {
         this._options = options; // Store for applyAssign access
+        this._permissions = permissions;
         const {
             if: condition,
             instantiate,
@@ -317,10 +320,10 @@ export class LazyLoadHandler implements AssignFromHandler {
             const len = Math.min(elements.length, assign.configs.length);
             for (let j = 0; j < len; j++) {
                 const cfg = assign.configs[j];
-                assignFrom(elements[j], cfg.toClone ?? {}, { from, ...cfg.withOptions });
+                assignFrom(elements[j], cfg.toClone ?? {}, { from, ...cfg.withOptions }, this._permissions);
             }
         } else if (assign.toClone) {
-            assignFrom(elements[0], assign.toClone, { from, ...assign.withOptions });
+            assignFrom(elements[0], assign.toClone, { from, ...assign.withOptions }, this._permissions);
         }
     }
 

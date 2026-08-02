@@ -55,7 +55,7 @@ export class ManageTemplateListHandler {
     constructor(config) {
         this.config = config;
     }
-    async assign(lhsTarget, resolvedParams, options) {
+    async assign(lhsTarget, resolvedParams, options, permissions) {
         //return;
         const { forEach: items, instantiate, method = 'appendChild', forget = false, markerName, yieldEvery, } = resolvedParams;
         if (!(lhsTarget instanceof Element)) {
@@ -143,7 +143,7 @@ export class ManageTemplateListHandler {
                     const len = Math.min(elements.length, configs.length);
                     for (let j = 0; j < len; j++) {
                         const cfg = configs[j];
-                        assignFrom(elements[j], cfg.toClone ?? {}, { from: item, ...cfg.withOptions });
+                        assignFrom(elements[j], cfg.toClone ?? {}, { from: item, ...cfg.withOptions }, permissions);
                     }
                 }
                 else {
@@ -153,13 +153,13 @@ export class ManageTemplateListHandler {
                             processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                         }
                         else {
-                            assignFrom(rootEl, toClone, { from: item, ...withOptions });
+                            assignFrom(rootEl, toClone, { from: item, ...withOptions }, permissions);
                         }
                         if (hostToClone && options?.from) {
-                            assignFrom(rootEl, hostToClone, { from: options.from, ...hostWithOptions });
+                            assignFrom(rootEl, hostToClone, { from: options.from, ...hostWithOptions }, permissions);
                         }
                         if (targetToClone) {
-                            assignFrom(rootEl, targetToClone, { from: lhsTarget, ...targetWithOptions });
+                            assignFrom(rootEl, targetToClone, { from: lhsTarget, ...targetWithOptions }, permissions);
                         }
                     }
                 }
@@ -192,7 +192,7 @@ export class ManageTemplateListHandler {
                     const len = Math.min(elements.length, configs.length);
                     for (let j = 0; j < len; j++) {
                         const cfg = configs[j];
-                        assignFrom(elements[j], cfg.toClone ?? {}, { from: item, ...cfg.withOptions });
+                        assignFrom(elements[j], cfg.toClone ?? {}, { from: item, ...cfg.withOptions }, permissions);
                     }
                 }
                 else {
@@ -204,13 +204,13 @@ export class ManageTemplateListHandler {
                             processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                         }
                         else {
-                            assignFrom(rootEl, toClone, { from: item, ...withOptions });
+                            assignFrom(rootEl, toClone, { from: item, ...withOptions }, permissions);
                         }
                         if (hostToClone && options?.from) {
-                            assignFrom(rootEl, hostToClone, { from: options.from, ...hostWithOptions });
+                            assignFrom(rootEl, hostToClone, { from: options.from, ...hostWithOptions }, permissions);
                         }
                         if (targetToClone) {
-                            assignFrom(rootEl, targetToClone, { from: lhsTarget, ...targetWithOptions });
+                            assignFrom(rootEl, targetToClone, { from: lhsTarget, ...targetWithOptions }, permissions);
                         }
                     }
                 }

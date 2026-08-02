@@ -378,3 +378,18 @@ Out of free tokens with the alternative AI service.
 
 Please resume from where things were left off above.
 
+---
+
+## Implementation Notes
+
+Phase I is implemented. `restrictedPropSettings` now blocks exact, case-sensitive property assignments (with one warning per property key), while leaving `-=` deliberately unrestricted.
+
+Coverage now flows through `assignGingerly`, `assignTentatively`’s new fourth `permissions` parameter, `assignFrom`/async, recursive merges, `@each`/`@eachTime`, handler return values, nested built-in handler assignments, and `+=` event vectors. Method calls such as `setAttribute` remain outside Phase I, as intended.
+
+For a first sanity pass, please open:
+
+- `http://localhost:8000/tests/restricted-prop-settings.html`
+
+It checks plain/nested assignments, commands, readonly recursion, `@each`, `assignFrom`, `assignTentatively` reversal, and event vectors. I added its Playwright counterpart as well.
+
+`git diff --check` passes. I did not edit generated `.js` files directly; your compiler updated several outputs. I couldn’t run a standalone TypeScript check because this shell doesn’t have `tsc` available.

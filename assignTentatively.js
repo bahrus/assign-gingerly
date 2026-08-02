@@ -1,3 +1,4 @@
+import { buildRestrictedPropSet, checkRestrictedProp } from './isAllowedImportPath.js';
 /**
  * Helper function to check if a string key represents an += command
  */
@@ -113,12 +114,13 @@ function getTopLevelKey(path) {
 /**
  * Main assignTentatively function with reversal support
  */
-export function assignTentatively(target, source, options) {
+export function assignTentatively(target, source, options, permissions) {
     if (!target || typeof target !== 'object') {
         return target;
     }
     const reversal = options?.reversal || {};
     const trackedCreatedPaths = new Set();
+    const restrictedPropSet = buildRestrictedPropSet(permissions);
     // Process all keys from source
     for (const key of Object.keys(source)) {
         const value = source[key];
@@ -129,11 +131,14 @@ export function assignTentatively(target, source, options) {
                 if (isNestedPath(path)) {
                     const pathParts = parsePath(path);
                     const topLevelKey = pathParts[0];
+                    const lastKey = pathParts[pathParts.length - 1];
+                    if (checkRestrictedProp(restrictedPropSet, lastKey)) {
+                        continue;
+                    }
                     // Track if we created a new top-level path (BEFORE calling ensureNestedPath)
                     if (!(topLevelKey in target)) {
                         trackedCreatedPaths.add(topLevelKey);
                     }
-                    const lastKey = pathParts[pathParts.length - 1];
                     const parent = ensureNestedPath(target, pathParts);
                     // If property already exists, store original value for reversal
                     if (lastKey in parent) {
@@ -150,6 +155,9 @@ export function assignTentatively(target, source, options) {
                 }
                 else {
                     // Plain key - direct operation on target
+                    if (checkRestrictedProp(restrictedPropSet, path)) {
+                        continue;
+                    }
                     if (path in target) {
                         if (!(path in reversal)) {
                             reversal[path] = target[path];
@@ -174,16 +182,22 @@ export function assignTentatively(target, source, options) {
                 if (isNestedPath(lhsPath)) {
                     lhsPathParts = parsePath(lhsPath);
                     const topLevelKey = lhsPathParts[0];
+                    lhsLastKey = lhsPathParts[lhsPathParts.length - 1];
+                    if (checkRestrictedProp(restrictedPropSet, lhsLastKey)) {
+                        continue;
+                    }
                     // Track if we created a new top-level path (BEFORE calling ensureNestedPath)
                     if (!(topLevelKey in target)) {
                         trackedCreatedPaths.add(topLevelKey);
                     }
-                    lhsLastKey = lhsPathParts[lhsPathParts.length - 1];
                     lhsParent = ensureNestedPath(target, lhsPathParts);
                 }
                 else {
                     lhsPathParts = [lhsPath];
                     lhsLastKey = lhsPath;
+                    if (checkRestrictedProp(restrictedPropSet, lhsLastKey)) {
+                        continue;
+                    }
                     lhsParent = target;
                 }
                 // Determine what to negate
@@ -286,11 +300,14 @@ export function assignTentatively(target, source, options) {
         if (isNestedPath(key)) {
             const pathParts = parsePath(key);
             const topLevelKey = pathParts[0];
+            const lastKey = pathParts[pathParts.length - 1];
+            if (checkRestrictedProp(restrictedPropSet, lastKey)) {
+                continue;
+            }
             // Track if we created a new top-level path (BEFORE calling ensureNestedPath)
             if (!(topLevelKey in target)) {
                 trackedCreatedPaths.add(topLevelKey);
             }
-            const lastKey = pathParts[pathParts.length - 1];
             const parent = ensureNestedPath(target, pathParts);
             if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                 // Recursively apply assignTentatively for nested objects
@@ -306,7 +323,7 @@ export function assignTentatively(target, source, options) {
                 }
                 // For nested objects, recursively apply with nested reversal tracking
                 const nestedReversal = {};
-                assignTentatively(parent[lastKey], value, { reversal: nestedReversal });
+                assignTentatively(parent[lastKey], value, { reversal: nestedReversal }, permissions);
                 // Merge nested reversals
                 for (const revKey of Object.keys(nestedReversal)) {
                     if (!(revKey in reversal)) {
@@ -327,6 +344,9 @@ export function assignTentatively(target, source, options) {
         }
         else {
             // Non-nested key
+            if (checkRestrictedProp(restrictedPropSet, key)) {
+                continue;
+            }
             if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                 // Recursively apply assignTentatively for nested objects
                 if (!(key in target) || typeof target[key] !== 'object') {
@@ -339,7 +359,7 @@ export function assignTentatively(target, source, options) {
                     target[key] = {};
                 }
                 const nestedReversal = {};
-                assignTentatively(target[key], value, { reversal: nestedReversal });
+                assignTentatively(target[key], value, { reversal: nestedReversal }, permissions);
                 // Merge nested reversals
                 for (const revKey of Object.keys(nestedReversal)) {
                     if (!(revKey in reversal)) {
