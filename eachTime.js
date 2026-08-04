@@ -3,7 +3,7 @@
  * This module is dynamically loaded only when @eachTime is encountered
  * Provides event-driven iteration over elements as they mount
  */
-import { redirectRestrictedProp } from './isAllowedImportPath.js';
+import { redirectRestrictedProp } from './assignPermissions/restrictedProps.js';
 /**
  * Check if a value is an EventTarget
  */

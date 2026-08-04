@@ -31,7 +31,7 @@ import { findMarkers, createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX
 import { resolveValue } from '../resolveValues.js';
 import { assignFrom } from '../assignFrom.js';
 import { processInferredAssignments } from '../inferredAssignments.js';
-import type { AssignPermissions } from '../isAllowedImportPath.js';
+import type { AssignPermissions } from '../types/assign-gingerly/types.js';
 
 /**
  * Reserved keys in fromEachItem config — not treated as shorthand patterns.

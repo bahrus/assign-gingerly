@@ -23,7 +23,7 @@
 
 import type { AssignFromHandler } from '../assignFromAsync.js';
 import assignGingerly from '../assignGingerly.js';
-import type { AssignPermissions } from '../isAllowedImportPath.js';
+import type { AssignPermissions } from '../types/assign-gingerly/types.js';
 
 /**
  * Operator keys recognized in case objects.

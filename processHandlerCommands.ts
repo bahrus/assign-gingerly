@@ -7,8 +7,9 @@
 import { resolveValues } from './resolveValues.js';
 import { getValues } from './getValues.js';
 import { evaluatePathWithMethods } from './assignGingerly.js';
-import { buildRestrictedPropSet, isAllowedImportPath, redirectRestrictedProp } from './isAllowedImportPath.js';
-import type { AssignPermissions } from './isAllowedImportPath.js';
+import { isAllowedImportPath } from './assignPermissions/isAllowedImportPath.js';
+import { buildRestrictedPropSet, redirectRestrictedProp } from './assignPermissions/restrictedProps.js';
+import type { AssignPermissions } from './types/assign-gingerly/types.js';
 import type { AssignFromOptions, AssignFromHandlerConstructor } from './assignFromAsync.js';
 
 /**
@@ -93,7 +94,7 @@ async function resolveFromHandlers(
         if (!permissions?.crossDomainImports && !isAllowedImportPath(entry)) {
             throw new Error(
                 `assignFrom: handler "${name}" has an invalid import path "${entry}". ` +
-                `Only relative, absolute, or bare specifier paths are allowed (no cross-domain URLs). ` +
+                `Only same-origin paths or import-map-covered specifiers are allowed. ` +
                 `Pass { crossDomainImports: true } in permissions to override.`
             );
         }

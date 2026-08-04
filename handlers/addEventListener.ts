@@ -9,7 +9,7 @@
 
 import assignGingerly from '../assignGingerly.js';
 import type { AddEventListenerConfig, AssignDispatchVector } from '../types/assign-gingerly/types.js';
-import type { AssignPermissions } from '../isAllowedImportPath.js';
+import type { AssignPermissions } from '../types/assign-gingerly/types.js';
 
 /**
  * WeakMap for dedup: Element → Map<key, AbortController>

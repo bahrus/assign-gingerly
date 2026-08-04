@@ -2,8 +2,8 @@
  * assignTentatively — reversible assignment with change tracking.
  */
 import type { IAssignTentativelyOptions } from './types/assign-gingerly/types.js';
-import type { AssignPermissions } from './isAllowedImportPath.js';
-import { buildRestrictedPropSet, checkRestrictedProp } from './isAllowedImportPath.js';
+import type { AssignPermissions } from './types/assign-gingerly/types.js';
+import { buildRestrictedPropSet, checkRestrictedProp } from './assignPermissions/restrictedProps.js';
 export type { IAssignTentativelyOptions };
 
 /**

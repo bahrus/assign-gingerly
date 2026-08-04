@@ -21,7 +21,7 @@
  */
 
 import { LazyLoadHandler } from './lazyLoad.js';
-import type { AssignPermissions } from '../isAllowedImportPath.js';
+import type { AssignPermissions } from '../types/assign-gingerly/types.js';
 import type { AssignFromHandler } from '../assignFromAsync.js';
 import type { LazyLoadSwitchResolvedParams } from '../types/assign-gingerly/types.js';
 

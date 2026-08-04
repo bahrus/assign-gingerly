@@ -15,7 +15,7 @@
  *     { emc: 'be-observant/emc.json', matching: '[itemprop]' },
  * ]);
  */
-import { isAllowedImportPath } from './isAllowedImportPath.js';
+import { isAllowedImportPath } from './assignPermissions/isAllowedImportPath.js';
 /**
  * Apply enhancements in bulk to matching elements within a target.
  *
@@ -37,7 +37,7 @@ export async function enhanceAll(target, configs, permissions) {
         // Validate EMC path unless cross-domain imports are explicitly permitted
         if (!permissions?.crossDomainImports && !isAllowedImportPath(config.emc)) {
             throw new Error(`enhanceAll: EMC path "${config.emc}" is a cross-domain URL. ` +
-                `Only relative, absolute, or bare specifier paths are allowed by default. ` +
+                `Only same-origin paths or import-map-covered specifiers are allowed by default. ` +
                 `Pass { crossDomainImports: true } in permissions to override.`);
         }
         // 1. Import the EMC JSON

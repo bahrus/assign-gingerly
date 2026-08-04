@@ -5,8 +5,9 @@
  */
 
 import type { IAssignGingerlyOptions } from './types/assign-gingerly/types.js';
-import type { AssignPermissions, RestrictedPropSettingsMap } from './isAllowedImportPath.js';
-import { redirectRestrictedProp } from './isAllowedImportPath.js';
+import type { AssignPermissions } from './types/assign-gingerly/types.js';
+import { redirectRestrictedProp } from './assignPermissions/restrictedProps.js';
+import type { RestrictedPropSettingsMap } from './assignPermissions/restrictedProps.js';
 
 /**
  * Check if a value is an EventTarget

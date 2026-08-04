@@ -22,7 +22,7 @@
 import { resolveValues } from './resolveValues.js';
 import {IAssignGingerlyOptions} from './types/assign-gingerly/types.js';
 import assignGingerly from './assignGingerly.js';
-import type { AssignPermissions } from './isAllowedImportPath.js';
+import type { AssignPermissions } from './types/assign-gingerly/types.js';
 import type { AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
 import {
   expandSubstitutions, categorizeKeys, handleSpreads, isHandlerCommand

@@ -18,6 +18,7 @@
     "*.js",
     "*.ts",
     "DX/**",
+    "assignPermissions/**",
     "handlers/**",
     "inferencer/**",
     "README.md",
@@ -143,9 +144,9 @@
       "default": "./enhanceAll.js",
       "types": "./enhanceAll.ts"
     },
-    "./isAllowedImportPath.js": {
-      "default": "./isAllowedImportPath.js",
-      "types": "./isAllowedImportPath.ts"
+    "./assignPermissions/isAllowedImportPath.js": {
+      "default": "./assignPermissions/isAllowedImportPath.js",
+      "types": "./assignPermissions/isAllowedImportPath.ts"
     },
     "./markerUtils.js": {
       "default": "./markerUtils.js",

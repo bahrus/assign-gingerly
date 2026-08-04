@@ -13,7 +13,7 @@ import { getValues, getValue } from './getValues.js';
 import assignGingerly from './assignGingerly.js';
 import { resolveIdVariable, parseIdRef } from './resolveIdRef.js';
 import { processInferredAssignments } from './inferredAssignments.js';
-import type { AssignPermissions } from './isAllowedImportPath.js';
+import type { AssignPermissions } from './types/assign-gingerly/types.js';
 import type { AssignFromOptions, AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
 
 // Re-export types for consumers

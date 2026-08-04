@@ -1,4 +1,4 @@
-import { buildRestrictedPropSet, checkRestrictedProp } from './isAllowedImportPath.js';
+import { buildRestrictedPropSet, checkRestrictedProp } from './assignPermissions/restrictedProps.js';
 /**
  * Helper function to check if a string key represents an += command
  */

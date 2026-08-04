@@ -1,4 +1,4 @@
-import { buildRestrictedPropSet, checkRestrictedProp, redirectRestrictedProp } from './isAllowedImportPath.js';
+import { buildRestrictedPropSet, checkRestrictedProp, redirectRestrictedProp } from './assignPermissions/restrictedProps.js';
 import { normalizeAliasOptions } from './getValues.js';
 /**
  * GUID for global instance map storage to ensure uniqueness across package versions
