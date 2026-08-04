@@ -203,7 +203,7 @@
     "chrome": "npx playwright cr http://localhost:8000"
   },
   "devDependencies": {
-    "@playwright/test": "1.62.0",
+    "@playwright/test": "1.62.1",
     "spa-ssi": "0.0.27"
   }
 }

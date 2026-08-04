@@ -73,29 +73,33 @@ export async function defineWithFeatures(tagName, baseTagName, config, registry,
         classCache = new Map();
         resolvedSpawnCache.set(BaseClass, classCache);
     }
-    const featureKeys = Object.keys(config.assignFeatures);
-    const resolvedSpawns = new Map();
-    await Promise.all(featureKeys.map(async (key) => {
-        const optIn = supportedFeatures[key];
-        if (!optIn) {
-            throw new Error(`defineWithFeatures: feature "${key}" not found in ${baseTagName}.supportedFeatures`);
-        }
-        // Check cache first
-        if (classCache.has(key)) {
-            resolvedSpawns.set(key, classCache.get(key));
-            return;
-        }
-        let spawn = optIn.fallbackSpawn;
-        if (spawn && isAsyncSpawn(spawn)) {
-            // Resolve the async spawner
-            spawn = await spawn();
-        }
-        // Cache the resolved spawn
-        if (spawn) {
-            classCache.set(key, spawn);
-        }
-        resolvedSpawns.set(key, spawn);
-    }));
+    const { assignFeatures: af } = config;
+    let resolvedSpawns;
+    if (af) {
+        const featureKeys = Object.keys(af);
+        resolvedSpawns = new Map();
+        await Promise.all(featureKeys.map(async (key) => {
+            const optIn = supportedFeatures[key];
+            if (!optIn) {
+                throw new Error(`defineWithFeatures: feature "${key}" not found in ${baseTagName}.supportedFeatures`);
+            }
+            // Check cache first
+            if (classCache.has(key)) {
+                resolvedSpawns.set(key, classCache.get(key));
+                return;
+            }
+            let spawn = optIn.fallbackSpawn;
+            if (spawn && isAsyncSpawn(spawn)) {
+                // Resolve the async spawner
+                spawn = await spawn();
+            }
+            // Cache the resolved spawn
+            if (spawn) {
+                classCache.set(key, spawn);
+            }
+            resolvedSpawns.set(key, spawn);
+        }));
+    }
     // 3. Create subclass
     const NewClass = class extends BaseClass {
     };
@@ -103,16 +107,18 @@ export async function defineWithFeatures(tagName, baseTagName, config, registry,
     if (options?.onSubclassCreated) {
         options.onSubclassCreated(NewClass);
     }
-    // 4. Build FeatureConfigsMap: resolved spawns + JSON config
-    const featuresMap = {};
-    for (const [key, jsonConfig] of Object.entries(config.assignFeatures)) {
-        featuresMap[key] = {
-            spawn: resolvedSpawns.get(key),
-            ...jsonConfig
-        };
+    if (af) {
+        // 4. Build FeatureConfigsMap: resolved spawns + JSON config
+        const featuresMap = {};
+        for (const [key, jsonConfig] of Object.entries(af)) {
+            featuresMap[key] = {
+                spawn: resolvedSpawns.get(key),
+                ...jsonConfig
+            };
+        }
+        // 5. assignFeatures (sequential onAssigned) + define
+        await assignFeatures(NewClass, featuresMap, reg.featuresRegistry);
     }
-    // 5. assignFeatures (sequential onAssigned) + define
-    await assignFeatures(NewClass, featuresMap, reg.featuresRegistry);
     reg.define(tagName, NewClass);
     return NewClass;
 }
