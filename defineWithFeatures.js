@@ -52,18 +52,20 @@ export async function defineWithFeatures(tagName, baseTagName, config, registry,
     if (!BaseClass) {
         throw new Error(`defineWithFeatures: base class "${baseTagName}" could not be resolved`);
     }
+    // 3. Create subclass
+    const NewClass = class extends BaseClass {
+    };
     const supportedFeatures = BaseClass.supportedFeatures;
     if (!supportedFeatures) {
         throw new Error(`defineWithFeatures: "${baseTagName}" does not define static supportedFeatures`);
     }
     // 2. Resolve all async fallback spawns (with caching)
-    let classCache = resolvedSpawnCache.get(BaseClass);
+    let classCache = resolvedSpawnCache.get(NewClass);
     if (!classCache) {
         classCache = new Map();
-        resolvedSpawnCache.set(BaseClass, classCache);
+        resolvedSpawnCache.set(NewClass, classCache);
     }
     const { assignFeatures: af } = config;
-    console.log({ af });
     let resolvedSpawns;
     if (af) {
         const featureKeys = Object.keys(af);
@@ -115,9 +117,6 @@ export async function defineWithFeatures(tagName, baseTagName, config, registry,
             resolvedSpawns.set(key, fallbackSpawn);
         }));
     }
-    // 3. Create subclass
-    const NewClass = class extends BaseClass {
-    };
     // 3b. Call onSubclassCreated callback (before define, before features if needed)
     if (options?.onSubclassCreated) {
         options.onSubclassCreated(NewClass);
