@@ -21,6 +21,7 @@
     "assignPermissions/**",
     "handlers/**",
     "inferencer/**",
+    "utils/**",
     "README.md",
     "LICENSE",
     "types/assign-gingerly/types.d.ts"
