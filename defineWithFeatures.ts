@@ -21,6 +21,7 @@
  */
 
 import { assignFeatures, FeatureConfig, FeatureConfigsMap, SupportedFeaturesMap } from './assignFeatures.js';
+import { isAsyncSpawn } from './utils/isAsyncSpawn.js';
 
 /**
  * Configuration passed to defineWithFeatures (JSON-serializable).
@@ -42,20 +43,10 @@ export interface DefineWithFeaturesOptions {
 }
 
 /**
- * Determines if a function is an async spawner (same heuristic as assignFeatures).
- */
-function isAsyncSpawn(fn: any): boolean {
-    if (typeof fn !== 'function') return false;
-    if (fn.constructor.name === 'AsyncFunction') return true;
-    if (fn.prototype === undefined) return true;
-    return false;
-}
-
-/**
  * Cache for resolved fallback spawns.
  * Key: BaseClass, Value: Map<featureKey, resolvedConstructor>
  */
-const resolvedSpawnCache = new WeakMap<Function, Map<string, any>>();
+export const resolvedSpawnCache = new WeakMap<Function, Map<string, any>>();
 
 /**
  * Declaratively define a custom element with features.

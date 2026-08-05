@@ -152,6 +152,10 @@
       "default": "./utils/findClassPrototypeInPath.js",
       "types": "./utils/findClassPrototypeInPath.ts"
     },
+    "./utils/isAsyncSpawn.js": {
+      "default": "./utils/isAsyncSpawn.js",
+      "types": "./utils/isAsyncSpawn.ts"
+    },
     "./markerUtils.js": {
       "default": "./markerUtils.js",
       "types": "./markerUtils.ts"

@@ -23,17 +23,8 @@
  * });
  */
 
+import { isAsyncSpawn } from './utils/isAsyncSpawn.js';
 import { FeatureConfigsMap, SupportedFeaturesMap } from './types/assign-gingerly/types.js';
-
-/**
- * Determines if a function is an async spawner.
- */
-function isAsyncSpawn(fn: any): boolean {
-    if (typeof fn !== 'function') return false;
-    if (fn.constructor.name === 'AsyncFunction') return true;
-    if (fn.prototype === undefined) return true;
-    return false;
-}
 
 /**
  * Resolves async fallback spawns for features that don't have an explicit spawn,

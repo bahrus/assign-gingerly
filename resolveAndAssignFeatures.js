@@ -22,18 +22,7 @@
  *     }
  * });
  */
-/**
- * Determines if a function is an async spawner.
- */
-function isAsyncSpawn(fn) {
-    if (typeof fn !== 'function')
-        return false;
-    if (fn.constructor.name === 'AsyncFunction')
-        return true;
-    if (fn.prototype === undefined)
-        return true;
-    return false;
-}
+import { isAsyncSpawn } from './utils/isAsyncSpawn.js';
 /**
  * Resolves async fallback spawns for features that don't have an explicit spawn,
  * then calls assignFeatures on the registry.

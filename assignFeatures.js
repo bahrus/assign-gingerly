@@ -9,6 +9,7 @@
  * properties installed on the class prototype.
  */
 import { parseWithAttrs } from './parseWithAttrs.js';
+import { isAsyncSpawn } from './utils/isAsyncSpawn.js';
 /**
  * WeakMap storing per-instance feature caches.
  * Outer key: the instance (element or other object).
@@ -86,26 +87,6 @@ function installWhenFeatureReadyMethod(ctr, methodName) {
         enumerable: false,
         configurable: true
     });
-}
-/**
- * Determines if a function is an async spawner (returns a Promise<Constructor>)
- * rather than a synchronous constructor.
- *
- * Heuristic:
- * - AsyncFunction (async () => ...) → async spawner
- * - Arrow function (no .prototype) → async spawner (assumed to return Promise<Constructor>)
- * - Class or function declaration (has .prototype) → synchronous constructor
- */
-function isAsyncSpawn(fn) {
-    if (typeof fn !== 'function')
-        return false;
-    // Explicit async function
-    if (fn.constructor.name === 'AsyncFunction')
-        return true;
-    // Arrow function or non-constructor function (no .prototype)
-    if (fn.prototype === undefined)
-        return true;
-    return false;
 }
 /**
  * Installs a getter/setter pair on the constructor's prototype for the given feature key.

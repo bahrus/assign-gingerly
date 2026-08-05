@@ -10,6 +10,7 @@
  */
 
 import { parseWithAttrs } from './parseWithAttrs.js';
+import { isAsyncSpawn } from './utils/isAsyncSpawn.js';
 import { FeatureSpawnContext, SupportedFeatureConfig, FeaturesClassConfig, FeatureConfig, SupportedFeaturesMap, FeatureConfigsMap } from './types/assign-gingerly/types.js';
 
 export type { FeatureSpawnContext, SupportedFeatureConfig, FeaturesClassConfig, FeatureConfig, SupportedFeaturesMap, FeatureConfigsMap };
@@ -103,23 +104,7 @@ function installWhenFeatureReadyMethod(ctr: Function, methodName: string): void 
     });
 }
 
-/**
- * Determines if a function is an async spawner (returns a Promise<Constructor>)
- * rather than a synchronous constructor.
- * 
- * Heuristic:
- * - AsyncFunction (async () => ...) → async spawner
- * - Arrow function (no .prototype) → async spawner (assumed to return Promise<Constructor>)
- * - Class or function declaration (has .prototype) → synchronous constructor
- */
-function isAsyncSpawn(fn: any): boolean {
-    if (typeof fn !== 'function') return false;
-    // Explicit async function
-    if (fn.constructor.name === 'AsyncFunction') return true;
-    // Arrow function or non-constructor function (no .prototype)
-    if (fn.prototype === undefined) return true;
-    return false;
-}
+
 
 /**
  * Installs a getter/setter pair on the constructor's prototype for the given feature key.

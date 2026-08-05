@@ -20,23 +20,12 @@
  * });
  */
 import { assignFeatures } from './assignFeatures.js';
-/**
- * Determines if a function is an async spawner (same heuristic as assignFeatures).
- */
-function isAsyncSpawn(fn) {
-    if (typeof fn !== 'function')
-        return false;
-    if (fn.constructor.name === 'AsyncFunction')
-        return true;
-    if (fn.prototype === undefined)
-        return true;
-    return false;
-}
+import { isAsyncSpawn } from './utils/isAsyncSpawn.js';
 /**
  * Cache for resolved fallback spawns.
  * Key: BaseClass, Value: Map<featureKey, resolvedConstructor>
  */
-const resolvedSpawnCache = new WeakMap();
+export const resolvedSpawnCache = new WeakMap();
 /**
  * Declaratively define a custom element with features.
  *
