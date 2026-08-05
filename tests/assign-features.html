@@ -108,10 +108,10 @@
                     photoTaker: { fallbackSpawn: PhotoTakerImpl }
                 }
             }
-            customElements.define('test-basic-getter', TestEl);
             customElements.assignFeatures(TestEl, {
                 photoTaker: { spawn: PhotoTakerImpl }
             });
+            customElements.define('test-basic-getter', TestEl);
 
             const desc = Object.getOwnPropertyDescriptor(TestEl.prototype, 'photoTaker');
             expect(typeof desc.get).toBe('function');
@@ -133,10 +133,10 @@
                     counter: { fallbackSpawn: CountingImpl }
                 }
             }
-            customElements.define('test-lazy-spawn', TestEl);
             customElements.assignFeatures(TestEl, {
                 counter: { spawn: CountingImpl }
             });
+            customElements.define('test-lazy-spawn', TestEl);
 
             const el = document.createElement('test-lazy-spawn');
             expect(spawnCount).toBe(0); // Not yet spawned
@@ -159,10 +159,10 @@
                     checker: { fallbackSpawn: HostCheckImpl }
                 }
             }
-            customElements.define('test-host-pass', TestEl);
             customElements.assignFeatures(TestEl, {
                 checker: { spawn: HostCheckImpl }
             });
+            customElements.define('test-host-pass', TestEl);
 
             const el = document.createElement('test-host-pass');
             el.checker;
@@ -179,10 +179,10 @@
                     checker: { fallbackSpawn: CtxCheckImpl }
                 }
             }
-            customElements.define('test-ctx-pass', TestEl);
             customElements.assignFeatures(TestEl, {
                 checker: { spawn: CtxCheckImpl }
             });
+            customElements.define('test-ctx-pass', TestEl);
 
             const el = document.createElement('test-ctx-pass');
             el.checker;
@@ -343,10 +343,10 @@
                     feature: { fallbackSpawn: FallbackImpl }
                 }
             }
-            customElements.define('test-fallback', TestEl);
             customElements.assignFeatures(TestEl, {
                 feature: {} // no spawn provided
             });
+            customElements.define('test-fallback', TestEl);
 
             const el = document.createElement('test-fallback');
             expect(el.feature.isFallback).toBe(true);
@@ -364,10 +364,10 @@
                     feature: { fallbackSpawn: FallbackImpl }
                 }
             }
-            customElements.define('test-spawn-priority', TestEl);
             customElements.assignFeatures(TestEl, {
                 feature: { spawn: InjectedImpl }
             });
+            customElements.define('test-spawn-priority', TestEl);
 
             const el = document.createElement('test-spawn-priority');
             expect(el.feature.type).toBe('injected');
@@ -391,10 +391,10 @@
                     }
                 }
             }
-            customElements.define('test-validate-pass', TestEl);
             customElements.assignFeatures(TestEl, {
                 feature: { spawn: ValidImpl }
             });
+            customElements.define('test-validate-pass', TestEl);
 
             const el = document.createElement('test-validate-pass');
             // Should not throw
@@ -416,10 +416,10 @@
                     }
                 }
             }
-            customElements.define('test-validate-fail', TestEl);
             customElements.assignFeatures(TestEl, {
                 feature: { spawn: InvalidImpl }
             });
+            customElements.define('test-validate-fail', TestEl);
 
             const el = document.createElement('test-validate-fail');
             expect(() => el.feature).toThrow('failed shape validation');
@@ -472,8 +472,8 @@
                     feature: { fallbackSpawn: Impl }
                 }
             }
-            customElements.define('test-double-assign', TestEl);
             customElements.assignFeatures(TestEl, { feature: { spawn: Impl } });
+            customElements.define('test-double-assign', TestEl);
 
             expect(() => {
                 customElements.assignFeatures(TestEl, { feature: { spawn: Impl } });
@@ -486,10 +486,10 @@
                     feature: {} // no fallbackSpawn
                 }
             }
-            customElements.define('test-no-spawn', TestEl);
             customElements.assignFeatures(TestEl, {
                 feature: {} // no spawn either
             });
+            customElements.define('test-no-spawn', TestEl);
 
             const el = document.createElement('test-no-spawn');
             expect(() => el.feature).toThrow('no spawn implementation found');
@@ -512,11 +512,11 @@
                     badgeMaker: { fallbackSpawn: BadgeImpl }
                 }
             }
-            customElements.define('test-multi-features', TestEl);
             customElements.assignFeatures(TestEl, {
                 photoTaker: { spawn: PhotoImpl },
                 badgeMaker: { spawn: BadgeImpl }
             });
+            customElements.define('test-multi-features', TestEl);
 
             const el = document.createElement('test-multi-features');
             expect(el.photoTaker.type).toBe('photo');
@@ -532,8 +532,8 @@
                     featureB: { fallbackSpawn: BImpl }
                 }
             }
-            customElements.define('test-incremental', TestEl);
             customElements.assignFeatures(TestEl, { featureA: { spawn: AImpl } });
+            customElements.define('test-incremental', TestEl);
             customElements.assignFeatures(TestEl, { featureB: { spawn: BImpl } });
 
             const el = document.createElement('test-incremental');
@@ -555,10 +555,10 @@
                     feature: { fallbackSpawn: CountImpl }
                 }
             }
-            customElements.define('test-isolation', TestEl);
             customElements.assignFeatures(TestEl, {
                 feature: { spawn: CountImpl }
             });
+            customElements.define('test-isolation', TestEl);
 
             const el1 = document.createElement('test-isolation');
             const el2 = document.createElement('test-isolation');
@@ -587,10 +587,10 @@
                     feature: { fallbackSpawn: MergeImpl }
                 }
             }
-            customElements.define('test-ag-merge', TestEl);
             customElements.assignFeatures(TestEl, {
                 feature: { spawn: MergeImpl }
             });
+            customElements.define('test-ag-merge', TestEl);
 
             const el = document.createElement('test-ag-merge');
             assignGingerly(el, {
@@ -614,10 +614,10 @@
                     feature: { fallbackSpawn: LazyMergeImpl }
                 }
             }
-            customElements.define('test-ag-lazy', TestEl);
             customElements.assignFeatures(TestEl, {
                 feature: { spawn: LazyMergeImpl }
             });
+            customElements.define('test-ag-lazy', TestEl);
 
             const el = document.createElement('test-ag-lazy');
             expect(spawned).toBe(false);
@@ -638,10 +638,10 @@
                     myFeature: { fallbackSpawn: EnumImpl }
                 }
             }
-            customElements.define('test-enumerable', TestEl);
             customElements.assignFeatures(TestEl, {
                 myFeature: { spawn: EnumImpl }
             });
+            customElements.define('test-enumerable', TestEl);
 
             let found = false;
             for (const key in TestEl.prototype) {

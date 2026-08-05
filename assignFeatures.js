@@ -10,7 +10,7 @@
  */
 import { parseWithAttrs } from './parseWithAttrs.js';
 import { isAsyncSpawn } from './utils/isAsyncSpawn.js';
-import { resolvedSpawnCache } from './defineWithFeatures.js';
+import { findClassPrototypeInPath } from './utils/findClassPrototypeInPath.js';
 /**
  * WeakMap storing per-instance feature caches.
  * Outer key: the instance (element or other object).
@@ -46,48 +46,78 @@ export class FeaturesRegistry {
  */
 const RAW_INIT_VALS = Symbol('rawInitVals');
 /**
- * Sentinel symbol to mark stored values as error state from failed async spawn.
+ * Cache for resolved feature spawns.
+ * Key: target constructor, Value: Map<featureKey, resolvedConstructor>
  */
-const FEATURE_ERROR = Symbol('featureError');
-/**
- * WeakMap storing pending Promises for async feature resolution.
- * Outer key: the instance. Inner map: feature key -> { promise, resolve, reject }.
- */
-const pendingFeatures = new WeakMap();
-/**
- * Resolves the whenFeatureReady method name from lifecycleKeys config.
- * Returns undefined if lifecycleKeys is not set.
- */
-function resolveWhenFeatureReadyName(lifecycleKeys) {
-    if (lifecycleKeys === undefined)
-        return undefined;
-    if (lifecycleKeys === true)
-        return 'whenFeatureReady';
-    return lifecycleKeys.whenFeatureReady || 'whenFeatureReady';
+export const resolvedSpawnCache = new WeakMap();
+function getOrCreateClassCache(ctr) {
+    let classCache = resolvedSpawnCache.get(ctr);
+    if (!classCache) {
+        classCache = new Map();
+        resolvedSpawnCache.set(ctr, classCache);
+    }
+    return classCache;
 }
 /**
- * Installs the whenFeatureReady method on the constructor prototype if not already present.
+ * Resolves a spawn reference (constructor, async function, or import-path string).
  */
-function installWhenFeatureReadyMethod(ctr, methodName) {
-    // Only install once per class
-    if (Object.getOwnPropertyDescriptor(ctr.prototype, methodName))
-        return;
-    Object.defineProperty(ctr.prototype, methodName, {
-        value: function (featureKey) {
-            // Trigger the getter (starts async resolution if needed, or returns sync instance)
-            const current = this[featureKey];
-            // Check if there's a pending async resolution for this instance + key
-            const pending = pendingFeatures.get(this)?.get(featureKey);
-            if (pending) {
-                return pending.promise;
-            }
-            // No pending — feature is already resolved (sync or async already completed)
-            return Promise.resolve(current);
-        },
-        writable: true,
-        enumerable: false,
-        configurable: true
-    });
+async function resolveSpawn(spawnish) {
+    if (!spawnish)
+        return undefined;
+    if (typeof spawnish === 'string') {
+        return await findClassPrototypeInPath(spawnish);
+    }
+    if (isAsyncSpawn(spawnish)) {
+        return await spawnish();
+    }
+    return spawnish;
+}
+/**
+ * Returns true if resolving this spawn reference requires awaiting.
+ */
+function isAsyncResolution(spawnish) {
+    if (typeof spawnish === 'string')
+        return true;
+    if (isAsyncSpawn(spawnish))
+        return true;
+    return false;
+}
+/**
+ * Resolves all configured spawns for the target constructor and caches them.
+ * Returns a Promise if any resolution is async, otherwise undefined.
+ */
+function resolveAndCacheSpawns(ctr, features, supportedFeatures) {
+    let hasAsync = false;
+    const asyncResolutions = [];
+    for (const key of Object.keys(features)) {
+        const classCache = getOrCreateClassCache(ctr);
+        if (classCache.has(key))
+            continue;
+        const featureConfig = features[key];
+        let spawnish = featureConfig.spawn;
+        if (spawnish === undefined) {
+            const optIn = supportedFeatures[key];
+            spawnish = optIn?.fallbackSpawn;
+        }
+        if (!spawnish) {
+            classCache.set(key, undefined);
+            continue;
+        }
+        if (isAsyncResolution(spawnish)) {
+            hasAsync = true;
+            asyncResolutions.push((async () => {
+                const resolved = await resolveSpawn(spawnish);
+                classCache.set(key, resolved);
+            })());
+        }
+        else {
+            classCache.set(key, spawnish);
+        }
+    }
+    if (hasAsync) {
+        return Promise.all(asyncResolutions).then(() => undefined);
+    }
+    return undefined;
 }
 /**
  * Installs a getter/setter pair on the constructor's prototype for the given feature key.
@@ -111,10 +141,6 @@ function installFeatureGetter(ctr, key, featuresRegistry) {
                 featureStorage.set(this, storage);
             }
             const stored = storage.get(key);
-            // Check for error state from failed async spawn
-            if (stored && typeof stored === 'object' && FEATURE_ERROR in stored) {
-                throw stored[FEATURE_ERROR];
-            }
             // If already spawned (not a raw sentinel, not undefined), return it
             if (stored !== undefined && !(stored && typeof stored === 'object' && RAW_INIT_VALS in stored)) {
                 return stored;
@@ -140,11 +166,11 @@ function installFeatureGetter(ctr, key, featuresRegistry) {
             if (!injection) {
                 throw new Error(`assignFeatures: no injection found for feature "${key}"`);
             }
-            // Resolve spawn: injection.spawn takes priority, then fallbackSpawn
+            // Resolve spawn from the cache populated before getters were installed
             const spawns = resolvedSpawnCache.get(ctr);
             const resolvedSpawn = spawns?.get(key);
             if (!resolvedSpawn) {
-                throw 'NI';
+                throw new Error(`assignFeatures: no spawn implementation found for feature "${key}"`);
             }
             const supportedFeatures = ctr.supportedFeatures;
             const optIn = supportedFeatures?.[key];
@@ -245,10 +271,9 @@ function installCallbackForwarding(ctr, key, callbacks) {
                         for (const featureKey of keys) {
                             // Access the getter (triggers lazy spawn on first connectedCallback)
                             const feature = this[featureKey];
-                            // Only forward if it's a real instance (not a placeholder or error)
+                            // Only forward if it's a real instance
                             if (feature && typeof feature === 'object' &&
-                                typeof feature[callbackName] === 'function' &&
-                                !(FEATURE_ERROR in feature)) {
+                                typeof feature[callbackName] === 'function') {
                                 feature[callbackName](...args);
                             }
                         }
@@ -263,9 +288,66 @@ function installCallbackForwarding(ctr, key, callbacks) {
         featureKeys.add(key);
     }
 }
+function installOneFeature(ctr, key, features, supportedFeatures, featuresRegistry) {
+    // 1. Confirm the key is opted-in via supportedFeatures
+    if (!(key in supportedFeatures)) {
+        throw new Error(`assignFeatures: "${key}" is not declared in ${ctr.name || 'constructor'}.supportedFeatures`);
+    }
+    // 2. Check that the prototype doesn't already have this property defined
+    const existingDescriptor = Object.getOwnPropertyDescriptor(ctr.prototype, key);
+    if (existingDescriptor) {
+        throw new Error(`assignFeatures: "${key}" already exists on ${ctr.name || 'constructor'}.prototype`);
+    }
+    // 3. Check that this key hasn't already been registered for this constructor
+    if (featuresRegistry.hasKey(ctr, key)) {
+        throw new Error(`assignFeatures: "${key}" has already been assigned for ${ctr.name || 'constructor'}`);
+    }
+    // 4. Register the injection
+    featuresRegistry.set(ctr, key, features[key]);
+    // 5. Install the lazy getter on the prototype
+    installFeatureGetter(ctr, key, featuresRegistry);
+    // 6. Install callback forwarding if configured (merge author + consumer)
+    const featureConfig = features[key];
+    const optIn = supportedFeatures[key];
+    const authorCallbacks = optIn.callbackForwarding || [];
+    const consumerCallbacks = featureConfig.callbackForwarding || [];
+    // Union of both (author defaults + consumer additions)
+    const allCallbacks = [...new Set([...authorCallbacks, ...consumerCallbacks])];
+    if (allCallbacks.length > 0) {
+        installCallbackForwarding(ctr, key, allCallbacks);
+    }
+    // 7. Call static onAssigned if the resolved spawn class defines it
+    const classCache = getOrCreateClassCache(ctr);
+    const resolvedSpawn = classCache.get(key);
+    if (resolvedSpawn && !isAsyncSpawn(resolvedSpawn) &&
+        Object.hasOwn(resolvedSpawn, 'onAssigned') &&
+        typeof resolvedSpawn.onAssigned === 'function') {
+        const result = resolvedSpawn.onAssigned(ctr, featureConfig, key);
+        if (result && typeof result.then === 'function') {
+            return result;
+        }
+    }
+    return undefined;
+}
+function installAllFeatures(ctr, features, supportedFeatures, featuresRegistry) {
+    let asyncResult;
+    for (const key of Object.keys(features)) {
+        const result = installOneFeature(ctr, key, features, supportedFeatures, featuresRegistry);
+        if (result) {
+            if (!asyncResult) {
+                asyncResult = result.then(() => undefined);
+            }
+            else {
+                asyncResult = asyncResult.then(() => result.then(() => undefined));
+            }
+        }
+    }
+    return asyncResult;
+}
 /**
  * Core assignFeatures implementation.
- * Validates inputs, registers injections, and installs lazy getters.
+ * Validates inputs, resolves all configured spawns (async if needed), caches them,
+ * and installs lazy getters on the prototype.
  *
  * Important: Call assignFeatures BEFORE customElements.define(), or at minimum
  * before any instances of the element are created. The lazy getters must be on
@@ -281,108 +363,14 @@ export function assignFeatures(ctr, features, featuresRegistry) {
     if (!supportedFeatures) {
         throw new Error(`assignFeatures: ${ctr.name || 'constructor'} does not define static supportedFeatures`);
     }
-    let hasAsync = false;
-    async function processFeatures() {
-        for (const key of Object.keys(features)) {
-            // 1. Confirm the key is opted-in via supportedFeatures
-            if (!(key in supportedFeatures)) {
-                throw new Error(`assignFeatures: "${key}" is not declared in ${ctr.name || 'constructor'}.supportedFeatures`);
-            }
-            // 2. Check that the prototype doesn't already have this property defined
-            const existingDescriptor = Object.getOwnPropertyDescriptor(ctr.prototype, key);
-            if (existingDescriptor) {
-                throw new Error(`assignFeatures: "${key}" already exists on ${ctr.name || 'constructor'}.prototype`);
-            }
-            // Resolve spawn: injection.spawn takes priority, then fallbackSpawn
-            const spawns = resolvedSpawnCache.get(ctr);
-            const resolvedSpawn = spawns?.get(key);
-            if (!resolvedSpawn) {
-                throw 'NI';
-            }
-            // 3. Check that this key hasn't already been registered for this constructor
-            if (featuresRegistry.hasKey(ctr, key)) {
-                throw new Error(`assignFeatures: "${key}" has already been assigned for ${ctr.name || 'constructor'}`);
-            }
-            // 4. Register the injection
-            featuresRegistry.set(ctr, key, features[key]);
-            // 5. Install the lazy getter on the prototype
-            installFeatureGetter(ctr, key, featuresRegistry);
-            // 6. Install callback forwarding if configured (merge author + consumer)
-            const featureConfig = features[key];
-            const optIn = supportedFeatures[key];
-            const authorCallbacks = optIn.callbackForwarding || [];
-            const consumerCallbacks = featureConfig.callbackForwarding || [];
-            // Union of both (author defaults + consumer additions)
-            const allCallbacks = [...new Set([...authorCallbacks, ...consumerCallbacks])];
-            if (allCallbacks.length > 0) {
-                installCallbackForwarding(ctr, key, allCallbacks);
-            }
-            // 7. Call static onAssigned if the spawn class defines it (sequentially awaited)
-            const SpawnClass = resolvedSpawn || featureConfig.spawn;
-            if (SpawnClass && !isAsyncSpawn(SpawnClass) &&
-                Object.hasOwn(SpawnClass, 'onAssigned') &&
-                typeof SpawnClass.onAssigned === 'function') {
-                const result = SpawnClass.onAssigned(ctr, featureConfig, key);
-                if (result && typeof result.then === 'function') {
-                    hasAsync = true;
-                    await result;
-                }
-            }
-        }
-        // 8. Install whenFeatureReady method if featuresConfig.lifecycleKeys is configured
-        const featuresConfig = ctr.featuresConfig;
-        if (featuresConfig?.lifecycleKeys) {
-            const methodName = resolveWhenFeatureReadyName(featuresConfig.lifecycleKeys);
-            if (methodName) {
-                installWhenFeatureReadyMethod(ctr, methodName);
-            }
-        }
+    // Resolve all configured spawns before installing getters. This is the single
+    // source of truth for spawn resolution; other callers (defineWithFeatures, etc.)
+    // delegate to assignFeatures.
+    const spawnResolution = resolveAndCacheSpawns(ctr, features, supportedFeatures);
+    if (spawnResolution) {
+        return spawnResolution.then(() => installAllFeatures(ctr, features, supportedFeatures, featuresRegistry));
     }
-    // Check if any feature has an async onAssigned (pre-scan)
-    for (const key of Object.keys(features)) {
-        const featureConfig = features[key];
-        const spawns = resolvedSpawnCache.get(ctr);
-        const resolvedSpawn = spawns?.get(key);
-        const SpawnClass = resolvedSpawn || featureConfig.spawn;
-        if (SpawnClass && !isAsyncSpawn(SpawnClass) &&
-            Object.hasOwn(SpawnClass, 'onAssigned') &&
-            typeof SpawnClass.onAssigned === 'function') {
-            // We can't know if it's async without calling it, so always use the async path
-            // if any onAssigned exists
-            return processFeatures();
-        }
-    }
-    // No onAssigned hooks — run synchronously (inline the logic to avoid the async wrapper)
-    for (const key of Object.keys(features)) {
-        if (!(key in supportedFeatures)) {
-            throw new Error(`assignFeatures: "${key}" is not declared in ${ctr.name || 'constructor'}.supportedFeatures`);
-        }
-        const existingDescriptor = Object.getOwnPropertyDescriptor(ctr.prototype, key);
-        if (existingDescriptor) {
-            throw new Error(`assignFeatures: "${key}" already exists on ${ctr.name || 'constructor'}.prototype`);
-        }
-        if (featuresRegistry.hasKey(ctr, key)) {
-            throw new Error(`assignFeatures: "${key}" has already been assigned for ${ctr.name || 'constructor'}`);
-        }
-        featuresRegistry.set(ctr, key, features[key]);
-        installFeatureGetter(ctr, key, featuresRegistry);
-        const featureConfig = features[key];
-        const optIn = supportedFeatures[key];
-        const authorCallbacks = optIn.callbackForwarding || [];
-        const consumerCallbacks = featureConfig.callbackForwarding || [];
-        const allCallbacks = [...new Set([...authorCallbacks, ...consumerCallbacks])];
-        if (allCallbacks.length > 0) {
-            installCallbackForwarding(ctr, key, allCallbacks);
-        }
-    }
-    const featuresConfig = ctr.featuresConfig;
-    if (featuresConfig?.lifecycleKeys) {
-        const methodName = resolveWhenFeatureReadyName(featuresConfig.lifecycleKeys);
-        if (methodName) {
-            installWhenFeatureReadyMethod(ctr, methodName);
-        }
-    }
-    return undefined;
+    return installAllFeatures(ctr, features, supportedFeatures, featuresRegistry);
 }
 /**
  * Captures own-properties that shadow feature getters and stores them as initVals.

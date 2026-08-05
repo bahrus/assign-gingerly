@@ -120,3 +120,9 @@ This applies to:
 - Any other `*.md` files.
 
 If changes include both markdown files **and** code files (`*.ts`, `*.js`), then compilation and testing are still required.
+
+## Chat / Conversation Records
+
+The maintainer prefers to carry out multi-turn chats and design discussions through git-committable markdown files inside the repository (for example, under `Chats/` or `requirements/`). This keeps a durable record of the conversation in git, which is useful when switching between different AI providers or returning to a design decision later.
+
+When participating in these recorded chats, append new responses to the markdown file so the thread remains sequential and reviewable. Treat the file as the source of truth for the discussion.

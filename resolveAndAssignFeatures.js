@@ -1,12 +1,12 @@
 /**
- * resolveAndAssignFeatures - Resolves async fallback spawns then calls assignFeatures.
+ * resolveAndAssignFeatures - Thin wrapper around assignFeatures for backward compatibility.
  *
- * For each feature in the config that doesn't have an explicit `spawn`, resolves
- * the async `fallbackSpawn` from the class's `static supportedFeatures` and sets
- * it as the spawn. Then calls `assignFeatures` with the fully resolved config.
+ * Resolves all configured spawns (including async fallback spawns and string import paths)
+ * and installs feature getters on the class prototype, then delegates to the registry's
+ * assignFeatures implementation.
  *
- * This eliminates the boilerplate of manually resolving async spawns before
- * calling assignFeatures.
+ * This is kept as a convenience entry point for callers that already await this function.
+ * The actual resolution logic lives in assignFeatures.
  *
  * @example
  * import { resolveAndAssignFeatures } from 'assign-gingerly/resolveAndAssignFeatures.js';
@@ -22,35 +22,15 @@
  *     }
  * });
  */
-import { isAsyncSpawn } from './utils/isAsyncSpawn.js';
+import { assignFeatures } from './assignFeatures.js';
 /**
- * Resolves async fallback spawns for features that don't have an explicit spawn,
- * then calls assignFeatures on the registry.
+ * Resolves all configured spawns and calls assignFeatures on the registry.
  *
  * @param ElementClass - The custom element class (must have static supportedFeatures)
  * @param featuresConfig - Feature configurations (spawn will be resolved from fallbackSpawn if missing)
  * @param registry - Optional CustomElementRegistry (defaults to global customElements)
  */
 export async function resolveAndAssignFeatures(ElementClass, featuresConfig, registry) {
-    const supportedFeatures = ElementClass.supportedFeatures;
-    if (!supportedFeatures) {
-        throw new Error(`resolveAndAssignFeatures: ${ElementClass.name || 'constructor'} does not define static supportedFeatures`);
-    }
-    // Resolve async fallback spawns in parallel for features without explicit spawn
-    await Promise.all(Object.entries(featuresConfig).map(async ([key, featureConfig]) => {
-        // Skip if spawn is already provided
-        if (featureConfig.spawn)
-            return;
-        const optIn = supportedFeatures[key];
-        if (!optIn?.fallbackSpawn)
-            return;
-        let spawn = optIn.fallbackSpawn;
-        if (isAsyncSpawn(spawn)) {
-            spawn = await spawn();
-        }
-        featureConfig.spawn = spawn;
-    }));
-    // Call assignFeatures on the registry
     const reg = registry || customElements;
-    await reg.assignFeatures(ElementClass, featuresConfig);
+    await assignFeatures(ElementClass, featuresConfig, reg.featuresRegistry);
 }

@@ -112,20 +112,20 @@
         // ctx tests — FeatureSpawnContext is passed correctly
         // ============================================================
 
-        await test('ctx: key is passed correctly', () => {
+        await test('ctx: key is passed correctly', async () => {
             let receivedCtx = null;
             class Impl { constructor(host, ctx) { receivedCtx = ctx; } }
             class TestEl extends HTMLElement {
                 static supportedFeatures = { myFeature: { fallbackSpawn: Impl } }
             }
-            customElements.assignFeatures(TestEl, { myFeature: { spawn: Impl } });
+            await customElements.assignFeatures(TestEl, { myFeature: { spawn: Impl } });
             customElements.define('test-adv-ctx-key', TestEl);
             const el = document.createElement('test-adv-ctx-key');
             el.myFeature;
             expect(receivedCtx.key).toBe('myFeature');
         });
 
-        await test('ctx: optIn references supportedFeatures entry', () => {
+        await test('ctx: optIn references supportedFeatures entry', async () => {
             let receivedCtx = null;
             class Impl { constructor(host, ctx) { receivedCtx = ctx; } }
             class TestEl extends HTMLElement {
@@ -133,21 +133,21 @@
                     feat: { fallbackSpawn: Impl, validateShape: (i) => true }
                 }
             }
-            customElements.assignFeatures(TestEl, { feat: { spawn: Impl } });
+            await customElements.assignFeatures(TestEl, { feat: { spawn: Impl } });
             customElements.define('test-adv-ctx-optin', TestEl);
             const el = document.createElement('test-adv-ctx-optin');
             el.feat;
             expect(receivedCtx.optIn).toBe(TestEl.supportedFeatures.feat);
         });
 
-        await test('ctx: injection references the FeatureConfig', () => {
+        await test('ctx: injection references the FeatureConfig', async () => {
             let receivedCtx = null;
             class Impl { constructor(host, ctx) { receivedCtx = ctx; } }
             class TestEl extends HTMLElement {
                 static supportedFeatures = { feat: { fallbackSpawn: Impl } }
             }
             const featureConfig = { spawn: Impl, customData: { version: 2 } };
-            customElements.assignFeatures(TestEl, { feat: featureConfig });
+            await customElements.assignFeatures(TestEl, { feat: featureConfig });
             customElements.define('test-adv-ctx-injection', TestEl);
             const el = document.createElement('test-adv-ctx-injection');
             el.feat;
@@ -155,13 +155,13 @@
             expect(receivedCtx.injection.customData.version).toBe(2);
         });
 
-        await test('ctx: featuresRegistry is present', () => {
+        await test('ctx: featuresRegistry is present', async () => {
             let receivedCtx = null;
             class Impl { constructor(host, ctx) { receivedCtx = ctx; } }
             class TestEl extends HTMLElement {
                 static supportedFeatures = { feat: { fallbackSpawn: Impl } }
             }
-            customElements.assignFeatures(TestEl, { feat: { spawn: Impl } });
+            await customElements.assignFeatures(TestEl, { feat: { spawn: Impl } });
             customElements.define('test-adv-ctx-registry', TestEl);
             const el = document.createElement('test-adv-ctx-registry');
             el.feat;
@@ -173,7 +173,7 @@
         // sharedContext tests
         // ============================================================
 
-        await test('sharedContext: getSharedContext provides ctx.shared', () => {
+        await test('sharedContext: getSharedContext provides ctx.shared', async () => {
             let receivedShared = null;
             class Impl { constructor(host, ctx) { receivedShared = ctx.shared; } }
             class TestEl extends HTMLElement {
@@ -187,27 +187,27 @@
                     }
                 }
             }
-            customElements.assignFeatures(TestEl, { feat: { spawn: Impl } });
+            await customElements.assignFeatures(TestEl, { feat: { spawn: Impl } });
             customElements.define('test-adv-shared', TestEl);
             const el = document.createElement('test-adv-shared');
             el.feat;
             expect(receivedShared.secret).toBe('hidden-value');
         });
 
-        await test('sharedContext: ctx.shared is undefined when getSharedContext not defined', () => {
+        await test('sharedContext: ctx.shared is undefined when getSharedContext not defined', async () => {
             let receivedCtx = null;
             class Impl { constructor(host, ctx) { receivedCtx = ctx; } }
             class TestEl extends HTMLElement {
                 static supportedFeatures = { feat: { fallbackSpawn: Impl } }
             }
-            customElements.assignFeatures(TestEl, { feat: { spawn: Impl } });
+            await customElements.assignFeatures(TestEl, { feat: { spawn: Impl } });
             customElements.define('test-adv-no-shared', TestEl);
             const el = document.createElement('test-adv-no-shared');
             el.feat;
             expect(receivedCtx.shared).toBeUndefined();
         });
 
-        await test('sharedContext: different features get different shared contexts', () => {
+        await test('sharedContext: different features get different shared contexts', async () => {
             let sharedA = null, sharedB = null;
             class ImplA { constructor(host, ctx) { sharedA = ctx.shared; } }
             class ImplB { constructor(host, ctx) { sharedB = ctx.shared; } }
@@ -229,7 +229,7 @@
                     }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 featA: { spawn: ImplA },
                 featB: { spawn: ImplB }
             });
@@ -247,7 +247,7 @@
         // customData tests
         // ============================================================
 
-        await test('customData: accessible via ctx.injection.customData', () => {
+        await test('customData: accessible via ctx.injection.customData', async () => {
             let receivedCustomData = null;
             class Impl {
                 constructor(host, ctx) { receivedCustomData = ctx.injection.customData; }
@@ -255,7 +255,7 @@
             class TestEl extends HTMLElement {
                 static supportedFeatures = { feat: { fallbackSpawn: Impl } }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feat: { spawn: Impl, customData: { apiUrl: 'https://example.com', retries: 3 } }
             });
             customElements.define('test-adv-customdata', TestEl);
@@ -269,7 +269,7 @@
         // Async spawn tests
         // ============================================================
 
-        await test('async: placeholder object returned immediately', () => {
+        await test('async: real instance is returned after awaiting assignFeatures', async () => {
             class AsyncImpl {
                 constructor(host, ctx, initVals) {
                     if (initVals) Object.assign(this, initVals);
@@ -279,173 +279,49 @@
             class TestEl extends HTMLElement {
                 static supportedFeatures = { feat: { fallbackSpawn: AsyncImpl } }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feat: { spawn: () => new Promise(resolve => setTimeout(() => resolve(AsyncImpl), 50)) }
             });
-            customElements.define('test-adv-async-placeholder', TestEl);
-            const el = document.createElement('test-adv-async-placeholder');
-            const placeholder = el.feat;
-            // Placeholder is a plain object, not an instance of AsyncImpl
-            expect(placeholder.isReal).toBeUndefined();
-            expect(typeof placeholder).toBe('object');
-        });
-
-        await test('async: placeholder accumulates properties via assignGingerly', () => {
-            class AsyncImpl {
-                constructor(host, ctx, initVals) {
-                    if (initVals) Object.assign(this, initVals);
-                    this.isReal = true;
-                }
-            }
-            class TestEl extends HTMLElement {
-                static supportedFeatures = { feat: { fallbackSpawn: AsyncImpl } }
-            }
-            customElements.assignFeatures(TestEl, {
-                feat: { spawn: () => new Promise(resolve => setTimeout(() => resolve(AsyncImpl), 50)) }
-            });
-            customElements.define('test-adv-async-accumulate', TestEl);
-            const el = document.createElement('test-adv-async-accumulate');
-            assignGingerly(el, { feat: { someProp: 'hello' } });
-            const placeholder = el.feat;
-            expect(placeholder.someProp).toBe('hello');
-        });
-
-        await test('async: real instance replaces placeholder after resolution', async () => {
-            class AsyncImpl {
-                constructor(host, ctx, initVals) {
-                    if (initVals) Object.assign(this, initVals);
-                    this.isReal = true;
-                }
-            }
-            class TestEl extends HTMLElement {
-                static supportedFeatures = { feat: { fallbackSpawn: AsyncImpl } }
-            }
-            customElements.assignFeatures(TestEl, {
-                feat: { spawn: () => new Promise(resolve => setTimeout(() => resolve(AsyncImpl), 50)) }
-            });
-            customElements.define('test-adv-async-resolve', TestEl);
-            const el = document.createElement('test-adv-async-resolve');
-            assignGingerly(el, { feat: { someProp: 'world' } });
-
-            // Wait for async resolution
-            await new Promise(resolve => setTimeout(resolve, 100));
-
+            customElements.define('test-adv-async-real', TestEl);
+            const el = document.createElement('test-adv-async-real');
             const instance = el.feat;
             expect(instance.isReal).toBe(true);
-            expect(instance.someProp).toBe('world');
-        });
-
-        await test('async: error state throws on subsequent access', async () => {
-            class TestEl extends HTMLElement {
-                static supportedFeatures = { feat: { fallbackSpawn: class {} } }
-            }
-            customElements.assignFeatures(TestEl, {
-                feat: { spawn: () => Promise.reject(new Error('network failure')) }
-            });
-            customElements.define('test-adv-async-error', TestEl);
-            const el = document.createElement('test-adv-async-error');
-            el.feat; // triggers async, returns placeholder
-
-            // Wait for rejection to be processed
-            await new Promise(resolve => setTimeout(resolve, 50));
-
-            expect(() => el.feat).toThrow('async spawn for "feat" failed');
-        });
-
-        // ============================================================
-        // whenFeatureReady tests
-        // ============================================================
-
-        await test('whenFeatureReady: method is installed when lifecycleKeys is true', () => {
-            class Impl { constructor(host) {} }
-            class TestEl extends HTMLElement {
-                static supportedFeatures = {
-                    feat: { fallbackSpawn: Impl }
-                }
-                static featuresConfig = { lifecycleKeys: true
-                }
-            }
-            customElements.assignFeatures(TestEl, { feat: { spawn: Impl } });
-            customElements.define('test-adv-lifecycle-install', TestEl);
-            const el = document.createElement('test-adv-lifecycle-install');
-            expect(typeof el.whenFeatureReady).toBe('function');
-        });
-
-        await test('whenFeatureReady: custom method name via lifecycleKeys object', () => {
-            class Impl { constructor(host) {} }
-            class TestEl extends HTMLElement {
-                static supportedFeatures = {
-                    feat: { fallbackSpawn: Impl }
-                }
-                static featuresConfig = { lifecycleKeys: { whenFeatureReady: 'awaitFeature' } }
-            }
-            customElements.assignFeatures(TestEl, { feat: { spawn: Impl } });
-            customElements.define('test-adv-lifecycle-custom', TestEl);
-            const el = document.createElement('test-adv-lifecycle-custom');
-            expect(typeof el.awaitFeature).toBe('function');
-        });
-
-        await test('whenFeatureReady: resolves immediately for sync features', async () => {
-            class Impl {
-                constructor(host) { this.ready = true; }
-            }
-            class TestEl extends HTMLElement {
-                static supportedFeatures = {
-                    feat: { fallbackSpawn: Impl }
-                }
-                static featuresConfig = { lifecycleKeys: true
-                }
-            }
-            customElements.assignFeatures(TestEl, { feat: { spawn: Impl } });
-            customElements.define('test-adv-lifecycle-sync', TestEl);
-            const el = document.createElement('test-adv-lifecycle-sync');
-            const instance = await el.whenFeatureReady('feat');
-            expect(instance.ready).toBe(true);
-        });
-
-        await test('whenFeatureReady: resolves after async spawn completes', async () => {
-            class AsyncImpl {
-                constructor(host, ctx, initVals) {
-                    this.resolved = true;
-                    if (initVals) Object.assign(this, initVals);
-                }
-            }
-            class TestEl extends HTMLElement {
-                static supportedFeatures = {
-                    feat: { fallbackSpawn: AsyncImpl }
-                }
-                static featuresConfig = { lifecycleKeys: true }
-            }
-            customElements.assignFeatures(TestEl, {
-                feat: { spawn: () => new Promise(resolve => setTimeout(() => resolve(AsyncImpl), 50)) }
-            });
-            customElements.define('test-adv-lifecycle-async', TestEl);
-            const el = document.createElement('test-adv-lifecycle-async');
-
-            const instance = await el.whenFeatureReady('feat');
-            expect(instance.resolved).toBe(true);
             expect(instance instanceof AsyncImpl).toBe(true);
         });
 
-        await test('whenFeatureReady: rejects when async spawn fails', async () => {
-            class TestEl extends HTMLElement {
-                static supportedFeatures = {
-                    feat: { fallbackSpawn: class {} }
+        await test('async: assignGingerly merges initVals before first access', async () => {
+            class AsyncImpl {
+                constructor(host, ctx, initVals) {
+                    if (initVals) Object.assign(this, initVals);
+                    this.isReal = true;
                 }
-                static featuresConfig = { lifecycleKeys: true }
             }
-            customElements.assignFeatures(TestEl, {
-                feat: { spawn: () => Promise.reject(new Error('load failed')) }
+            class TestEl extends HTMLElement {
+                static supportedFeatures = { feat: { fallbackSpawn: AsyncImpl } }
+            }
+            await customElements.assignFeatures(TestEl, {
+                feat: { spawn: () => new Promise(resolve => setTimeout(() => resolve(AsyncImpl), 50)) }
             });
-            customElements.define('test-adv-lifecycle-reject', TestEl);
-            const el = document.createElement('test-adv-lifecycle-reject');
+            customElements.define('test-adv-async-vals', TestEl);
+            const el = document.createElement('test-adv-async-vals');
+            assignGingerly(el, { feat: { someProp: 'hello' } });
+            const instance = el.feat;
+            expect(instance.someProp).toBe('hello');
+            expect(instance.isReal).toBe(true);
+        });
 
+        await test('async: assignFeatures rejects when async spawn fails', async () => {
+            class TestEl extends HTMLElement {
+                static supportedFeatures = { feat: { fallbackSpawn: class {} } }
+            }
             let caught = false;
             try {
-                await el.whenFeatureReady('feat');
+                await customElements.assignFeatures(TestEl, {
+                    feat: { spawn: () => Promise.reject(new Error('network failure')) }
+                });
             } catch (e) {
                 caught = true;
-                expect(e.message.includes('async spawn for "feat" failed')).toBe(true);
+                expect(e.message.includes('network failure')).toBe(true);
             }
             expect(caught).toBe(true);
         });
@@ -454,7 +330,7 @@
         // withAttrs tests
         // ============================================================
 
-        await test('withAttrs: parses attributes into initVals', () => {
+        await test('withAttrs: parses attributes into initVals', async () => {
             let receivedInitVals = null;
             class Impl {
                 constructor(host, ctx, initVals) { receivedInitVals = initVals; }
@@ -462,7 +338,7 @@
             class TestEl extends HTMLElement {
                 static supportedFeatures = { feat: { fallbackSpawn: Impl } }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feat: {
                     spawn: Impl,
                     withAttrs: {
@@ -480,7 +356,7 @@
             el.remove();
         });
 
-        await test('withAttrs: programmatic initVals override attributes', () => {
+        await test('withAttrs: programmatic initVals override attributes', async () => {
             let receivedInitVals = null;
             class Impl {
                 constructor(host, ctx, initVals) {
@@ -495,7 +371,7 @@
                     captureFeatureInitVals(this);
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feat: {
                     spawn: Impl,
                     withAttrs: {
@@ -521,65 +397,6 @@
             expect(receivedInitVals.mode).toBe('portrait');
             expect(receivedInitVals.color).toBe('blue');
             el.remove();
-        });
-
-        // ============================================================
-        // withAsyncMethods tests
-        // ============================================================
-
-        await test('withAsyncMethods: awaits async method then assigns property', async () => {
-            class AsyncFeature {
-                constructor(host) { this.value = 'initial'; }
-            }
-            class TestEl extends HTMLElement {
-                static supportedFeatures = {
-                    feat: { fallbackSpawn: AsyncFeature }
-                }
-                static featuresConfig = { lifecycleKeys: true }
-                async whenFeatureReady(key) {
-                    // Simulate — just return the feature after a tick
-                    await new Promise(r => setTimeout(r, 10));
-                    return this[key];
-                }
-            }
-            customElements.assignFeatures(TestEl, { feat: { spawn: AsyncFeature } });
-            customElements.define('test-adv-asyncmethods-assign', TestEl);
-            const el = document.createElement('test-adv-asyncmethods-assign');
-
-            // Use withAsyncMethods to await whenFeatureReady then assign
-            assignGingerly(el, {
-                '?.whenFeatureReady?.feat?.value': 'updated'
-            }, { withAsyncMethods: ['whenFeatureReady'] });
-
-            // Wait for async chain to complete
-            await new Promise(r => setTimeout(r, 50));
-
-            expect(el.feat.value).toBe('updated');
-        });
-
-        await test('withAsyncMethods: works with sync methods in same path', async () => {
-            class Feature {
-                constructor(host) { this.items = { count: 0 }; }
-            }
-            class TestEl extends HTMLElement {
-                static supportedFeatures = {
-                    feat: { fallbackSpawn: Feature, lifecycleKeys: true }
-                }
-                async whenFeatureReady(key) {
-                    return this[key];
-                }
-            }
-            customElements.assignFeatures(TestEl, { feat: { spawn: Feature } });
-            customElements.define('test-adv-asyncmethods-mixed', TestEl);
-            const el = document.createElement('test-adv-asyncmethods-mixed');
-
-            assignGingerly(el, {
-                '?.whenFeatureReady?.feat?.items?.count': 42
-            }, { withAsyncMethods: ['whenFeatureReady'] });
-
-            await new Promise(r => setTimeout(r, 50));
-
-            expect(el.feat.items.count).toBe(42);
         });
 
         // ============================================================

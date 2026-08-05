@@ -5487,12 +5487,11 @@ class ClubMember extends HTMLElement {
     }
 }
 
-customElements.define('club-member', ClubMember);
-
-// No spawn provided — will use fallbackSpawn
 customElements.assignFeatures(ClubMember, {
     photoTaker: {}
 });
+
+customElements.define('club-member', ClubMember);
 
 const el = document.createElement('club-member');
 console.log(el.photoTaker.takePicture()); // works via fallbackSpawn
@@ -5541,13 +5540,13 @@ class ClubMember extends HTMLElement {
     }
 }
 
-customElements.define('club-member', ClubMember);
-
 // Can assign all at once
 customElements.assignFeatures(ClubMember, {
     photoTaker: { spawn: PhotoTakerImpl },
     badgeMaker: { spawn: BadgeMakerImpl }
 });
+
+customElements.define('club-member', ClubMember);
 
 // Or incrementally (different keys each call)
 // customElements.assignFeatures(ClubMember, { photoTaker: { spawn: PhotoTakerImpl } });
@@ -5619,14 +5618,15 @@ While designed with custom elements in mind, `assignFeatures` works with any con
 customElements.assignFeatures(
     ctr: Function,           // The class constructor
     features: FeatureConfigsMap  // Map of feature keys to FeatureConfig
-): void;
+): Promise<void> | undefined;
 
 // FeatureConfig — passed to assignFeatures for each feature key:
 interface FeatureConfig {
-    // Synchronous constructor or async function returning one
+    // Synchronous constructor, async function returning one, or import-path string
     spawn?: 
         | { new(hostElement: any, ctx: FeatureSpawnContext, initVals?: any): any }
-        | (() => Promise<{ new(hostElement: any, ctx: FeatureSpawnContext, initVals?: any): any }>);
+        | (() => Promise<{ new(hostElement: any, ctx: FeatureSpawnContext, initVals?: any): any }>)
+        | string; // import path or builtIns.* alias
     
     // Attribute patterns for parsing element attributes into initVals
     withAttrs?: AttrPatterns<any>;
@@ -5639,7 +5639,6 @@ interface FeatureConfig {
 interface SupportedFeatureConfig {
     fallbackSpawn?: /* same type as FeatureConfig.spawn */;
     validateShape?: (instance: any) => boolean;
-    lifecycleKeys?: true | { whenFeatureReady?: string };
     getSharedContext?: (instance: any) => any;
 }
 
@@ -5739,7 +5738,7 @@ console.log(el.photoTaker.count);    // 42
 
 ### Async spawn (lazy-loading features)
 
-Feature implementations can be loaded asynchronously. Instead of providing a constructor directly, provide a function that returns a Promise resolving to a constructor:
+Feature implementations can be loaded asynchronously by providing an async function or an import-path string as `spawn`. The spawn is resolved before the feature getter is installed, so `assignFeatures` returns a Promise when any configured spawn is async:
 
 ```JavaScript
 customElements.assignFeatures(ClubMember, {
@@ -5747,85 +5746,16 @@ customElements.assignFeatures(ClubMember, {
         spawn: () => import('./photo-taker.js').then(m => m.PhotoTakerImpl)
     }
 });
-```
 
-**How it works:**
-
-1. On first access, the getter detects that `spawn` is an async function (arrow function or `async function`).
-2. It creates a `{}` placeholder object, stores it, and returns it immediately.
-3. In the background, the async function is called and awaited.
-4. When the Promise resolves, the real class is instantiated with the placeholder as `initVals` (so any properties merged into the placeholder are passed to the constructor).
-5. The placeholder is replaced in storage with the real instance.
-6. Subsequent getter accesses return the real instance.
-
-**During the loading window:**
-
-```JavaScript
-const el = document.createElement('club-member');
-
-// First access — returns placeholder {}
-assignGingerly(el, { photoTaker: { someProp: 'hello' } });
-// Merges into the placeholder: { someProp: 'hello' }
-
-// Later, after async resolution:
-console.log(el.photoTaker.someProp); // 'hello' — now on the real instance
-console.log(el.photoTaker instanceof PhotoTakerImpl); // true
-```
-
-**Error handling:**
-
-If the async import fails, the error is stored. The next getter access throws with the original error attached:
-
-```JavaScript
-try {
-    el.photoTaker;
-} catch (e) {
-    console.log(e.message);     // 'assignFeatures: async spawn for "photoTaker" failed: ...'
-    console.log(e.placeholder); // the accumulated placeholder object
-    console.log(e.cause);       // the original import/network error
-}
-```
-
-**Detection heuristic:** A function is treated as an async spawner if it's an `AsyncFunction` or has no `.prototype` (arrow functions). Classes and `function` declarations (which have `.prototype`) are treated as synchronous constructors.
-
-### `whenFeatureReady` lifecycle method
-
-For code that needs to wait for an async feature to be fully instantiated, configure `lifecycleKeys` on the supported feature:
-
-```JavaScript
-class ClubMember extends HTMLElement {
-    static supportedFeatures = {
-        photoTaker: {
-            fallbackSpawn: PhotoTakerImpl,
-            lifecycleKeys: true  // installs 'whenFeatureReady' method
-        }
-    };
-    static featuresConfig = {
-        lifecycleKeys: true
-    }
-}
-
+// Or use an import path string:
 customElements.assignFeatures(ClubMember, {
-    photoTaker: { spawn: () => import('./photo-taker.js').then(m => m.PhotoTakerImpl) }
+    photoTaker: {
+        spawn: './photo-taker.js'
+    }
 });
-
-const el = document.createElement('club-member');
-
-// Wait for the async feature to be ready
-const photoTaker = await el.whenFeatureReady('photoTaker');
-console.log(photoTaker instanceof PhotoTakerImpl); // true
 ```
 
-**Configuration:**
-
-- `lifecycleKeys: true` — installs a method named `'whenFeatureReady'` on the prototype.
-- `lifecycleKeys: { whenFeatureReady: 'awaitFeature' }` — custom method name (in case `whenFeatureReady` conflicts with an existing method).
-
-**Behavior:**
-
-- For **synchronous** features: returns `Promise.resolve(instance)` immediately.
-- For **async** features: returns a Promise that resolves when the async spawn completes and the real instance is stored.
-- The method triggers the getter (starting async resolution if it hasn't started yet).
+Because the real class is resolved before the getter is installed, the first access returns the actual instance rather than a placeholder. If an async spawn fails, the `assignFeatures` Promise rejects with the original error.
 
 ### Attribute parsing with `withAttrs`
 
@@ -5863,7 +5793,7 @@ withAttrs: {
 
 **Merge priority (lowest to highest):**
 1. Attribute-parsed values (`withAttrs`)
-2. Programmatic `initVals` (from `captureFeatureInitVals` or placeholder accumulation)
+2. Programmatic `initVals` (from `captureFeatureInitVals`)
 
 Attributes are always unprefixed for features (no `enh-` prefix). The same `parseWithAttrs` function used by enhancements is reused here.
 
@@ -5935,15 +5865,22 @@ class PhotoTakerImpl {
 
 ### `withAsyncMethods` in assignGingerly
 
-assignGingerly supports async method calls in path expressions via the `withAsyncMethods` option. This is particularly useful with `whenFeatureReady`:
+assignGingerly supports async method calls in path expressions via the `withAsyncMethods` option. When a path segment matches a name in `withAsyncMethods`, the method is called and its return value is awaited before continuing the chain.
 
 ```JavaScript
 import assignGingerly from 'assign-gingerly/assignGingerly.js';
 
+class ViewModel {
+    async fetchValue() {
+        await someAsyncWork();
+        return this;
+    }
+}
+
 assignGingerly(el, {
-    '?.whenFeatureReady?.photoTaker?.someProp': 'hello'
-}, { withAsyncMethods: ['whenFeatureReady'] });
-// Equivalent to: (await el.whenFeatureReady('photoTaker')).someProp = 'hello'
+    '?.fetchValue?.someProp': 'hello'
+}, { withAsyncMethods: ['fetchValue'] });
+// Equivalent to: (await el.fetchValue()).someProp = 'hello'
 ```
 
 **How it works:**
@@ -5955,12 +5892,12 @@ assignGingerly(el, {
 
 ```JavaScript
 assignGingerly(el, {
-    '?.whenFeatureReady?.photoTaker?.classList?.add': 'active'
+    '?.fetchValue?.classList?.add': 'active'
 }, { 
-    withAsyncMethods: ['whenFeatureReady'],
+    withAsyncMethods: ['fetchValue'],
     withMethods: ['add']
 });
-// (await el.whenFeatureReady('photoTaker')).classList.add('active')
+// (await el.fetchValue()).classList.add('active')
 ```
 
 **Note:** Interaction with `@each` and `@eachTime` is not yet supported for async methods.
