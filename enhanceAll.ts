@@ -17,6 +17,7 @@
  */
 
 import { isAllowedImportPath } from './assignPermissions/isAllowedImportPath.js';
+import { findClassPrototypeInPath } from './utils/findClassPrototypeInPath.js';
 import type { AssignPermissions } from './types/assign-gingerly/types.js';
 
 /**
@@ -112,15 +113,15 @@ async function resolveAndRegister(enhConfig: any, target: Element): Promise<any>
         if (existing) return existing;
     }
 
-    // Not registered — dynamically import the spawn module
+    // Not registered — dynamically import the spawn module and extract the spawn class
     if (!spawnPath) return null;
 
-    const spawnModule = await import(spawnPath);
-    const SpawnClass = spawnModule.default ?? Object.values(spawnModule).find(
-        (v: any) => typeof v === 'function' && v.prototype
-    );
-
-    if (!SpawnClass) return null;
+    let SpawnClass;
+    try {
+        SpawnClass = await findClassPrototypeInPath(spawnPath);
+    } catch {
+        return null;
+    }
 
     // Build and register the registry item
     const registryItem: any = {

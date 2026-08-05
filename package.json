@@ -148,6 +148,10 @@
       "default": "./assignPermissions/isAllowedImportPath.js",
       "types": "./assignPermissions/isAllowedImportPath.ts"
     },
+    "./utils/findClassPrototypeInPath.js": {
+      "default": "./utils/findClassPrototypeInPath.js",
+      "types": "./utils/findClassPrototypeInPath.ts"
+    },
     "./markerUtils.js": {
       "default": "./markerUtils.js",
       "types": "./markerUtils.ts"

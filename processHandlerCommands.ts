@@ -7,7 +7,7 @@
 import { resolveValues } from './resolveValues.js';
 import { getValues } from './getValues.js';
 import { evaluatePathWithMethods } from './assignGingerly.js';
-import { isAllowedImportPath } from './assignPermissions/isAllowedImportPath.js';
+import { findClassPrototypeInPath } from './utils/findClassPrototypeInPath.js';
 import { buildRestrictedPropSet, redirectRestrictedProp } from './assignPermissions/restrictedProps.js';
 import type { AssignPermissions } from './types/assign-gingerly/types.js';
 import type { AssignFromOptions, AssignFromHandlerConstructor } from './assignFromAsync.js';
@@ -26,23 +26,11 @@ const BUILT_IN_MAP: Record<string, string> = {
 };
 
 /**
- * Find a handler class in a dynamically imported module.
- * Checks default export first, then searches for the first class with `assign` on prototype.
+ * Criteria for locating an assignFrom handler class: must expose an `assign` method
+ * on its prototype.
  */
-function findHandlerInModule(module: any): AssignFromHandlerConstructor | undefined {
-    // Check default export first
-    if (module.default && typeof module.default === 'function'
-        && module.default.prototype && 'assign' in module.default.prototype) {
-        return module.default;
-    }
-    // Search other exports
-    for (const key of Object.keys(module)) {
-        const exported = module[key];
-        if (typeof exported === 'function' && exported.prototype && 'assign' in exported.prototype) {
-            return exported as AssignFromHandlerConstructor;
-        }
-    }
-    return undefined;
+function handlerCriteria(proto: any): boolean {
+    return 'assign' in proto.prototype;
 }
 
 /**
@@ -60,10 +48,9 @@ async function loadBuiltIn(name: string): Promise<AssignFromHandlerConstructor |
     if (cached) return cached;
     const path = BUILT_IN_MAP[name];
     if (!path) return undefined;
-    const module = await import(path);
-    const cls = findHandlerInModule(module);
-    if (cls) handlerCache.set(name, cls);
-    return cls;
+    const cls = await findClassPrototypeInPath(path, handlerCriteria);
+    handlerCache.set(name, cls);
+    return cls as AssignFromHandlerConstructor;
 }
 
 /**
@@ -71,8 +58,7 @@ async function loadBuiltIn(name: string): Promise<AssignFromHandlerConstructor |
  */
 async function resolveFromHandlers(
     name: string,
-    handlers: Record<string, AssignFromHandlerConstructor | string> | undefined,
-    permissions?: AssignPermissions
+    handlers: Record<string, AssignFromHandlerConstructor | string> | undefined
 ): Promise<AssignFromHandlerConstructor | undefined> {
     if (!handlers || !(name in handlers)) return undefined;
 
@@ -90,22 +76,9 @@ async function resolveFromHandlers(
             return loadBuiltIn(entry);
         }
 
-        // Import path string — validate and dynamically import
-        if (!permissions?.crossDomainImports && !isAllowedImportPath(entry)) {
-            throw new Error(
-                `assignFrom: handler "${name}" has an invalid import path "${entry}". ` +
-                `Only same-origin paths or import-map-covered specifiers are allowed. ` +
-                `Pass { crossDomainImports: true } in permissions to override.`
-            );
-        }
-        const module = await import(entry);
-        const HandlerClass = findHandlerInModule(module);
-        if (!HandlerClass) {
-            throw new Error(
-                `assignFrom: handler "${name}" — module "${entry}" does not export a valid handler class.`
-            );
-        }
-        return HandlerClass;
+        // Import path string — validate and extract handler class via shared utility
+        const HandlerClass = await findClassPrototypeInPath(entry, handlerCriteria);
+        return HandlerClass as AssignFromHandlerConstructor;
     }
 
     return undefined;
@@ -204,7 +177,7 @@ export async function processHandlerCommands(
         for (const config of configs) {
             //return; //1.3ms
             // 1. Check options.handlers (local, per-call)
-            let HandlerClass = await resolveFromHandlers(config.do, options.handlers, permissions);
+            let HandlerClass = await resolveFromHandlers(config.do, options.handlers);
             //return; // 1.4
             // 2. Fallback to built-in auto-load
             if (!HandlerClass && config.do.startsWith('builtIns.')) {

@@ -80,6 +80,27 @@ switch (localName) {
 }
 ```
 
+## Dynamic Module Imports
+
+When dynamically importing a module to obtain a class constructor, always use `utils/findClassPrototypeInPath.js` instead of hand-rolling the import-and-search logic.
+
+- `findClassPrototypeInPath(path, criteria?)` validates the path via `isAllowedImportPath`, performs the dynamic import, prefers the default export, falls back to named exports, and returns the first matching class.
+- The base check requires the export to be a function with a prototype. The optional `criteria` callback is applied only after the base check passes.
+- If the path is not allowed, it throws `ImportNotAllowedError`. If no matching class is found, it throws `NoMatchingExportError`.
+
+```typescript
+// Good — delegated to shared utility
+import { findClassPrototypeInPath } from './utils/findClassPrototypeInPath.js';
+
+const HandlerClass = await findClassPrototypeInPath('./handlers/myHandler.js', proto => 'assign' in proto.prototype);
+```
+
+```typescript
+// Avoid — ad-hoc import + manual scanning
+const mod = await import('./handlers/myHandler.js');
+const cls = mod.default ?? Object.values(mod).find(v => typeof v === 'function' && v.prototype);
+```
+
 ## Markdown-Only Changes
 
 When changes are made exclusively to markdown files (`*.md`), there is no need to:

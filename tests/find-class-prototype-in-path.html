@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>findClassPrototypeInPath Tests</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>findClassPrototypeInPath Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0" style="display:none;"></div>
+
+    <script type="module">
+        import {
+            findClassPrototypeInPath,
+            ImportNotAllowedError,
+            NoMatchingExportError
+        } from '../utils/findClassPrototypeInPath.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function test(name, fn) {
+            Promise.resolve()
+                .then(fn)
+                .then(() => {
+                    passed++;
+                    results.push({ name, status: 'pass' });
+                })
+                .catch(error => {
+                    failed++;
+                    results.push({ name, status: 'fail', error: error.message || String(error) });
+                })
+                .finally(renderResults);
+        }
+
+        function expect(actual) {
+            return {
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${expected} but got ${actual}`);
+                    }
+                },
+                toBeInstanceOf(expected) {
+                    if (!(actual instanceof expected)) {
+                        throw new Error(`Expected instance of ${expected.name} but got ${actual}`);
+                    }
+                },
+                async toReject(expectedType) {
+                    let caught;
+                    try {
+                        await actual;
+                    } catch (error) {
+                        caught = error;
+                    }
+                    if (!caught) {
+                        throw new Error('Expected promise to reject but it resolved');
+                    }
+                    if (!(caught instanceof expectedType)) {
+                        throw new Error(`Expected rejection of ${expectedType.name} but got ${caught}`);
+                    }
+                    return caught;
+                }
+            };
+        }
+
+        test('returns default export when it is a class with a prototype', async () => {
+            const cls = await findClassPrototypeInPath('/tests/class-prototype-fixtures/defaultExport.js');
+            expect(cls.name).toBe('DefaultExportClass');
+        });
+
+        test('falls back to named export when default is absent', async () => {
+            const cls = await findClassPrototypeInPath('/tests/class-prototype-fixtures/namedExport.js');
+            expect(cls.name).toBe('NamedExportClass');
+        });
+
+        test('throws NoMatchingExportError when module has no exports', async () => {
+            const error = await expect(
+                findClassPrototypeInPath('/tests/class-prototype-fixtures/noExports.js')
+            ).toReject(NoMatchingExportError);
+            expect(error.path).toBe('/tests/class-prototype-fixtures/noExports.js');
+        });
+
+        test('throws NoMatchingExportError when no class matches', async () => {
+            await expect(
+                findClassPrototypeInPath('/tests/class-prototype-fixtures/noMatch.js')
+            ).toReject(NoMatchingExportError);
+        });
+
+        test('applies criteria after base class check', async () => {
+            const cls = await findClassPrototypeInPath(
+                '/tests/class-prototype-fixtures/criteriaExport.js',
+                proto => 'assign' in proto.prototype
+            );
+            expect(cls.name).toBe('NamedWithAssign');
+        });
+
+        test('throws ImportNotAllowedError for cross-origin paths', async () => {
+            await expect(
+                findClassPrototypeInPath('https://example.invalid/module.js')
+            ).toReject(ImportNotAllowedError);
+        });
+
+        function renderResults() {
+            // Wait until all async tests have reported
+            if (results.length < 6) return;
+
+            const total = passed + failed;
+            const statusEl = document.getElementById('status');
+            const resultsEl = document.getElementById('results');
+            const completeEl = document.getElementById('test-complete');
+
+            statusEl.innerHTML = `
+                <span class="${failed === 0 ? 'pass' : 'fail'}">
+                    ${passed}/${total} tests passed
+                </span>
+            `;
+
+            results.forEach(result => {
+                const div = document.createElement('div');
+                div.className = `test-item ${result.status}`;
+                div.innerHTML = `
+                    <strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}
+                    ${result.error ? `<div class="error">${result.error}</div>` : ''}
+                `;
+                resultsEl.appendChild(div);
+            });
+
+            completeEl.setAttribute('data-passed', passed.toString());
+            completeEl.setAttribute('data-failed', failed.toString());
+            completeEl.setAttribute('data-total', total.toString());
+            completeEl.style.display = 'block';
+
+            console.log(`Tests complete: ${passed}/${total} passed`);
+        }
+    </script>
+</body>
+</html>
