@@ -20,7 +20,7 @@
  * });
  */
 
-import { assignFeatures, FeatureConfigsMap, SupportedFeaturesMap } from './assignFeatures.js';
+import { assignFeatures, FeatureConfig, FeatureConfigsMap, SupportedFeaturesMap } from './assignFeatures.js';
 
 /**
  * Configuration passed to defineWithFeatures (JSON-serializable).
@@ -118,12 +118,37 @@ export async function defineWithFeatures(
                     `defineWithFeatures: feature "${key}" not found in ${baseTagName}.supportedFeatures`
                 );
             }
-            const featureConfig = af[key];
             // Check cache first
             if (classCache!.has(key)) {
                 resolvedSpawns!.set(key, classCache!.get(key));
                 return;
             }
+            const featureConfig = af[key] as FeatureConfig;
+            const { spawn } = featureConfig;
+            if(spawn){
+                if(isAsyncSpawn(spawn)){
+                    // Resolve the async spawner
+                    const resolvedSpawn = await (spawn as () => Promise<any>)(); 
+                    classCache!.set(key, resolvedSpawn);
+                    resolvedSpawns!.set(key, resolvedSpawn);
+                    return;
+                }
+                if(typeof spawn === 'string'){
+                    // Resolve the string spawn (import path or builtIns.* alias)
+                    const {findClassPrototypeInPath} = await import('./utils/findClassPrototypeInPath.js');
+                    const resolvedSpawn = await findClassPrototypeInPath(spawn);
+                    classCache!.set(key, resolvedSpawn);
+                    resolvedSpawns!.set(key, resolvedSpawn);
+                    return;
+                }
+                // if spawn is a constructor, just use it
+                classCache!.set(key, spawn);
+                resolvedSpawns!.set(key, spawn);
+                return;
+            }
+            
+
+
             let spawnClass = undefined;
             let { fallbackSpawn } = optIn;
             //let spawn = optIn.fallbackSpawn;
