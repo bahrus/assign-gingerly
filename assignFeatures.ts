@@ -183,14 +183,6 @@ function installFeatureGetter(
                 throw new Error(`assignFeatures: "${key}" not in static supportedFeatures`);
             }
 
-            // const SpawnClass = injection.spawn || optIn.fallbackSpawn;
-
-            // if (!SpawnClass) {
-            //     throw new Error(
-            //         `assignFeatures: no spawn implementation found for feature "${key}". ` +
-            //         `Provide spawn in assignFeatures() or fallbackSpawn in supportedFeatures.`
-            //     );
-            // }
 
             // Build the spawn context
             const shared = optIn.getSharedContext?.(this);
@@ -224,125 +216,7 @@ function installFeatureGetter(
                     : attrInitVals;
             }
 
-            // if (isAsyncSpawn(SpawnClass)) {
-            //     // Async path: SpawnClass is a function that returns Promise<Constructor>
-            //     const placeholder = initVals && typeof initVals === 'object' ? initVals : {};
-            //     storage.set(key, placeholder);
 
-            //     // Capture host element reference for the async callback
-            //     const hostElement = this;
-
-            //     // Create a pending Promise for whenFeatureReady consumers
-            //     let pendingMap = pendingFeatures.get(hostElement);
-            //     if (!pendingMap) {
-            //         pendingMap = new Map();
-            //         pendingFeatures.set(hostElement, pendingMap);
-            //     }
-            //     let resolvePending: Function;
-            //     let rejectPending: Function;
-            //     const promise = new Promise<any>((resolve, reject) => {
-            //         resolvePending = resolve;
-            //         rejectPending = reject;
-            //     });
-            //     pendingMap.set(key, { promise, resolve: resolvePending!, reject: rejectPending! });
-
-            //     // Kick off async resolution
-            //     (SpawnClass as () => Promise<any>)().then((ResolvedClass: any) => {
-            //         // Mutate injection so future getter calls see the resolved constructor
-            //         (injection as any).spawn = ResolvedClass;
-
-            //         // Get the current placeholder (may have accumulated properties via assignGingerly)
-            //         const currentStorage = featureStorage.get(hostElement);
-            //         const currentPlaceholder = currentStorage?.get(key);
-
-            //         // Don't upgrade if an error was stored or if already upgraded
-            //         if (!currentPlaceholder || (typeof currentPlaceholder === 'object' && FEATURE_ERROR in currentPlaceholder)) {
-            //             return;
-            //         }
-
-            //         // Parse attributes at resolution time (element should be in DOM by now)
-            //         let asyncAttrInitVals: any = undefined;
-            //         if (injection.withAttrs && hostElement instanceof Element) {
-            //             try {
-            //                 asyncAttrInitVals = parseWithAttrs(
-            //                     hostElement as Element,
-            //                     injection.withAttrs,
-            //                     true // always unprefixed for features
-            //                 );
-            //             } catch (e) {
-            //                 // Non-fatal: log and continue with placeholder as initVals
-            //                 console.error('Error parsing feature attributes during async resolution:', e);
-            //             }
-            //         }
-
-            //         // Merge: attributes are base, placeholder (programmatic) overrides
-            //         const asyncInitVals = asyncAttrInitVals
-            //             ? { ...asyncAttrInitVals, ...currentPlaceholder }
-            //             : currentPlaceholder;
-
-            //         // Instantiate the real class with merged initVals
-            //         const realCtx: FeatureSpawnContext = {
-            //             key,
-            //             optIn,
-            //             injection,
-            //             featuresRegistry: fr,
-            //             shared: optIn.getSharedContext?.(hostElement)
-            //         };
-            //         const instance = new ResolvedClass(hostElement, realCtx, asyncInitVals);
-
-            //         // Validate shape if configured
-            //         if (optIn.validateShape) {
-            //             if (!optIn.validateShape(instance)) {
-            //                 const error: any = new Error(
-            //                     `assignFeatures: spawned instance for "${key}" failed shape validation`
-            //                 );
-            //                 error.placeholder = currentPlaceholder;
-            //                 currentStorage!.set(key, { [FEATURE_ERROR]: error });
-            //                 rejectPending!(error);
-            //                 pendingMap!.delete(key);
-            //                 return;
-            //             }
-            //         }
-
-            //         // Replace placeholder with real instance
-            //         currentStorage!.set(key, instance);
-
-            //         // Resolve the pending Promise and clean up
-            //         resolvePending!(instance);
-            //         pendingMap!.delete(key);
-            //     }).catch((err: any) => {
-            //         // Store error state — getter will throw on next access
-            //         const currentStorage = featureStorage.get(hostElement);
-            //         const currentPlaceholder = currentStorage?.get(key);
-            //         const error: any = new Error(
-            //             `assignFeatures: async spawn for "${key}" failed: ${err.message}`
-            //         );
-            //         error.placeholder = currentPlaceholder;
-            //         error.cause = err;
-            //         currentStorage?.set(key, { [FEATURE_ERROR]: error });
-
-            //         // Reject the pending Promise and clean up
-            //         rejectPending!(error);
-            //         pendingMap!.delete(key);
-            //     });
-
-            //     return placeholder;
-            // } else {
-            //     // Synchronous path: SpawnClass is a constructor
-            //     const instance = new (SpawnClass as any)(this, ctx, initVals);
-
-            //     // Validate shape if configured
-            //     if (optIn.validateShape) {
-            //         if (!optIn.validateShape(instance)) {
-            //             throw new Error(
-            //                 `assignFeatures: spawned instance for "${key}" failed shape validation`
-            //             );
-            //         }
-            //     }
-
-            //     storage.set(key, instance);
-            //     return instance;
-            // }
 
             // Synchronous path: SpawnClass is a constructor
             const instance = new (resolvedSpawn as any)(this, ctx, initVals);
