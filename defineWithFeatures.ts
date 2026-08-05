@@ -105,6 +105,7 @@ export async function defineWithFeatures(
         resolvedSpawnCache.set(BaseClass, classCache);
     }
     const {assignFeatures: af} = config;
+    console.log({af});
     let resolvedSpawns: Map<string, any> | undefined;
     if (af) {
         const featureKeys = Object.keys(af);
@@ -117,24 +118,25 @@ export async function defineWithFeatures(
                     `defineWithFeatures: feature "${key}" not found in ${baseTagName}.supportedFeatures`
                 );
             }
-
+            const featureConfig = af[key];
             // Check cache first
             if (classCache!.has(key)) {
                 resolvedSpawns!.set(key, classCache!.get(key));
                 return;
             }
-
-            let spawn = optIn.fallbackSpawn;
-            if (spawn && isAsyncSpawn(spawn)) {
+            let spawnClass = undefined;
+            let { fallbackSpawn } = optIn;
+            //let spawn = optIn.fallbackSpawn;
+            if (fallbackSpawn && isAsyncSpawn(fallbackSpawn)) {
                 // Resolve the async spawner
-                spawn = await (spawn as () => Promise<any>)();
+                fallbackSpawn = await (fallbackSpawn as () => Promise<any>)();
             }
 
             // Cache the resolved spawn
-            if (spawn) {
-                classCache!.set(key, spawn);
+            if (fallbackSpawn) {
+                classCache!.set(key, fallbackSpawn);
             }
-            resolvedSpawns!.set(key, spawn);
+            resolvedSpawns!.set(key, fallbackSpawn);
         }));
     }
 

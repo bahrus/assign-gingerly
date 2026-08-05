@@ -74,6 +74,7 @@ export async function defineWithFeatures(tagName, baseTagName, config, registry,
         resolvedSpawnCache.set(BaseClass, classCache);
     }
     const { assignFeatures: af } = config;
+    console.log({ af });
     let resolvedSpawns;
     if (af) {
         const featureKeys = Object.keys(af);
@@ -83,21 +84,24 @@ export async function defineWithFeatures(tagName, baseTagName, config, registry,
             if (!optIn) {
                 throw new Error(`defineWithFeatures: feature "${key}" not found in ${baseTagName}.supportedFeatures`);
             }
+            const featureConfig = af[key];
             // Check cache first
             if (classCache.has(key)) {
                 resolvedSpawns.set(key, classCache.get(key));
                 return;
             }
-            let spawn = optIn.fallbackSpawn;
-            if (spawn && isAsyncSpawn(spawn)) {
+            let spawnClass = undefined;
+            let { fallbackSpawn } = optIn;
+            //let spawn = optIn.fallbackSpawn;
+            if (fallbackSpawn && isAsyncSpawn(fallbackSpawn)) {
                 // Resolve the async spawner
-                spawn = await spawn();
+                fallbackSpawn = await fallbackSpawn();
             }
             // Cache the resolved spawn
-            if (spawn) {
-                classCache.set(key, spawn);
+            if (fallbackSpawn) {
+                classCache.set(key, fallbackSpawn);
             }
-            resolvedSpawns.set(key, spawn);
+            resolvedSpawns.set(key, fallbackSpawn);
         }));
     }
     // 3. Create subclass
