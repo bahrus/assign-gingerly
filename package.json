@@ -40,8 +40,13 @@
       "default": "./assignTentatively.js",
       "types": "./assignTentatively.ts"
     },
-    "./waitForEvent.js": {
-      "default": "./waitForEvent.js"
+    "./buildCSSQuery.js": {
+      "default": "./buildCSSQuery.js",
+      "types": "./buildCSSQuery.ts"
+    },
+    "./object-extension.js": {
+      "default": "./object-extension.js",
+      "types": "./object-extension.ts"
     },
     "./parserRegistry.js": {
       "default": "./parserRegistry.js"
@@ -50,10 +55,7 @@
       "default": "./parseWithAttrs.js",
       "types": "./parseWithAttrs.ts"
     },
-    "./buildCSSQuery.js": {
-      "default": "./buildCSSQuery.js",
-      "types": "./buildCSSQuery.ts"
-    },
+
     "./resolve/resolveTemplate.js": {
       "default": "./resolve/resolveTemplate.js",
       "types": "./resolve/resolveTemplate.ts"
@@ -197,6 +199,9 @@
     "./evaluatePathWithAsyncMethods.js": {
       "default": "./evaluatePathWithAsyncMethods.js",
       "types": "./evaluatePathWithAsyncMethods.ts"
+    },
+    "./waitForEvent.js": {
+      "default": "./waitForEvent.js"
     }
   },
   "main": "index.js",
