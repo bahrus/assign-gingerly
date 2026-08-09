@@ -54,6 +54,8 @@ So in our view this package helps fill the void left by not supporting the "is" 
 
 Anyway, let's start out detailing the more innocent features of this package / polyfill.
 
+Because the same declarative input can come from sources that aren't fully trusted — HTML attributes, user JSON, remote config — the package also provides an **opt-in permission layer** to block or redirect dangerous property assignments.  See [docs/assign-permissions.md](docs/assign-permissions.md) for how to construct and pass a `PermissionProcessor`.
+
 The three utility functions are:
 
 ## assignGingerly

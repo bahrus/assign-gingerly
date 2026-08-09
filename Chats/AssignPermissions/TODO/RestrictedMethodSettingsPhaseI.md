@@ -13,3 +13,9 @@
     ]
 }
 ```
+
+This overrides 
+
+withMethods: ['setHTMLUnsafe']
+
+The withMethods might be configurable in an HTML attribute, whereas restrictedMethodSettings only gets set from  
