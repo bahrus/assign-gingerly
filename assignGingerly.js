@@ -1,4 +1,4 @@
-import { normalizeAliasOptions } from './getValues.js';
+import { normalizeAliasOptions } from './resolve/getValues.js';
 /**
  * GUID for global instance map storage to ensure uniqueness across package versions
  */

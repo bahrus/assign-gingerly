@@ -7,7 +7,7 @@
  * Re-exports ResolveValuesOptions for backward compatibility.
  */
 
-import { getValue, getValues } from '../getValues.js';
+import { getValue, getValues } from './getValues.js';
 import type { ResolveValuesOptions } from '../types/assign-gingerly/types.js';
 
 export type { ResolveValuesOptions };

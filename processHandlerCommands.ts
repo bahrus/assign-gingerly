@@ -5,7 +5,7 @@
  */
 
 import { resolveValues } from './resolve/resolveValues.js';
-import { getValues } from './getValues.js';
+import { getValues } from './resolve/getValues.js';
 import { evaluatePathWithMethods } from './assignGingerly.js';
 import { findClassPrototypeInPath } from './utils/findClassPrototypeInPath.js';
 import type { PermissionProcessor } from './types/assign-gingerly/types.js';

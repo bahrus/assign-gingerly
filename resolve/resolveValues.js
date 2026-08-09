@@ -6,7 +6,7 @@
  *
  * Re-exports ResolveValuesOptions for backward compatibility.
  */
-import { getValue, getValues } from '../getValues.js';
+import { getValue, getValues } from './getValues.js';
 // Re-export getValue as resolveValue for backward compatibility
 export { getValue as resolveValue };
 /**

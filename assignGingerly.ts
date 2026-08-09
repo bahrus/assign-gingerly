@@ -3,7 +3,7 @@
 import { EnhancementConfig } from "./types/assign-gingerly/types";
 import type { AssignFromOptions, FeatureConfigsMap, IAssignGingerlyOptions } from "./types/assign-gingerly/types";
 import type { PermissionProcessor } from './types/assign-gingerly/types.js';
-import { normalizeAliasOptions } from './getValues.js';
+import { normalizeAliasOptions } from './resolve/getValues.js';
 
 /**
  * Constructor signature for ItemScope Manager classes

@@ -9,7 +9,7 @@
  * Handler commands (` =>`) are fire-and-forget (kicked off asynchronously, not awaited).
  */
 
-import { getValues, getValue } from './getValues.js';
+import { getValues, getValue } from './resolve/getValues.js';
 import assignGingerly from './assignGingerly.js';
 import { resolveIdVariable, parseIdRef } from './resolve/resolveIdRef.js';
 import { processInferredAssignments } from './inferredAssignments.js';

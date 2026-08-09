@@ -17,7 +17,7 @@
  * }, source, { withMethods: ['querySelector'], aka: { q: 'querySelector' } });
  */
 
-import type { GetValuesOptions } from './types/assign-gingerly/types.js';
+import type { GetValuesOptions } from '../types/assign-gingerly/types.js';
 
 export function normalizeAliasOptions(options?: {
     aka?: Record<string, string>;
