@@ -22,7 +22,10 @@
  *     }
  * });
  */
-import { assignFeatures } from './assignFeatures.js';
+
+import { FeatureConfigsMap } from '../types/assign-gingerly/types.js';
+import { assignFeatures } from '../assignFeatures.js';
+
 /**
  * Resolves all configured spawns and calls assignFeatures on the registry.
  *
@@ -30,7 +33,11 @@ import { assignFeatures } from './assignFeatures.js';
  * @param featuresConfig - Feature configurations (spawn will be resolved from fallbackSpawn if missing)
  * @param registry - Optional CustomElementRegistry (defaults to global customElements)
  */
-export async function resolveAndAssignFeatures(ElementClass, featuresConfig, registry) {
+export async function resolveAndAssignFeatures(
+    ElementClass: Function,
+    featuresConfig: FeatureConfigsMap,
+    registry?: any
+): Promise<void> {
     const reg = registry || customElements;
     await assignFeatures(ElementClass, featuresConfig, reg.featuresRegistry);
 }

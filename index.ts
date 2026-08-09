@@ -13,7 +13,7 @@ export {assignFrom} from './assignFrom.js';
 export {assignFeatures, FeaturesRegistry, captureFeatureInitVals, PropertyBag, suggestFeatureInfo, getFeatureInfoSuggestions} from './assignFeatures.js';
 export {installForwarding} from './DX/installForwarding.js';
 export {defineWithFeatures} from './defineWithFeatures.js';
-export {resolveAndAssignFeatures} from './resolveAndAssignFeatures.js';
+export {resolveAndAssignFeatures} from './resolve/resolveAndAssignFeatures.js';
 export {nudge} from './handlers/nudge.js';
 export {arr} from './handlers/arr.js';
 export {} from './handlers/manageTemplateList.js';

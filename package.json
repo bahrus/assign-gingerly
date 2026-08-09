@@ -86,8 +86,8 @@
       "types": "./defineWithFeatures.ts"
     },
     "./resolveAndAssignFeatures.js": {
-      "default": "./resolveAndAssignFeatures.js",
-      "types": "./resolveAndAssignFeatures.ts"
+      "default": "./resolve/resolveAndAssignFeatures.js",
+      "types": "./resolve/resolveAndAssignFeatures.ts"
     },
     "./handlers/addEventListener.js": {
       "default": "./handlers/addEventListener.js",
