@@ -116,7 +116,7 @@
                 }
             };
             const redirectPermissions = {
-                restrictedPropSettings: [{ prop: 'outerHTML', useMethod: 'replaceWithHTML' }]
+                restrictedPropSettings: [{ props: 'outerHTML', useMethod: 'replaceWithHTML' }]
             };
             assignGingerly(target, {
                 outerHTML: '<p>root</p>',
@@ -128,7 +128,7 @@
         await test('fails closed when a configured redirect method is unavailable', () => {
             const target = { outerHTML: 'safe' };
             const redirectPermissions = {
-                restrictedPropSettings: [{ prop: 'outerHTML', useMethod: 'replaceWithHTML' }]
+                restrictedPropSettings: [{ props: 'outerHTML', useMethod: 'replaceWithHTML' }]
             };
             assignGingerly(target, { outerHTML: 'blocked' }, undefined, redirectPermissions);
             expect(target.outerHTML).toBe('safe');
@@ -141,7 +141,7 @@
                 replaceWithHTML(value) { calls.push(value); }
             };
             const redirectPermissions = {
-                restrictedPropSettings: [{ prop: 'outerHTML', useMethod: 'replaceWithHTML' }]
+                restrictedPropSettings: [{ props: 'outerHTML', useMethod: 'replaceWithHTML' }]
             };
             assignGingerly(target, {
                 'outerHTML +=': ' appended',
@@ -158,7 +158,7 @@
                 replaceWithHTML(value) { calls.push(value); }
             };
             const redirectPermissions = {
-                restrictedPropSettings: [{ prop: 'outerHTML', useMethod: 'replaceWithHTML' }]
+                restrictedPropSettings: [{ props: 'outerHTML', useMethod: 'replaceWithHTML' }]
             };
             assignFrom(target, { outerHTML: '?.html' }, { from: { html: '<p>resolved</p>' } }, redirectPermissions);
             expect(calls).toEqual(['<p>resolved</p>']);
@@ -170,13 +170,49 @@
                 assignGingerly({}, { outerHTML: 'blocked' }, undefined, {
                     restrictedPropSettings: [
                         'outerHTML',
-                        { prop: 'outerHTML', useMethod: 'replaceWithHTML' }
+                        { props: 'outerHTML', useMethod: 'replaceWithHTML' }
                     ]
                 });
             } catch (error) {
                 didThrow = true;
             }
             expect(didThrow).toBe(true);
+        });
+
+        await test('Phase III: allows same-origin src property assignment', () => {
+            const img = document.createElement('img');
+            const permissions = {
+                restrictedPropSettings: [{ props: 'src', allowFromSameDomain: true }]
+            };
+            assignGingerly(img, { src: '/tests/restricted-prop-settings.html' }, undefined, permissions);
+            expect(img.getAttribute('src')).toBe('/tests/restricted-prop-settings.html');
+        });
+
+        await test('Phase III: blocks cross-origin src property assignment', () => {
+            const img = document.createElement('img');
+            const permissions = {
+                restrictedPropSettings: [{ props: 'src', allowFromSameDomain: true }]
+            };
+            assignGingerly(img, { src: 'https://example.com/x.png' }, undefined, permissions);
+            expect(img.getAttribute('src')).toBe(null);
+        });
+
+        await test('Phase III: blocks src assignment when both flags are false', () => {
+            const img = document.createElement('img');
+            const permissions = {
+                restrictedPropSettings: [{ props: 'src', allowFromSameDomain: false, allowCrossDomain: false }]
+            };
+            assignGingerly(img, { src: '/tests/restricted-prop-settings.html' }, undefined, permissions);
+            expect(img.getAttribute('src')).toBe(null);
+        });
+
+        await test('Phase III: allowCrossDomain permits any src', () => {
+            const img = document.createElement('img');
+            const permissions = {
+                restrictedPropSettings: [{ props: 'src', allowCrossDomain: true }]
+            };
+            assignGingerly(img, { src: 'https://example.com/x.png' }, undefined, permissions);
+            expect(img.getAttribute('src')).toBe('https://example.com/x.png');
         });
 
         const statusEl = document.getElementById('status');

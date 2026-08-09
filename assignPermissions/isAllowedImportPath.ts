@@ -1,3 +1,5 @@
+import { isAllowedUrl } from './isAllowedUrl.js';
+
 /**
  * Check whether an import specifier resolves to the current origin or is
  * covered by an import-map entry.
@@ -8,11 +10,7 @@ export function isAllowedImportPath(value: string): boolean {
         return isImportMapSpecifier(value);
     }
 
-    try {
-        return new URL(value, document.baseURI).origin === location.origin;
-    } catch {
-        return false;
-    }
+    return isAllowedUrl(value);
 }
 
 function isImportMapSpecifier(value: string): boolean {

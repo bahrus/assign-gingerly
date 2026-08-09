@@ -315,6 +315,60 @@ If that order looks good, I can start with steps 1–3.
 
 ---
 
+## Implementation Notes (Steps 1–3 Done)
+
+### Files changed
+
+1. `types/assign-gingerly/types.d.ts`
+2. `inferencer/types/assign-gingerly/types.d.ts`
+3. `assignPermissions/isAllowedUrl.ts` (new)
+4. `assignPermissions/isAllowedUrl.js` (new)
+5. `assignPermissions/isAllowedImportPath.ts`
+6. `assignPermissions/isAllowedImportPath.js`
+7. `assignPermissions/restrictedProps.ts`
+8. `assignPermissions/restrictedProps.js`
+9. `tests/restricted-prop-settings.html`
+
+### What was implemented
+
+- `RestrictedPropSetting.prop` was replaced with `props: string | string[]` in both type files.
+- `allowFromSameHost` was renamed to `allowFromSameDomain`.
+- Added `attr?: boolean | string | string[]` to the type.
+- Created `assignPermissions/isAllowedUrl.ts` as a dedicated same-origin URL validator.
+- Refactored `isAllowedImportPath.ts` to delegate its relative/absolute origin check to `isAllowedUrl`.
+- Refactored `restrictedProps.ts`:
+  - `buildRestrictedPropSet` now normalizes `props` and `attr`, builds a `props` map and an `attrs` map, and rejects duplicate entries in either map.
+  - `RestrictedPropSettingsMap` is now `{ props: Map; attrs: Map }` instead of a single `Map`.
+  - `redirectRestrictedProp` handles the new URL flags:
+    - `allowCrossDomain: true` → allows the assignment (or calls `useMethod` if configured).
+    - `allowFromSameDomain: true` → allows only same-origin URLs; anything else is skipped with a warning.
+    - neither flag set → preserves the existing Phase I/II behavior (block, or redirect to `useMethod`).
+  - Added `checkRestrictedAttributeCall` to validate `setAttribute(name, value)` calls; this is not yet wired into `assignGingerly.ts` (Step 4).
+
+### Tests
+
+- Updated existing Phase II tests in `tests/restricted-prop-settings.html` to use `props` instead of `prop`.
+- Added Phase III property-assignment tests:
+  - same-origin `src` allowed
+  - cross-origin `src` blocked
+  - both flags false blocks even same-origin values
+  - `allowCrossDomain: true` allows any value
+
+### Validation
+
+- `npx tsc --noEmit` passes.
+- Full Playwright suite passes: **87/87 tests passed**.
+
+### One issue hit during testing
+
+The first `npm test` run appeared to fail across the board, but the root cause was a stale `node.exe` process still holding port 8000 from an earlier server. Once that was killed and the test server restarted, all tests passed. This is worth keeping in mind if future test runs behave similarly.
+
+### Ready for Step 4
+
+Step 4 (`assignGingerly.ts` `withMethods` wiring for `setAttribute`) is the remaining work to complete Phase III behavior. The `checkRestrictedAttributeCall` helper is already written and waiting to be plugged in.
+
+---
+
 ## Human Response II
 
 > It's a breaking change [`allowFromSameHost` → `allowFromSameDomain`]
@@ -324,4 +378,84 @@ There's absolutely no use of the permissions support so far.  Please don't add a
 In the same vein, let's not support both prop and props.  Let's only support one, string | string[], and please use your judgment which one is clearer.
 
 Please start with steps 1-3 and add the implementation notes below.
+
+---
+
+## AI Response II
+
+Confirmed decisions:
+
+- No backward-compatibility shims. `allowFromSameHost` becomes `allowFromSameDomain` everywhere.
+- Only one property field: `props: string | string[]`.
+- I'll use `props` rather than `prop` because it reads naturally for both single values and arrays.
+
+I'll start with steps 1–3 now. Implementation notes will be appended as I go.
+
+### Implementation plan / notes
+
+**Step 1 — Type updates**
+
+Files to change:
+
+- `types/assign-gingerly/types.d.ts`
+- `inferencer/types/assign-gingerly/types.d.ts` (kept in sync with the main types)
+
+Changes:
+
+```ts
+export interface RestrictedPropSetting {
+    props: string | string[];
+    useMethod?: string;
+    attr?: boolean | string | string[];
+    allowFromSameDomain?: boolean;
+    allowCrossDomain?: boolean;
+}
+```
+
+**Step 2 — Shared same-origin helper**
+
+New file: `assignPermissions/isAllowedUrl.ts`
+
+```ts
+export function isAllowedUrl(value: string, base = document.baseURI): boolean {
+    if (typeof document === 'undefined' || typeof location === 'undefined') return false;
+    if (typeof value !== 'string' || value === '') return false;
+    try {
+        return new URL(value, base).origin === location.origin;
+    } catch {
+        return false;
+    }
+}
+```
+
+**Step 3 — Update `assignPermissions/restrictedProps.ts` and `assignPermissions/isAllowedImportPath.ts`**
+
+- Import `isAllowedUrl` into `isAllowedImportPath.ts` and use it for the relative/absolute branch (after the import-map check).
+- In `restrictedProps.ts`:
+  - Accept `props: string | string[]`.
+  - Build a `Map<string, RestrictedPropSetting>` keyed by each prop name.
+  - Build a second `Map<string, RestrictedPropSetting>` keyed by attr name when `attr` is provided.
+  - Keep duplicate detection across all prop names.
+  - Add a `checkRestrictedUrl(setting, value)` helper.
+  - Extend `redirectRestrictedProp` so:
+    - If `allowCrossDomain` is true, allow the assignment to proceed (return true so caller skips its own assignment; perform `useMethod` if configured).
+    - Else if `allowFromSameDomain` is true and the value passes `isAllowedUrl`, proceed with assignment/`useMethod`.
+    - Else skip and warn once.
+  - Add a `checkRestrictedAttribute(restrictedAttrSet, methodName, args)` helper for the `withMethods` `setAttribute` path. I'll add this now even though the wiring into `assignGingerly.ts` is step 4, because the helper belongs in `restrictedProps.ts`.
+
+**Existing tests to update**
+
+- `tests/restricted-prop-settings.html`: change `{ prop: 'outerHTML', useMethod: '...' }` to `{ props: 'outerHTML', useMethod: '...' }`.
+- Add Phase III test cases for `src`, same-origin allow, and cross-origin block.
+
+**Files I expect to touch for steps 1–3**
+
+1. `types/assign-gingerly/types.d.ts`
+2. `inferencer/types/assign-gingerly/types.d.ts`
+3. `assignPermissions/isAllowedUrl.ts` (new)
+4. `assignPermissions/isAllowedImportPath.ts`
+5. `assignPermissions/restrictedProps.ts`
+6. `tests/restricted-prop-settings.html`
+
+I will not touch `assignGingerly.ts` or `assignTentatively.ts` until step 4.
 
