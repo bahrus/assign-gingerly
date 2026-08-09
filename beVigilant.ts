@@ -10,7 +10,7 @@
 
 import { Infer } from './inferencer/inferencer.js';
 import { withScopePerimeter } from './inferencer/withScopePerimeter.js';
-import { registerInCache } from './resolveIdRef.js';
+import { registerInCache } from './resolve/resolveIdRef.js';
 
 /**
  * Set up a MutationObserver that watches for new [itemprop] elements

@@ -11,7 +11,7 @@
 
 import { getValues, getValue } from './getValues.js';
 import assignGingerly from './assignGingerly.js';
-import { resolveIdVariable, parseIdRef } from './resolveIdRef.js';
+import { resolveIdVariable, parseIdRef } from './resolve/resolveIdRef.js';
 import { processInferredAssignments } from './inferredAssignments.js';
 import type { PermissionProcessor, AssignFromOptions, AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
 

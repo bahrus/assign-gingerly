@@ -10,7 +10,7 @@
  */
 import { getValues, getValue } from './getValues.js';
 import assignGingerly from './assignGingerly.js';
-import { resolveIdVariable, parseIdRef } from './resolveIdRef.js';
+import { resolveIdVariable, parseIdRef } from './resolve/resolveIdRef.js';
 import { processInferredAssignments } from './inferredAssignments.js';
 /**
  * Supported substitution variables and their option keys.

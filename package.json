@@ -62,17 +62,17 @@
       "default": "./getHost.js",
       "types": "./getHost.ts"
     },
-    "./resolveValues.js": {
-      "default": "./resolveValues.js",
-      "types": "./resolveValues.ts"
+    "./resolve/resolveValues.js": {
+      "default": "./resolve/resolveValues.js",
+      "types": "./resolve/resolveValues.ts"
     },
     "./getValues.js": {
       "default": "./getValues.js",
       "types": "./getValues.ts"
     },
-    "./resolveIdRef.js": {
-      "default": "./resolveIdRef.js",
-      "types": "./resolveIdRef.ts"
+    "./resolve/resolveIdRef.js": {
+      "default": "./resolve/resolveIdRef.js",
+      "types": "./resolve/resolveIdRef.ts"
     },
     "./transitionHelper.js": {
       "default": "./transitionHelper.js",

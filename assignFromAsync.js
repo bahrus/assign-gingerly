@@ -19,7 +19,7 @@
  * }, { from: source });
  * // target is now { color: 'red', text: 'Hello' }
  */
-import { resolveValues } from './resolveValues.js';
+import { resolveValues } from './resolve/resolveValues.js';
 import assignGingerly from './assignGingerly.js';
 import { expandSubstitutions, categorizeKeys, handleSpreads } from './assignFrom.js';
 // Module cache for processHandlerCommands — avoids await on dynamic import after first call
@@ -45,7 +45,7 @@ export async function assignFromAsync(target, pattern, options, permissionProces
     // Process #[x] normal keys — resolve element, then apply remaining path + value
     if (idRefNormalKeys.length > 0 && (options.pin || options.at)) {
         const ids = { ...options.pin, ...options.at };
-        const { resolveIdVariable, parseIdRef } = await import('./resolveIdRef.js');
+        const { resolveIdVariable, parseIdRef } = await import('./resolve/resolveIdRef.js');
         const { withMethods, aka, akaMethods, protocols, from } = options;
         for (const key of idRefNormalKeys) {
             const parsed = parseIdRef(key);
@@ -81,7 +81,7 @@ export async function assignFromAsync(target, pattern, options, permissionProces
     // Process #[x] handler keys — resolve element, then pass to handler processing
     if (idRefHandlerKeys.length > 0 && (options.pin || options.at)) {
         const ids = { ...options.pin, ...options.at };
-        const { resolveIdVariable, parseIdRef } = await import('./resolveIdRef.js');
+        const { resolveIdVariable, parseIdRef } = await import('./resolve/resolveIdRef.js');
         _processHandlerCommands ??= (await import('./processHandlerCommands.js')).processHandlerCommands;
         for (const key of idRefHandlerKeys) {
             const parsed = parseIdRef(key);

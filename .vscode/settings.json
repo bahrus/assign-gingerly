@@ -14,5 +14,9 @@
     },
     "chat.tools.terminal.autoApprove": {
         "npx playwright": true
-    }
+    },
+    "explorer.fileNesting.patterns": {
+        "*.ts": "${capture}.js, ${capture}.js.map",
+    },
+    "explorer.fileNesting.enabled": true
 }

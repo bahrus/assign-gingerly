@@ -21,7 +21,7 @@
  * // Now el.command delegates to el.behaviors.commandBehavior.command
  */
 
-import { resolveValue} from '../resolveValues.js';
+import { resolveValue} from '../resolve/resolveValues.js';
 import {ResolveValuesOptions, IAssignGingerlyOptions} from '../types/assign-gingerly/types.js';
 import assignGingerly, {  } from '../assignGingerly.js';
 
