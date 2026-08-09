@@ -37,7 +37,7 @@ function extractShorthand(config) {
 /**
  * Process a single AssignDispatchVector — execute all toTarget/toHost/toLHS assignments.
  */
-function processVector(vector, source, target, host, lhs, inheritedOptions, useAssignFrom, permissions) {
+function processVector(vector, source, target, host, lhs, inheritedOptions, useAssignFrom, permissionProcessor) {
     const destinations = [
         { key: 'toTarget', dest: target },
         { key: 'toHost', dest: host },
@@ -50,11 +50,11 @@ function processVector(vector, source, target, host, lhs, inheritedOptions, useA
         if (useAssignFrom && source != null) {
             // Dynamic import assignFrom on demand (fire-and-forget context, already async)
             import('../assignFrom.js').then(({ assignFrom }) => {
-                assignFrom(dest, pattern, { from: source, ...inheritedOptions, ...vector.withOptions }, permissions);
+                assignFrom(dest, pattern, { from: source, ...inheritedOptions, ...vector.withOptions }, permissionProcessor);
             });
         }
         else {
-            assignGingerly(dest, pattern, inheritedOptions, permissions);
+            assignGingerly(dest, pattern, inheritedOptions, permissionProcessor);
         }
     }
     // Handle shorthand (implicit toHost)
@@ -62,11 +62,11 @@ function processVector(vector, source, target, host, lhs, inheritedOptions, useA
     if (shorthand) {
         if (useAssignFrom && source != null) {
             import('../assignFrom.js').then(({ assignFrom }) => {
-                assignFrom(host, shorthand, { from: source, ...inheritedOptions, ...vector.withOptions }, permissions);
+                assignFrom(host, shorthand, { from: source, ...inheritedOptions, ...vector.withOptions }, permissionProcessor);
             });
         }
         else {
-            assignGingerly(host, shorthand, inheritedOptions, permissions);
+            assignGingerly(host, shorthand, inheritedOptions, permissionProcessor);
         }
     }
 }
@@ -79,7 +79,7 @@ function processVector(vector, source, target, host, lhs, inheritedOptions, useA
  * @param host - The options.from (source/view model)
  * @param inheritedOptions - Parent assignFrom options (withMethods, aka, etc.)
  */
-export function attachEventListener(lhs, config, target, host, inheritedOptions, permissions) {
+export function attachEventListener(lhs, config, target, host, inheritedOptions, permissionProcessor) {
     const { on: eventName, get: getConfig, fromLHS, fromHost, fromTarget, fromEvent, dispatch } = config;
     // Resolve get config values
     const { abortController, key, nudge, options: listenerOptions, stopPropagation, preventDefault, dispatch: getDispatch } = getConfig ?? {};
@@ -112,22 +112,22 @@ export function attachEventListener(lhs, config, target, host, inheritedOptions,
         if (preventDefault)
             event.preventDefault();
         // Static assignments (no from) — top-level toTarget/toHost/toLHS + shorthand
-        processVector(config, null, target, host, lhs, inheritedOptions, false, permissions);
+        processVector(config, null, target, host, lhs, inheritedOptions, false, permissionProcessor);
         // fromLHS assignments
         if (fromLHS) {
-            processVector(fromLHS, lhs, target, host, lhs, inheritedOptions, true, permissions);
+            processVector(fromLHS, lhs, target, host, lhs, inheritedOptions, true, permissionProcessor);
         }
         // fromHost assignments
         if (fromHost) {
-            processVector(fromHost, host, target, host, lhs, inheritedOptions, true, permissions);
+            processVector(fromHost, host, target, host, lhs, inheritedOptions, true, permissionProcessor);
         }
         // fromTarget assignments
         if (fromTarget) {
-            processVector(fromTarget, target, target, host, lhs, inheritedOptions, true, permissions);
+            processVector(fromTarget, target, target, host, lhs, inheritedOptions, true, permissionProcessor);
         }
         // fromEvent assignments
         if (fromEvent) {
-            processVector(fromEvent, event, target, host, lhs, inheritedOptions, true, permissions);
+            processVector(fromEvent, event, target, host, lhs, inheritedOptions, true, permissionProcessor);
         }
         // Dispatch custom event if configured
         const dispatchConfig = dispatch || getDispatch;

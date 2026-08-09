@@ -13,8 +13,7 @@ import { getValues, getValue } from './getValues.js';
 import assignGingerly from './assignGingerly.js';
 import { resolveIdVariable, parseIdRef } from './resolveIdRef.js';
 import { processInferredAssignments } from './inferredAssignments.js';
-import type { AssignPermissions } from './types/assign-gingerly/types.js';
-import type { AssignFromOptions, AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
+import type { PermissionProcessor, AssignFromOptions, AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
 
 // Re-export types for consumers
 export type { AssignFromOptions, AssignFromHandler, AssignFromHandlerConstructor };
@@ -391,7 +390,7 @@ function processIdRefNormalKeys(
   expandedPattern: Record<string, any>,
   target: any,
   options: AssignFromOptions,
-  permissions?: AssignPermissions
+  permissionProcessor?: PermissionProcessor
 ): void {
   const ids = getEffectiveIds(options);
   if (!ids) return;
@@ -410,7 +409,7 @@ function processIdRefNormalKeys(
         { __v: value }, from,
         { withMethods, aka, akaMethods, protocols, root: target }
       );
-      assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissions);
+      assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissionProcessor);
     } else {
       const resolvedValue = getValues(
         typeof value === 'object' && value !== null ? value : { __v: value },
@@ -418,7 +417,7 @@ function processIdRefNormalKeys(
         { withMethods, aka, akaMethods, protocols, root: target }
       );
       if (!('__v' in resolvedValue)) {
-        assignGingerly(el, resolvedValue, options, permissions);
+        assignGingerly(el, resolvedValue, options, permissionProcessor);
       }
     }
   }
@@ -433,14 +432,14 @@ function processIdRefNormalKeys(
  * @param target - Object to merge resolved values into
  * @param pattern - Object whose RHS values may contain `?.` path strings
  * @param options - Options including `from` (source object)
- * @param permissions - Optional security permissions
+ * @param permissionProcessor - Optional security permissionProcessor
  * @returns The target object after merging
  */
 export function assignFrom(
   target: any,
   pattern: Record<string, any>,
   options: AssignFromOptions,
-  permissions?: AssignPermissions
+  permissionProcessor?: PermissionProcessor
 ): any {
   // Expand looped substitution variables
   const expandedPattern = expandSubstitutions(pattern, options);
@@ -464,7 +463,7 @@ export function assignFrom(
       }
     }
     if (Object.keys(ternaryResolved).length > 0) {
-      assignGingerly(target, ternaryResolved, options, permissions);
+      assignGingerly(target, ternaryResolved, options, permissionProcessor);
     }
   }
 
@@ -502,18 +501,18 @@ export function assignFrom(
     const resolved = getValues(normalPattern, options.from, resolveOptions);
 
     handleSpreads(resolved);
-    assignGingerly(target, resolved, options, permissions);
+    assignGingerly(target, resolved, options, permissionProcessor);
   }
 
   // Process #[x] normal keys (sync)
   if (idRefNormalKeys.length > 0) {
-    processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, options, permissions);
+    processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, options, permissionProcessor);
   }
 
   // Process handler commands — fire-and-forget (async)
   if (handlerKeys.length > 0) {
     import('./processHandlerCommands.js').then(({ processHandlerCommands }) => {
-      processHandlerCommands(target, handlerKeys, expandedPattern, options, permissions);
+      processHandlerCommands(target, handlerKeys, expandedPattern, options, permissionProcessor);
     });
   }
 
@@ -528,7 +527,7 @@ export function assignFrom(
         if (!el) continue;
         const syntheticKey = parsed.remainingPath ? `${parsed.remainingPath} =>` : ' =>';
         const syntheticPattern = { [syntheticKey]: expandedPattern[key] };
-        processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissions);
+        processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissionProcessor);
       }
     });
   }
@@ -551,7 +550,7 @@ export function assignFrom(
   // Process bulk enhancements — fire-and-forget (async)
   if (options.enhance && options.enhance.length > 0) {
     import('./enhanceAll.js').then(({ enhanceAll }) => {
-      enhanceAll(target, options.enhance!, permissions);
+      enhanceAll(target, options.enhance!, permissionProcessor);
     });
   }
 

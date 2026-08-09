@@ -4,9 +4,7 @@
  * Provides event-driven iteration over elements as they mount
  */
 
-import type { AssignPermissions, RestrictedPropSettingsMap, IAssignGingerlyOptions } from './types/assign-gingerly/types.js';
-import { redirectRestrictedProp } from './assignPermissions/restrictedProps.js';
-import type {  } from './assignPermissions/restrictedProps.js';
+import type { PermissionProcessor, IAssignGingerlyOptions } from './types/assign-gingerly/types.js';
 
 /**
  * Check if a value is an EventTarget
@@ -34,8 +32,7 @@ export async function handleEachTime(
   withMethods: Set<string> | undefined,
   aliasMap: Map<string, string>,
   options?: IAssignGingerlyOptions,
-  permissions?: AssignPermissions,
-  restrictedPropSet?: RestrictedPropSettingsMap
+  permissionProcessor?: PermissionProcessor
 ): Promise<void> {
   // Validate signal - required for cleanup
   if (!options?.signal) {
@@ -110,7 +107,7 @@ export async function handleEachTime(
             const lastKey = result.lastKey;
             const parent = result.target;
             
-            if (redirectRestrictedProp(restrictedPropSet, parent, lastKey, value)) {
+            if (permissionProcessor?.redirectRestrictedProp(parent, lastKey, value)) {
               // skip
             } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
               // Check if property exists and is readonly
@@ -122,7 +119,7 @@ export async function handleEachTime(
                   );
                 }
                 // Recursively apply assignGingerly
-                assignGingerly(currentValue, value, options, permissions);
+                assignGingerly(currentValue, value, options, permissionProcessor);
               } else {
                 // Property is writable - replace it
                 parent[lastKey] = value;

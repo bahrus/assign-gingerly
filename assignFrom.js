@@ -377,7 +377,7 @@ function getEffectiveIds(options) {
 /**
  * Process #[x] normal keys synchronously.
  */
-function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, options, permissions) {
+function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, options, permissionProcessor) {
     const ids = getEffectiveIds(options);
     if (!ids)
         return;
@@ -392,12 +392,12 @@ function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, option
         const value = expandedPattern[key];
         if (parsed.remainingPath) {
             const resolvedValue = getValues({ __v: value }, from, { withMethods, aka, akaMethods, protocols, root: target });
-            assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissions);
+            assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissionProcessor);
         }
         else {
             const resolvedValue = getValues(typeof value === 'object' && value !== null ? value : { __v: value }, from, { withMethods, aka, akaMethods, protocols, root: target });
             if (!('__v' in resolvedValue)) {
-                assignGingerly(el, resolvedValue, options, permissions);
+                assignGingerly(el, resolvedValue, options, permissionProcessor);
             }
         }
     }
@@ -411,10 +411,10 @@ function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, option
  * @param target - Object to merge resolved values into
  * @param pattern - Object whose RHS values may contain `?.` path strings
  * @param options - Options including `from` (source object)
- * @param permissions - Optional security permissions
+ * @param permissionProcessor - Optional security permissionProcessor
  * @returns The target object after merging
  */
-export function assignFrom(target, pattern, options, permissions) {
+export function assignFrom(target, pattern, options, permissionProcessor) {
     // Expand looped substitution variables
     const expandedPattern = expandSubstitutions(pattern, options);
     // Categorize keys
@@ -436,7 +436,7 @@ export function assignFrom(target, pattern, options, permissions) {
             }
         }
         if (Object.keys(ternaryResolved).length > 0) {
-            assignGingerly(target, ternaryResolved, options, permissions);
+            assignGingerly(target, ternaryResolved, options, permissionProcessor);
         }
     }
     // Process normal keys via getValues (sync) + assignGingerly
@@ -472,16 +472,16 @@ export function assignFrom(target, pattern, options, permissions) {
         }
         const resolved = getValues(normalPattern, options.from, resolveOptions);
         handleSpreads(resolved);
-        assignGingerly(target, resolved, options, permissions);
+        assignGingerly(target, resolved, options, permissionProcessor);
     }
     // Process #[x] normal keys (sync)
     if (idRefNormalKeys.length > 0) {
-        processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, options, permissions);
+        processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, options, permissionProcessor);
     }
     // Process handler commands — fire-and-forget (async)
     if (handlerKeys.length > 0) {
         import('./processHandlerCommands.js').then(({ processHandlerCommands }) => {
-            processHandlerCommands(target, handlerKeys, expandedPattern, options, permissions);
+            processHandlerCommands(target, handlerKeys, expandedPattern, options, permissionProcessor);
         });
     }
     // Process #[x] handler keys — fire-and-forget (async)
@@ -497,7 +497,7 @@ export function assignFrom(target, pattern, options, permissions) {
                     continue;
                 const syntheticKey = parsed.remainingPath ? `${parsed.remainingPath} =>` : ' =>';
                 const syntheticPattern = { [syntheticKey]: expandedPattern[key] };
-                processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissions);
+                processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissionProcessor);
             }
         });
     }
@@ -517,7 +517,7 @@ export function assignFrom(target, pattern, options, permissions) {
     // Process bulk enhancements — fire-and-forget (async)
     if (options.enhance && options.enhance.length > 0) {
         import('./enhanceAll.js').then(({ enhanceAll }) => {
-            enhanceAll(target, options.enhance, permissions);
+            enhanceAll(target, options.enhance, permissionProcessor);
         });
     }
     return target;

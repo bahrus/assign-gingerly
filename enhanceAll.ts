@@ -18,7 +18,7 @@
 
 import { isAllowedImportPath } from './assignPermissions/isAllowedImportPath.js';
 import { findClassPrototypeInPath } from './utils/findClassPrototypeInPath.js';
-import type { AssignPermissions } from './types/assign-gingerly/types.js';
+import type { PermissionProcessor } from './types/assign-gingerly/types.js';
 
 /**
  * Configuration for a single enhancement to apply in bulk.
@@ -51,15 +51,15 @@ export interface EnhanceConfig {
 export async function enhanceAll(
     target: Element,
     configs: EnhanceConfig[],
-    permissions?: AssignPermissions
+    permissionProcessor?: PermissionProcessor
 ): Promise<void> {
     for (const config of configs) {
         // Validate EMC path unless cross-domain imports are explicitly permitted
-        if (!permissions?.crossDomainImports && !isAllowedImportPath(config.emc)) {
+        if (!permissionProcessor?.crossDomainImports && !isAllowedImportPath(config.emc)) {
             throw new Error(
                 `enhanceAll: EMC path "${config.emc}" is a cross-domain URL. ` +
                 `Only same-origin paths or import-map-covered specifiers are allowed by default. ` +
-                `Pass { crossDomainImports: true } in permissions to override.`
+                `Pass { crossDomainImports: true } in permissionProcessor to override.`
             );
         }
 

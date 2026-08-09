@@ -22,8 +22,7 @@
 import { resolveValues } from './resolveValues.js';
 import {IAssignGingerlyOptions} from './types/assign-gingerly/types.js';
 import assignGingerly from './assignGingerly.js';
-import type { AssignPermissions } from './types/assign-gingerly/types.js';
-import type { AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
+import type { PermissionProcessor, AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
 import {
   expandSubstitutions, categorizeKeys, handleSpreads, isHandlerCommand
 } from './assignFrom.js';
@@ -56,7 +55,7 @@ export async function assignFromAsync(
   target: any,
   pattern: Record<string, any>,
   options: AssignFromOptions,
-  permissions?: AssignPermissions
+  permissionProcessor?: PermissionProcessor
 ): Promise<any> {
   // First: expand looped substitution variables (${x}, ${y}, ${z})
   const expandedPattern = expandSubstitutions(pattern, options);
@@ -77,7 +76,7 @@ export async function assignFromAsync(
     // Recursively handle "..." spread keys at all nesting levels
     handleSpreads(resolved);
 
-    assignGingerly(target, resolved, options, permissions);
+    assignGingerly(target, resolved, options, permissionProcessor);
   }
 
   // Process #[x] normal keys — resolve element, then apply remaining path + value
@@ -100,7 +99,7 @@ export async function assignFromAsync(
           { withMethods, aka, akaMethods, protocols, root: el }
         );
         // Apply remaining path on the resolved element
-        assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissions);
+        assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissionProcessor);
       } else {
         // No remaining path — resolve and assign directly to the element
         const resolvedValue = await resolveValues(
@@ -111,7 +110,7 @@ export async function assignFromAsync(
         if ('__v' in resolvedValue) {
           // Single value — can't assign to element root without a path
         } else {
-          assignGingerly(el, resolvedValue, options, permissions);
+          assignGingerly(el, resolvedValue, options, permissionProcessor);
         }
       }
     }
@@ -120,7 +119,7 @@ export async function assignFromAsync(
   if (handlerKeys.length > 0) {
     
     _processHandlerCommands ??= (await import('./processHandlerCommands.js')).processHandlerCommands;
-    await _processHandlerCommands(target, handlerKeys, expandedPattern, options, permissions);
+    await _processHandlerCommands(target, handlerKeys, expandedPattern, options, permissionProcessor);
   }
   // Process #[x] handler keys — resolve element, then pass to handler processing
   if (idRefHandlerKeys.length > 0 && (options.pin || options.at)) {
@@ -145,7 +144,7 @@ export async function assignFromAsync(
         [syntheticKey]: expandedPattern[key]
       };
 
-      await _processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissions);
+      await _processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissionProcessor);
     }
   }
 
@@ -167,7 +166,7 @@ export async function assignFromAsync(
   // Process bulk enhancements — dynamically imported only when option is present
   if (options.enhance && options.enhance.length > 0) {
     const { enhanceAll } = await import('./enhanceAll.js');
-    await enhanceAll(target, options.enhance, permissions);
+    await enhanceAll(target, options.enhance, permissionProcessor);
   }
 
   return target;

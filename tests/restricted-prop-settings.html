@@ -15,11 +15,12 @@
         import { assignFrom } from '../assignFrom.js';
         import assignTentatively from '../assignTentatively.js';
         import { attachEventListener } from '../handlers/addEventListener.js';
+        import { PermissionProcessor } from '../assignPermissions/PermissionProcessor.js';
 
         const results = [];
         let passed = 0;
         let failed = 0;
-        const permissions = { restrictedPropSettings: ['innerHTML', 'src'] };
+        const permissionProcessor = new PermissionProcessor({ restrictedPropSettings: ['innerHTML', 'src'] });
 
         async function test(name, fn) {
             try {
@@ -52,7 +53,7 @@
                 title: 'allowed',
                 '?.nested?.innerHTML': 'blocked',
                 '?.nested?.title': 'allowed'
-            }, undefined, permissions);
+            }, undefined, permissionProcessor);
             expect(target.innerHTML).toBe('safe');
             expect(target.title).toBe('allowed');
             expect(target.nested.innerHTML).toBe('safe');
@@ -65,33 +66,33 @@
                 'src +=': 'b',
                 'innerHTML =!': '.',
                 ' -=': 'innerHTML'
-            }, undefined, permissions);
+            }, undefined, permissionProcessor);
             expect(target).toEqual({ src: 'a' });
         });
 
         await test('preserves restrictions during readonly recursive merges', () => {
             const target = {};
             Object.defineProperty(target, 'config', { value: { innerHTML: 'safe' }, writable: false });
-            assignGingerly(target, { config: { innerHTML: 'blocked', title: 'allowed' } }, undefined, permissions);
+            assignGingerly(target, { config: { innerHTML: 'blocked', title: 'allowed' } }, undefined, permissionProcessor);
             expect(target.config).toEqual({ innerHTML: 'safe', title: 'allowed' });
         });
 
         await test('preserves restrictions through @each', () => {
             const target = { rows: [{ innerHTML: 'safe' }, { innerHTML: 'safe' }] };
-            assignGingerly(target, { '?.rows?.@each?.innerHTML': 'blocked' }, undefined, permissions);
+            assignGingerly(target, { '?.rows?.@each?.innerHTML': 'blocked' }, undefined, permissionProcessor);
             expect(target.rows).toEqual([{ innerHTML: 'safe' }, { innerHTML: 'safe' }]);
         });
 
         await test('assignFrom forwards permissions to resolved assignments', () => {
             const target = { innerHTML: 'safe' };
-            assignFrom(target, { innerHTML: '?.value', title: '?.value' }, { from: { value: 'blocked' } }, permissions);
+            assignFrom(target, { innerHTML: '?.value', title: '?.value' }, { from: { value: 'blocked' } }, permissionProcessor);
             expect(target).toEqual({ innerHTML: 'safe', title: 'blocked' });
         });
 
         await test('assignTentatively skips restricted settings without a reversal entry', () => {
             const target = { innerHTML: 'safe', title: 'old' };
             const reversal = {};
-            assignTentatively(target, { innerHTML: 'blocked', title: 'new' }, { reversal }, permissions);
+            assignTentatively(target, { innerHTML: 'blocked', title: 'new' }, { reversal }, permissionProcessor);
             expect(target).toEqual({ innerHTML: 'safe', title: 'new' });
             expect(reversal).toEqual({ title: 'old' });
         });
@@ -102,7 +103,7 @@
             attachEventListener(button, {
                 on: 'click',
                 toTarget: { innerHTML: 'blocked', title: 'allowed' }
-            }, target, target, {}, permissions);
+            }, target, target, {}, permissionProcessor);
             button.click();
             expect(target).toEqual({ innerHTML: 'safe', title: 'allowed' });
         });
@@ -115,22 +116,22 @@
                     replaceWithHTML(value) { calls.push(['nested', value]); }
                 }
             };
-            const redirectPermissions = {
+            const redirectPermissionProcessor = new PermissionProcessor({
                 restrictedPropSettings: [{ props: 'outerHTML', useMethod: 'replaceWithHTML' }]
-            };
+            });
             assignGingerly(target, {
                 outerHTML: '<p>root</p>',
                 '?.nested?.outerHTML': '<p>nested</p>'
-            }, undefined, redirectPermissions);
+            }, undefined, redirectPermissionProcessor);
             expect(calls).toEqual([['root', '<p>root</p>'], ['nested', '<p>nested</p>']]);
         });
 
         await test('fails closed when a configured redirect method is unavailable', () => {
             const target = { outerHTML: 'safe' };
-            const redirectPermissions = {
+            const redirectPermissionProcessor = new PermissionProcessor({
                 restrictedPropSettings: [{ props: 'outerHTML', useMethod: 'replaceWithHTML' }]
-            };
-            assignGingerly(target, { outerHTML: 'blocked' }, undefined, redirectPermissions);
+            });
+            assignGingerly(target, { outerHTML: 'blocked' }, undefined, redirectPermissionProcessor);
             expect(target.outerHTML).toBe('safe');
         });
 
@@ -140,14 +141,14 @@
                 outerHTML: 'safe',
                 replaceWithHTML(value) { calls.push(value); }
             };
-            const redirectPermissions = {
+            const redirectPermissionProcessor = new PermissionProcessor({
                 restrictedPropSettings: [{ props: 'outerHTML', useMethod: 'replaceWithHTML' }]
-            };
+            });
             assignGingerly(target, {
                 'outerHTML +=': ' appended',
                 'outerHTML =!': '.',
                 'outerHTML Y=': { value: 'ignored' }
-            }, undefined, redirectPermissions);
+            }, undefined, redirectPermissionProcessor);
             expect(target.outerHTML).toBe('safe');
             expect(calls).toEqual([]);
         });
@@ -157,22 +158,23 @@
             const target = {
                 replaceWithHTML(value) { calls.push(value); }
             };
-            const redirectPermissions = {
+            const redirectPermissionProcessor = new PermissionProcessor({
                 restrictedPropSettings: [{ props: 'outerHTML', useMethod: 'replaceWithHTML' }]
-            };
-            assignFrom(target, { outerHTML: '?.html' }, { from: { html: '<p>resolved</p>' } }, redirectPermissions);
+            });
+            assignFrom(target, { outerHTML: '?.html' }, { from: { html: '<p>resolved</p>' } }, redirectPermissionProcessor);
             expect(calls).toEqual(['<p>resolved</p>']);
         });
 
         await test('rejects duplicate property policies', () => {
             let didThrow = false;
             try {
-                assignGingerly({}, { outerHTML: 'blocked' }, undefined, {
+                const duplicateProcessor = new PermissionProcessor({
                     restrictedPropSettings: [
                         'outerHTML',
                         { props: 'outerHTML', useMethod: 'replaceWithHTML' }
                     ]
                 });
+                assignGingerly({}, { outerHTML: 'blocked' }, undefined, duplicateProcessor);
             } catch (error) {
                 didThrow = true;
             }
@@ -181,37 +183,37 @@
 
         await test('Phase III: allows same-origin src property assignment', () => {
             const img = document.createElement('img');
-            const permissions = {
+            const phaseProcessor = new PermissionProcessor({
                 restrictedPropSettings: [{ props: 'src', allowFromSameDomain: true }]
-            };
-            assignGingerly(img, { src: '/tests/restricted-prop-settings.html' }, undefined, permissions);
+            });
+            assignGingerly(img, { src: '/tests/restricted-prop-settings.html' }, undefined, phaseProcessor);
             expect(img.getAttribute('src')).toBe('/tests/restricted-prop-settings.html');
         });
 
         await test('Phase III: blocks cross-origin src property assignment', () => {
             const img = document.createElement('img');
-            const permissions = {
+            const phaseProcessor = new PermissionProcessor({
                 restrictedPropSettings: [{ props: 'src', allowFromSameDomain: true }]
-            };
-            assignGingerly(img, { src: 'https://example.com/x.png' }, undefined, permissions);
+            });
+            assignGingerly(img, { src: 'https://example.com/x.png' }, undefined, phaseProcessor);
             expect(img.getAttribute('src')).toBe(null);
         });
 
         await test('Phase III: blocks src assignment when both flags are false', () => {
             const img = document.createElement('img');
-            const permissions = {
+            const phaseProcessor = new PermissionProcessor({
                 restrictedPropSettings: [{ props: 'src', allowFromSameDomain: false, allowCrossDomain: false }]
-            };
-            assignGingerly(img, { src: '/tests/restricted-prop-settings.html' }, undefined, permissions);
+            });
+            assignGingerly(img, { src: '/tests/restricted-prop-settings.html' }, undefined, phaseProcessor);
             expect(img.getAttribute('src')).toBe(null);
         });
 
         await test('Phase III: allowCrossDomain permits any src', () => {
             const img = document.createElement('img');
-            const permissions = {
+            const phaseProcessor = new PermissionProcessor({
                 restrictedPropSettings: [{ props: 'src', allowCrossDomain: true }]
-            };
-            assignGingerly(img, { src: 'https://example.com/x.png' }, undefined, permissions);
+            });
+            assignGingerly(img, { src: 'https://example.com/x.png' }, undefined, phaseProcessor);
             expect(img.getAttribute('src')).toBe('https://example.com/x.png');
         });
 

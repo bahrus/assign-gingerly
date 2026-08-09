@@ -1,9 +1,7 @@
 /**
  * assignTentatively — reversible assignment with change tracking.
  */
-import type { IAssignTentativelyOptions } from './types/assign-gingerly/types.js';
-import type { AssignPermissions } from './types/assign-gingerly/types.js';
-import { buildRestrictedPropSet, checkRestrictedProp } from './assignPermissions/restrictedProps.js';
+import type { IAssignTentativelyOptions, PermissionProcessor } from './types/assign-gingerly/types.js';
 export type { IAssignTentativelyOptions };
 
 /**
@@ -137,7 +135,7 @@ export function assignTentatively(
   target: any,
   source: Record<string | symbol, any>,
   options?: IAssignTentativelyOptions,
-  permissions?: AssignPermissions
+  permissionProcessor?: PermissionProcessor
 ): any {
   if (!target || typeof target !== 'object') {
     return target;
@@ -145,7 +143,7 @@ export function assignTentatively(
 
   const reversal = options?.reversal || {};
   const trackedCreatedPaths = new Set<string>();
-  const restrictedPropSet = buildRestrictedPropSet(permissions);
+
 
   // Process all keys from source
   for (const key of Object.keys(source)) {
@@ -160,7 +158,7 @@ export function assignTentatively(
           const topLevelKey = pathParts[0];
           const lastKey = pathParts[pathParts.length - 1];
 
-          if (checkRestrictedProp(restrictedPropSet, lastKey)) {
+          if (permissionProcessor?.checkRestrictedProp(lastKey)) {
             continue;
           }
           
@@ -184,7 +182,7 @@ export function assignTentatively(
           }
         } else {
           // Plain key - direct operation on target
-          if (checkRestrictedProp(restrictedPropSet, path)) {
+          if (permissionProcessor?.checkRestrictedProp(path)) {
             continue;
           }
           if (path in target) {
@@ -215,7 +213,7 @@ export function assignTentatively(
           const topLevelKey = lhsPathParts[0];
           lhsLastKey = lhsPathParts[lhsPathParts.length - 1];
 
-          if (checkRestrictedProp(restrictedPropSet, lhsLastKey)) {
+          if (permissionProcessor?.checkRestrictedProp(lhsLastKey)) {
             continue;
           }
           
@@ -228,7 +226,7 @@ export function assignTentatively(
         } else {
           lhsPathParts = [lhsPath];
           lhsLastKey = lhsPath;
-          if (checkRestrictedProp(restrictedPropSet, lhsLastKey)) {
+          if (permissionProcessor?.checkRestrictedProp(lhsLastKey)) {
             continue;
           }
           lhsParent = target;
@@ -337,7 +335,7 @@ export function assignTentatively(
       const topLevelKey = pathParts[0];
       const lastKey = pathParts[pathParts.length - 1];
 
-      if (checkRestrictedProp(restrictedPropSet, lastKey)) {
+      if (permissionProcessor?.checkRestrictedProp(lastKey)) {
         continue;
       }
 
@@ -362,7 +360,7 @@ export function assignTentatively(
         }
         // For nested objects, recursively apply with nested reversal tracking
         const nestedReversal: Record<string | symbol, any> = {};
-        assignTentatively(parent[lastKey], value, { reversal: nestedReversal }, permissions);
+        assignTentatively(parent[lastKey], value, { reversal: nestedReversal }, permissionProcessor);
         // Merge nested reversals
         for (const revKey of Object.keys(nestedReversal)) {
           if (!(revKey in reversal)) {
@@ -381,7 +379,7 @@ export function assignTentatively(
       }
     } else {
       // Non-nested key
-      if (checkRestrictedProp(restrictedPropSet, key)) {
+      if (permissionProcessor?.checkRestrictedProp(key)) {
         continue;
       }
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
@@ -396,7 +394,7 @@ export function assignTentatively(
           target[key] = {};
         }
         const nestedReversal: Record<string | symbol, any> = {};
-        assignTentatively(target[key], value, { reversal: nestedReversal }, permissions);
+        assignTentatively(target[key], value, { reversal: nestedReversal }, permissionProcessor);
         // Merge nested reversals
         for (const revKey of Object.keys(nestedReversal)) {
           if (!(revKey in reversal)) {

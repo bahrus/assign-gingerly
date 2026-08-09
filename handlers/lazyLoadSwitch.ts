@@ -21,7 +21,7 @@
  */
 
 import { LazyLoadHandler } from './lazyLoad.js';
-import type { AssignPermissions } from '../types/assign-gingerly/types.js';
+import type { PermissionProcessor } from '../types/assign-gingerly/types.js';
 import type { AssignFromHandler } from '../assignFromAsync.js';
 import type { LazyLoadSwitchResolvedParams } from '../types/assign-gingerly/types.js';
 
@@ -56,10 +56,10 @@ function evaluateOp(lhs: any, op: string, rhs: any): boolean {
  */
 export class LazyLoadSwitchHandler extends LazyLoadHandler implements AssignFromHandler {
 
-    async assign(lhsTarget: any, resolvedParams: LazyLoadSwitchResolvedParams, options?: any, permissions?: AssignPermissions): Promise<void> {
+    async assign(lhsTarget: any, resolvedParams: LazyLoadSwitchResolvedParams, options?: any, permissionProcessor?: PermissionProcessor): Promise<void> {
         const { lhs, op = '===', rhs, ...rest } = resolvedParams;
         const condition = evaluateOp(lhs, op, rhs);
         // Delegate to parent with computed condition
-        return super.assign(lhsTarget, { ...rest, if: condition }, options, permissions);
+        return super.assign(lhsTarget, { ...rest, if: condition }, options, permissionProcessor);
     }
 }

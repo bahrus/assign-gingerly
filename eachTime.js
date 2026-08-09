@@ -3,7 +3,6 @@
  * This module is dynamically loaded only when @eachTime is encountered
  * Provides event-driven iteration over elements as they mount
  */
-import { redirectRestrictedProp } from './assignPermissions/restrictedProps.js';
 /**
  * Check if a value is an EventTarget
  */
@@ -21,7 +20,7 @@ function isEventTarget(value) {
  * @param aliasMap - Map of aliases for token substitution
  * @param options - Options including required AbortSignal
  */
-export async function handleEachTime(target, pathParts, forEachIndex, value, withMethods, aliasMap, options, permissions, restrictedPropSet) {
+export async function handleEachTime(target, pathParts, forEachIndex, value, withMethods, aliasMap, options, permissionProcessor) {
     // Validate signal - required for cleanup
     if (!options?.signal) {
         throw new Error('@eachTime requires an AbortSignal in options.signal for cleanup');
@@ -82,7 +81,7 @@ export async function handleEachTime(target, pathParts, forEachIndex, value, wit
                         // Normal assignment
                         const lastKey = result.lastKey;
                         const parent = result.target;
-                        if (redirectRestrictedProp(restrictedPropSet, parent, lastKey, value)) {
+                        if (permissionProcessor?.redirectRestrictedProp(parent, lastKey, value)) {
                             // skip
                         }
                         else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
@@ -93,7 +92,7 @@ export async function handleEachTime(target, pathParts, forEachIndex, value, wit
                                     throw new Error(`Cannot merge object into readonly primitive property '${String(lastKey)}'`);
                                 }
                                 // Recursively apply assignGingerly
-                                assignGingerly(currentValue, value, options, permissions);
+                                assignGingerly(currentValue, value, options, permissionProcessor);
                             }
                             else {
                                 // Property is writable - replace it

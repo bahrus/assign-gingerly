@@ -2,8 +2,7 @@
 
 import { EnhancementConfig } from "./types/assign-gingerly/types";
 import type { AssignFromOptions, FeatureConfigsMap, IAssignGingerlyOptions } from "./types/assign-gingerly/types";
-import type { AssignPermissions, RestrictedPropSettingsMap } from './types/assign-gingerly/types.js';
-import { buildRestrictedPropSet, checkRestrictedProp, redirectRestrictedProp } from './assignPermissions/restrictedProps.js';
+import type { PermissionProcessor } from './types/assign-gingerly/types.js';
 import { normalizeAliasOptions } from './getValues.js';
 
 /**
@@ -567,8 +566,7 @@ function applyToEach(
   withMethods: Set<string>,
   aliasMap: Map<string, string>,
   options?: IAssignGingerlyOptions,
-  permissions?: AssignPermissions,
-  restrictedPropSet?: RestrictedPropSettingsMap
+  permissionProcessor?: PermissionProcessor
 ): void {
   // Convert to array for iteration
   const items = Array.isArray(iterable) ? iterable : Array.from(iterable);
@@ -626,7 +624,7 @@ function applyToEach(
       
       // Recursively apply to the nested iterable
       if (isIterable(current)) {
-        applyToEach(current, pathAfterForEach, value, withMethods, aliasMap, options, permissions, restrictedPropSet);
+        applyToEach(current, pathAfterForEach, value, withMethods, aliasMap, options, permissionProcessor);
       }
     } else {
       // No nested @each, evaluate the remaining path normally
@@ -650,7 +648,7 @@ function applyToEach(
         const lastKey = result.lastKey;
         const parent = result.target;
         
-        if (redirectRestrictedProp(restrictedPropSet, parent, lastKey, value)) {
+        if (permissionProcessor?.redirectRestrictedProp(parent, lastKey, value)) {
           // skip
         } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
           if (lastKey in parent && isReadonlyProperty(parent, lastKey)) {
@@ -658,7 +656,7 @@ function applyToEach(
             if (typeof currentValue !== 'object' || currentValue === null) {
               throw new Error(`Cannot merge object into readonly primitive property '${String(lastKey)}'`);
             }
-            assignGingerly(currentValue, value, options, permissions);
+            assignGingerly(currentValue, value, options, permissionProcessor);
           } else {
             parent[lastKey] = value;
           }
@@ -701,16 +699,13 @@ export function assignGingerly(
   target: any,
   source: Record<string | symbol, any>,
   options?: IAssignGingerlyOptions,
-  permissions?: AssignPermissions
+  permissionProcessor?: PermissionProcessor
 ): any {
   if (!target || typeof target !== 'object') {
     return target;
   }
 
   const { aliasMap, withMethods: withMethodsSet } = normalizeAliasOptions(options);
-
-  // Normalize restrictedPropSettings once per top-level call
-  const restrictedPropSet = buildRestrictedPropSet(permissions);
 
   // Convert withAsyncMethods array to Set for O(1) lookup
   const withAsyncMethodsSet = options?.withAsyncMethods
@@ -810,7 +805,7 @@ export function assignGingerly(
           }
 
           //TODO:  this logic seems to occur twice at least.  Maybe make it a method?
-          if (checkRestrictedProp(restrictedPropSet, lhsKey)) {
+          if (permissionProcessor?.checkRestrictedProp(lhsKey)) {
             continue;
           }
 
@@ -821,7 +816,7 @@ export function assignGingerly(
             const capturedTarget = target;
             const capturedOptions = options as AssignFromOptions | undefined;
             import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
-              attachEventListener(capturedLhs, capturedValue, capturedTarget, capturedOptions?.from ?? capturedTarget, capturedOptions ?? {}, permissions);
+              attachEventListener(capturedLhs, capturedValue, capturedTarget, capturedOptions?.from ?? capturedTarget, capturedOptions ?? {}, permissionProcessor);
             });
             continue;
           }
@@ -833,7 +828,7 @@ export function assignGingerly(
           }
         } else {
           // Plain key - direct operation on target
-          if (checkRestrictedProp(restrictedPropSet, path)) {
+          if (permissionProcessor?.checkRestrictedProp(path)) {
             continue;
           }
 
@@ -844,7 +839,7 @@ export function assignGingerly(
             const capturedTarget = target;
             const capturedOptions = options as AssignFromOptions | undefined;
             import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
-              attachEventListener(capturedLhs, capturedValue, capturedTarget, capturedOptions?.from ?? capturedTarget, capturedOptions ?? {}, permissions);
+              attachEventListener(capturedLhs, capturedValue, capturedTarget, capturedOptions?.from ?? capturedTarget, capturedOptions ?? {}, permissionProcessor);
             });
             continue;
           }
@@ -908,7 +903,7 @@ export function assignGingerly(
         }
         
         // Apply negation to LHS — check restriction first
-        if (!checkRestrictedProp(restrictedPropSet, lhsLastKey)) {
+        if (!permissionProcessor?.checkRestrictedProp(lhsLastKey)) {
           lhsParent[lhsLastKey] = !valueToNegate;
         }
       }
@@ -965,7 +960,7 @@ export function assignGingerly(
       if (path) {
         const pathParts = isNestedPath(path) ? parsePath(path) : [path];
         const lastKey = pathParts[pathParts.length - 1];
-        if (checkRestrictedProp(restrictedPropSet, lastKey)) {
+        if (permissionProcessor?.checkRestrictedProp(lastKey)) {
           continue;
         }
         // Navigate to the target sub-object
@@ -992,7 +987,7 @@ export function assignGingerly(
         
         // Recursively merge if target is a valid object
         if (mergeTarget && typeof mergeTarget === 'object') {
-          assignGingerly(mergeTarget, value, options, permissions);
+          assignGingerly(mergeTarget, value, options, permissionProcessor);
         }
       }
       continue;
@@ -1023,8 +1018,7 @@ export function assignGingerly(
                 withMethodsSet,
                 aliasMap,
                 options,
-                permissions,
-                restrictedPropSet
+                permissionProcessor
               );
             } catch (error) {
               console.error('Error in @eachTime:', error);
@@ -1054,7 +1048,7 @@ export function assignGingerly(
         
         // Apply to each item in the iterable
         if (isIterable(current)) {
-          applyToEach(current, pathAfterForEach, value, withMethodsSet || new Set(), aliasMap, options, permissions, restrictedPropSet);
+          applyToEach(current, pathAfterForEach, value, withMethodsSet || new Set(), aliasMap, options, permissionProcessor);
         }
         // If not iterable, let JavaScript throw error naturally when trying to iterate
         
@@ -1070,8 +1064,7 @@ export function assignGingerly(
         const capturedValue = value;
         const capturedWithMethodsSet = withMethodsSet || new Set<string>();
         const capturedOptions = options;
-        const capturedPermissions = permissions;
-        const capturedRestrictedPropSet = restrictedPropSet;
+        const capturedPermissionProcessor = permissionProcessor;
         (async () => {
           const { evaluatePathWithAsyncMethods } = await import('./evaluatePathWithAsyncMethods.js');
           const result = await evaluatePathWithAsyncMethods(
@@ -1096,7 +1089,7 @@ export function assignGingerly(
             // Not a method — assign the value
             const lastKey = result.lastKey;
             const parent = result.target;
-            if (redirectRestrictedProp(capturedRestrictedPropSet, parent, lastKey, capturedValue)) {
+            if (capturedPermissionProcessor?.redirectRestrictedProp(parent, lastKey, capturedValue)) {
               // skip
             } else if (typeof capturedValue === 'object' && capturedValue !== null && !Array.isArray(capturedValue)) {
               if (lastKey in parent && isReadonlyProperty(parent, lastKey)) {
@@ -1104,7 +1097,7 @@ export function assignGingerly(
                 if (typeof currentValue !== 'object' || currentValue === null) {
                   throw new Error(`Cannot merge object into readonly primitive property '${String(lastKey)}'`);
                 }
-                assignGingerly(currentValue, capturedValue, capturedOptions, capturedPermissions);
+                assignGingerly(currentValue, capturedValue, capturedOptions, capturedPermissionProcessor);
               } else {
                 parent[lastKey] = capturedValue;
               }
@@ -1141,7 +1134,7 @@ export function assignGingerly(
         const lastKey = result.lastKey;
         const parent = result.target;
         
-        if (redirectRestrictedProp(restrictedPropSet, parent, lastKey, value)) {
+        if (permissionProcessor?.redirectRestrictedProp(parent, lastKey, value)) {
           // skip
         // Check for static assignTo protocol
         } else if (lastKey in parent && tryAssignTo(parent[lastKey], value, parent, lastKey)) {
@@ -1153,7 +1146,7 @@ export function assignGingerly(
             if (typeof currentValue !== 'object' || currentValue === null) {
               throw new Error(`Cannot merge object into readonly primitive property '${String(lastKey)}'`);
             }
-            assignGingerly(currentValue, value, options, permissions);
+            assignGingerly(currentValue, value, options, permissionProcessor);
           } else {
             // Property is writable - replace it
             parent[lastKey] = value;
@@ -1166,7 +1159,7 @@ export function assignGingerly(
         const lastKey = pathParts[pathParts.length - 1];
         const parent = ensureNestedPath(target, pathParts);
 
-        if (redirectRestrictedProp(restrictedPropSet, parent, lastKey, value)) {
+        if (permissionProcessor?.redirectRestrictedProp(parent, lastKey, value)) {
           // skip
         // Check for static assignTo protocol
         } else if (lastKey in parent && tryAssignTo(parent[lastKey], value, parent, lastKey)) {
@@ -1180,7 +1173,7 @@ export function assignGingerly(
               throw new Error(`Cannot merge object into readonly primitive property '${String(lastKey)}'`);
             }
             // Recursively apply assignGingerly to the readonly object
-            assignGingerly(currentValue, value, options, permissions);
+            assignGingerly(currentValue, value, options, permissionProcessor);
           } else {
             // Property is writable - replace it
             parent[lastKey] = value;
@@ -1211,7 +1204,7 @@ export function assignGingerly(
         continue;
       }
       
-      if (redirectRestrictedProp(restrictedPropSet, target, key, value)) {
+      if (permissionProcessor?.redirectRestrictedProp(target, key, value)) {
         // skip
       // Check for static assignTo protocol
       } else if (key in target && tryAssignTo(target[key], value, target, key)) {
@@ -1225,7 +1218,7 @@ export function assignGingerly(
             throw new Error(`Cannot merge object into readonly primitive property '${String(key)}'`);
           }
           // Recursively apply assignGingerly to the readonly object
-          assignGingerly(currentValue, value, options, permissions);
+          assignGingerly(currentValue, value, options, permissionProcessor);
         } else {
           // Property is writable - replace it
           target[key] = value;
@@ -1369,7 +1362,7 @@ export function assignGingerly(
   // Fire-and-forget bulk enhancements (async, non-blocking)
   if (options?.enhance && options.enhance.length > 0 && typeof target === 'object' && target instanceof Element) {
     import('./enhanceAll.js').then(({ enhanceAll }) => {
-      enhanceAll(target, options!.enhance!, permissions);
+      enhanceAll(target, options!.enhance!, permissionProcessor);
     });
   }
 

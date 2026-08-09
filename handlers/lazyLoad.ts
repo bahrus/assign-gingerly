@@ -20,11 +20,11 @@
  */
 
 import type { AssignFromHandler } from '../assignFromAsync.js';
-import type { LazyLoadResolvedParams, LazyLoadInstantiatedContext } from '../types/assign-gingerly/types.js';
+import type { LazyLoadResolvedParams, LazyLoadInstantiatedContext, PermissionProcessor } from '../types/assign-gingerly/types.js';
 import { withTransition, ensureHideStyle, DEFAULT_HIDE_CLASS } from '../transitionHelper.js';
 import { findMarkers, createMarkers, getNodesBetweenMarkers, findMarkersSibling, createMarkersSibling, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 import { assignFrom } from '../assignFrom.js';
-import type { AssignPermissions } from '../types/assign-gingerly/types.js';
+
 
 export type { LazyLoadResolvedParams, LazyLoadInstantiatedContext };
 
@@ -49,16 +49,16 @@ function getMarkerName(templateEl: any): string {
 export class LazyLoadHandler implements AssignFromHandler {
     config: any;
     _options: any;
-    _permissions?: AssignPermissions;
+    _permissionProcessor?: PermissionProcessor;
     static #markerCounter = 0;
 
     constructor(config: any) {
         this.config = config;
     }
 
-    async assign(lhsTarget: any, resolvedParams: LazyLoadResolvedParams, options?: any, permissions?: AssignPermissions): Promise<void> {
+    async assign(lhsTarget: any, resolvedParams: LazyLoadResolvedParams, options?: any, permissionProcessor?: PermissionProcessor): Promise<void> {
         this._options = options; // Store for applyAssign access
-        this._permissions = permissions;
+        this._permissionProcessor = permissionProcessor;
         const {
             if: condition,
             instantiate,
@@ -320,10 +320,10 @@ export class LazyLoadHandler implements AssignFromHandler {
             const len = Math.min(elements.length, assign.configs.length);
             for (let j = 0; j < len; j++) {
                 const cfg = assign.configs[j];
-                assignFrom(elements[j], cfg.toClone ?? {}, { from, ...cfg.withOptions }, this._permissions);
+                assignFrom(elements[j], cfg.toClone ?? {}, { from, ...cfg.withOptions }, this._permissionProcessor);
             }
         } else if (assign.toClone) {
-            assignFrom(elements[0], assign.toClone, { from, ...assign.withOptions }, this._permissions);
+            assignFrom(elements[0], assign.toClone, { from, ...assign.withOptions }, this._permissionProcessor);
         }
     }
 

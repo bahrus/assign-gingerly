@@ -33,13 +33,13 @@ import { findClassPrototypeInPath } from './utils/findClassPrototypeInPath.js';
  * @param target - The DOM element to search within
  * @param configs - Array of enhancement configurations
  */
-export async function enhanceAll(target, configs, permissions) {
+export async function enhanceAll(target, configs, permissionProcessor) {
     for (const config of configs) {
         // Validate EMC path unless cross-domain imports are explicitly permitted
-        if (!permissions?.crossDomainImports && !isAllowedImportPath(config.emc)) {
+        if (!permissionProcessor?.crossDomainImports && !isAllowedImportPath(config.emc)) {
             throw new Error(`enhanceAll: EMC path "${config.emc}" is a cross-domain URL. ` +
                 `Only same-origin paths or import-map-covered specifiers are allowed by default. ` +
-                `Pass { crossDomainImports: true } in permissions to override.`);
+                `Pass { crossDomainImports: true } in permissionProcessor to override.`);
         }
         // 1. Import the EMC JSON
         const emcModule = await import(config.emc, { with: { type: 'json' } });

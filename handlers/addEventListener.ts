@@ -8,8 +8,7 @@
  */
 
 import assignGingerly from '../assignGingerly.js';
-import type { AddEventListenerConfig, AssignDispatchVector } from '../types/assign-gingerly/types.js';
-import type { AssignPermissions } from '../types/assign-gingerly/types.js';
+import type { AddEventListenerConfig, AssignDispatchVector, PermissionProcessor } from '../types/assign-gingerly/types.js';
 
 /**
  * WeakMap for dedup: Element → Map<key, AbortController>
@@ -52,7 +51,7 @@ function processVector(
     lhs: Element,
     inheritedOptions: any,
     useAssignFrom: boolean,
-    permissions?: AssignPermissions
+    permissionProcessor?: PermissionProcessor
 ): void {
     const destinations = [
         { key: 'toTarget' as const, dest: target },
@@ -66,10 +65,10 @@ function processVector(
         if (useAssignFrom && source != null) {
             // Dynamic import assignFrom on demand (fire-and-forget context, already async)
             import('../assignFrom.js').then(({ assignFrom }) => {
-                assignFrom(dest, pattern, { from: source, ...inheritedOptions, ...vector.withOptions }, permissions);
+                assignFrom(dest, pattern, { from: source, ...inheritedOptions, ...vector.withOptions }, permissionProcessor);
             });
         } else {
-            assignGingerly(dest, pattern, inheritedOptions, permissions);
+            assignGingerly(dest, pattern, inheritedOptions, permissionProcessor);
         }
     }
 
@@ -78,10 +77,10 @@ function processVector(
     if (shorthand) {
         if (useAssignFrom && source != null) {
             import('../assignFrom.js').then(({ assignFrom }) => {
-                assignFrom(host, shorthand, { from: source, ...inheritedOptions, ...vector.withOptions }, permissions);
+                assignFrom(host, shorthand, { from: source, ...inheritedOptions, ...vector.withOptions }, permissionProcessor);
             });
         } else {
-            assignGingerly(host, shorthand, inheritedOptions, permissions);
+            assignGingerly(host, shorthand, inheritedOptions, permissionProcessor);
         }
     }
 }
@@ -101,7 +100,7 @@ export function attachEventListener(
     target: any,
     host: any,
     inheritedOptions: any,
-    permissions?: AssignPermissions
+    permissionProcessor?: PermissionProcessor
 ): void {
     const { on: eventName, get: getConfig, fromLHS, fromHost, fromTarget, fromEvent, dispatch } = config;
 
@@ -134,26 +133,26 @@ export function attachEventListener(
         if (preventDefault) event.preventDefault();
 
         // Static assignments (no from) — top-level toTarget/toHost/toLHS + shorthand
-        processVector(config, null, target, host, lhs, inheritedOptions, false, permissions);
+        processVector(config, null, target, host, lhs, inheritedOptions, false, permissionProcessor);
 
         // fromLHS assignments
         if (fromLHS) {
-            processVector(fromLHS, lhs, target, host, lhs, inheritedOptions, true, permissions);
+            processVector(fromLHS, lhs, target, host, lhs, inheritedOptions, true, permissionProcessor);
         }
 
         // fromHost assignments
         if (fromHost) {
-            processVector(fromHost, host, target, host, lhs, inheritedOptions, true, permissions);
+            processVector(fromHost, host, target, host, lhs, inheritedOptions, true, permissionProcessor);
         }
 
         // fromTarget assignments
         if (fromTarget) {
-            processVector(fromTarget, target, target, host, lhs, inheritedOptions, true, permissions);
+            processVector(fromTarget, target, target, host, lhs, inheritedOptions, true, permissionProcessor);
         }
 
         // fromEvent assignments
         if (fromEvent) {
-            processVector(fromEvent, event, target, host, lhs, inheritedOptions, true, permissions);
+            processVector(fromEvent, event, target, host, lhs, inheritedOptions, true, permissionProcessor);
         }
 
         // Dispatch custom event if configured
