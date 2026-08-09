@@ -2,9 +2,8 @@
 
 import { EnhancementConfig } from "./types/assign-gingerly/types";
 import type { AssignFromOptions, FeatureConfigsMap, IAssignGingerlyOptions } from "./types/assign-gingerly/types";
-import type { AssignPermissions } from './types/assign-gingerly/types.js';
+import type { AssignPermissions, RestrictedPropSettingsMap } from './types/assign-gingerly/types.js';
 import { buildRestrictedPropSet, checkRestrictedProp, redirectRestrictedProp } from './assignPermissions/restrictedProps.js';
-import type { RestrictedPropSettingsMap } from './assignPermissions/restrictedProps.js';
 import { normalizeAliasOptions } from './getValues.js';
 
 /**

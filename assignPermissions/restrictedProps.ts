@@ -1,10 +1,7 @@
-import type { AssignPermissions, RestrictedPropSetting } from '../types/assign-gingerly/types.js';
+import type { AssignPermissions, RestrictedPropSetting, RestrictedPropSettingsMap } from '../types/assign-gingerly/types.js';
 import { isAllowedUrl } from './isAllowedUrl.js';
 
-export interface RestrictedPropSettingsMap {
-    props: Map<string, RestrictedPropSetting | undefined>;
-    attrs: Map<string, RestrictedPropSetting | undefined>;
-}
+
 
 const warnedOnce = new Set<string>();
 
