@@ -1,6 +1,6 @@
 import { AttrPatterns, AttrConfig, ParserFunction, ParserContext, SpawnContext } from './types/assign-gingerly/types';
 import { globalParserRegistry, getParserRegistry } from './parserRegistry.js';
-import { resolveTemplate } from './resolveTemplate.js';
+import { resolveTemplate } from './resolve/resolveTemplate.js';
 
 // Module-level cache for parsed attribute values
 // Structure: Map<configKey, Map<attrValue, parsedValue>>

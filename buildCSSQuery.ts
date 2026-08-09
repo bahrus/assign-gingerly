@@ -1,5 +1,5 @@
 import { EnhancementConfig, AttrPatterns } from './types/assign-gingerly/types';
-import { resolveTemplate } from './resolveTemplate.js';
+import { resolveTemplate } from './resolve/resolveTemplate.js';
 
 /**
  * Extracts attribute names from withAttrs configuration

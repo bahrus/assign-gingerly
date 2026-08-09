@@ -1,4 +1,4 @@
-import { resolveTemplate } from './resolveTemplate.js';
+import { resolveTemplate } from './resolve/resolveTemplate.js';
 /**
  * Extracts attribute names from withAttrs configuration
  * Resolves template variables and excludes underscore-prefixed config keys

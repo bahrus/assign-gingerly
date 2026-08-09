@@ -21,6 +21,7 @@
     "assignPermissions/**",
     "handlers/**",
     "inferencer/**",
+    "resolve/**",
     "utils/**",
     "README.md",
     "LICENSE",
@@ -53,9 +54,9 @@
       "default": "./buildCSSQuery.js",
       "types": "./buildCSSQuery.ts"
     },
-    "./resolveTemplate.js": {
-      "default": "./resolveTemplate.js",
-      "types": "./resolveTemplate.ts"
+    "./resolve/resolveTemplate.js": {
+      "default": "./resolve/resolveTemplate.js",
+      "types": "./resolve/resolveTemplate.ts"
     },
     "./getHost.js": {
       "default": "./getHost.js",
@@ -84,10 +85,6 @@
     "./defineWithFeatures.js": {
       "default": "./defineWithFeatures.js",
       "types": "./defineWithFeatures.ts"
-    },
-    "./resolveAndAssignFeatures.js": {
-      "default": "./resolve/resolveAndAssignFeatures.js",
-      "types": "./resolve/resolveAndAssignFeatures.ts"
     },
     "./handlers/addEventListener.js": {
       "default": "./handlers/addEventListener.js",
