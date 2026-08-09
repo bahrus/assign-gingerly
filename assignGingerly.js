@@ -369,12 +369,20 @@ export function isClassInstance(value) {
     return proto !== Object.prototype && proto !== null;
 }
 /**
+ * Check whether a method name is listed in withMethods and is not restricted
+ * by the permission processor. Restricted methods are treated as non-method
+ * property names so they fall through to normal access.
+ */
+export function isAllowedMethod(methodName, withMethods, permissionProcessor) {
+    return withMethods.has(methodName) && !permissionProcessor?.checkRestrictedMethod(methodName);
+}
+/**
  * Helper function to evaluate a nested path with method calls
  * Handles chained method calls where path segments can be methods
  *
  * Exported for use by eachTime.ts
  */
-export function evaluatePathWithMethods(target, pathParts, value, withMethods) {
+export function evaluatePathWithMethods(target, pathParts, value, withMethods, permissionProcessor) {
     let current = target;
     let i = 0;
     // Process all segments except the last one
@@ -383,10 +391,10 @@ export function evaluatePathWithMethods(target, pathParts, value, withMethods) {
         const nextPart = pathParts[i + 1];
         // A trailing | marks a zero-argument method call: 'deref|' calls deref()
         // without consuming the next segment. Only applies to names in withMethods.
-        const isZeroArgMethod = part.endsWith('|') && withMethods.has(part.slice(0, -1));
+        const isZeroArgMethod = part.endsWith('|') && isAllowedMethod(part.slice(0, -1), withMethods, permissionProcessor);
         const nextIsMethod = withMethods.has(nextPart)
             || (nextPart.endsWith('|') && withMethods.has(nextPart.slice(0, -1)));
-        if (withMethods.has(part) || isZeroArgMethod) {
+        if (isAllowedMethod(part, withMethods, permissionProcessor) || isZeroArgMethod) {
             const methodName = isZeroArgMethod ? part.slice(0, -1) : part;
             const method = current[methodName];
             if (typeof method === 'function') {
@@ -420,12 +428,12 @@ export function evaluatePathWithMethods(target, pathParts, value, withMethods) {
     // Strip a trailing | from the last segment only when it names a listed method;
     // otherwise it is a literal property name (e.g. an exotic key ending in |).
     const rawLastKey = pathParts[pathParts.length - 1];
-    const isZeroArg = rawLastKey.endsWith('|') && withMethods.has(rawLastKey.slice(0, -1));
+    const isZeroArg = rawLastKey.endsWith('|') && isAllowedMethod(rawLastKey.slice(0, -1), withMethods, permissionProcessor);
     const lastKey = isZeroArg ? rawLastKey.slice(0, -1) : rawLastKey;
     return {
         target: current,
         lastKey,
-        isMethod: withMethods.has(lastKey),
+        isMethod: isAllowedMethod(lastKey, withMethods, permissionProcessor),
         isZeroArg
     };
 }
@@ -493,8 +501,8 @@ function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, opti
             let current = item;
             for (const part of pathToForEach) {
                 // A trailing | marks a zero-argument method call (only for names in withMethods)
-                const isZeroArgMethod = part.endsWith('|') && withMethods.has(part.slice(0, -1));
-                if (withMethods.has(part) || isZeroArgMethod) {
+                const isZeroArgMethod = part.endsWith('|') && isAllowedMethod(part.slice(0, -1), withMethods, permissionProcessor);
+                if (isAllowedMethod(part, withMethods, permissionProcessor) || isZeroArgMethod) {
                     const methodName = isZeroArgMethod ? part.slice(0, -1) : part;
                     const method = current[methodName];
                     if (typeof method === 'function') {
@@ -534,7 +542,7 @@ function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, opti
         }
         else {
             // No nested @each, evaluate the remaining path normally
-            const result = evaluatePathWithMethods(item, remainingPath, value, withMethods);
+            const result = evaluatePathWithMethods(item, remainingPath, value, withMethods, permissionProcessor);
             if (result.isMethod) {
                 // Last segment is a method - call it
                 const method = result.target[result.lastKey];
@@ -686,7 +694,7 @@ export function assignGingerly(target, source, options, permissionProcessor) {
                     let lhsParent;
                     let lhsKey;
                     if (withMethodsSet) {
-                        const result = evaluatePathWithMethods(target, pathParts, value, withMethodsSet);
+                        const result = evaluatePathWithMethods(target, pathParts, value, withMethodsSet, permissionProcessor);
                         lhsParent = result.target;
                         lhsKey = result.lastKey;
                         lhsValue = lhsParent[lhsKey];
@@ -859,7 +867,7 @@ export function assignGingerly(target, source, options, permissionProcessor) {
                 let mergeTarget;
                 if (isNestedPath(path)) {
                     if (withMethodsSet) {
-                        const result = evaluatePathWithMethods(target, parsePath(path), value, withMethodsSet);
+                        const result = evaluatePathWithMethods(target, parsePath(path), value, withMethodsSet, permissionProcessor);
                         mergeTarget = result.target[result.lastKey];
                     }
                     else {
@@ -913,7 +921,7 @@ export function assignGingerly(target, source, options, permissionProcessor) {
                 let current = target;
                 if (pathToForEach.length > 0) {
                     if (withMethodsSet) {
-                        const result = evaluatePathWithMethods(target, pathToForEach, value, withMethodsSet);
+                        const result = evaluatePathWithMethods(target, pathToForEach, value, withMethodsSet, permissionProcessor);
                         // The result.target is the current position after evaluating the path
                         // This is already the iterable we want
                         current = result.target;
@@ -943,7 +951,7 @@ export function assignGingerly(target, source, options, permissionProcessor) {
                 const capturedPermissionProcessor = permissionProcessor;
                 (async () => {
                     const { evaluatePathWithAsyncMethods } = await import('./evaluatePathWithAsyncMethods.js');
-                    const result = await evaluatePathWithAsyncMethods(capturedTarget, capturedPathParts, capturedValue, capturedWithMethodsSet, withAsyncMethodsSet);
+                    const result = await evaluatePathWithAsyncMethods(capturedTarget, capturedPathParts, capturedValue, capturedWithMethodsSet, withAsyncMethodsSet, capturedPermissionProcessor);
                     if (result.isMethod || result.isAsyncMethod) {
                         // Last segment is a method — call it
                         const method = result.target[result.lastKey];
@@ -987,7 +995,7 @@ export function assignGingerly(target, source, options, permissionProcessor) {
             }
             // Check if we need to handle methods
             if (withMethodsSet) {
-                const result = evaluatePathWithMethods(target, pathParts, value, withMethodsSet);
+                const result = evaluatePathWithMethods(target, pathParts, value, withMethodsSet, permissionProcessor);
                 if (result.isMethod) {
                     // Last segment is a method - call it
                     const method = result.target[result.lastKey];

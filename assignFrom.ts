@@ -407,14 +407,14 @@ function processIdRefNormalKeys(
     if (parsed.remainingPath) {
       const resolvedValue = getValues(
         { __v: value }, from,
-        { withMethods, aka, akaMethods, protocols, root: target }
+        { withMethods, aka, akaMethods, protocols, root: target, permissionProcessor }
       );
       assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissionProcessor);
     } else {
       const resolvedValue = getValues(
         typeof value === 'object' && value !== null ? value : { __v: value },
         from,
-        { withMethods, aka, akaMethods, protocols, root: target }
+        { withMethods, aka, akaMethods, protocols, root: target, permissionProcessor }
       );
       if (!('__v' in resolvedValue)) {
         assignGingerly(el, resolvedValue, options, permissionProcessor);
@@ -447,7 +447,7 @@ export function assignFrom(
   // Categorize keys
   const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys } = categorizeKeys(expandedPattern);
 
-  const resolveOptions = { ...options, root: target } as any;
+  const resolveOptions = { ...options, root: target, permissionProcessor } as any;
 
   // Process ?= ternary keys (sync)
   if (ternaryKeys.length > 0) {
@@ -487,7 +487,8 @@ export function assignFrom(
                   aka: options.aka,
                   akaMethods: options.akaMethods,
                   protocols: options.protocols,
-                  root: target
+                  root: target,
+                  permissionProcessor
                 });
               } else {
                 normalPattern[key] = el.id; // bare #[x] → ID string

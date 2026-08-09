@@ -391,11 +391,11 @@ function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, option
             continue;
         const value = expandedPattern[key];
         if (parsed.remainingPath) {
-            const resolvedValue = getValues({ __v: value }, from, { withMethods, aka, akaMethods, protocols, root: target });
+            const resolvedValue = getValues({ __v: value }, from, { withMethods, aka, akaMethods, protocols, root: target, permissionProcessor });
             assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissionProcessor);
         }
         else {
-            const resolvedValue = getValues(typeof value === 'object' && value !== null ? value : { __v: value }, from, { withMethods, aka, akaMethods, protocols, root: target });
+            const resolvedValue = getValues(typeof value === 'object' && value !== null ? value : { __v: value }, from, { withMethods, aka, akaMethods, protocols, root: target, permissionProcessor });
             if (!('__v' in resolvedValue)) {
                 assignGingerly(el, resolvedValue, options, permissionProcessor);
             }
@@ -419,7 +419,7 @@ export function assignFrom(target, pattern, options, permissionProcessor) {
     const expandedPattern = expandSubstitutions(pattern, options);
     // Categorize keys
     const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys } = categorizeKeys(expandedPattern);
-    const resolveOptions = { ...options, root: target };
+    const resolveOptions = { ...options, root: target, permissionProcessor };
     // Process ?= ternary keys (sync)
     if (ternaryKeys.length > 0) {
         const ternaryResolved = {};
@@ -459,7 +459,8 @@ export function assignFrom(target, pattern, options, permissionProcessor) {
                                     aka: options.aka,
                                     akaMethods: options.akaMethods,
                                     protocols: options.protocols,
-                                    root: target
+                                    root: target,
+                                    permissionProcessor
                                 });
                             }
                             else {

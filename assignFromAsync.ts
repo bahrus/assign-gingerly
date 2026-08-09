@@ -70,7 +70,8 @@ export async function assignFromAsync(
       aka: options.aka,
       akaMethods: options.akaMethods,
       protocols: options.protocols,
-      root: target
+      root: target,
+      permissionProcessor
     });
 
     // Recursively handle "..." spread keys at all nesting levels
@@ -96,7 +97,7 @@ export async function assignFromAsync(
         // Resolve the RHS value
         const resolvedValue = await resolveValues(
           { __v: value }, from,
-          { withMethods, aka, akaMethods, protocols, root: el }
+          { withMethods, aka, akaMethods, protocols, root: el, permissionProcessor }
         );
         // Apply remaining path on the resolved element
         assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissionProcessor);
@@ -105,7 +106,7 @@ export async function assignFromAsync(
         const resolvedValue = await resolveValues(
           typeof value === 'object' && value !== null ? value : { __v: value },
           from,
-          { withMethods, aka, akaMethods, protocols, root: el }
+          { withMethods, aka, akaMethods, protocols, root: el, permissionProcessor }
         );
         if ('__v' in resolvedValue) {
           // Single value — can't assign to element root without a path

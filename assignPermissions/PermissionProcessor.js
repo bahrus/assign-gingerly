@@ -5,7 +5,9 @@ export class PermissionProcessor {
         const { props, attrs } = buildMaps(permissions);
         this.props = props;
         this.attrs = attrs;
+        this.methods = buildMethodSet(permissions);
         this.warned = new Set();
+        this.warnedMethods = new Set();
     }
     get crossDomainImports() {
         return !!this.permissions?.crossDomainImports;
@@ -20,6 +22,12 @@ export class PermissionProcessor {
         if (!this.props.has(key))
             return false;
         this.warnRestricted(key);
+        return true;
+    }
+    checkRestrictedMethod(methodName) {
+        if (!this.methods.has(methodName))
+            return false;
+        this.warnRestrictedMethod(methodName);
         return true;
     }
     redirectRestrictedProp(target, key, value) {
@@ -89,6 +97,12 @@ export class PermissionProcessor {
             console.warn(`assignGingerly: property '${key}' is in restrictedPropSettings — assignment skipped.`);
         }
     }
+    warnRestrictedMethod(methodName) {
+        if (!this.warnedMethods.has(methodName)) {
+            this.warnedMethods.add(methodName);
+            console.warn(`assignGingerly: method '${methodName}' is in restrictedMethodSettings — method call skipped.`);
+        }
+    }
 }
 function buildMaps(permissions) {
     const settings = permissions?.restrictedPropSettings;
@@ -136,4 +150,17 @@ function normalizeAttrNames(attr, propNames) {
     if (attr === true)
         return propNames;
     return normalizeStrings(attr);
+}
+function buildMethodSet(permissions) {
+    const methodSettings = permissions?.restrictedMethodSettings;
+    const methods = new Set();
+    if (!methodSettings || methodSettings.length === 0) {
+        return methods;
+    }
+    for (const setting of methodSettings) {
+        if (typeof setting === 'string') {
+            methods.add(setting);
+        }
+    }
+    return methods;
 }

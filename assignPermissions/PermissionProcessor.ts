@@ -10,13 +10,16 @@ export class PermissionProcessor {
     private readonly permissions: AssignPermissions | undefined;
     private readonly props: Map<string, RestrictedPropSetting | undefined>;
     private readonly attrs: Map<string, RestrictedPropSetting | undefined>;
+    private readonly methods: Set<string>;
     private readonly warned = new Set<string>();
+    private readonly warnedMethods = new Set<string>();
 
     constructor(permissions: AssignPermissions | undefined) {
         this.permissions = permissions;
         const { props, attrs } = buildMaps(permissions);
         this.props = props;
         this.attrs = attrs;
+        this.methods = buildMethodSet(permissions);
     }
 
     get crossDomainImports(): boolean {
@@ -34,6 +37,12 @@ export class PermissionProcessor {
     checkRestrictedProp(key: string): boolean {
         if (!this.props.has(key)) return false;
         this.warnRestricted(key);
+        return true;
+    }
+
+    checkRestrictedMethod(methodName: string): boolean {
+        if (!this.methods.has(methodName)) return false;
+        this.warnRestrictedMethod(methodName);
         return true;
     }
 
@@ -121,6 +130,13 @@ export class PermissionProcessor {
             console.warn(`assignGingerly: property '${key}' is in restrictedPropSettings — assignment skipped.`);
         }
     }
+
+    private warnRestrictedMethod(methodName: string): void {
+        if (!this.warnedMethods.has(methodName)) {
+            this.warnedMethods.add(methodName);
+            console.warn(`assignGingerly: method '${methodName}' is in restrictedMethodSettings — method call skipped.`);
+        }
+    }
 }
 
 function buildMaps(permissions: AssignPermissions | undefined): RestrictedPropSettingsMap {
@@ -174,4 +190,21 @@ function normalizeAttrNames(
     if (attr === undefined || attr === false) return [];
     if (attr === true) return propNames;
     return normalizeStrings(attr);
+}
+
+function buildMethodSet(permissions: AssignPermissions | undefined): Set<string> {
+    const methodSettings = permissions?.restrictedMethodSettings;
+    const methods = new Set<string>();
+    if (!methodSettings || methodSettings.length === 0) {
+        return methods;
+    }
+
+    for (const setting of methodSettings) {
+        if (typeof setting === 'string') {
+            methods.add(setting);
+        }
+        // Phase II: object-form RestrictedMethodConfig entries are ignored for now.
+    }
+
+    return methods;
 }

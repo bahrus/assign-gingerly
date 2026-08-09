@@ -107,3 +107,49 @@ Phase I is a small, well-scoped addition: add a `Set<string>` denylist to `Permi
 ## Human Response I
 
 I agree with all your recommendations.  Please implement.
+
+---
+
+## AI Response II — Implementation Complete
+
+Implemented Phase I of restricted method settings.
+
+### Changes
+
+- `assignPermissions/PermissionProcessor.ts` / `.js`
+  - Added private `methods: Set<string>` built from string entries in `restrictedMethodSettings`.
+  - Added `checkRestrictedMethod(methodName: string): boolean` with one-time console warning.
+  - Object-form `RestrictedMethodConfig` entries are ignored (reserved for Phase II).
+
+- `types/assign-gingerly/types.d.ts` and `inferencer/types/assign-gingerly/types.d.ts`
+  - Added `checkRestrictedMethod` to the `PermissionProcessor` declaration.
+  - Added `permissionProcessor?: PermissionProcessor` to `GetValuesOptions` and `ResolveValuesOptions`.
+
+- `assignGingerly.ts` / `.js`
+  - Added exported `isAllowedMethod` helper.
+  - Updated `evaluatePathWithMethods` and `applyToEach` to skip restricted method names when consulting `withMethods`.
+  - Kept the raw `withMethods`/`withAsyncMethods` allowlist for deciding whether a method *consumes* the next segment as an argument versus leaving it for the next method call.
+
+- `evaluatePathWithAsyncMethods.ts` / `.js`
+  - Added `permissionProcessor` parameter and guarded both sync and async method checks.
+
+- `eachTime.ts` / `.js`
+  - Forwarded `permissionProcessor` to `evaluatePathWithMethods` for both the path-to-event-source and the path-after-`@eachTime`.
+
+- `resolve/getValues.ts` / `.js`
+  - Added local `isAllowedMethod` helper and threaded `permissionProcessor` through `navigatePath`, `getArray`, `getValues`, and `getValue`.
+
+- `assignFrom.ts` / `.js` and `assignFromAsync.ts` / `.js`
+  - Passed `permissionProcessor` into `getValues` / `resolveValues` options.
+
+- `tests/restricted-prop-settings.html`
+  - Added 7 Phase I method tests covering: blocked method in `withMethods`, `|` zero-arg marker, `akaMethods` alias, restricted method in middle of chain, direct property access unaffected, ignored object-form entries, and `assignFrom` RHS resolution.
+
+### Validation
+
+- `npx playwright test tests/restricted-prop-settings.spec.ts --project=chromium --reporter=list` passes.
+- Full `npm test` suite: **87 passed**.
+
+### Note on the `nextIsMethod` logic
+
+One subtlety: when deciding whether a method call should consume the next path segment as an argument, we still consult the raw `withMethods`/`withAsyncMethods` allowlist, not the permission-filtered set. A restricted method name that appears *after* an allowed method should still be treated as a method boundary (so the allowed method is called with no arguments and we move on), even though the restricted method itself will not be invoked. This prevents a restricted method from being silently swallowed as an argument to an earlier method.

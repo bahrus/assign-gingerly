@@ -11,12 +11,23 @@
  * Deferred until a compelling use case presents itself.
  */
 
+import type { PermissionProcessor } from './types/assign-gingerly/types.js';
+import { isAllowedMethod } from './assignGingerly.js';
+
 export interface AsyncPathResult {
     target: any;
     lastKey: string;
     isMethod: boolean;
     isAsyncMethod: boolean;
     isZeroArg: boolean;
+}
+
+function isAllowedAsyncMethod(
+    methodName: string,
+    withAsyncMethods: Set<string>,
+    permissionProcessor?: PermissionProcessor
+): boolean {
+    return withAsyncMethods.has(methodName) && !permissionProcessor?.checkRestrictedMethod(methodName);
 }
 
 /**
@@ -35,7 +46,8 @@ export async function evaluatePathWithAsyncMethods(
     pathParts: string[],
     value: any,
     withMethods: Set<string>,
-    withAsyncMethods: Set<string>
+    withAsyncMethods: Set<string>,
+    permissionProcessor?: PermissionProcessor
 ): Promise<AsyncPathResult> {
     let current = target;
     let i = 0;
@@ -47,13 +59,13 @@ export async function evaluatePathWithAsyncMethods(
 
         // A trailing | marks a zero-argument method call: 'deref|' calls deref()
         // without consuming the next segment. Only applies to listed method names.
-        const isZeroArgSync = part.endsWith('|') && withMethods.has(part.slice(0, -1));
-        const isZeroArgAsync = part.endsWith('|') && withAsyncMethods.has(part.slice(0, -1));
+        const isZeroArgSync = part.endsWith('|') && isAllowedMethod(part.slice(0, -1), withMethods, permissionProcessor);
+        const isZeroArgAsync = part.endsWith('|') && isAllowedAsyncMethod(part.slice(0, -1), withAsyncMethods, permissionProcessor);
         const baseName = (isZeroArgSync || isZeroArgAsync) ? part.slice(0, -1) : part;
         const nextIsMethod = withAsyncMethods.has(nextPart) || withMethods.has(nextPart)
             || (nextPart.endsWith('|') && (withAsyncMethods.has(nextPart.slice(0, -1)) || withMethods.has(nextPart.slice(0, -1))));
 
-        if (withAsyncMethods.has(part) || isZeroArgAsync) {
+        if (isAllowedAsyncMethod(part, withAsyncMethods, permissionProcessor) || isZeroArgAsync) {
             // Async method — call and await
             const method = current[baseName];
             if (typeof method === 'function') {
@@ -72,7 +84,7 @@ export async function evaluatePathWithAsyncMethods(
                 }
                 current = current[baseName];
             }
-        } else if (withMethods.has(part) || isZeroArgSync) {
+        } else if (isAllowedMethod(part, withMethods, permissionProcessor) || isZeroArgSync) {
             // Sync method — same logic as evaluatePathWithMethods
             const method = current[baseName];
             if (typeof method === 'function') {
@@ -105,13 +117,13 @@ export async function evaluatePathWithAsyncMethods(
     // otherwise it is a literal property name (e.g. an exotic key ending in |).
     const rawLastKey = pathParts[pathParts.length - 1];
     const isZeroArg = rawLastKey.endsWith('|')
-        && (withMethods.has(rawLastKey.slice(0, -1)) || withAsyncMethods.has(rawLastKey.slice(0, -1)));
+        && (isAllowedMethod(rawLastKey.slice(0, -1), withMethods, permissionProcessor) || isAllowedAsyncMethod(rawLastKey.slice(0, -1), withAsyncMethods, permissionProcessor));
     const lastKey = isZeroArg ? rawLastKey.slice(0, -1) : rawLastKey;
     return {
         target: current,
         lastKey,
-        isMethod: withMethods.has(lastKey),
-        isAsyncMethod: withAsyncMethods.has(lastKey),
+        isMethod: isAllowedMethod(lastKey, withMethods, permissionProcessor),
+        isAsyncMethod: isAllowedAsyncMethod(lastKey, withAsyncMethods, permissionProcessor),
         isZeroArg
     };
 }

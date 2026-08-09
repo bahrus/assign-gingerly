@@ -17,7 +17,7 @@
  * }, source, { withMethods: ['querySelector'], aka: { q: 'querySelector' } });
  */
 
-import type { GetValuesOptions } from '../types/assign-gingerly/types.js';
+import type { GetValuesOptions, PermissionProcessor } from '../types/assign-gingerly/types.js';
 
 export function normalizeAliasOptions(options?: {
     aka?: Record<string, string>;
@@ -59,6 +59,19 @@ export function normalizeAliasOptions(options?: {
     }
 
     return { aliasMap, withMethods };
+}
+
+/**
+ * Check whether a method name is listed in withMethods and is not restricted
+ * by the permission processor. Restricted methods are treated as non-method
+ * property names so they fall through to normal access.
+ */
+function isAllowedMethod(
+    methodName: string,
+    withMethods: Set<string> | undefined,
+    permissionProcessor?: PermissionProcessor
+): boolean {
+    return !!withMethods && withMethods.has(methodName) && !permissionProcessor?.checkRestrictedMethod(methodName);
 }
 
 /**
@@ -107,7 +120,8 @@ function parseCachedPath(path: string): string[] {
 function navigatePath(
     source: any,
     parts: string[],
-    withMethods: Set<string> | undefined
+    withMethods: Set<string> | undefined,
+    permissionProcessor?: PermissionProcessor
 ): any {
     let current = source;
     let i = 0;
@@ -117,11 +131,11 @@ function navigatePath(
 
         const part = parts[i];
 
-        if (withMethods && withMethods.has(part)) {
+        if (isAllowedMethod(part, withMethods, permissionProcessor)) {
             const method = current[part];
             if (typeof method === 'function') {
                 const nextPart = parts[i + 1];
-                if (nextPart !== undefined && !(withMethods.has(nextPart))) {
+                if (nextPart !== undefined && !isAllowedMethod(nextPart, withMethods, permissionProcessor)) {
                     current = method.call(current, nextPart);
                     i += 2;
                 } else {
@@ -188,12 +202,13 @@ function getArray(
     protocols: Record<string, (key: string) => any> | undefined,
     options?: GetValuesOptions
 ): any[] {
+    const permissionProcessor = options?.permissionProcessor;
     const result: any[] = [];
     for (const item of arr) {
         if (typeof item === 'string' && item.startsWith('?.')) {
             const aliased = applyAliases(item, aliasMap);
             const parts = parseCachedPath(aliased);
-            result.push(parts.length === 0 ? source : navigatePath(source, parts, withMethods));
+            result.push(parts.length === 0 ? source : navigatePath(source, parts, withMethods, permissionProcessor));
         } else if (typeof item === 'string' && item.startsWith('$0')) {
             const rootRef = resolveRootReference(item, source, options?.root);
             if (rootRef === null) {
@@ -202,7 +217,7 @@ function getArray(
                 const aliased = applyAliases(rootRef.path, aliasMap);
                 const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
                 const parts = parseCachedPath(normalizedPath);
-                result.push(parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods));
+                result.push(parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods, permissionProcessor));
             }
         } else if (typeof item === 'string' && protocols && hasProtocol(item)) {
             result.push(getProtocolValue(item, protocols, options));
@@ -242,13 +257,14 @@ export function getValues(
     const { aliasMap, withMethods } = normalizeAliasOptions(options);
 
     const protocols = options?.protocols;
+    const permissionProcessor = options?.permissionProcessor;
 
     const result: Record<string, any> = {};
     for (const [key, value] of Object.entries(pattern)) {
         if (typeof value === 'string' && value.startsWith('?.')) {
             const aliased = applyAliases(value, aliasMap);
             const parts = parseCachedPath(aliased);
-            result[key] = parts.length === 0 ? source : navigatePath(source, parts, withMethods);
+            result[key] = parts.length === 0 ? source : navigatePath(source, parts, withMethods, permissionProcessor);
         } else if (typeof value === 'string' && value.startsWith('$0')) {
             const rootRef = resolveRootReference(value, source, options?.root);
             if (rootRef === null) {
@@ -257,7 +273,7 @@ export function getValues(
                 const aliased = applyAliases(rootRef.path, aliasMap);
                 const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
                 const parts = parseCachedPath(normalizedPath);
-                result[key] = parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods);
+                result[key] = parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods, permissionProcessor);
             }
         } else if (typeof value === 'string' && protocols && hasProtocol(value)) {
             result[key] = getProtocolValue(value, protocols, options);
@@ -309,6 +325,7 @@ export function getValue(
     if (parts.length === 0) return source;
 
     const { withMethods } = normalizeAliasOptions(options);
+    const permissionProcessor = options?.permissionProcessor;
 
-    return navigatePath(source, parts, withMethods);
+    return navigatePath(source, parts, withMethods, permissionProcessor);
 }

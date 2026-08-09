@@ -50,7 +50,7 @@ export async function handleEachTime(
     const { evaluatePathWithMethods } = await import('./assignGingerly.js');
     
     if (withMethods && withMethods.size > 0) {
-      const result = evaluatePathWithMethods(target, pathToEventSource, value, withMethods);
+      const result = evaluatePathWithMethods(target, pathToEventSource, value, withMethods, permissionProcessor);
       eventSource = result.target;
     } else {
       // Simple property navigation
@@ -86,7 +86,8 @@ export async function handleEachTime(
             mountedElement, 
             pathAfterForEach, 
             value, 
-            withMethods || new Set()
+            withMethods || new Set(),
+            permissionProcessor
           );
           
           if (result.isMethod) {

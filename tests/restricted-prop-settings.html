@@ -217,6 +217,108 @@
             expect(img.getAttribute('src')).toBe('https://example.com/x.png');
         });
 
+        await test('Phase I: blocks a method listed in withMethods', () => {
+            const target = {
+                value: 'safe',
+                setHTMLUnsafe(value) { this.value = value; }
+            };
+            const methodProcessor = new PermissionProcessor({
+                restrictedMethodSettings: ['setHTMLUnsafe']
+            });
+            assignGingerly(target, {
+                '?.setHTMLUnsafe': 'blocked'
+            }, { withMethods: ['setHTMLUnsafe'] }, methodProcessor);
+            expect(target.value).toBe('safe');
+        });
+
+        await test('Phase I: blocks zero-arg method marker for restricted method', () => {
+            const target = {
+                value: 'safe',
+                setHTMLUnsafe() { this.value = 'called'; }
+            };
+            const methodProcessor = new PermissionProcessor({
+                restrictedMethodSettings: ['setHTMLUnsafe']
+            });
+            assignGingerly(target, {
+                '?.setHTMLUnsafe|': true
+            }, { withMethods: ['setHTMLUnsafe'] }, methodProcessor);
+            expect(target.value).toBe('safe');
+        });
+
+        await test('Phase I: blocks akaMethods alias to a restricted method', () => {
+            const target = {
+                value: 'safe',
+                setHTMLUnsafe(value) { this.value = value; }
+            };
+            const methodProcessor = new PermissionProcessor({
+                restrictedMethodSettings: ['setHTMLUnsafe']
+            });
+            assignGingerly(target, {
+                '?.dangerous': 'blocked'
+            }, { akaMethods: { dangerous: 'setHTMLUnsafe' } }, methodProcessor);
+            expect(target.value).toBe('safe');
+        });
+
+        await test('Phase I: restricted method in middle of chain falls back to property access', () => {
+            const inner = { setHTMLUnsafe: { dangerous: 'safe' } };
+            const target = {
+                next() { return inner; },
+                setHTMLUnsafe(value) { throw new Error('should not be called'); }
+            };
+            const methodProcessor = new PermissionProcessor({
+                restrictedMethodSettings: ['setHTMLUnsafe']
+            });
+            assignGingerly(target, {
+                '?.next?.setHTMLUnsafe?.dangerous': 'changed'
+            }, { withMethods: ['next', 'setHTMLUnsafe'] }, methodProcessor);
+            expect(inner.setHTMLUnsafe.dangerous).toBe('changed');
+        });
+
+        await test('Phase I: direct property access without withMethods is unaffected', () => {
+            const target = {
+                setHTMLUnsafe: 'safe'
+            };
+            const methodProcessor = new PermissionProcessor({
+                restrictedMethodSettings: ['setHTMLUnsafe']
+            });
+            assignGingerly(target, {
+                setHTMLUnsafe: 'allowed'
+            }, undefined, methodProcessor);
+            expect(target.setHTMLUnsafe).toBe('allowed');
+        });
+
+        await test('Phase I: object-form restrictedMethodSettings entries are ignored', () => {
+            const target = {
+                value: 'safe',
+                setHTMLUnsafe(value) { this.value = value; }
+            };
+            const methodProcessor = new PermissionProcessor({
+                restrictedMethodSettings: [
+                    { method: 'setHTMLUnsafe', addArgs: ['sanitizer'] }
+                ]
+            });
+            assignGingerly(target, {
+                '?.setHTMLUnsafe': 'blocked'
+            }, { withMethods: ['setHTMLUnsafe'] }, methodProcessor);
+            expect(target.value).toBe('blocked');
+        });
+
+        await test('Phase I: assignFrom RHS resolution blocks restricted methods', () => {
+            const source = {
+                value: 'safe',
+                setHTMLUnsafe(value) { this.value = value; }
+            };
+            const target = {};
+            const methodProcessor = new PermissionProcessor({
+                restrictedMethodSettings: ['setHTMLUnsafe']
+            });
+            assignFrom(target, {
+                result: '?.setHTMLUnsafe'
+            }, { from: source, withMethods: ['setHTMLUnsafe'] }, methodProcessor);
+            expect(typeof target.result).toBe('function');
+            expect(source.value).toBe('safe');
+        });
+
         const statusEl = document.getElementById('status');
         const resultsEl = document.getElementById('results');
         const completeEl = document.getElementById('test-complete');

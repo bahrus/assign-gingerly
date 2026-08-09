@@ -49,6 +49,14 @@ export function normalizeAliasOptions(options) {
     return { aliasMap, withMethods };
 }
 /**
+ * Check whether a method name is listed in withMethods and is not restricted
+ * by the permission processor. Restricted methods are treated as non-method
+ * property names so they fall through to normal access.
+ */
+function isAllowedMethod(methodName, withMethods, permissionProcessor) {
+    return !!withMethods && withMethods.has(methodName) && !permissionProcessor?.checkRestrictedMethod(methodName);
+}
+/**
  * Apply alias substitutions to a path string.
  * Replaces complete tokens between `?.` delimiters with their aliased values.
  */
@@ -90,18 +98,18 @@ function parseCachedPath(path) {
  * Navigate a path against a source object, optionally calling methods.
  * Returns the resolved value at the end of the path.
  */
-function navigatePath(source, parts, withMethods) {
+function navigatePath(source, parts, withMethods, permissionProcessor) {
     let current = source;
     let i = 0;
     while (i < parts.length) {
         if (current == null)
             return current;
         const part = parts[i];
-        if (withMethods && withMethods.has(part)) {
+        if (isAllowedMethod(part, withMethods, permissionProcessor)) {
             const method = current[part];
             if (typeof method === 'function') {
                 const nextPart = parts[i + 1];
-                if (nextPart !== undefined && !(withMethods.has(nextPart))) {
+                if (nextPart !== undefined && !isAllowedMethod(nextPart, withMethods, permissionProcessor)) {
                     current = method.call(current, nextPart);
                     i += 2;
                 }
@@ -152,12 +160,13 @@ function getProtocolValue(value, protocols, options) {
  * Recurses into nested arrays and plain objects.
  */
 function getArray(arr, source, aliasMap, withMethods, protocols, options) {
+    const permissionProcessor = options?.permissionProcessor;
     const result = [];
     for (const item of arr) {
         if (typeof item === 'string' && item.startsWith('?.')) {
             const aliased = applyAliases(item, aliasMap);
             const parts = parseCachedPath(aliased);
-            result.push(parts.length === 0 ? source : navigatePath(source, parts, withMethods));
+            result.push(parts.length === 0 ? source : navigatePath(source, parts, withMethods, permissionProcessor));
         }
         else if (typeof item === 'string' && item.startsWith('$0')) {
             const rootRef = resolveRootReference(item, source, options?.root);
@@ -168,7 +177,7 @@ function getArray(arr, source, aliasMap, withMethods, protocols, options) {
                 const aliased = applyAliases(rootRef.path, aliasMap);
                 const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
                 const parts = parseCachedPath(normalizedPath);
-                result.push(parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods));
+                result.push(parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods, permissionProcessor));
             }
         }
         else if (typeof item === 'string' && protocols && hasProtocol(item)) {
@@ -207,12 +216,13 @@ function getArray(arr, source, aliasMap, withMethods, protocols, options) {
 export function getValues(pattern, source, options) {
     const { aliasMap, withMethods } = normalizeAliasOptions(options);
     const protocols = options?.protocols;
+    const permissionProcessor = options?.permissionProcessor;
     const result = {};
     for (const [key, value] of Object.entries(pattern)) {
         if (typeof value === 'string' && value.startsWith('?.')) {
             const aliased = applyAliases(value, aliasMap);
             const parts = parseCachedPath(aliased);
-            result[key] = parts.length === 0 ? source : navigatePath(source, parts, withMethods);
+            result[key] = parts.length === 0 ? source : navigatePath(source, parts, withMethods, permissionProcessor);
         }
         else if (typeof value === 'string' && value.startsWith('$0')) {
             const rootRef = resolveRootReference(value, source, options?.root);
@@ -223,7 +233,7 @@ export function getValues(pattern, source, options) {
                 const aliased = applyAliases(rootRef.path, aliasMap);
                 const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
                 const parts = parseCachedPath(normalizedPath);
-                result[key] = parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods);
+                result[key] = parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods, permissionProcessor);
             }
         }
         else if (typeof value === 'string' && protocols && hasProtocol(value)) {
@@ -274,5 +284,6 @@ export function getValue(path, source, options) {
     if (parts.length === 0)
         return source;
     const { withMethods } = normalizeAliasOptions(options);
-    return navigatePath(source, parts, withMethods);
+    const permissionProcessor = options?.permissionProcessor;
+    return navigatePath(source, parts, withMethods, permissionProcessor);
 }

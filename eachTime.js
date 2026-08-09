@@ -34,7 +34,7 @@ export async function handleEachTime(target, pathParts, forEachIndex, value, wit
         // Import evaluatePathWithMethods for navigation
         const { evaluatePathWithMethods } = await import('./assignGingerly.js');
         if (withMethods && withMethods.size > 0) {
-            const result = evaluatePathWithMethods(target, pathToEventSource, value, withMethods);
+            const result = evaluatePathWithMethods(target, pathToEventSource, value, withMethods, permissionProcessor);
             eventSource = result.target;
         }
         else {
@@ -60,7 +60,7 @@ export async function handleEachTime(target, pathParts, forEachIndex, value, wit
                 // Import needed functions from assignGingerly
                 const { evaluatePathWithMethods, assignGingerly, isReadonlyProperty } = await import('./assignGingerly.js');
                 if (pathAfterForEach.length > 0) {
-                    const result = evaluatePathWithMethods(mountedElement, pathAfterForEach, value, withMethods || new Set());
+                    const result = evaluatePathWithMethods(mountedElement, pathAfterForEach, value, withMethods || new Set(), permissionProcessor);
                     if (result.isMethod) {
                         // Last segment is a method - call it
                         const method = result.target[result.lastKey];
