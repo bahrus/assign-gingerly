@@ -459,3 +459,37 @@ export function isAllowedUrl(value: string, base = document.baseURI): boolean {
 
 I will not touch `assignGingerly.ts` or `assignTentatively.ts` until step 4.
 
+Steps 1–3 are done and verified.
+
+What changed:
+
+- `types/assign-gingerly/types.d.ts` and `inferencer/types/assign-gingerly/types.d.ts`
+  - `prop: string` → `props: string | string[]`
+  - `allowFromSameHost` → `allowFromSameDomain`
+  - Added `attr?: boolean | string | string[]`
+
+- `assignPermissions/isAllowedUrl.ts` (new)
+  - Dedicated same-origin URL validator used by both the import-path guard and the restricted-prop guard.
+
+- `assignPermissions/isAllowedImportPath.ts`
+  - Now delegates its relative/absolute origin check to `isAllowedUrl`.
+
+- `assignPermissions/restrictedProps.ts`
+  - `buildRestrictedPropSet` normalizes `props` and `attr`, builds a `{ props, attrs }` map, and rejects duplicates in either map.
+  - `redirectRestrictedProp` now handles `allowCrossDomain` and `allowFromSameDomain`:
+    - cross-domain allowed
+    - same-origin allowed
+    - otherwise falls back to Phase I/II block or `useMethod`
+  - Added `checkRestrictedAttributeCall` for the upcoming `setAttribute` wiring (Step 4).
+
+- `tests/restricted-prop-settings.html`
+  - Updated existing Phase II cases from `prop` to `props`.
+  - Added Phase III tests for `src` property assignment: same-origin allow, cross-origin block, both-flags-false, and `allowCrossDomain`.
+
+Validation:
+
+- `npx tsc --noEmit` passes.
+- Full Playwright suite: **87/87 passed**.
+
+I also appended the implementation notes to `Chats/AssignPermissions/TODO/RestrictedPropSettingsPhaseIII.md`. Step 4 (wiring `setAttribute` interception into `assignGingerly.ts`) is ready to go when you want to proceed.
+
