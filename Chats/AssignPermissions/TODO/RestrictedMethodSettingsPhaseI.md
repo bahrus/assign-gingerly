@@ -101,3 +101,9 @@ Keep the signature a single boolean for Phase I. Internally it just checks a `Se
 ### Bottom line
 
 Phase I is a small, well-scoped addition: add a `Set<string>` denylist to `PermissionProcessor`, expose `checkRestrictedMethod`, and consult it whenever `withMethods` is about to call a method. It directly addresses the threat model you described and does not require touching the property-permission logic again.
+
+---
+
+## Human Response I
+
+I agree with all your recommendations.  Please implement.
