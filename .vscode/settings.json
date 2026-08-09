@@ -17,6 +17,7 @@
     },
     "explorer.fileNesting.patterns": {
         "*.ts": "${capture}.js, ${capture}.js.map",
+        "*.html": "${capture}.spec.ts"
     },
     "explorer.fileNesting.enabled": true
 }
