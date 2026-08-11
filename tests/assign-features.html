@@ -39,13 +39,24 @@
 
         function test(name, fn) {
             try {
-                fn();
+                const result = fn();
+                if (result && typeof result.then === 'function') {
+                    // Async test — store promise
+                    return result.then(() => {
+                        passed++;
+                        results.push({ name, status: 'pass' });
+                    }).catch(error => {
+                        failed++;
+                        results.push({ name, status: 'fail', error: error.message });
+                    });
+                }
                 passed++;
                 results.push({ name, status: 'pass' });
             } catch (error) {
                 failed++;
                 results.push({ name, status: 'fail', error: error.message });
             }
+            return Promise.resolve();
         }
 
         function expect(actual) {
@@ -99,7 +110,9 @@
         // Basic functionality tests
         // ============================================================
 
-        test('basic: lazy getter is installed on prototype', () => {
+        async function runTests() {
+
+        await test('basic: lazy getter is installed on prototype', async () => {
             class PhotoTakerImpl {
                 constructor(host) { this.host = host; }
             }
@@ -108,7 +121,7 @@
                     photoTaker: { fallbackSpawn: PhotoTakerImpl }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 photoTaker: { spawn: PhotoTakerImpl }
             });
             customElements.define('test-basic-getter', TestEl);
@@ -120,7 +133,7 @@
             expect(desc.configurable).toBe(false);
         });
 
-        test('basic: feature is lazily instantiated on first access', () => {
+        await test('basic: feature is lazily instantiated on first access', async () => {
             let spawnCount = 0;
             class CountingImpl {
                 constructor(host) { 
@@ -133,7 +146,7 @@
                     counter: { fallbackSpawn: CountingImpl }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 counter: { spawn: CountingImpl }
             });
             customElements.define('test-lazy-spawn', TestEl);
@@ -149,7 +162,7 @@
             expect(instance2).toBe(instance); // Same instance
         });
 
-        test('basic: host element is passed to constructor', () => {
+        await test('basic: host element is passed to constructor', async () => {
             let receivedHost = null;
             class HostCheckImpl {
                 constructor(host) { receivedHost = host; }
@@ -159,7 +172,7 @@
                     checker: { fallbackSpawn: HostCheckImpl }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 checker: { spawn: HostCheckImpl }
             });
             customElements.define('test-host-pass', TestEl);
@@ -169,7 +182,7 @@
             expect(receivedHost).toBe(el);
         });
 
-        test('basic: ctx is passed to constructor', () => {
+        await test('basic: ctx is passed to constructor', async () => {
             let receivedCtx = null;
             class CtxCheckImpl {
                 constructor(host, ctx) { receivedCtx = ctx; }
@@ -179,7 +192,7 @@
                     checker: { fallbackSpawn: CtxCheckImpl }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 checker: { spawn: CtxCheckImpl }
             });
             customElements.define('test-ctx-pass', TestEl);
@@ -195,7 +208,7 @@
         // initVals / pre-upgrade property capture tests
         // ============================================================
 
-        test('initVals: captures own-property set before getter access', () => {
+        await test('initVals: captures own-property set before getter access', async () => {
             let receivedInitVals = undefined;
             class InitValImpl {
                 constructor(host, ctx, initVals) {
@@ -214,7 +227,7 @@
             }
 
             // assignFeatures before define
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feature: { spawn: InitValImpl }
             });
 
@@ -234,7 +247,7 @@
             el.remove();
         });
 
-        test('initVals: own-property is deleted after capture', () => {
+        await test('initVals: own-property is deleted after capture', async () => {
             class SimpleImpl {
                 constructor(host, ctx, initVals) {
                     if (initVals) Object.assign(this, initVals);
@@ -251,7 +264,7 @@
             }
 
             // assignFeatures before define
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feature: { spawn: SimpleImpl }
             });
 
@@ -273,7 +286,7 @@
             el.remove();
         });
 
-        test('initVals: undefined when no own-property exists', () => {
+        await test('initVals: undefined when no own-property exists', async () => {
             let receivedInitVals = 'NOT_UNDEFINED';
             class CheckImpl {
                 constructor(host, ctx, initVals) {
@@ -285,7 +298,7 @@
                     feature: { fallbackSpawn: CheckImpl }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feature: { spawn: CheckImpl }
             });
             customElements.define('test-initvals-none', TestEl);
@@ -295,7 +308,7 @@
             expect(receivedInitVals).toBeUndefined();
         });
 
-        test('initVals: works with primitive own-property values', () => {
+        await test('initVals: works with primitive own-property values', async () => {
             let receivedInitVals = undefined;
             class PrimImpl {
                 constructor(host, ctx, initVals) {
@@ -313,7 +326,7 @@
             }
 
             // assignFeatures before define
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feature: { spawn: PrimImpl }
             });
 
@@ -334,7 +347,7 @@
         // fallbackSpawn tests
         // ============================================================
 
-        test('fallbackSpawn: used when no spawn in injection', () => {
+        await test('fallbackSpawn: used when no spawn in injection', async () => {
             class FallbackImpl {
                 constructor(host) { this.host = host; this.isFallback = true; }
             }
@@ -343,7 +356,7 @@
                     feature: { fallbackSpawn: FallbackImpl }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feature: {} // no spawn provided
             });
             customElements.define('test-fallback', TestEl);
@@ -352,7 +365,7 @@
             expect(el.feature.isFallback).toBe(true);
         });
 
-        test('fallbackSpawn: injection spawn takes priority over fallback', () => {
+        await test('fallbackSpawn: injection spawn takes priority over fallback', async () => {
             class FallbackImpl {
                 constructor(host) { this.type = 'fallback'; }
             }
@@ -364,7 +377,7 @@
                     feature: { fallbackSpawn: FallbackImpl }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feature: { spawn: InjectedImpl }
             });
             customElements.define('test-spawn-priority', TestEl);
@@ -377,7 +390,7 @@
         // validateShape tests
         // ============================================================
 
-        test('validateShape: passes when validation returns true', () => {
+        await test('validateShape: passes when validation returns true', async () => {
             class ValidImpl {
                 constructor(host) { this.takePicture = () => 'click'; }
             }
@@ -391,7 +404,7 @@
                     }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feature: { spawn: ValidImpl }
             });
             customElements.define('test-validate-pass', TestEl);
@@ -402,7 +415,7 @@
             expect(instance.takePicture()).toBe('click');
         });
 
-        test('validateShape: throws when validation returns false', () => {
+        await test('validateShape: throws when validation returns false', async () => {
             class InvalidImpl {
                 constructor(host) { /* missing takePicture */ }
             }
@@ -416,7 +429,7 @@
                     }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feature: { spawn: InvalidImpl }
             });
             customElements.define('test-validate-fail', TestEl);
@@ -429,16 +442,23 @@
         // Error condition tests
         // ============================================================
 
-        test('error: throws if constructor has no supportedFeatures', () => {
+        await test('error: throws if constructor has no supportedFeatures', async () => {
             class NoFeatures extends HTMLElement {}
             customElements.define('test-no-features', NoFeatures);
 
-            expect(() => {
-                customElements.assignFeatures(NoFeatures, { foo: {} });
-            }).toThrow('does not define static supportedFeatures');
+            let threw = false;
+            try {
+                await customElements.assignFeatures(NoFeatures, { foo: {} });
+            } catch (e) {
+                threw = true;
+                if (!e.message.includes('does not define static supportedFeatures')) {
+                    throw new Error(`Expected error containing "does not define static supportedFeatures" but got "${e.message}"`);
+                }
+            }
+            if (!threw) throw new Error('Expected function to throw but it did not');
         });
 
-        test('error: throws if key not in supportedFeatures', () => {
+        await test('error: throws if key not in supportedFeatures', async () => {
             class TestEl extends HTMLElement {
                 static supportedFeatures = {
                     allowed: { fallbackSpawn: class { constructor() {} } }
@@ -446,12 +466,19 @@
             }
             customElements.define('test-bad-key', TestEl);
 
-            expect(() => {
-                customElements.assignFeatures(TestEl, { notAllowed: {} });
-            }).toThrow('is not declared in');
+            let threw = false;
+            try {
+                await customElements.assignFeatures(TestEl, { notAllowed: {} });
+            } catch (e) {
+                threw = true;
+                if (!e.message.includes('is not declared in')) {
+                    throw new Error(`Expected error containing "is not declared in" but got "${e.message}"`);
+                }
+            }
+            if (!threw) throw new Error('Expected function to throw but it did not');
         });
 
-        test('error: throws if property already exists on prototype', () => {
+        await test('error: throws if property already exists on prototype', async () => {
             class TestEl extends HTMLElement {
                 static supportedFeatures = {
                     existing: { fallbackSpawn: class { constructor() {} } }
@@ -460,33 +487,47 @@
             }
             customElements.define('test-existing-prop', TestEl);
 
-            expect(() => {
-                customElements.assignFeatures(TestEl, { existing: {} });
-            }).toThrow('already exists on');
+            let threw = false;
+            try {
+                await customElements.assignFeatures(TestEl, { existing: {} });
+            } catch (e) {
+                threw = true;
+                if (!e.message.includes('already exists on')) {
+                    throw new Error(`Expected error containing "already exists on" but got "${e.message}"`);
+                }
+            }
+            if (!threw) throw new Error('Expected function to throw but it did not');
         });
 
-        test('error: throws if same key assigned twice', () => {
+        await test('error: throws if same key assigned twice', async () => {
             class Impl { constructor() {} }
             class TestEl extends HTMLElement {
                 static supportedFeatures = {
                     feature: { fallbackSpawn: Impl }
                 }
             }
-            customElements.assignFeatures(TestEl, { feature: { spawn: Impl } });
+            await customElements.assignFeatures(TestEl, { feature: { spawn: Impl } });
             customElements.define('test-double-assign', TestEl);
 
-            expect(() => {
-                customElements.assignFeatures(TestEl, { feature: { spawn: Impl } });
-            }).toThrow('already');
+            let threw = false;
+            try {
+                await customElements.assignFeatures(TestEl, { feature: { spawn: Impl } });
+            } catch (e) {
+                threw = true;
+                if (!e.message.includes('already')) {
+                    throw new Error(`Expected error containing "already" but got "${e.message}"`);
+                }
+            }
+            if (!threw) throw new Error('Expected function to throw but it did not');
         });
 
-        test('error: throws if no spawn and no fallbackSpawn', () => {
+        await test('error: throws if no spawn and no fallbackSpawn', async () => {
             class TestEl extends HTMLElement {
                 static supportedFeatures = {
                     feature: {} // no fallbackSpawn
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feature: {} // no spawn either
             });
             customElements.define('test-no-spawn', TestEl);
@@ -499,7 +540,7 @@
         // Multiple features tests
         // ============================================================
 
-        test('multiple: supports multiple features on same class', () => {
+        await test('multiple: supports multiple features on same class', async () => {
             class PhotoImpl {
                 constructor(host) { this.type = 'photo'; }
             }
@@ -512,7 +553,7 @@
                     badgeMaker: { fallbackSpawn: BadgeImpl }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 photoTaker: { spawn: PhotoImpl },
                 badgeMaker: { spawn: BadgeImpl }
             });
@@ -523,7 +564,7 @@
             expect(el.badgeMaker.type).toBe('badge');
         });
 
-        test('multiple: incremental assignFeatures calls work', () => {
+        await test('multiple: incremental assignFeatures calls work', async () => {
             class AImpl { constructor(host) { this.type = 'A'; } }
             class BImpl { constructor(host) { this.type = 'B'; } }
             class TestEl extends HTMLElement {
@@ -532,9 +573,9 @@
                     featureB: { fallbackSpawn: BImpl }
                 }
             }
-            customElements.assignFeatures(TestEl, { featureA: { spawn: AImpl } });
+            await customElements.assignFeatures(TestEl, { featureA: { spawn: AImpl } });
             customElements.define('test-incremental', TestEl);
-            customElements.assignFeatures(TestEl, { featureB: { spawn: BImpl } });
+            await customElements.assignFeatures(TestEl, { featureB: { spawn: BImpl } });
 
             const el = document.createElement('test-incremental');
             expect(el.featureA.type).toBe('A');
@@ -545,7 +586,7 @@
         // Per-instance isolation tests
         // ============================================================
 
-        test('isolation: each instance gets its own feature instance', () => {
+        await test('isolation: each instance gets its own feature instance', async () => {
             let instanceCount = 0;
             class CountImpl {
                 constructor(host) { this.id = ++instanceCount; }
@@ -555,7 +596,7 @@
                     feature: { fallbackSpawn: CountImpl }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feature: { spawn: CountImpl }
             });
             customElements.define('test-isolation', TestEl);
@@ -575,7 +616,7 @@
         // Integration with assignGingerly tests
         // ============================================================
 
-        test('assignGingerly: merges into getter-only feature property', () => {
+        await test('assignGingerly: merges into getter-only feature property', async () => {
             class MergeImpl {
                 constructor(host, ctx, initVals) {
                     this.someProp = 'default';
@@ -587,7 +628,7 @@
                     feature: { fallbackSpawn: MergeImpl }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feature: { spawn: MergeImpl }
             });
             customElements.define('test-ag-merge', TestEl);
@@ -601,7 +642,7 @@
             expect(el.feature.otherProp).toBe('untouched');
         });
 
-        test('assignGingerly: triggers lazy spawn then merges', () => {
+        await test('assignGingerly: triggers lazy spawn then merges', async () => {
             let spawned = false;
             class LazyMergeImpl {
                 constructor(host) {
@@ -614,7 +655,7 @@
                     feature: { fallbackSpawn: LazyMergeImpl }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 feature: { spawn: LazyMergeImpl }
             });
             customElements.define('test-ag-lazy', TestEl);
@@ -631,14 +672,14 @@
         // Feature enumeration test
         // ============================================================
 
-        test('enumerable: feature properties show up in for...in', () => {
+        await test('enumerable: feature properties show up in for...in', async () => {
             class EnumImpl { constructor(host) {} }
             class TestEl extends HTMLElement {
                 static supportedFeatures = {
                     myFeature: { fallbackSpawn: EnumImpl }
                 }
             }
-            customElements.assignFeatures(TestEl, {
+            await customElements.assignFeatures(TestEl, {
                 myFeature: { spawn: EnumImpl }
             });
             customElements.define('test-enumerable', TestEl);
@@ -654,34 +695,38 @@
         // Display results
         // ============================================================
 
-        const total = passed + failed;
-        const statusEl = document.getElementById('status');
-        const resultsEl = document.getElementById('results');
-        const completeEl = document.getElementById('test-complete');
+        } // end runTests
 
-        statusEl.innerHTML = `
-            <span class="${failed === 0 ? 'pass' : 'fail'}">
-                ${passed}/${total} tests passed
-            </span>
-        `;
+        runTests().then(() => {
+            const total = passed + failed;
+            const statusEl = document.getElementById('status');
+            const resultsEl = document.getElementById('results');
+            const completeEl = document.getElementById('test-complete');
 
-        results.forEach(result => {
-            const div = document.createElement('div');
-            div.className = `test-item ${result.status}`;
-            div.innerHTML = `
-                <strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}
-                ${result.error ? `<div class="error">${result.error}</div>` : ''}
+            statusEl.innerHTML = `
+                <span class="${failed === 0 ? 'pass' : 'fail'}">
+                    ${passed}/${total} tests passed
+                </span>
             `;
-            resultsEl.appendChild(div);
+
+            results.forEach(result => {
+                const div = document.createElement('div');
+                div.className = `test-item ${result.status}`;
+                div.innerHTML = `
+                    <strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}
+                    ${result.error ? `<div class="error">${result.error}</div>` : ''}
+                `;
+                resultsEl.appendChild(div);
+            });
+
+            // Signal completion to Playwright
+            completeEl.setAttribute('data-passed', passed.toString());
+            completeEl.setAttribute('data-failed', failed.toString());
+            completeEl.setAttribute('data-total', total.toString());
+            completeEl.style.display = 'block';
+
+            console.log(`Tests complete: ${passed}/${total} passed`);
         });
-
-        // Signal completion to Playwright
-        completeEl.setAttribute('data-passed', passed.toString());
-        completeEl.setAttribute('data-failed', failed.toString());
-        completeEl.setAttribute('data-total', total.toString());
-        completeEl.style.display = 'block';
-
-        console.log(`Tests complete: ${passed}/${total} passed`);
     </script>
 </body>
 </html>

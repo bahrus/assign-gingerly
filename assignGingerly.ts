@@ -1,9 +1,11 @@
 
 
-import { EnhancementConfig } from "./types/assign-gingerly/types";
+import { EnhancementConfig, EnhKey } from "./types/assign-gingerly/types";
 import type { AssignFromOptions, FeatureConfigsMap, IAssignGingerlyOptions } from "./types/assign-gingerly/types";
 import type { PermissionProcessor } from './types/assign-gingerly/types.js';
 import { normalizeAliasOptions } from './resolve/getValues.js';
+
+const DEFAULT_ENHANCEMENT_KEY = Symbol('assign-gingerly.default-enhancement-setup');
 
 /**
  * Constructor signature for ItemScope Manager classes
@@ -72,6 +74,7 @@ export class EnhancementRegisteredEvent extends Event {
  */
 export class EnhancementRegistry extends EventTarget {
   #items: Set<EnhancementConfig> = new Set();
+  #pendingSetups = new Map<EnhKey, Promise<void>[]>();
 
   push(items: EnhancementConfig | EnhancementConfig[]): void {
     if (Array.isArray(items)) {
@@ -83,11 +86,12 @@ export class EnhancementRegistry extends EventTarget {
     // Dispatch event after adding items
     this.dispatchEvent(new EnhancementRegisteredEvent(items));
 
-    // Process features if present (fire-and-forget, uses shared featuresRegistry)
+    // Process features if present (async, tracked so callers can await)
     const itemsArr = Array.isArray(items) ? items : [items];
     for (const item of itemsArr) {
       if (item.features) {
-        this.#assignFeatures(item.spawn, item.features);
+        const promise = this.#assignFeatures(item.spawn, item.features);
+        this._trackSetup(item.enhKey ?? DEFAULT_ENHANCEMENT_KEY, promise);
       }
     }
   }
@@ -97,8 +101,42 @@ export class EnhancementRegistry extends EventTarget {
     const featuresRegistry = (this as any)._featuresRegistry
       ?? (typeof customElements !== 'undefined' ? (customElements as any).featuresRegistry : undefined);
     if (featuresRegistry) {
-      assignFeatures(spawn, features, featuresRegistry);
+      await assignFeatures(spawn, features, featuresRegistry);
     }
+  }
+
+  /**
+   * Wait for all pending setups for a given enhancement key to complete.
+   * @param enhKey - Enhancement key to wait for
+   */
+  async whenDefined(enhKey: EnhKey): Promise<void> {
+    const pending = this.#pendingSetups.get(enhKey);
+    if (pending && pending.length > 0) {
+      await Promise.all(pending);
+    }
+  }
+
+  /**
+   * Internal method to track a pending setup.
+   * @param name - Setup key
+   * @param promise - Promise representing the setup operation
+   */
+  _trackSetup(name: EnhKey, promise: Promise<void>): void {
+    if (!this.#pendingSetups.has(name)) {
+      this.#pendingSetups.set(name, []);
+    }
+    this.#pendingSetups.get(name)!.push(promise);
+
+    // Clean up after completion
+    promise.finally(() => {
+      const pending = this.#pendingSetups.get(name);
+      if (pending) {
+        const index = pending.indexOf(promise);
+        if (index > -1) {
+          pending.splice(index, 1);
+        }
+      }
+    });
   }
 
   getItems(): EnhancementConfig[] {
@@ -151,9 +189,10 @@ export class ItemscopeRegistry extends EventTarget {
     this.#configs.set(name, config);
     this.dispatchEvent(new Event(name));
 
-    // Process features if present (fire-and-forget, uses shared featuresRegistry)
+    // Process features if present (async, tracked so callers can await)
     if ((config as any).features) {
-      this.#assignFeatures(config.manager, (config as any).features);
+      const promise = this.#assignFeatures(config.manager, (config as any).features);
+      this._trackSetup(name, promise);
     }
   }
 
@@ -162,7 +201,7 @@ export class ItemscopeRegistry extends EventTarget {
     const featuresRegistry = (this as any)._featuresRegistry
       ?? (typeof customElements !== 'undefined' ? (customElements as any).featuresRegistry : undefined);
     if (featuresRegistry) {
-      assignFeatures(manager, features, featuresRegistry);
+      await assignFeatures(manager, features, featuresRegistry);
     }
   }
 

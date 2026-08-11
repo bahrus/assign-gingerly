@@ -96,14 +96,12 @@ function isAsyncResolution(spawnish: any): boolean {
 
 /**
  * Resolves all configured spawns for the target constructor and caches them.
- * Returns a Promise if any resolution is async, otherwise undefined.
  */
-function resolveAndCacheSpawns(
+async function resolveAndCacheSpawns(
     ctr: Function,
     features: FeatureConfigsMap,
     supportedFeatures: SupportedFeaturesMap
-): Promise<void> | undefined {
-    let hasAsync = false;
+): Promise<void> {
     const asyncResolutions: Promise<void>[] = [];
 
     for (const key of Object.keys(features)) {
@@ -123,7 +121,6 @@ function resolveAndCacheSpawns(
         }
 
         if (isAsyncResolution(spawnish)) {
-            hasAsync = true;
             asyncResolutions.push((async () => {
                 const resolved = await resolveSpawn(spawnish);
                 classCache.set(key, resolved);
@@ -133,10 +130,9 @@ function resolveAndCacheSpawns(
         }
     }
 
-    if (hasAsync) {
-        return Promise.all(asyncResolutions).then(() => undefined);
+    if (asyncResolutions.length > 0) {
+        await Promise.all(asyncResolutions);
     }
-    return undefined;
 }
 
 /**
@@ -349,13 +345,13 @@ function installCallbackForwarding(
     }
 }
 
-function installOneFeature(
+async function installOneFeature(
     ctr: Function,
     key: string,
     features: FeatureConfigsMap,
     supportedFeatures: SupportedFeaturesMap,
     featuresRegistry: FeaturesRegistry
-): Promise<void> | undefined {
+): Promise<void> {
     // 1. Confirm the key is opted-in via supportedFeatures
     if (!(key in supportedFeatures)) {
         throw new Error(
@@ -401,32 +397,19 @@ function installOneFeature(
     if (resolvedSpawn && !isAsyncSpawn(resolvedSpawn) &&
         Object.hasOwn(resolvedSpawn, 'onAssigned') &&
         typeof (resolvedSpawn as any).onAssigned === 'function') {
-        const result = (resolvedSpawn as any).onAssigned(ctr, featureConfig, key);
-        if (result && typeof result.then === 'function') {
-            return result;
-        }
+        await (resolvedSpawn as any).onAssigned(ctr, featureConfig, key);
     }
-    return undefined;
 }
 
-function installAllFeatures(
+async function installAllFeatures(
     ctr: Function,
     features: FeatureConfigsMap,
     supportedFeatures: SupportedFeaturesMap,
     featuresRegistry: FeaturesRegistry
-): Promise<void> | undefined {
-    let asyncResult: Promise<void> | undefined;
+): Promise<void> {
     for (const key of Object.keys(features)) {
-        const result = installOneFeature(ctr, key, features, supportedFeatures, featuresRegistry);
-        if (result) {
-            if (!asyncResult) {
-                asyncResult = result.then(() => undefined);
-            } else {
-                asyncResult = asyncResult.then(() => result.then(() => undefined));
-            }
-        }
+        await installOneFeature(ctr, key, features, supportedFeatures, featuresRegistry);
     }
-    return asyncResult;
 }
 
 /**
@@ -442,11 +425,11 @@ function installAllFeatures(
  * @param features - Map of feature keys to their injection configs
  * @param featuresRegistry - The registry to store injections in
  */
-export function assignFeatures(
+export async function assignFeatures(
     ctr: Function,
     features: FeatureConfigsMap,
     featuresRegistry: FeaturesRegistry
-): Promise<void> | undefined {
+): Promise<void> {
     // Validate that the constructor has static supportedFeatures
     const supportedFeatures: SupportedFeaturesMap | undefined = (ctr as any).supportedFeatures;
 
@@ -459,15 +442,8 @@ export function assignFeatures(
     // Resolve all configured spawns before installing getters. This is the single
     // source of truth for spawn resolution; other callers (defineWithFeatures, etc.)
     // delegate to assignFeatures.
-    const spawnResolution = resolveAndCacheSpawns(ctr, features, supportedFeatures);
-
-    if (spawnResolution) {
-        return spawnResolution.then(() =>
-            installAllFeatures(ctr, features, supportedFeatures, featuresRegistry)
-        );
-    }
-
-    return installAllFeatures(ctr, features, supportedFeatures, featuresRegistry);
+    await resolveAndCacheSpawns(ctr, features, supportedFeatures);
+    await installAllFeatures(ctr, features, supportedFeatures, featuresRegistry);
 }
 
 /**
@@ -682,7 +658,7 @@ export class PropertyBag {
 declare global {
     interface CustomElementRegistry {
         featuresRegistry: FeaturesRegistry;
-        assignFeatures(ctr: Function, features: FeatureConfigsMap): Promise<void> | undefined;
+        assignFeatures(ctr: Function, features: FeatureConfigsMap): Promise<void>;
     }
 }
 

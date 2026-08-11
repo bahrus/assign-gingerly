@@ -84,10 +84,8 @@ function isAsyncResolution(spawnish) {
 }
 /**
  * Resolves all configured spawns for the target constructor and caches them.
- * Returns a Promise if any resolution is async, otherwise undefined.
  */
-function resolveAndCacheSpawns(ctr, features, supportedFeatures) {
-    let hasAsync = false;
+async function resolveAndCacheSpawns(ctr, features, supportedFeatures) {
     const asyncResolutions = [];
     for (const key of Object.keys(features)) {
         const classCache = getOrCreateClassCache(ctr);
@@ -104,7 +102,6 @@ function resolveAndCacheSpawns(ctr, features, supportedFeatures) {
             continue;
         }
         if (isAsyncResolution(spawnish)) {
-            hasAsync = true;
             asyncResolutions.push((async () => {
                 const resolved = await resolveSpawn(spawnish);
                 classCache.set(key, resolved);
@@ -114,10 +111,9 @@ function resolveAndCacheSpawns(ctr, features, supportedFeatures) {
             classCache.set(key, spawnish);
         }
     }
-    if (hasAsync) {
-        return Promise.all(asyncResolutions).then(() => undefined);
+    if (asyncResolutions.length > 0) {
+        await Promise.all(asyncResolutions);
     }
-    return undefined;
 }
 /**
  * Installs a getter/setter pair on the constructor's prototype for the given feature key.
@@ -288,7 +284,7 @@ function installCallbackForwarding(ctr, key, callbacks) {
         featureKeys.add(key);
     }
 }
-function installOneFeature(ctr, key, features, supportedFeatures, featuresRegistry) {
+async function installOneFeature(ctr, key, features, supportedFeatures, featuresRegistry) {
     // 1. Confirm the key is opted-in via supportedFeatures
     if (!(key in supportedFeatures)) {
         throw new Error(`assignFeatures: "${key}" is not declared in ${ctr.name || 'constructor'}.supportedFeatures`);
@@ -322,27 +318,13 @@ function installOneFeature(ctr, key, features, supportedFeatures, featuresRegist
     if (resolvedSpawn && !isAsyncSpawn(resolvedSpawn) &&
         Object.hasOwn(resolvedSpawn, 'onAssigned') &&
         typeof resolvedSpawn.onAssigned === 'function') {
-        const result = resolvedSpawn.onAssigned(ctr, featureConfig, key);
-        if (result && typeof result.then === 'function') {
-            return result;
-        }
+        await resolvedSpawn.onAssigned(ctr, featureConfig, key);
     }
-    return undefined;
 }
-function installAllFeatures(ctr, features, supportedFeatures, featuresRegistry) {
-    let asyncResult;
+async function installAllFeatures(ctr, features, supportedFeatures, featuresRegistry) {
     for (const key of Object.keys(features)) {
-        const result = installOneFeature(ctr, key, features, supportedFeatures, featuresRegistry);
-        if (result) {
-            if (!asyncResult) {
-                asyncResult = result.then(() => undefined);
-            }
-            else {
-                asyncResult = asyncResult.then(() => result.then(() => undefined));
-            }
-        }
+        await installOneFeature(ctr, key, features, supportedFeatures, featuresRegistry);
     }
-    return asyncResult;
 }
 /**
  * Core assignFeatures implementation.
@@ -357,7 +339,7 @@ function installAllFeatures(ctr, features, supportedFeatures, featuresRegistry) 
  * @param features - Map of feature keys to their injection configs
  * @param featuresRegistry - The registry to store injections in
  */
-export function assignFeatures(ctr, features, featuresRegistry) {
+export async function assignFeatures(ctr, features, featuresRegistry) {
     // Validate that the constructor has static supportedFeatures
     const supportedFeatures = ctr.supportedFeatures;
     if (!supportedFeatures) {
@@ -366,11 +348,8 @@ export function assignFeatures(ctr, features, featuresRegistry) {
     // Resolve all configured spawns before installing getters. This is the single
     // source of truth for spawn resolution; other callers (defineWithFeatures, etc.)
     // delegate to assignFeatures.
-    const spawnResolution = resolveAndCacheSpawns(ctr, features, supportedFeatures);
-    if (spawnResolution) {
-        return spawnResolution.then(() => installAllFeatures(ctr, features, supportedFeatures, featuresRegistry));
-    }
-    return installAllFeatures(ctr, features, supportedFeatures, featuresRegistry);
+    await resolveAndCacheSpawns(ctr, features, supportedFeatures);
+    await installAllFeatures(ctr, features, supportedFeatures, featuresRegistry);
 }
 /**
  * Captures own-properties that shadow feature getters and stores them as initVals.
