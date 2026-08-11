@@ -22,7 +22,7 @@
  * | 🏷️ | builtIns.microDataJoin |
  * | 📋 | builtIns.manageTemplateList |
  */
-export const builtInEmoji: Record<string, string> = {
+export const builtInEmoji= {
     '📦': 'builtIns.lazyLoad',
     '🎚️': 'builtIns.lazyLoadSwitch',
     '🔗': 'builtIns.join',
@@ -31,7 +31,7 @@ export const builtInEmoji: Record<string, string> = {
     '📊': 'builtIns.rangeSelector',
 };
 
-export const akaMethods: Record<string, string> = {
+export const akaMethods = {
     '🔍': 'querySelector',
     '🧺': 'querySelectorAll',
     '+': 'add',
@@ -53,7 +53,7 @@ export const akaMethods: Record<string, string> = {
     //'🧩': 'includes'
 };
 
-export const aka: Record<string, string> = {
+export const aka = {
     '©️': 'content?.cloneNode?.true',
     //'🔎': 'clone?.querySelector'
     // textContent is a property, not a method — aliasing it via akaMethods
