@@ -30,13 +30,13 @@ Received:   0
       - text: throws ImportNotAllowedError for cross-origin paths
     - generic [ref=e7]:
       - strong [ref=e8]: ✓
-      - text: throws NoMatchingExportError when no class matches
+      - text: returns default export when it is a class with a prototype
     - generic [ref=e9]:
       - strong [ref=e10]: ✓
-      - text: falls back to named export when default is absent
+      - text: throws NoMatchingExportError when no class matches
     - generic [ref=e11]:
       - strong [ref=e12]: ✓
-      - text: returns default export when it is a class with a prototype
+      - text: falls back to named export when default is absent
     - generic [ref=e13]:
       - strong [ref=e14]: ✓
       - text: throws NoMatchingExportError when module has no exports
