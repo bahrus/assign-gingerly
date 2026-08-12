@@ -287,20 +287,122 @@
             expect(target.setHTMLUnsafe).toBe('allowed');
         });
 
-        await test('Phase I: object-form restrictedMethodSettings entries are ignored', () => {
+        await test('Phase II: object-form appends literal args to method calls', () => {
+            const calls = [];
             const target = {
-                value: 'safe',
-                setHTMLUnsafe(value) { this.value = value; }
+                setHTMLUnsafe(value, extra) { calls.push([value, extra]); }
             };
             const methodProcessor = new PermissionProcessor({
                 restrictedMethodSettings: [
-                    { method: 'setHTMLUnsafe', addArgs: ['sanitizer'] }
+                    { method: 'setHTMLUnsafe', appendArgs: ['sanitizer'] }
                 ]
             });
             assignGingerly(target, {
-                '?.setHTMLUnsafe': 'blocked'
+                '?.setHTMLUnsafe': 'allowed'
             }, { withMethods: ['setHTMLUnsafe'] }, methodProcessor);
-            expect(target.value).toBe('blocked');
+            expect(calls).toEqual([['allowed', 'sanitizer']]);
+        });
+
+        await test('Phase II: appendArgs resolves ?.sanitizerOptions from permissions', () => {
+            const calls = [];
+            const target = {
+                setHTMLUnsafe(value, options) { calls.push([value, options]); }
+            };
+            const sanitizerOptions = { allowElements: ['div'] };
+            const methodProcessor = new PermissionProcessor({
+                sanitizerOptions,
+                restrictedMethodSettings: [
+                    { method: 'setHTMLUnsafe', appendArgs: ['?.sanitizerOptions'] }
+                ]
+            });
+            assignGingerly(target, {
+                '?.setHTMLUnsafe': 'allowed'
+            }, { withMethods: ['setHTMLUnsafe'] }, methodProcessor);
+            expect(calls).toEqual([['allowed', sanitizerOptions]]);
+        });
+
+        await test('Phase II: appendArgs resolves ?.customSettings from permissions', () => {
+            const calls = [];
+            const target = {
+                setHTMLUnsafe(value, settings) { calls.push([value, settings]); }
+            };
+            const customSettings = { policy: 'strict' };
+            const methodProcessor = new PermissionProcessor({
+                customSettings,
+                restrictedMethodSettings: [
+                    { method: 'setHTMLUnsafe', appendArgs: ['?.customSettings'] }
+                ]
+            });
+            assignGingerly(target, {
+                '?.setHTMLUnsafe': 'allowed'
+            }, { withMethods: ['setHTMLUnsafe'] }, methodProcessor);
+            expect(calls).toEqual([['allowed', customSettings]]);
+        });
+
+        await test('Phase II: zero-arg marker gets appended args', () => {
+            const calls = [];
+            const target = {
+                setHTMLUnsafe(extra) { calls.push([extra]); }
+            };
+            const methodProcessor = new PermissionProcessor({
+                restrictedMethodSettings: [
+                    { method: 'setHTMLUnsafe', appendArgs: ['sanitizer'] }
+                ]
+            });
+            assignGingerly(target, {
+                '?.setHTMLUnsafe|': 'ignored'
+            }, { withMethods: ['setHTMLUnsafe'] }, methodProcessor);
+            expect(calls).toEqual([['sanitizer']]);
+        });
+
+        await test('Phase II: middle-chain method gets appended args', () => {
+            const calls = [];
+            const target = {
+                getWrapper(extra) {
+                    calls.push(['getWrapper', extra]);
+                    return {
+                        setHTMLUnsafe(value) { calls.push(['setHTMLUnsafe', value]); }
+                    };
+                }
+            };
+            const methodProcessor = new PermissionProcessor({
+                restrictedMethodSettings: [
+                    { method: 'getWrapper', appendArgs: ['wrapperArg'] }
+                ]
+            });
+            assignGingerly(target, {
+                '?.getWrapper?.setHTMLUnsafe': 'allowed'
+            }, { withMethods: ['getWrapper', 'setHTMLUnsafe'] }, methodProcessor);
+            expect(calls).toEqual([['getWrapper', 'wrapperArg'], ['setHTMLUnsafe', 'allowed']]);
+        });
+
+        await test('Phase I: string entry still blocks method calls', () => {
+            const calls = [];
+            const target = {
+                setHTMLUnsafe(value) { calls.push(value); }
+            };
+            const methodProcessor = new PermissionProcessor({
+                restrictedMethodSettings: ['setHTMLUnsafe']
+            });
+            assignGingerly(target, {
+                '?.setHTMLUnsafe': 'allowed'
+            }, { withMethods: ['setHTMLUnsafe'] }, methodProcessor);
+            expect(calls).toEqual([]);
+        });
+
+        await test('Phase II: duplicate configured method entries throw', () => {
+            let threw = false;
+            try {
+                new PermissionProcessor({
+                    restrictedMethodSettings: [
+                        { method: 'setHTMLUnsafe', appendArgs: ['a'] },
+                        { method: 'setHTMLUnsafe', appendArgs: ['b'] }
+                    ]
+                });
+            } catch (e) {
+                threw = true;
+            }
+            expect(threw).toBe(true);
         });
 
         await test('Phase I: assignFrom RHS resolution blocks restricted methods', () => {

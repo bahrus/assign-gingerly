@@ -200,3 +200,41 @@ Sounds good.
 
 If everything seems clear, please begin implementing, otherwise, please add additional points that need clarification below.
 
+---
+
+## Implementation Status Update
+
+**Date:** 2026-08-10
+
+### What was done
+
+1. **`types/assign-gingerly/types.d.ts` and `inferencer/types/assign-gingerly/types.d.ts`** — `RestrictedMethodConfig` already has `appendArgs` (with `addArgs` kept as a deprecated alias).
+
+2. **`assignPermissions/PermissionProcessor.ts` / `.js`** — `buildMethodMaps` builds `blockedMethods` (plain string entries) and `configuredMethods` (object entries). Exposed `getMethodAppendArgs(methodName)` which resolves `?.` paths against `this.permissions` and passes non-path literals through as-is. Duplicate configured method entries throw.
+
+3. **`assignGingerly.ts` / `.js`** — all method call sites now append resolved args:
+   - Non-nested method calls (line ~1248).
+   - Nested path final method calls via `evaluatePathWithMethods` (line ~1174).
+   - `applyToEach` for `@each` paths (line ~688).
+   - Final async method calls in the `withAsyncMethods` fire-and-forget branch (line ~1132).
+
+4. **`evaluatePathWithAsyncMethods.ts` / `.js`** — middle-chain sync/async methods append args when `nextIsMethod` or `isZeroArg`.
+
+5. **`tests/restricted-prop-settings.html`** — added Phase II unit tests covering:
+   - Literal `appendArgs` appended to method calls.
+   - `?.sanitizerOptions` resolved from the permissions object.
+   - `?.customSettings` resolved from the permissions object.
+   - Zero-arg marker (`method|`) still receives appended args.
+   - Middle-chain method receives appended args.
+   - Plain string entries still block the method.
+   - Duplicate configured method entries throw.
+
+### Test results
+
+- `npx playwright test tests/restricted-prop-settings.spec.ts` — **3 passed** across chromium, firefox, webkit.
+- `npx playwright test` — **87 passed** across all browsers.
+
+### Remaining / follow-up
+
+- Phase II implementation is complete. Phase III (sanitizer integration) can be tackled when ready.
+

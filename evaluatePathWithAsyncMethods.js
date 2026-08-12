@@ -43,13 +43,14 @@ export async function evaluatePathWithAsyncMethods(target, pathParts, value, wit
             // Async method — call and await
             const method = current[baseName];
             if (typeof method === 'function') {
+                const appendArgs = permissionProcessor?.getMethodAppendArgs(baseName) ?? [];
                 if (isZeroArgAsync || nextIsMethod) {
                     // Zero-arg call — next is either a method or explicitly not an argument
-                    current = await method.call(current);
+                    current = await method.call(current, ...appendArgs);
                 }
                 else {
                     // Call with next part as string arg, then await
-                    current = await method.call(current, nextPart);
+                    current = await method.call(current, nextPart, ...appendArgs);
                     i++; // Skip next part since we consumed it as argument
                 }
             }
@@ -65,13 +66,14 @@ export async function evaluatePathWithAsyncMethods(target, pathParts, value, wit
             // Sync method — same logic as evaluatePathWithMethods
             const method = current[baseName];
             if (typeof method === 'function') {
+                const appendArgs = permissionProcessor?.getMethodAppendArgs(baseName) ?? [];
                 if (isZeroArgSync || nextIsMethod) {
                     // Zero-arg call — next is either a method or explicitly not an argument
-                    current = method.call(current);
+                    current = method.call(current, ...appendArgs);
                 }
                 else {
                     // Call with next part as string arg
-                    current = method.call(current, nextPart);
+                    current = method.call(current, nextPart, ...appendArgs);
                     i++; // Skip next part since we consumed it as argument
                 }
             }

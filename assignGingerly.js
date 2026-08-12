@@ -433,13 +433,14 @@ export function evaluatePathWithMethods(target, pathParts, value, withMethods, p
             const methodName = isZeroArgMethod ? part.slice(0, -1) : part;
             const method = current[methodName];
             if (typeof method === 'function') {
+                const appendArgs = permissionProcessor?.getMethodAppendArgs(methodName) ?? [];
                 if (isZeroArgMethod || nextIsMethod) {
                     // Zero-arg call - next part is either a method or explicitly not an argument
-                    current = method.call(current);
+                    current = method.call(current, ...appendArgs);
                 }
                 else {
                     // Only current is method - call with next part as string arg
-                    current = method.call(current, nextPart);
+                    current = method.call(current, nextPart, ...appendArgs);
                     i++; // Skip next part since we consumed it as argument
                 }
             }
@@ -541,8 +542,9 @@ function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, opti
                     const methodName = isZeroArgMethod ? part.slice(0, -1) : part;
                     const method = current[methodName];
                     if (typeof method === 'function') {
+                        const appendArgs = permissionProcessor?.getMethodAppendArgs(methodName) ?? [];
                         if (isZeroArgMethod) {
-                            current = method.call(current);
+                            current = method.call(current, ...appendArgs);
                             continue;
                         }
                         // For methods in the middle, we need to check the next part
@@ -551,15 +553,15 @@ function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, opti
                         const nextIsMethod = nextPart && (withMethods.has(nextPart)
                             || (nextPart.endsWith('|') && withMethods.has(nextPart.slice(0, -1))));
                         if (nextIsMethod) {
-                            current = method.call(current);
+                            current = method.call(current, ...appendArgs);
                         }
                         else if (nextPart) {
-                            current = method.call(current, nextPart);
+                            current = method.call(current, nextPart, ...appendArgs);
                             // Skip next part
                             pathToForEach.splice(nextIndex, 1);
                         }
                         else {
-                            current = method.call(current);
+                            current = method.call(current, ...appendArgs);
                         }
                     }
                     else {
@@ -582,15 +584,16 @@ function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, opti
                 // Last segment is a method - call it
                 const method = result.target[result.lastKey];
                 if (typeof method === 'function') {
+                    const appendArgs = permissionProcessor?.getMethodAppendArgs(result.lastKey) ?? [];
                     if (result.isZeroArg) {
-                        // Trailing | marker - call with no arguments, ignoring the value
-                        method.call(result.target);
+                        // Trailing | marker - call with appended args only, ignoring the value
+                        method.call(result.target, ...appendArgs);
                     }
                     else if (Array.isArray(value)) {
-                        method.apply(result.target, value);
+                        method.apply(result.target, [...value, ...appendArgs]);
                     }
                     else {
-                        method.call(result.target, value);
+                        method.call(result.target, value, ...appendArgs);
                     }
                 }
             }
@@ -991,12 +994,13 @@ export function assignGingerly(target, source, options, permissionProcessor) {
                         // Last segment is a method — call it
                         const method = result.target[result.lastKey];
                         if (typeof method === 'function') {
-                            // Trailing | marker - call with no arguments, ignoring the value
+                            const appendArgs = capturedPermissionProcessor?.getMethodAppendArgs(result.lastKey) ?? [];
+                            // Trailing | marker - call with appended args only, ignoring the value
                             const returnVal = result.isZeroArg
-                                ? method.call(result.target)
+                                ? method.call(result.target, ...appendArgs)
                                 : Array.isArray(capturedValue)
-                                    ? method.apply(result.target, capturedValue)
-                                    : method.call(result.target, capturedValue);
+                                    ? method.apply(result.target, [...capturedValue, ...appendArgs])
+                                    : method.call(result.target, capturedValue, ...appendArgs);
                             // If it's an async method, await it (for side effects)
                             if (result.isAsyncMethod)
                                 await returnVal;
@@ -1035,15 +1039,16 @@ export function assignGingerly(target, source, options, permissionProcessor) {
                     // Last segment is a method - call it
                     const method = result.target[result.lastKey];
                     if (typeof method === 'function') {
+                        const appendArgs = permissionProcessor?.getMethodAppendArgs(result.lastKey) ?? [];
                         if (result.isZeroArg) {
-                            // Trailing | marker - call with no arguments, ignoring the value
-                            method.call(result.target);
+                            // Trailing | marker - call with appended args only, ignoring the value
+                            method.call(result.target, ...appendArgs);
                         }
                         else if (Array.isArray(value)) {
-                            method.apply(result.target, value);
+                            method.apply(result.target, [...value, ...appendArgs]);
                         }
                         else {
-                            method.call(result.target, value);
+                            method.call(result.target, value, ...appendArgs);
                         }
                     }
                     // Silently skip if not a function
@@ -1117,15 +1122,16 @@ export function assignGingerly(target, source, options, permissionProcessor) {
                 const methodName = isZeroArgKey ? key.slice(0, -1) : key;
                 const method = target[methodName];
                 if (typeof method === 'function') {
+                    const appendArgs = permissionProcessor?.getMethodAppendArgs(methodName) ?? [];
                     if (isZeroArgKey) {
-                        // Trailing | marker - call with no arguments, ignoring the value
-                        method.call(target);
+                        // Trailing | marker - call with appended args only, ignoring the value
+                        method.call(target, ...appendArgs);
                     }
                     else if (Array.isArray(value)) {
-                        method.apply(target, value);
+                        method.apply(target, [...value, ...appendArgs]);
                     }
                     else {
-                        method.call(target, value);
+                        method.call(target, value, ...appendArgs);
                     }
                 }
                 // Silently skip if not a function

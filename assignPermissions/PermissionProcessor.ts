@@ -1,4 +1,5 @@
-import type { AssignPermissions, RestrictedPropSetting } from '../types/assign-gingerly/types.js';
+import type { AssignPermissions, RestrictedMethodConfig, RestrictedPropSetting } from '../types/assign-gingerly/types.js';
+import { getValue } from '../resolve/getValues.js';
 import { isAllowedUrl } from './isAllowedUrl.js';
 
 export interface RestrictedPropSettingsMap {
@@ -10,7 +11,8 @@ export class PermissionProcessor {
     private readonly permissions: AssignPermissions | undefined;
     private readonly props: Map<string, RestrictedPropSetting | undefined>;
     private readonly attrs: Map<string, RestrictedPropSetting | undefined>;
-    private readonly methods: Set<string>;
+    private readonly blockedMethods: Set<string>;
+    private readonly configuredMethods: Map<string, RestrictedMethodConfig>;
     private readonly warned = new Set<string>();
     private readonly warnedMethods = new Set<string>();
 
@@ -19,7 +21,9 @@ export class PermissionProcessor {
         const { props, attrs } = buildMaps(permissions);
         this.props = props;
         this.attrs = attrs;
-        this.methods = buildMethodSet(permissions);
+        const { blockedMethods, configuredMethods } = buildMethodMaps(permissions);
+        this.blockedMethods = blockedMethods;
+        this.configuredMethods = configuredMethods;
     }
 
     get crossDomainImports(): boolean {
@@ -41,9 +45,34 @@ export class PermissionProcessor {
     }
 
     checkRestrictedMethod(methodName: string): boolean {
-        if (!this.methods.has(methodName)) return false;
+        if (!this.blockedMethods.has(methodName)) return false;
         this.warnRestrictedMethod(methodName);
         return true;
+    }
+
+    /**
+     * Returns the resolved appendArgs for a configured method, if any.
+     * - String entries that start with `?.` are resolved against the permissions object.
+     * - Non-path strings are returned as-is.
+     * - Methods listed as plain strings in restrictedMethodSettings do not return args;
+     *   they are fully blocked via checkRestrictedMethod.
+     */
+    getMethodAppendArgs(methodName: string): any[] | undefined {
+        const config = this.configuredMethods.get(methodName);
+        if (!config) return undefined;
+
+        const rawArgs = config.appendArgs ?? config.addArgs;
+        if (!rawArgs || rawArgs.length === 0) return undefined;
+
+        const resolved: any[] = [];
+        for (const arg of rawArgs) {
+            if (typeof arg === 'string' && arg.startsWith('?.')) {
+                resolved.push(getValue(arg, this.permissions));
+            } else {
+                resolved.push(arg);
+            }
+        }
+        return resolved;
     }
 
     redirectRestrictedProp(target: any, key: string, value: any): boolean {
@@ -192,19 +221,25 @@ function normalizeAttrNames(
     return normalizeStrings(attr);
 }
 
-function buildMethodSet(permissions: AssignPermissions | undefined): Set<string> {
+function buildMethodMaps(permissions: AssignPermissions | undefined): { blockedMethods: Set<string>; configuredMethods: Map<string, RestrictedMethodConfig> } {
     const methodSettings = permissions?.restrictedMethodSettings;
-    const methods = new Set<string>();
+    const blockedMethods = new Set<string>();
+    const configuredMethods = new Map<string, RestrictedMethodConfig>();
     if (!methodSettings || methodSettings.length === 0) {
-        return methods;
+        return { blockedMethods, configuredMethods };
     }
 
     for (const setting of methodSettings) {
         if (typeof setting === 'string') {
-            methods.add(setting);
+            blockedMethods.add(setting);
+            continue;
         }
-        // Phase II: object-form RestrictedMethodConfig entries are ignored for now.
+
+        if (configuredMethods.has(setting.method)) {
+            throw new Error(`assignGingerly: duplicate restrictedMethodSettings entry for '${setting.method}'.`);
+        }
+        configuredMethods.set(setting.method, setting);
     }
 
-    return methods;
+    return { blockedMethods, configuredMethods };
 }

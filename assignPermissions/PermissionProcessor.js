@@ -1,11 +1,14 @@
 import { isAllowedUrl } from './isAllowedUrl.js';
+import { getValue } from '../resolve/getValues.js';
 export class PermissionProcessor {
     constructor(permissions) {
         this.permissions = permissions;
         const { props, attrs } = buildMaps(permissions);
         this.props = props;
         this.attrs = attrs;
-        this.methods = buildMethodSet(permissions);
+        const { blockedMethods, configuredMethods } = buildMethodMaps(permissions);
+        this.blockedMethods = blockedMethods;
+        this.configuredMethods = configuredMethods;
         this.warned = new Set();
         this.warnedMethods = new Set();
     }
@@ -25,10 +28,28 @@ export class PermissionProcessor {
         return true;
     }
     checkRestrictedMethod(methodName) {
-        if (!this.methods.has(methodName))
+        if (!this.blockedMethods.has(methodName))
             return false;
         this.warnRestrictedMethod(methodName);
         return true;
+    }
+    getMethodAppendArgs(methodName) {
+        const config = this.configuredMethods.get(methodName);
+        if (!config)
+            return undefined;
+        const rawArgs = config.appendArgs ?? config.addArgs;
+        if (!rawArgs || rawArgs.length === 0)
+            return undefined;
+        const resolved = [];
+        for (const arg of rawArgs) {
+            if (typeof arg === 'string' && arg.startsWith('?.')) {
+                resolved.push(getValue(arg, this.permissions));
+            }
+            else {
+                resolved.push(arg);
+            }
+        }
+        return resolved;
     }
     redirectRestrictedProp(target, key, value) {
         if (!this.props.has(key))
@@ -151,16 +172,22 @@ function normalizeAttrNames(attr, propNames) {
         return propNames;
     return normalizeStrings(attr);
 }
-function buildMethodSet(permissions) {
+function buildMethodMaps(permissions) {
     const methodSettings = permissions?.restrictedMethodSettings;
-    const methods = new Set();
+    const blockedMethods = new Set();
+    const configuredMethods = new Map();
     if (!methodSettings || methodSettings.length === 0) {
-        return methods;
+        return { blockedMethods, configuredMethods };
     }
     for (const setting of methodSettings) {
         if (typeof setting === 'string') {
-            methods.add(setting);
+            blockedMethods.add(setting);
+            continue;
         }
+        if (configuredMethods.has(setting.method)) {
+            throw new Error(`assignGingerly: duplicate restrictedMethodSettings entry for '${setting.method}'.`);
+        }
+        configuredMethods.set(setting.method, setting);
     }
-    return methods;
+    return { blockedMethods, configuredMethods };
 }
