@@ -250,7 +250,7 @@ class ElementEnhancementContainer {
             throw new Error('Instance must be an EventTarget to use whenResolved');
         }
         // Lazy load waitForEvent
-        const { waitForEvent } = await import('./waitForEvent.js');
+        const { waitForEvent } = await import('./utils/waitForEvent.js');
         // Wait for the resolved event (use resolvedKey as event name)
         // Note: When symbols are supported as event names, this will work with symbol keys too
         await waitForEvent(spawnedInstance, resolvedKey);

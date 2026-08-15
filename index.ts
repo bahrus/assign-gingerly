@@ -1,7 +1,7 @@
 export {assignGingerly} from './assignGingerly.js';
 export {assignTentatively} from './assignTentatively.js';
 export {EnhancementRegistry, ItemscopeRegistry, EnhancementRegisteredEvent} from './assignGingerly.js';
-export {waitForEvent} from './waitForEvent.js';
+export {waitForEvent} from './utils/waitForEvent.js';
 export {ParserRegistry, globalParserRegistry} from './parserRegistry.js';
 export {parseWithAttrs} from './parseWithAttrs.js';
 export {buildCSSQuery} from './buildCSSQuery.js';

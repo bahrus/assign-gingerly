@@ -47,7 +47,7 @@ async function defineIshProperty(element, managerName, options, assignGingerlyFn
     let config = registry.get(managerName);
     // If not registered, wait for registration
     if (!config) {
-        const { waitForEvent } = await import('./waitForEvent.js');
+        const { waitForEvent } = await import('./utils/waitForEvent.js');
         await waitForEvent(registry, managerName);
         config = registry.get(managerName);
         if (!config) {

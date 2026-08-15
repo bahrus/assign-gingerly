@@ -159,9 +159,9 @@
       "default": "./markerUtils.js",
       "types": "./markerUtils.ts"
     },
-    "./waitForSettled.js": {
-      "default": "./waitForSettled.js",
-      "types": "./waitForSettled.ts"
+    "./utils/waitForSettled.js": {
+      "default": "./utils/waitForSettled.js",
+      "types": "./utils/waitForSettled.ts"
     },
     "./inferredAssignments.js": {
       "default": "./inferredAssignments.js",
@@ -199,8 +199,9 @@
       "default": "./evaluatePathWithAsyncMethods.js",
       "types": "./evaluatePathWithAsyncMethods.ts"
     },
-    "./waitForEvent.js": {
-      "default": "./waitForEvent.js"
+    "./utils/waitForEvent.js": {
+      "default": "./utils/waitForEvent.js",
+      "types": "./utils/waitForEvent.ts"
     }
   },
   "main": "index.js",
