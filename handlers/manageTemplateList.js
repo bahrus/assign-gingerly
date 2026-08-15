@@ -224,7 +224,7 @@ export class ManageTemplateListHandler {
         if (fragment.childNodes.length > 0) {
             const waitOpt = resolvedParams.waitForSettled;
             if (waitOpt) {
-                const { waitForSettled } = await import('../waitForSettled.js');
+                const { waitForSettled } = await import('../utils/waitForSettled.js');
                 const idleMs = typeof waitOpt === 'object' ? waitOpt.idleMs : 100;
                 const timeout = typeof waitOpt === 'object' ? waitOpt.timeout : undefined;
                 try {
