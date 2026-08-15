@@ -23,6 +23,7 @@
 
     <script type="module">
         import assignGingerly from '../assignGingerly.js';
+        import { assignFrom } from '../assignFrom.js';
 
         const results = [];
         let passed = 0;
@@ -263,6 +264,110 @@
             });
             expect(obj.notEmptyObj).toBe(false);
             expect(obj.notFullObj).toBe(false);
+        });
+
+        test('should handle resolved literal RHS (e.g., from assignFrom)', () => {
+            // assignFrom resolves '?.expanded' to a boolean before calling assignGingerly.
+            // The toggle handler must use that literal value directly.
+            const obj = { expanded: true };
+            assignGingerly(obj, { '?.hidden =!': true });
+            expect(obj.hidden).toBe(false);
+
+            assignGingerly(obj, { '?.hidden2 =!': false });
+            expect(obj.hidden2).toBe(true);
+        });
+
+        test('should toggle each item with @each and resolved literal RHS', () => {
+            const obj = {
+                items: [{ hidden: false }, { hidden: false }, { hidden: false }],
+                expanded: true
+            };
+            // Simulates assignFrom resolving '?.expanded' to true
+            assignGingerly(obj, {
+                '?.items?.@each?.hidden =!': true
+            });
+            for (const item of obj.items) {
+                expect(item.hidden).toBe(false);
+            }
+
+            assignGingerly(obj, {
+                '?.items?.@each?.hidden =!': false
+            });
+            for (const item of obj.items) {
+                expect(item.hidden).toBe(true);
+            }
+        });
+
+        test('should toggle each item with @each and path RHS', () => {
+            const obj = {
+                items: [{ hidden: true }, { hidden: true }],
+                expanded: true
+            };
+            assignGingerly(obj, {
+                '?.items?.@each?.hidden =!': '?.expanded'
+            });
+            for (const item of obj.items) {
+                expect(item.hidden).toBe(false);
+            }
+        });
+
+        test('should toggle each item with @each when withMethods is provided and path has one segment', () => {
+            // Regression: evaluatePathWithMethods returns the container for a single-segment
+            // property path, not the property value. The toggle handler must resolve that.
+            const obj = {
+                items: [{ hidden: true }, { hidden: true }],
+                expanded: false
+            };
+            assignGingerly(obj, {
+                '?.items?.@each?.hidden =!': '?.expanded'
+            }, { withMethods: ['someMethod'] }); // withMethodsSet present but not used by this path
+            for (const item of obj.items) {
+                expect(item.hidden).toBe(true); // !false === true
+            }
+        });
+
+        test('should toggle each item with @each and self-reference', () => {
+            const obj = {
+                items: [{ hidden: true }, { hidden: false }, { hidden: true }]
+            };
+            assignGingerly(obj, {
+                '?.items?.@each?.hidden =!': '.'
+            });
+            expect(obj.items[0].hidden).toBe(false);
+            expect(obj.items[1].hidden).toBe(true);
+            expect(obj.items[2].hidden).toBe(false);
+        });
+
+        test('should toggle each item with nested @each', () => {
+            const obj = {
+                groups: [
+                    { items: [{ hidden: false }, { hidden: false }] },
+                    { items: [{ hidden: false }, { hidden: false }] }
+                ],
+                expanded: true
+            };
+            assignGingerly(obj, {
+                '?.groups?.@each?.items?.@each?.hidden =!': '?.expanded'
+            });
+            for (const group of obj.groups) {
+                for (const item of group.items) {
+                    expect(item.hidden).toBe(false);
+                }
+            }
+        });
+
+        test('should work end-to-end via assignFrom with @each and toggle', () => {
+            const obj = {
+                controls: [{ hidden: true }, { hidden: true }, { hidden: true }],
+                expanded: false
+            };
+            // assignFrom resolves '?.expanded' to the boolean value of obj.expanded
+            assignFrom(obj, {
+                '?.controls?.@each?.hidden =!': '?.expanded'
+            }, { from: obj });
+            for (const item of obj.controls) {
+                expect(item.hidden).toBe(true); // !false === true
+            }
         });
 
         // Display results

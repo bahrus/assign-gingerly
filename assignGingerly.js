@@ -420,6 +420,7 @@ export function isAllowedMethod(methodName, withMethods, permissionProcessor) {
 export function evaluatePathWithMethods(target, pathParts, value, withMethods, permissionProcessor) {
     let current = target;
     let i = 0;
+    let lastSegmentConsumed = false;
     // Process all segments except the last one
     while (i < pathParts.length - 1) {
         const part = pathParts[i];
@@ -442,6 +443,9 @@ export function evaluatePathWithMethods(target, pathParts, value, withMethods, p
                     // Only current is method - call with next part as string arg
                     current = method.call(current, nextPart, ...appendArgs);
                     i++; // Skip next part since we consumed it as argument
+                    if (i === pathParts.length - 1) {
+                        lastSegmentConsumed = true;
+                    }
                 }
             }
             else {
@@ -470,7 +474,8 @@ export function evaluatePathWithMethods(target, pathParts, value, withMethods, p
         target: current,
         lastKey,
         isMethod: isAllowedMethod(lastKey, withMethods, permissionProcessor),
-        isZeroArg
+        isZeroArg,
+        lastSegmentConsumed
     };
 }
 /**
@@ -620,6 +625,115 @@ function applyToEach(iterable, remainingPath, value, withMethods, aliasMap, opti
                     parent[lastKey] = value;
                 }
             }
+        }
+    }
+}
+/**
+ * Resolve the RHS of a toggle (=!) command to the value that should be negated.
+ * Supports:
+ * - '?.path' nested path strings resolved against target (returns the resolved value, or true if missing)
+ * - plain key strings looked up on target (returns the value, or true if missing)
+ * - resolved literal values (e.g., booleans from assignFrom) returned as-is
+ */
+function resolveValueToNegate(rhsPath, target) {
+    if (typeof rhsPath === 'string' && isNestedPath(rhsPath)) {
+        const rhsPathParts = parsePath(rhsPath);
+        let current = target;
+        let exists = true;
+        for (const part of rhsPathParts) {
+            if (current && typeof current === 'object' && part in current) {
+                current = current[part];
+            }
+            else {
+                exists = false;
+                break;
+            }
+        }
+        return exists ? current : true;
+    }
+    if (typeof rhsPath === 'string') {
+        return (rhsPath in target) ? target[rhsPath] : true;
+    }
+    // Non-string resolved value (e.g., boolean, number, null from assignFrom)
+    return rhsPath;
+}
+/**
+ * Apply a toggle (=!) assignment to each item in an iterable.
+ * Handles nested @each, withMethods, self-reference ('.'),
+ * and resolved literal RHS values.
+ */
+function applyToggleToEach(iterable, remainingPath, rhsPath, target, withMethods, aliasMap, options, permissionProcessor) {
+    const items = Array.isArray(iterable) ? iterable : Array.from(iterable);
+    for (const item of items) {
+        if (remainingPath.length === 0) {
+            // No remaining path; cannot toggle the item itself meaningfully
+            continue;
+        }
+        // Check for nested @each in the remaining path
+        const forEachIndex = remainingPath.findIndex(part => isForEachSymbol(part, aliasMap));
+        if (forEachIndex !== -1) {
+            // Evaluate path up to the nested @each
+            const pathToForEach = remainingPath.slice(0, forEachIndex);
+            const pathAfterForEach = remainingPath.slice(forEachIndex + 1);
+            let current = item;
+            for (const part of pathToForEach) {
+                const isZeroArgMethod = part.endsWith('|') && isAllowedMethod(part.slice(0, -1), withMethods, permissionProcessor);
+                if (isAllowedMethod(part, withMethods, permissionProcessor) || isZeroArgMethod) {
+                    const methodName = isZeroArgMethod ? part.slice(0, -1) : part;
+                    const method = current[methodName];
+                    if (typeof method === 'function') {
+                        const appendArgs = permissionProcessor?.getMethodAppendArgs(methodName) ?? [];
+                        if (isZeroArgMethod) {
+                            current = method.call(current, ...appendArgs);
+                            continue;
+                        }
+                        const nextIndex = pathToForEach.indexOf(part) + 1;
+                        const nextPart = pathToForEach[nextIndex];
+                        const nextIsMethod = nextPart && (withMethods.has(nextPart)
+                            || (nextPart.endsWith('|') && withMethods.has(nextPart.slice(0, -1))));
+                        if (nextIsMethod) {
+                            current = method.call(current, ...appendArgs);
+                        }
+                        else if (nextPart) {
+                            current = method.call(current, nextPart, ...appendArgs);
+                            pathToForEach.splice(nextIndex, 1);
+                        }
+                        else {
+                            current = method.call(current, ...appendArgs);
+                        }
+                    }
+                    else {
+                        current = current[methodName];
+                    }
+                }
+                else {
+                    current = current[part];
+                }
+            }
+            if (isIterable(current)) {
+                applyToggleToEach(current, pathAfterForEach, rhsPath, target, withMethods, aliasMap, options, permissionProcessor);
+            }
+            continue;
+        }
+        // No nested @each - compute the value to negate for this item
+        let valueToNegate;
+        if (rhsPath === '.') {
+            // Self-reference: negate the current value at remainingPath on the item
+            const result = evaluatePathWithMethods(item, remainingPath, undefined, withMethods, permissionProcessor);
+            valueToNegate = result.target[result.lastKey];
+        }
+        else {
+            valueToNegate = resolveValueToNegate(rhsPath, target);
+        }
+        const valueToAssign = !valueToNegate;
+        // Apply the toggle to the item
+        const result = evaluatePathWithMethods(item, remainingPath, valueToAssign, withMethods, permissionProcessor);
+        if (result.isMethod) {
+            // Toggle with a method as the final segment is not supported; skip.
+            continue;
+        }
+        if (!permissionProcessor?.redirectRestrictedProp(result.target, result.lastKey, valueToAssign)) {
+            result.target[result.lastKey] = valueToAssign;
         }
     }
 }
@@ -795,54 +909,79 @@ export function assignGingerly(target, source, options, permissionProcessor) {
             const lhsPath = parseToggleCommand(key);
             if (lhsPath) {
                 const rhsPath = value;
-                // Resolve LHS
-                let lhsParent;
-                let lhsLastKey;
                 if (isNestedPath(lhsPath)) {
                     const lhsPathParts = parsePath(lhsPath);
-                    lhsLastKey = lhsPathParts[lhsPathParts.length - 1];
-                    lhsParent = ensureNestedPath(target, lhsPathParts);
-                }
-                else {
-                    lhsLastKey = lhsPath;
-                    lhsParent = target;
-                }
-                // Determine what to negate
-                let valueToNegate;
-                if (rhsPath === '.') {
-                    // Self-reference: negate the LHS value itself (if it exists)
-                    if (lhsLastKey in lhsParent) {
-                        valueToNegate = lhsParent[lhsLastKey];
-                    }
-                    else {
-                        valueToNegate = undefined;
-                    }
-                }
-                else {
-                    // RHS path: navigate to get the value (don't create paths)
-                    if (isNestedPath(rhsPath)) {
-                        const rhsPathParts = parsePath(rhsPath);
+                    // Check for @each in the LHS path
+                    const forEachIndex = lhsPathParts.findIndex(part => isForEachSymbol(part, aliasMap));
+                    if (forEachIndex !== -1) {
+                        // Static forEach (@each) toggle
+                        const pathToForEach = lhsPathParts.slice(0, forEachIndex);
+                        const pathAfterForEach = lhsPathParts.slice(forEachIndex + 1);
+                        // Navigate to the iterable
                         let current = target;
-                        let exists = true;
-                        for (const part of rhsPathParts) {
-                            if (current && typeof current === 'object' && part in current) {
-                                current = current[part];
+                        if (pathToForEach.length > 0) {
+                            if (withMethodsSet) {
+                                const result = evaluatePathWithMethods(target, pathToForEach, value, withMethodsSet, permissionProcessor);
+                                // evaluatePathWithMethods returns the container object + last key by default.
+                                // If the last segment was consumed as a method argument, or the last segment
+                                // is a zero-arg method marked with |, result.target is already the value.
+                                if (result.lastSegmentConsumed) {
+                                    current = result.target;
+                                }
+                                else if (result.isMethod) {
+                                    const method = result.target[result.lastKey];
+                                    if (typeof method === 'function') {
+                                        const appendArgs = permissionProcessor?.getMethodAppendArgs(result.lastKey) ?? [];
+                                        current = method.call(result.target, ...appendArgs);
+                                    }
+                                    else {
+                                        current = method;
+                                    }
+                                }
+                                else {
+                                    current = result.target[result.lastKey];
+                                }
                             }
                             else {
-                                exists = false;
-                                break;
+                                for (const part of pathToForEach) {
+                                    current = current[part];
+                                }
                             }
                         }
-                        valueToNegate = exists ? current : true;
+                        if (isIterable(current)) {
+                            applyToggleToEach(current, pathAfterForEach, rhsPath, target, withMethodsSet || new Set(), aliasMap, options, permissionProcessor);
+                        }
+                        continue;
+                    }
+                    // No @each in path - standard toggle
+                    const lhsLastKey = lhsPathParts[lhsPathParts.length - 1];
+                    const lhsParent = ensureNestedPath(target, lhsPathParts);
+                    // Determine what to negate
+                    let valueToNegate;
+                    if (rhsPath === '.') {
+                        valueToNegate = (lhsLastKey in lhsParent) ? lhsParent[lhsLastKey] : undefined;
                     }
                     else {
-                        // Plain key RHS
-                        valueToNegate = (rhsPath in target) ? target[rhsPath] : true;
+                        valueToNegate = resolveValueToNegate(rhsPath, target);
+                    }
+                    if (!permissionProcessor?.checkRestrictedProp(lhsLastKey)) {
+                        lhsParent[lhsLastKey] = !valueToNegate;
                     }
                 }
-                // Apply negation to LHS — check restriction first
-                if (!permissionProcessor?.checkRestrictedProp(lhsLastKey)) {
-                    lhsParent[lhsLastKey] = !valueToNegate;
+                else {
+                    // Plain key LHS
+                    const lhsLastKey = lhsPath;
+                    const lhsParent = target;
+                    let valueToNegate;
+                    if (rhsPath === '.') {
+                        valueToNegate = (lhsLastKey in lhsParent) ? lhsParent[lhsLastKey] : undefined;
+                    }
+                    else {
+                        valueToNegate = resolveValueToNegate(rhsPath, target);
+                    }
+                    if (!permissionProcessor?.checkRestrictedProp(lhsLastKey)) {
+                        lhsParent[lhsLastKey] = !valueToNegate;
+                    }
                 }
             }
             continue;
@@ -960,9 +1099,25 @@ export function assignGingerly(target, source, options, permissionProcessor) {
                 if (pathToForEach.length > 0) {
                     if (withMethodsSet) {
                         const result = evaluatePathWithMethods(target, pathToForEach, value, withMethodsSet, permissionProcessor);
-                        // The result.target is the current position after evaluating the path
-                        // This is already the iterable we want
-                        current = result.target;
+                        // evaluatePathWithMethods returns the container object + last key by default.
+                        // If the last segment was consumed as a method argument, or the last segment
+                        // is a zero-arg method marked with |, result.target is already the value.
+                        if (result.lastSegmentConsumed) {
+                            current = result.target;
+                        }
+                        else if (result.isMethod) {
+                            const method = result.target[result.lastKey];
+                            if (typeof method === 'function') {
+                                const appendArgs = permissionProcessor?.getMethodAppendArgs(result.lastKey) ?? [];
+                                current = method.call(result.target, ...appendArgs);
+                            }
+                            else {
+                                current = method;
+                            }
+                        }
+                        else {
+                            current = result.target[result.lastKey];
+                        }
                     }
                     else {
                         for (const part of pathToForEach) {
