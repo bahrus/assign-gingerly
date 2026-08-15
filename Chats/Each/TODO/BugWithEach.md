@@ -150,3 +150,94 @@ The error went away.  However, the hidden setting is not getting set to false on
 
 FYI, the page is running at:  http://localhost:8000/demo/dev.html in case you can run the page and capture the console.logs.
 
+---
+
+## Bruce's Response II
+
+I guess you were updating the document above my latest response, so that time flow is confusing.
+
+Anyway, can you confirm that the fix that you applied to make @each work with =! operator, will also work with other operators such as +=, Y=, etc.
+
+Please add to the chat below with your reply.
+
+---
+
+## Conclusion / Reply to Bruce's Response II
+
+No — the fix I applied is **specific to the `=!` (toggle) operator**. It does **not** automatically fix `+=`, `-=`, or `Y=` when those commands are combined with `@each`.
+
+### Why the other operators are still affected
+
+`assignGingerly.ts` processes command suffixes (`+=`, `=!`, `-=`, `Y=`) in a series of early `if` blocks, **before** the general `@each` detection in the main assignment loop. My changes only added `@each` awareness to the `=!` handler and fixed the `evaluatePathWithMethods` navigation so the iterable is resolved correctly. The `+=`, `-=`, and `Y=` handlers still use the old logic, so a key like:
+
+```json
+"?.ariaControlsElements?.@each?.hidden +=": 1
+"?.ariaControlsElements?.@each?.hidden -=": "prop"
+"?.ariaControlsElements?.@each?.style Y=": { "color": "red" }
+```
+
+would still be parsed as a literal path, `ensureNestedPath` would create an object property literally named `@each`, and the intended iteration would not happen.
+
+### Should we fix them now?
+
+That depends on whether your use cases actually need `@each` paired with those operators. At the moment:
+
+- Your reported bug only uses `=!`.
+- The existing test suite does not exercise `@each` with `+=`, `-=`, or `Y=`.
+- The `el-maker.json` config for `plus-minus` does not use those combinations either.
+
+If you want, I can extend the same `@each` handling to `+=`, `-=`, and `Y=` as a follow-up. It would be a similar pattern to what I did for `=!`: detect `@each` in the LHS path, navigate to the iterable, then apply the operation to each item. Let me know if you'd like me to proceed with that.
+
+---
+
+## Bruce's Response III
+
+Thanks for confirming my concern.
+
+I think it would be the user expectation, based on all the documentation that this would work with all the operator commands.
+
+My concern is that your fix added maybe 200 lines to the code base.  Will each such fix add 200 lines, or can we find a way of sharing the logic so that the some code logic gets used?
+
+---
+
+## Thoughts on Extending the Fix to `+=`, `-=`, and `Y=`
+
+You're right — users will expect `@each` to compose with all the operators, and duplicating ~200 lines per operator would be bad. We should share logic.
+
+### Proposed approach
+
+Instead of adding a separate `@each`-aware handler for every command, refactor so that each command handler:
+
+1. Parses the command and the LHS path.
+2. Detects `@each` in the LHS path (one shared check).
+3. If `@each` is present, calls a single shared helper: `applyCommandToEach(iterable, remainingPath, commandSuffix, value, options, permissionProcessor)`.
+4. The shared helper:
+   - Navigates to the iterable (using the same `evaluatePathWithMethods` fix already in place).
+   - Walks the remaining path, handling nested `@each` recursively with one shared navigation routine.
+   - At the leaf, builds a synthetic command key like `'?.hidden +=': value` and calls `assignGingerly(item, syntheticKey, ...)`.
+
+By delegating the actual `+=`, `=!`, `-=`, `Y=` semantics back to the existing command handlers on the individual item, we reuse all the existing command logic and only need to write the iteration/navigation plumbing once.
+
+### What this would touch
+
+- `assignGingerly.ts`:
+  - Extract the nested `@each` navigation logic currently in `applyToEach`/`applyToggleToEach` into a shared helper.
+  - Add `applyCommandToEach`.
+  - Refactor `applyToggleToEach` to use the same shared helper.
+  - Modify the `+=`, `-=`, and `Y=` handlers to detect `@each` and dispatch to `applyCommandToEach`.
+- `tests/toggle-command.html` and possibly new test files for `+=`/`-=`/`Y=` with `@each`.
+
+### Scope estimate
+
+This is roughly a **1-file refactor** in `assignGingerly.ts` plus tests. It should not add 200 lines per operator; the net addition should be modest because we'll replace the duplicated navigation in `applyToggleToEach` with the shared helper at the same time.
+
+### Recommendation
+
+Proceed with the refactor. It makes the behavior consistent across all operators, fixes the latent bugs, and keeps the code maintainable. Let me know if you want me to start on it.
+
+---
+
+## Bruce's Response IV
+
+Please implement, and add implementation notes below.
+
