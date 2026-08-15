@@ -29,6 +29,10 @@
  */
 const PATH_SYMBOL = Symbol('assign-gingerly-path');
 
+function isPathProxy(value: unknown): value is { [PATH_SYMBOL]: string } {
+    return !!value && (typeof value === 'object' || typeof value === 'function') && PATH_SYMBOL in value;
+}
+
 /**
  * Type that maps an object type to a proxy where every property access
  * returns either a deeper proxy (for object properties) or a terminal
@@ -60,6 +64,7 @@ export interface PathsOptions {
  */
 function createIdRefProxy(idRef: string, options?: PathsOptions): any {
     function handler() {}
+    Object.defineProperty(handler, PATH_SYMBOL, { value: idRef });
     return new Proxy(handler, {
         get(_, prop: string | symbol) {
             if (prop === 'path' || prop === PATH_SYMBOL) {
@@ -77,7 +82,7 @@ function createIdRefProxy(idRef: string, options?: PathsOptions): any {
                 let argStr: string;
                 if (arg === true) argStr = 'true';
                 else if (arg === false) argStr = 'false';
-                else if (arg && typeof arg === 'object' && PATH_SYMBOL in arg) {
+                else if (isPathProxy(arg)) {
                     const fullPath = arg[PATH_SYMBOL] as string;
                     argStr = fullPath.startsWith('?.') ? fullPath.substring(2) : fullPath;
                 }
@@ -103,6 +108,7 @@ function createPathProxy(prefix: string, options?: PathsOptions): any {
 
     // Use a function as the target to enable the apply trap
     function handler() {}
+    Object.defineProperty(handler, PATH_SYMBOL, { value: prefix.length > 0 ? `?.${prefix}` : '?.' });
 
     return new Proxy(handler, {
         get(_, prop: string | symbol) {
@@ -139,7 +145,7 @@ function createPathProxy(prefix: string, options?: PathsOptions): any {
                 let argStr: string;
                 if (arg === true) argStr = 'true';
                 else if (arg === false) argStr = 'false';
-                else if (arg && typeof arg === 'object' && PATH_SYMBOL in arg) {
+                else if (isPathProxy(arg)) {
                     // Proxy arg — extract path without '?.' prefix
                     const fullPath = arg[PATH_SYMBOL] as string;
                     argStr = fullPath.startsWith('?.') ? fullPath.substring(2) : fullPath;
@@ -194,12 +200,12 @@ export function paths<T>(options?: PathsOptions): PathProxy<T> {
  * }
  */
 export function set(lhs: any): { to: (rhs: any) => Record<string, any> } {
-    const lhsStr = lhs && typeof lhs === 'object' && PATH_SYMBOL in lhs
+    const lhsStr = isPathProxy(lhs)
         ? lhs[PATH_SYMBOL]
         : String(lhs);
     return {
         to(rhs: any): Record<string, any> {
-            const rhsStr = rhs && typeof rhs === 'object' && PATH_SYMBOL in rhs
+            const rhsStr = isPathProxy(rhs)
                 ? rhs[PATH_SYMBOL]
                 : rhs;
             return { [lhsStr]: rhsStr };
@@ -226,7 +232,7 @@ export function set(lhs: any): { to: (rhs: any) => Record<string, any> } {
  * // { assign: { incrementButton: '?.clone?.q?..increment', ... } }
  */
 export function smoothOver(value: any): any {
-    if (value && typeof value === 'object' && PATH_SYMBOL in value) {
+    if (isPathProxy(value)) {
         return value[PATH_SYMBOL];
     }
     if (Array.isArray(value)) {
@@ -328,13 +334,13 @@ export function sp(strings: TemplateStringsArray, ...values: any[]): any[] {
         if (strings[i]) result.push(strings[i]);
         if (i < values.length) {
             const v = values[i];
-            if (v && typeof v === 'object' && PATH_SYMBOL in v) {
+            if (isPathProxy(v)) {
                 // Auto-extract path from proxy object
                 result.push(v[PATH_SYMBOL]);
             } else if (Array.isArray(v)) {
                 // Nested array — recursively extract paths from proxy elements
                 result.push(v.map(el =>
-                    el && typeof el === 'object' && PATH_SYMBOL in el ? el[PATH_SYMBOL] : el
+                    isPathProxy(el) ? el[PATH_SYMBOL] : el
                 ));
             } else {
                 result.push(v);
@@ -384,14 +390,14 @@ export function md(strings: TemplateStringsArray, ...values: any[]): any[] {
         if (strings[i]) result.push(strings[i]);
         if (i < values.length) {
             const v = values[i];
-            if (v && typeof v === 'object' && PATH_SYMBOL in v) {
+            if (isPathProxy(v)) {
                 // Proxy object → {prop, val}
                 const pathStr = v[PATH_SYMBOL] as string;
                 result.push({ prop: extractPropName(pathStr), val: pathStr });
             } else if (Array.isArray(v)) {
                 // Nested array — recursively convert proxy elements to {prop, val}
                 result.push(v.map(el => {
-                    if (el && typeof el === 'object' && PATH_SYMBOL in el) {
+                    if (isPathProxy(el)) {
                         const pathStr = el[PATH_SYMBOL] as string;
                         return { prop: extractPropName(pathStr), val: pathStr };
                     }
@@ -400,7 +406,7 @@ export function md(strings: TemplateStringsArray, ...values: any[]): any[] {
             } else if (v && typeof v === 'object' && 'prop' in v) {
                 // Developer override object — extract val from proxy if present
                 const processed = { ...v };
-                if (processed.val && typeof processed.val === 'object' && PATH_SYMBOL in processed.val) {
+                if (isPathProxy(processed.val)) {
                     processed.val = processed.val[PATH_SYMBOL];
                 }
                 result.push(processed);
