@@ -420,6 +420,48 @@
             expect(obj).toEqual({ flag: false, keep: 'this' });
         });
 
+        test('should delete properties from each item with @each', () => {
+            const obj = {
+                items: [
+                    { a: 1, b: 2 },
+                    { a: 3, b: 4 }
+                ]
+            };
+            assignGingerly(obj, {
+                '?.items?.@each -=': 'a'
+            });
+            expect(obj.items[0]).toEqual({ b: 2 });
+            expect(obj.items[1]).toEqual({ b: 4 });
+        });
+
+        test('should delete multiple properties from each item with @each', () => {
+            const obj = {
+                items: [
+                    { a: 1, b: 2, c: 3 },
+                    { a: 4, b: 5, c: 6 }
+                ]
+            };
+            assignGingerly(obj, {
+                '?.items?.@each -=': ['a', 'b']
+            });
+            expect(obj.items[0]).toEqual({ c: 3 });
+            expect(obj.items[1]).toEqual({ c: 6 });
+        });
+
+        test('should delete from nested @each paths', () => {
+            const obj = {
+                groups: [
+                    { items: [{ x: 1, y: 2 }] },
+                    { items: [{ x: 3, y: 4 }] }
+                ]
+            };
+            assignGingerly(obj, {
+                '?.groups?.@each?.items?.@each -=': 'x'
+            });
+            expect(obj.groups[0].items[0]).toEqual({ y: 2 });
+            expect(obj.groups[1].items[0]).toEqual({ y: 4 });
+        });
+
         // Display results
         const total = passed + failed;
         const statusEl = document.getElementById('status');

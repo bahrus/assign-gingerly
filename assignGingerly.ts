@@ -759,96 +759,77 @@ function resolveValueToNegate(rhsPath: any, target: any): any {
 }
 
 /**
- * Apply a toggle (=!) assignment to each item in an iterable.
- * Handles nested @each, withMethods, self-reference ('.'),
- * and resolved literal RHS values.
+ * Navigate a path that leads to an iterable, returning the iterable value or undefined.
+ * Handles withMethods and the evaluatePathWithMethods semantics.
  */
-function applyToggleToEach(
-  iterable: any,
-  remainingPath: string[],
-  rhsPath: any,
+function getIterableAtPath(
   target: any,
-  withMethods: Set<string>,
+  pathParts: string[],
+  value: any,
+  withMethods: Set<string> | undefined,
+  permissionProcessor?: PermissionProcessor
+): any {
+  let current = target;
+  if (pathParts.length > 0) {
+    if (withMethods && withMethods.size > 0) {
+      const result = evaluatePathWithMethods(target, pathParts, value, withMethods, permissionProcessor);
+      // evaluatePathWithMethods returns the container object + last key by default.
+      // If the last segment was consumed as a method argument, or the last segment
+      // is a zero-arg method marked with |, result.target is already the value.
+      if (result.lastSegmentConsumed) {
+        current = result.target;
+      } else if (result.isMethod) {
+        const method = result.target[result.lastKey];
+        if (typeof method === 'function') {
+          const appendArgs = permissionProcessor?.getMethodAppendArgs(result.lastKey) ?? [];
+          current = method.call(result.target, ...appendArgs);
+        } else {
+          current = method;
+        }
+      } else {
+        current = result.target[result.lastKey];
+      }
+    } else {
+      for (const part of pathParts) {
+        current = current[part];
+      }
+    }
+  }
+  return isIterable(current) ? current : undefined;
+}
+
+/**
+ * Apply an operator command (+=, =!, -=, Y=) to each item in an iterable.
+ * Detects @each in the path, navigates to the iterable, then builds a synthetic
+ * command key for the remaining path and delegates to assignGingerly per item.
+ * Nested @each is handled recursively through assignGingerly.
+ */
+function applyCommandToEach(
+  target: any,
+  pathParts: string[],
+  commandSuffix: string,
+  value: any,
+  withMethods: Set<string> | undefined,
   aliasMap: Map<string, string>,
   options?: IAssignGingerlyOptions,
   permissionProcessor?: PermissionProcessor
 ): void {
+  const forEachIndex = pathParts.findIndex(part => isForEachSymbol(part, aliasMap));
+  if (forEachIndex === -1) return;
+
+  const pathToForEach = pathParts.slice(0, forEachIndex);
+  const pathAfterForEach = pathParts.slice(forEachIndex + 1);
+
+  const iterable = getIterableAtPath(target, pathToForEach, value, withMethods, permissionProcessor);
+  if (!iterable) return;
+
   const items = Array.isArray(iterable) ? iterable : Array.from(iterable);
+  const syntheticKey = pathAfterForEach.length > 0
+    ? `?.${pathAfterForEach.join('?.')}${commandSuffix}`
+    : commandSuffix;
 
   for (const item of items) {
-    if (remainingPath.length === 0) {
-      // No remaining path; cannot toggle the item itself meaningfully
-      continue;
-    }
-
-    // Check for nested @each in the remaining path
-    const forEachIndex = remainingPath.findIndex(part => isForEachSymbol(part, aliasMap));
-
-    if (forEachIndex !== -1) {
-      // Evaluate path up to the nested @each
-      const pathToForEach = remainingPath.slice(0, forEachIndex);
-      const pathAfterForEach = remainingPath.slice(forEachIndex + 1);
-
-      let current = item;
-      for (const part of pathToForEach) {
-        const isZeroArgMethod = part.endsWith('|') && isAllowedMethod(part.slice(0, -1), withMethods, permissionProcessor);
-        if (isAllowedMethod(part, withMethods, permissionProcessor) || isZeroArgMethod) {
-          const methodName = isZeroArgMethod ? part.slice(0, -1) : part;
-          const method = current[methodName];
-          if (typeof method === 'function') {
-            const appendArgs = permissionProcessor?.getMethodAppendArgs(methodName) ?? [];
-            if (isZeroArgMethod) {
-              current = method.call(current, ...appendArgs);
-              continue;
-            }
-            const nextIndex = pathToForEach.indexOf(part) + 1;
-            const nextPart = pathToForEach[nextIndex];
-            const nextIsMethod = nextPart && (withMethods.has(nextPart)
-              || (nextPart.endsWith('|') && withMethods.has(nextPart.slice(0, -1))));
-            if (nextIsMethod) {
-              current = method.call(current, ...appendArgs);
-            } else if (nextPart) {
-              current = method.call(current, nextPart, ...appendArgs);
-              pathToForEach.splice(nextIndex, 1);
-            } else {
-              current = method.call(current, ...appendArgs);
-            }
-          } else {
-            current = current[methodName];
-          }
-        } else {
-          current = current[part];
-        }
-      }
-
-      if (isIterable(current)) {
-        applyToggleToEach(current, pathAfterForEach, rhsPath, target, withMethods, aliasMap, options, permissionProcessor);
-      }
-      continue;
-    }
-
-    // No nested @each - compute the value to negate for this item
-    let valueToNegate: any;
-    if (rhsPath === '.') {
-      // Self-reference: negate the current value at remainingPath on the item
-      const result = evaluatePathWithMethods(item, remainingPath, undefined, withMethods, permissionProcessor);
-      valueToNegate = result.target[result.lastKey];
-    } else {
-      valueToNegate = resolveValueToNegate(rhsPath, target);
-    }
-
-    const valueToAssign = !valueToNegate;
-
-    // Apply the toggle to the item
-    const result = evaluatePathWithMethods(item, remainingPath, valueToAssign, withMethods, permissionProcessor);
-    if (result.isMethod) {
-      // Toggle with a method as the final segment is not supported; skip.
-      continue;
-    }
-
-    if (!permissionProcessor?.redirectRestrictedProp(result.target, result.lastKey, valueToAssign)) {
-      result.target[result.lastKey] = valueToAssign;
-    }
+    assignGingerly(item, { [syntheticKey]: value }, options, permissionProcessor);
   }
 }
 
@@ -973,6 +954,12 @@ export function assignGingerly(
         if (isNestedPath(path)) {
           const pathParts = parsePath(path);
 
+          // Check for @each in path
+          if (pathParts.some(part => isForEachSymbol(part, aliasMap))) {
+            applyCommandToEach(target, pathParts, ' +=', value, withMethodsSet, aliasMap, options, permissionProcessor);
+            continue;
+          }
+
           // Check for withMethods path evaluation
           let lhsValue: any;
           let lhsParent: any;
@@ -1048,44 +1035,13 @@ export function assignGingerly(
           const lhsPathParts = parsePath(lhsPath);
 
           // Check for @each in the LHS path
-          const forEachIndex = lhsPathParts.findIndex(part => isForEachSymbol(part, aliasMap));
-
-          if (forEachIndex !== -1) {
-            // Static forEach (@each) toggle
-            const pathToForEach = lhsPathParts.slice(0, forEachIndex);
-            const pathAfterForEach = lhsPathParts.slice(forEachIndex + 1);
-
-            // Navigate to the iterable
-            let current = target;
-            if (pathToForEach.length > 0) {
-              if (withMethodsSet) {
-                const result = evaluatePathWithMethods(target, pathToForEach, value, withMethodsSet, permissionProcessor);
-                // evaluatePathWithMethods returns the container object + last key by default.
-                // If the last segment was consumed as a method argument, or the last segment
-                // is a zero-arg method marked with |, result.target is already the value.
-                if (result.lastSegmentConsumed) {
-                  current = result.target;
-                } else if (result.isMethod) {
-                  const method = result.target[result.lastKey];
-                  if (typeof method === 'function') {
-                    const appendArgs = permissionProcessor?.getMethodAppendArgs(result.lastKey) ?? [];
-                    current = method.call(result.target, ...appendArgs);
-                  } else {
-                    current = method;
-                  }
-                } else {
-                  current = result.target[result.lastKey];
-                }
-              } else {
-                for (const part of pathToForEach) {
-                  current = current[part];
-                }
-              }
-            }
-
-            if (isIterable(current)) {
-              applyToggleToEach(current, pathAfterForEach, rhsPath, target, withMethodsSet || new Set(), aliasMap, options, permissionProcessor);
-            }
+          if (lhsPathParts.some(part => isForEachSymbol(part, aliasMap))) {
+            // Resolve non-self-referencing RHS paths against the original target
+            // before iterating, so each item negates the same root value.
+            const resolvedValue = (rhsPath === '.' || typeof rhsPath !== 'string')
+              ? rhsPath
+              : resolveValueToNegate(rhsPath, target);
+            applyCommandToEach(target, lhsPathParts, ' =!', resolvedValue, withMethodsSet, aliasMap, options, permissionProcessor);
             continue;
           }
 
@@ -1134,6 +1090,13 @@ export function assignGingerly(
         
         if (isNestedPath(path)) {
           const pathParts = parsePath(path);
+
+          // Check for @each in path
+          if (pathParts.some(part => isForEachSymbol(part, aliasMap))) {
+            applyCommandToEach(target, pathParts, ' -=', value, withMethodsSet, aliasMap, options, permissionProcessor);
+            continue;
+          }
+
           if (pathParts.length === 0) {
             parent = target;
           } else {
@@ -1177,6 +1140,13 @@ export function assignGingerly(
         if (permissionProcessor?.checkRestrictedProp(lastKey)) {
           continue;
         }
+
+        // Check for @each in path
+        if (isNestedPath(path) && pathParts.some(part => isForEachSymbol(part, aliasMap))) {
+          applyCommandToEach(target, pathParts, ' Y=', value, withMethodsSet, aliasMap, options, permissionProcessor);
+          continue;
+        }
+
         // Navigate to the target sub-object
         let mergeTarget: any;
         if (isNestedPath(path)) {
@@ -1244,37 +1214,12 @@ export function assignGingerly(
         // Static forEach (@each) - existing logic
         const pathToForEach = pathParts.slice(0, forEachIndex);
         const pathAfterForEach = pathParts.slice(forEachIndex + 1);
-        
+
         // Navigate to the iterable
-        let current = target;
-        if (pathToForEach.length > 0) {
-          if (withMethodsSet) {
-            const result = evaluatePathWithMethods(target, pathToForEach, value, withMethodsSet, permissionProcessor);
-            // evaluatePathWithMethods returns the container object + last key by default.
-            // If the last segment was consumed as a method argument, or the last segment
-            // is a zero-arg method marked with |, result.target is already the value.
-            if (result.lastSegmentConsumed) {
-              current = result.target;
-            } else if (result.isMethod) {
-              const method = result.target[result.lastKey];
-              if (typeof method === 'function') {
-                const appendArgs = permissionProcessor?.getMethodAppendArgs(result.lastKey) ?? [];
-                current = method.call(result.target, ...appendArgs);
-              } else {
-                current = method;
-              }
-            } else {
-              current = result.target[result.lastKey];
-            }
-          } else {
-            for (const part of pathToForEach) {
-              current = current[part];
-            }
-          }
-        }
-        
+        const current = getIterableAtPath(target, pathToForEach, value, withMethodsSet, permissionProcessor);
+
         // Apply to each item in the iterable
-        if (isIterable(current)) {
+        if (current) {
           applyToEach(current, pathAfterForEach, value, withMethodsSet || new Set(), aliasMap, options, permissionProcessor);
         }
         // If not iterable, let JavaScript throw error naturally when trying to iterate

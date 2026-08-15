@@ -209,6 +209,56 @@
             expect(obj).toEqual({ a: { b: 1 } });
         });
 
+        // Y= with @each
+        test('should merge into each item with @each', () => {
+            const obj = {
+                items: [
+                    { style: { color: 'red', size: 'small' } },
+                    { style: { color: 'blue', size: 'large' } }
+                ]
+            };
+            assignGingerly(obj, {
+                '?.items?.@each?.style Y=': {
+                    display: 'block',
+                    opacity: '1'
+                }
+            });
+            expect(obj.items[0].style).toEqual({ color: 'red', size: 'small', display: 'block', opacity: '1' });
+            expect(obj.items[1].style).toEqual({ color: 'blue', size: 'large', display: 'block', opacity: '1' });
+        });
+
+        test('should merge into each item preserving existing properties with @each', () => {
+            const obj = {
+                items: [
+                    { style: { color: 'red' } },
+                    { style: { color: 'blue' } }
+                ]
+            };
+            assignGingerly(obj, {
+                '?.items?.@each?.style Y=': {
+                    width: '100px'
+                }
+            });
+            expect(obj.items[0].style).toEqual({ color: 'red', width: '100px' });
+            expect(obj.items[1].style).toEqual({ color: 'blue', width: '100px' });
+        });
+
+        test('should merge into nested @each items', () => {
+            const obj = {
+                groups: [
+                    { items: [{ style: { color: 'red' } }] },
+                    { items: [{ style: { color: 'blue' } }] }
+                ]
+            };
+            assignGingerly(obj, {
+                '?.groups?.@each?.items?.@each?.style Y=': {
+                    width: '100px'
+                }
+            });
+            expect(obj.groups[0].items[0].style).toEqual({ color: 'red', width: '100px' });
+            expect(obj.groups[1].items[0].style).toEqual({ color: 'blue', width: '100px' });
+        });
+
         // Display results
         const total = passed + failed;
         const statusEl = document.getElementById('status');

@@ -241,3 +241,39 @@ Proceed with the refactor. It makes the behavior consistent across all operators
 
 Please implement, and add implementation notes below.
 
+
+---
+
+## Implementation Notes — Shared `@each` Handler for All Operators
+
+### What was implemented
+
+Refactored `assignGingerly.ts` so that `@each` works consistently with `+=`, `=!`, `-=`, and `Y=`.
+
+- Added `getIterableAtPath(target, pathParts, value, withMethods, permissionProcessor)` to navigate a path that ends in an iterable, reusing the `evaluatePathWithMethods` fix (including `lastSegmentConsumed` handling).
+- Added `applyCommandToEach(target, pathParts, commandSuffix, value, withMethods, aliasMap, options, permissionProcessor)`:
+  - Finds `@each` in the path.
+  - Uses `getIterableAtPath` to reach the iterable.
+  - Builds a synthetic command key for the remaining path (e.g., `?.hidden +=`).
+  - Calls `assignGingerly(item, { [syntheticKey]: value }, ...)` per item, so nested `@each` recurses naturally through the existing handlers.
+  - Supports empty remaining paths, so commands like `?.items?.@each -=` apply to the item itself.
+- Removed `applyToggleToEach`; the `=!` handler now delegates to `applyCommandToEach` like the others.
+- Updated the `+=`, `=!`, `-=`, and `Y=` handlers to detect `@each` in the LHS path and dispatch to `applyCommandToEach`.
+- The `=!` handler pre-resolves non-self-referencing RHS path strings (`rhsPath !== '.'`) against the original target before delegating, so each item negates the same root value and nested `@each` works correctly.
+
+### Tests added
+
+- `assign-gingerly/tests/inc-command.html` — `@each` with `+=` (literal RHS, nested `@each`, property preservation).
+- `assign-gingerly/tests/delete-command.html` — `@each` with `-=` (single property, multiple properties, nested `@each`, deleting from the item itself).
+- `assign-gingerly/tests/merge-command.html` — `@each` with `Y=` (merge into existing sub-objects, preserve properties, nested `@each`).
+- Existing `toggle-command.html` already covers `@each` with `=!`.
+
+### Verification
+
+Recompiled `assignGingerly.ts` with `npx tsc` and ran the full Playwright suite in `assign-gingerly`:
+
+```
+93 passed (19.2s)
+```
+
+All Chromium, Firefox, and WebKit tests pass, including the new `@each` command tests and the original `foreach.spec.ts` and `toggle-command` tests.

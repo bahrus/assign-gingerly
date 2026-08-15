@@ -260,6 +260,48 @@
             expect(obj.total).toBeCloseTo(0.3);
         });
 
+        test('should increment each item with @each and literal RHS', () => {
+            const obj = {
+                items: [{ count: 1 }, { count: 2 }, { count: 3 }]
+            };
+            assignGingerly(obj, {
+                '?.items?.@each?.count +=': 10
+            });
+            expect(obj.items[0].count).toBe(11);
+            expect(obj.items[1].count).toBe(12);
+            expect(obj.items[2].count).toBe(13);
+        });
+
+        test('should increment each item with nested @each', () => {
+            const obj = {
+                groups: [
+                    { items: [{ count: 1 }, { count: 2 }] },
+                    { items: [{ count: 3 }, { count: 4 }] }
+                ]
+            };
+            assignGingerly(obj, {
+                '?.groups?.@each?.items?.@each?.count +=': 100
+            });
+            expect(obj.groups[0].items[0].count).toBe(101);
+            expect(obj.groups[0].items[1].count).toBe(102);
+            expect(obj.groups[1].items[0].count).toBe(103);
+            expect(obj.groups[1].items[1].count).toBe(104);
+        });
+
+        test('should preserve other properties when incrementing with @each', () => {
+            const obj = {
+                items: [
+                    { count: 1, name: 'a' },
+                    { count: 2, name: 'b' }
+                ]
+            };
+            assignGingerly(obj, {
+                '?.items?.@each?.count +=': 1
+            });
+            expect(obj.items[0]).toEqual({ count: 2, name: 'a' });
+            expect(obj.items[1]).toEqual({ count: 3, name: 'b' });
+        });
+
         // Display results
         const total = passed + failed;
         const statusEl = document.getElementById('status');
