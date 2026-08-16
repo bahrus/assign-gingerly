@@ -4402,7 +4402,7 @@ export default {
 - `paths<T>()` creates a deeply-proxied object typed as `T`
 - Every property access returns a deeper proxy (e.g., `$.address.city`)
 - Capitalized reserved tokens like `.Each` and `.EqNot` normalize into command syntax
-- `.path` extracts the `?.`-prefixed string: `$.address.city.path` → `'?.address?.city'`
+- `.Path` extracts the `?.`-prefixed string: `$.address.city.Path` → `'?.address?.city'`
 - Inside `sp` template literals, `.Path` is not needed — proxy objects are auto-detected
 
 **How `sp` works:**
