@@ -17,7 +17,7 @@ test.describe('assign-gingerly DX paths helpers', () => {
       assign: {
         expandButton: $.clone.querySelector('[name=expand]'),
         collapseButton: $.clone.querySelector('[name=collapse]'),
-        [$.ariaExpanded.path]: $.expanded,
+        [$.ariaExpanded.Path]: $.expanded,
       },
     });
 

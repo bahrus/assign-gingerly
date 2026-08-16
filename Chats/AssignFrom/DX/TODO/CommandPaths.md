@@ -170,3 +170,57 @@ What changed:
 - The generated JS mirror was updated alongside the TypeScript source so the package works immediately without a build step.
 
 This keeps the authoring model simple: lowercase segments remain ordinary path pieces, and capitalized tokens are the reserved command markers.
+
+---
+
+## Human Response IV
+
+FYI, I removed backwards compatibility technical debt for 'path'.  If I missed any, please remove.
+
+I tested this, and it's showing promise, but:
+
+```JS
+...doAssign(
+    set($.ariaExpanded).to($.expanded),
+    set($.ariaControlsElements.Each.hidden.EqNot`).to($.expanded)
+)
+```
+
+gives error:
+
+```
+Restarting 'el-maker.mjs'
+file:///C:/git/custom-elements/plus-minus/el-maker.mjs:92
+writeFileSync(outputFile, render(), 'utf8');
+                                            
+
+SyntaxError: Unexpected end of input
+    at compileSourceTextModule (node:internal/modules/esm/utils:318:16)
+    at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:90:18)
+    at #translate (node:internal/modules/esm/loader:451:20)
+    at afterLoad (node:internal/modules/esm/loader:507:29)
+    at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:512:12)
+    at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:555:36)
+    at afterResolve (node:internal/modules/esm/loader:603:52)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:609:12)
+    at node:internal/modules/esm/loader:628:32
+    at TracingChannel.tracePromise (node:diagnostics_channel:362:14)
+
+Node.js v24.15.0
+Failed running 'el-maker.mjs'. Waiting for file changes before restarting...
+```
+
+## Codex Response V
+
+I double-checked the repo for remaining `path` alias support.
+
+What’s still left:
+
+- The live proxy implementation no longer accepts `path` as an accessor.
+- The README examples now use `Path`.
+- The only remaining `.path` hit in this thread is the original historical example in the Human Ask section at the top of the file.
+- The `?.path?.notation` mention in the README is just a literal wire-format example, not the proxy API.
+
+So I don’t see any remaining runtime alias support to remove. The current public surface is consistently `Path`, `Each`, `EqNot`, `PlusEq`, `QMEq`, `YEq`, `MinusEq`, and `Arrow`.
+
+Can you fix this?

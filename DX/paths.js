@@ -19,8 +19,8 @@
  * const value = sp`${$.lastName}, ${$.firstName}`;
  * // ['?.lastName', ', ', '?.firstName']
  *
- * // Use .path for raw string contexts (object keys, plain arrays):
- * const key = $.textContent.path;  // '?.textContent'
+ * // Use .Path for raw string contexts (object keys, plain arrays):
+ * const key = $.textContent.Path;  // '?.textContent'
  */
 /**
  * Symbol used internally to detect path proxy objects.
@@ -58,14 +58,14 @@ function getReservedToken(prop) {
 /**
  * Create a proxy for id-ref paths (#[varName]).
  * After the initial #[varName], further property access chains with ?. from the resolved element.
- * .path returns the #[varName] prefix (optionally with further ?. path).
+ * .Path returns the #[varName] prefix (optionally with further ?. path).
  */
 function createIdRefProxy(idRef, options) {
     function handler() { }
     Object.defineProperty(handler, PATH_SYMBOL, { value: idRef });
     return new Proxy(handler, {
         get(_, prop) {
-            if (prop === 'path' || prop === 'Path' || prop === PATH_SYMBOL) {
+            if (prop === 'Path' || prop === PATH_SYMBOL) {
                 return idRef;
             }
             if (typeof prop === 'symbol')
@@ -74,7 +74,7 @@ function createIdRefProxy(idRef, options) {
             if (reservedToken === 'Each') {
                 return createIdRefProxy(appendPathSegment(idRef, '@each'), options);
             }
-            if (reservedToken && reservedToken !== 'Path' && reservedToken !== 'path') {
+            if (reservedToken && reservedToken !== 'Path') {
                 return createIdRefProxy(appendCommandSuffix(idRef, reservedToken), options);
             }
             // Chain further path segments after the id ref
@@ -116,14 +116,14 @@ function createPathProxy(prefix, options) {
     Object.defineProperty(handler, PATH_SYMBOL, { value: prefix.length > 0 ? `?.${prefix}` : '?.' });
     return new Proxy(handler, {
         get(_, prop) {
-            if (prop === 'path' || prop === 'Path' || prop === PATH_SYMBOL) {
+            if (prop === 'Path' || prop === PATH_SYMBOL) {
                 return serializePath(prefix);
             }
             // Ignore symbol access (Symbol.iterator, Symbol.toPrimitive, etc.)
             if (typeof prop === 'symbol')
                 return undefined;
             const reservedToken = getReservedToken(String(prop));
-            if (reservedToken === 'Path' || reservedToken === 'path') {
+            if (reservedToken === 'Path') {
                 return serializePath(prefix);
             }
             if (reservedToken === 'Each') {
@@ -185,21 +185,21 @@ function createPathProxy(prefix, options) {
  *
  * @example
  * const $ = paths<Person>();
- * $.lastName.path          // '?.lastName'
- * $.address.city.path      // '?.address?.city'
+ * $.lastName.Path          // '?.lastName'
+ * $.address.city.Path      // '?.address?.city'
  *
  * // With aka (reverse alias applied):
  * const $ = paths<MyEl>({ aka: { q: 'querySelector' } });
- * $.querySelector('.user').textContent.path  // '?.q?..user?.textContent'
+ * $.querySelector('.user').textContent.Path  // '?.q?..user?.textContent'
  *
- * // Inside sp template literals, .path is not needed:
+ * // Inside sp template literals, .Path is not needed:
  * sp`${$.lastName}, ${$.firstName}`  // ['?.lastName', ', ', '?.firstName']
  */
 export function paths(options) {
     return createPathProxy('', options);
 }
 /**
- * Create an assignment pair: { [lhs.path]: rhs.path }.
+ * Create an assignment pair: { [lhs.Path]: rhs.Path }.
  * Used to express "set this target to this source value" in a spreadable form.
  *
  * @example
@@ -318,7 +318,7 @@ export function forEachKeyIn(keys, factory, options) {
  * Interleaves static string segments with interpolated values.
  *
  * Path proxy objects are auto-detected and converted to their `?.`-prefixed
- * string representation — no `.path` call needed inside sp template literals.
+ * string representation — no `.Path` call needed inside sp template literals.
  *
  * Arrays passed as interpolations are preserved as nested arrays (for
  * all-or-nothing optional segments in builtIns.join).
