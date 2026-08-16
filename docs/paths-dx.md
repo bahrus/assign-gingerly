@@ -10,7 +10,7 @@ import { paths, set, doAssign, smoothOver, sp, md } from 'assign-gingerly/paths.
 
 ## `paths<T>(options?)`
 
-Creates a typed proxy where every property access and method call records the path. The proxy produces `?.`-prefixed path strings used by `assignFrom` / `assignGingerly`.
+Creates a typed proxy where every property access and method call records the path. The proxy produces serialized `?.` path strings used by `assignFrom` / `assignGingerly`, and it exposes reserved terminal markers like `Each`, `EqNot`, and `Path` for command-style authoring.
 
 ```ts
 interface MyVM extends HTMLElement {
@@ -28,38 +28,51 @@ const $ = paths<MyVM>({ aka, withMethods });
 ### Property access
 
 ```ts
-$.username.path            // '?.username'
-$.clone.path               // '?.clone'
+$.username.Path            // '?.username'
+$.clone.Path               // '?.clone'
+```
+
+### Command tokens
+
+Use capitalized terminal markers to build command suffixes in a path-chain shape:
+
+```ts
+$.ariaControlsElements.Each.hidden.EqNot.Path   // '?.ariaControlsElements?.@each?.hidden =!'
+$.count.PlusEq.Path                             // '?.count +='
+$.text.QMEq.Path                                // '?.text ?='
+$.style.YEq.Path                                // '?.style Y='
+$.data.MinusEq.Path                             // '?.data -='
+$.handler.Arrow.Path                            // '?.handler =>'
 ```
 
 ### Method call syntax
 
-Method arguments are appended to the path. Aliases are reversed automatically (`querySelector` → `q`):
+Method arguments are appended to the path. Aliases are reversed automatically (`querySelector` ? `q`):
 
 ```ts
-$.querySelector('.user').path                    // '?.q?..user'
-$.clone.querySelector('.status').className.path  // '?.clone?.q?..status?.className'
-$.template.content.cloneNode(true).path          // '?.template?.content?.cloneNode?.true'
+$.querySelector('.user').Path                    // '?.q?..user'
+$.clone.querySelector('.status').className.Path  // '?.clone?.q?..status?.className'
+$.template.content.cloneNode(true).Path          // '?.template?.content?.cloneNode?.true'
 ```
 
 ### Bare proxy = self-reference
 
 ```ts
-$.path   // '?.' (the source object itself)
+$.Path   // '?.' (the source object itself)
 ```
 
 ### Options
 
 | Option | Effect |
 |--------|--------|
-| `aka` | Reverse aliases: `querySelector` in code → `q` in output path |
+| `aka` | Reverse aliases: `querySelector` in code ? `q` in output path |
 | `withMethods` | Declares method names (for future disambiguation use) |
 
 ---
 
 ## `set(lhs).to(rhs)`
 
-Produces a single assignment pair `{ [lhsPath]: rhsPath }`. Both arguments can be proxies (auto-extracted) or plain values.
+Produces a single assignment pair `{ [lhsPath]: rhsPath }`. Both arguments can be proxies (auto-extracted) or plain values. Reserved terminal tokens are preserved in the serialized path, so command-style chains like `$.ariaControlsElements.Each.hidden.EqNot` can be passed directly.
 
 ```ts
 set($.clone.querySelector('.username').textContent).to($.username)
@@ -109,7 +122,7 @@ Mix with literal values:
 
 ## `smoothOver(value)`
 
-Recursively walks any structure (objects, arrays, nested) and converts all proxy values to their `?.`-prefixed path strings. Wrap an entire config to handle all proxies in one pass.
+Recursively walks any structure (objects, arrays, nested) and converts all proxy values to their serialized `?.` path strings. This includes reserved command tokens, so a terminal marker stays attached to the final output. Wrap an entire config to handle all proxies in one pass.
 
 ```ts
 const raConfig = {
@@ -133,7 +146,7 @@ Non-proxy values (numbers, booleans, plain strings) pass through unchanged.
 
 ## `sp` — Split into Parts (for `builtIns.join`)
 
-Tagged template literal that produces an array of path strings + literal strings. Proxy objects are auto-extracted (no `.path` needed inside the tag).
+Tagged template literal that produces an array of path strings + literal strings. Proxy objects are auto-extracted (no `.Path` needed inside the tag).
 
 ```ts
 const value = sp`${$.lastName}, ${$.firstName}`;
@@ -254,3 +267,5 @@ const raConfig = {
 - Aliases applied automatically (`querySelector` → `q` in output)
 - No manual `?.` string construction
 - Output is the same JSON as hand-written configs
+
+

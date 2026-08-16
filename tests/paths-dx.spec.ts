@@ -50,3 +50,33 @@ test.describe('assign-gingerly DX paths helpers', () => {
     ]);
   });
 });
+
+test.describe('assign-gingerly DX reserved tokens', () => {
+  test('normalize reserved terminal tokens into command strings', () => {
+    const $ = paths<any>({ aka: { q: 'querySelector' } });
+
+    expect($.foo.Path).toBe('?.foo');
+    expect($.ariaControlsElements.Each.hidden.EqNot.Path).toBe('?.ariaControlsElements?.@each?.hidden =!');
+    expect($.count.PlusEq.Path).toBe('?.count +=');
+    expect($.text.QMEq.Path).toBe('?.text ?=');
+    expect($.style.YEq.Path).toBe('?.style Y=');
+    expect($.data.MinusEq.Path).toBe('?.data -=');
+    expect($.handler.Arrow.Path).toBe('?.handler =>');
+
+    expect(set($.count.PlusEq).to(1)).toEqual({ '?.count +=': 1 });
+    expect(smoothOver({ assign: { value: $.ariaControlsElements.Each.hidden.EqNot } })).toEqual({
+      assign: { value: '?.ariaControlsElements?.@each?.hidden =!' },
+    });
+  });
+
+  test('sp and md continue to accept Path and reserved tokens', () => {
+    const $ = paths<any>({ aka: { q: 'querySelector' } });
+
+    expect(sp`${$.foo.Path} ${$.bar}`).toEqual(['?.foo', ' ', '?.bar']);
+    expect(md`${$.foo} ${$.bar}`).toEqual([
+      { prop: 'foo', val: '?.foo' },
+      ' ',
+      { prop: 'bar', val: '?.bar' },
+    ]);
+  });
+});

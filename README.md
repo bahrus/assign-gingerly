@@ -4401,8 +4401,9 @@ export default {
 
 - `paths<T>()` creates a deeply-proxied object typed as `T`
 - Every property access returns a deeper proxy (e.g., `$.address.city`)
+- Capitalized reserved tokens like `.Each` and `.EqNot` normalize into command syntax
 - `.path` extracts the `?.`-prefixed string: `$.address.city.path` → `'?.address?.city'`
-- Inside `sp` template literals, `.path` is not needed — proxy objects are auto-detected
+- Inside `sp` template literals, `.Path` is not needed — proxy objects are auto-detected
 
 **How `sp` works:**
 
@@ -4421,19 +4422,19 @@ const value = sp`${$.lastName}${[', ', $.middleName]}, ${$.firstName}`;
 // ['?.lastName', [', ', '?.middleName'], ', ', '?.firstName']
 ```
 
-**Using `.path` outside of `sp`:**
+**Using `.Path` outside of `sp`:**
 
 When you need the path string in a non-`sp` context (object keys, plain arrays, other expressions):
 
 ```TypeScript
 const $ = paths<Person>();
 
-$.lastName.path           // '?.lastName'
-$.address.city.path       // '?.address?.city'
+$.lastName.Path           // '?.lastName'
+$.address.city.Path       // '?.address?.city'
 
 // As an object key:
 const pattern = {
-    [$.textContent.path]: '?.firstName'  // '?.textContent': '?.firstName'
+    [$.textContent.Path]: '?.firstName'  // '?.textContent': '?.firstName'
 };
 ```
 
@@ -4473,7 +4474,7 @@ md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, format: 'long' }}`
 | `sp` | `'?.firstName'` (path string) | `builtIns.join` |
 | `md` | `{ prop: 'firstName', val: '?.firstName' }` | `builtIns.microDataJoin` |
 
-Both auto-detect path proxies (no `.path` needed inside template literals) and preserve nested arrays for optional segments.
+Both auto-detect path proxies (no `.Path` needed inside template literals) and preserve nested arrays for optional segments.
 
 ## Cached Element Resolution with `#[x]` and `pin`
 

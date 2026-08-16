@@ -33,19 +33,62 @@ function isPathProxy(value: unknown): value is { [PATH_SYMBOL]: string } {
     return !!value && (typeof value === 'object' || typeof value === 'function') && PATH_SYMBOL in value;
 }
 
+const COMMAND_TOKEN_SUFFIXES = {
+    Each: '?.@each',
+    EqNot: ' =!',
+    PlusEq: ' +=',
+    QMEq: ' ?=',
+    YEq: ' Y=',
+    MinusEq: ' -=',
+    Arrow: ' =>',
+} as const;
+
+type CommandToken = keyof typeof COMMAND_TOKEN_SUFFIXES;
+
+function serializePath(prefix: string): string {
+    return prefix.length > 0 ? `?.${prefix}` : '?.';
+}
+
+function appendPathSegment(prefix: string, segment: string): string {
+    return prefix ? `${prefix}?.${segment}` : segment;
+}
+
+function appendCommandSuffix(prefix: string, token: CommandToken): string {
+    return `${prefix}${COMMAND_TOKEN_SUFFIXES[token]}`;
+}
+
+function getReservedToken(prop: string): CommandToken | 'Path' | 'path' | undefined {
+    if (prop === 'Path' || prop === 'path') return prop;
+    if (prop in COMMAND_TOKEN_SUFFIXES) return prop as CommandToken;
+    return undefined;
+}
+
 /**
  * Type that maps an object type to a proxy where every property access
  * returns either a deeper proxy (for object properties) or a terminal
- * with a `.path` string accessor — while providing full autocomplete.
- * Enhanced: also callable (for method call syntax).
+ * with a serialized path string accessor — while providing full autocomplete.
+ * Enhanced: also callable (for method call syntax) and includes reserved
+ * command markers such as `Each`, `EqNot`, and `PlusEq`.
  */
+export type PathProxyCore = {
+    readonly Path: string;
+    readonly path: string;
+    readonly Each: PathProxy<any>;
+    readonly EqNot: PathProxy<any>;
+    readonly PlusEq: PathProxy<any>;
+    readonly QMEq: PathProxy<any>;
+    readonly YEq: PathProxy<any>;
+    readonly MinusEq: PathProxy<any>;
+    readonly Arrow: PathProxy<any>;
+};
+
 export type PathProxy<T> = {
     [K in keyof T]-?: T[K] extends ((...args: any[]) => infer R)
-        ? ((...args: any[]) => PathProxy<NonNullable<R>> & { readonly path: string }) & PathProxy<NonNullable<R>> & { readonly path: string }
+        ? ((...args: any[]) => PathProxy<NonNullable<R>> & PathProxyCore) & PathProxy<NonNullable<R>> & PathProxyCore
         : T[K] extends (object | undefined | null)
-            ? PathProxy<NonNullable<T[K]>> & { readonly path: string } & ((...args: any[]) => PathProxy<any> & { readonly path: string })
-            : { readonly path: string } & ((...args: any[]) => PathProxy<any> & { readonly path: string });
-} & { readonly path: string } & ((...args: any[]) => PathProxy<any> & { readonly path: string });
+            ? PathProxy<NonNullable<T[K]>> & PathProxyCore & ((...args: any[]) => PathProxy<any> & PathProxyCore)
+            : PathProxyCore & ((...args: any[]) => PathProxy<any> & PathProxyCore);
+} & PathProxyCore & ((...args: any[]) => PathProxy<any> & PathProxyCore);
 
 /**
  * Options for paths proxy creation.
@@ -67,13 +110,21 @@ function createIdRefProxy(idRef: string, options?: PathsOptions): any {
     Object.defineProperty(handler, PATH_SYMBOL, { value: idRef });
     return new Proxy(handler, {
         get(_, prop: string | symbol) {
-            if (prop === 'path' || prop === PATH_SYMBOL) {
+            if (prop === 'path' || prop === 'Path' || prop === PATH_SYMBOL) {
                 return idRef;
             }
             if (typeof prop === 'symbol') return undefined;
 
+            const reservedToken = getReservedToken(prop);
+            if (reservedToken === 'Each') {
+                return createIdRefProxy(appendPathSegment(idRef, '@each'), options);
+            }
+            if (reservedToken && reservedToken !== 'Path' && reservedToken !== 'path') {
+                return createIdRefProxy(appendCommandSuffix(idRef, reservedToken), options);
+            }
+
             // Chain further path segments after the id ref
-            const chained = `${idRef}?.${String(prop)}`;
+            const chained = appendPathSegment(idRef, String(prop));
             return createIdRefProxy(chained, options);
         },
         apply(_, __, args) {
@@ -112,11 +163,22 @@ function createPathProxy(prefix: string, options?: PathsOptions): any {
 
     return new Proxy(handler, {
         get(_, prop: string | symbol) {
-            if (prop === 'path' || prop === PATH_SYMBOL) {
-                return prefix.length > 0 ? `?.${prefix}` : '?.';
+            if (prop === 'path' || prop === 'Path' || prop === PATH_SYMBOL) {
+                return serializePath(prefix);
             }
             // Ignore symbol access (Symbol.iterator, Symbol.toPrimitive, etc.)
             if (typeof prop === 'symbol') return undefined;
+
+            const reservedToken = getReservedToken(String(prop));
+            if (reservedToken === 'Path' || reservedToken === 'path') {
+                return serializePath(prefix);
+            }
+            if (reservedToken === 'Each') {
+                return createPathProxy(appendPathSegment(prefix, '@each'), options);
+            }
+            if (reservedToken) {
+                return createPathProxy(appendCommandSuffix(prefix, reservedToken), options);
+            }
 
             let segment = String(prop);
 
@@ -135,7 +197,7 @@ function createPathProxy(prefix: string, options?: PathsOptions): any {
                 }
             }
 
-            const newPath = prefix ? `${prefix}?.${segment}` : segment;
+            const newPath = appendPathSegment(prefix, segment);
             return createPathProxy(newPath, options);
         },
         apply(_, __, args) {
@@ -152,7 +214,7 @@ function createPathProxy(prefix: string, options?: PathsOptions): any {
                 }
                 else argStr = String(arg);
 
-                const newPath = prefix ? `${prefix}?.${argStr}` : argStr;
+                const newPath = appendPathSegment(prefix, argStr);
                 return createPathProxy(newPath, options);
             }
             // No args — method called with no arguments, return self
@@ -355,8 +417,10 @@ export function sp(strings: TemplateStringsArray, ...values: any[]): any[] {
  * e.g., '?.address?.city' → 'city', '?.firstName' → 'firstName'
  */
 function extractPropName(pathStr: string): string {
-    const parts = pathStr.split('?.');
-    return parts[parts.length - 1];
+    const withoutCommand = pathStr.replace(/(?: \+=| =!| \?=| Y=| -=| =>)$/, '');
+    const parts = withoutCommand.split('?.');
+    const last = parts[parts.length - 1];
+    return last === '@each' ? 'Each' : last;
 }
 
 /**
