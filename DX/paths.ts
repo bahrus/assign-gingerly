@@ -57,8 +57,8 @@ function appendCommandSuffix(prefix: string, token: CommandToken): string {
     return `${prefix}${COMMAND_TOKEN_SUFFIXES[token]}`;
 }
 
-function getReservedToken(prop: string): CommandToken | 'Path' | 'path' | undefined {
-    if (prop === 'Path' || prop === 'path') return prop;
+function getReservedToken(prop: string): CommandToken | 'Path' | undefined {
+    if (prop === 'Path') return prop;
     if (prop in COMMAND_TOKEN_SUFFIXES) return prop as CommandToken;
     return undefined;
 }
@@ -72,7 +72,6 @@ function getReservedToken(prop: string): CommandToken | 'Path' | 'path' | undefi
  */
 export type PathProxyCore = {
     readonly Path: string;
-    readonly path: string;
     readonly Each: PathProxy<any>;
     readonly EqNot: PathProxy<any>;
     readonly PlusEq: PathProxy<any>;

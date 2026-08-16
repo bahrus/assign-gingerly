@@ -49,7 +49,7 @@ function appendCommandSuffix(prefix, token) {
     return `${prefix}${COMMAND_TOKEN_SUFFIXES[token]}`;
 }
 function getReservedToken(prop) {
-    if (prop === 'Path' || prop === 'path')
+    if (prop === 'Path')
         return prop;
     if (prop in COMMAND_TOKEN_SUFFIXES)
         return prop;
