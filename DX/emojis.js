@@ -47,7 +47,8 @@ export const akaMethods = {
     '📝': 'log',
     '⚠️': 'warn',
     '🚨': 'error',
-    '🤱': 'appendChild'
+    '🤱': 'appendChild',
+    '😣': 'focus',
     //'🧩': 'includes'
 };
 export const aka = {
