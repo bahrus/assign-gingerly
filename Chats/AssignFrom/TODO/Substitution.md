@@ -4,7 +4,7 @@
 
 ## Bruce's Ask
 
-I was hesitant to propose this, but the use cases for this just seem too compelling to not do.  When resolving the rhs in an assignFromCall, we need the ability to substitute in values from the "from" argument:
+I was hesitant to propose this, but the use cases for this just seem too compelling to not do so.  When resolving the rhs in an assignFromCall, we need the ability to substitute in values from the "from" argument:
 
 Phase I
 
