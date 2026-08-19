@@ -23,7 +23,7 @@ I'm open to something other than ${} if that could seem confusing due to its oth
 
 Phase Maybe Never
 
-I don't think there's a compelling case for Phase II, but I wouldn't be shocked if a (weak) use case does to allow chained accessor expressions inside ${}.  I think the use case should need to be quite strong to go there
+I don't think there's a compelling case for Phase II, but I wouldn't be shocked if a (weak) use case does arise to allow chained accessor expressions inside ${}.
 
 Phase Too Hard To Even Consider
 
