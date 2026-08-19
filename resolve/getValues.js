@@ -68,6 +68,45 @@ function applyAliases(path, aliasMap) {
     return substituted.join('?.');
 }
 /**
+ * Apply value substitutions to a path string.
+ * Replaces complete tokens between `?.` delimiters with their resolved values.
+ * Substitutions are applied before aliases.
+ */
+function applySubstitutions(path, substitutionMap) {
+    if (!substitutionMap || substitutionMap.size === 0)
+        return path;
+    const parts = path.split('?.');
+    const substituted = parts.map(part => substitutionMap.get(part) ?? part);
+    return substituted.join('?.');
+}
+/**
+ * Resolve substitution values declared in options.substitutions.
+ * Each substitution path is resolved against the source object without
+ * applying substitutions itself, to avoid infinite recursion.
+ * Resolved values must be strings and must not contain `?.`.
+ */
+function resolveSubstitutions(substitutions, source, options) {
+    const map = new Map();
+    if (!substitutions)
+        return map;
+    for (const [name, path] of Object.entries(substitutions)) {
+        // Resolve the substitution path against the source, but do not apply
+        // substitutions to that path. Root references ($0) are also disabled
+        // for substitution paths so values are sourced from `from` only.
+        const resolved = getValue(path, source, options
+            ? { ...options, substitutions: undefined, root: undefined }
+            : undefined);
+        if (typeof resolved !== 'string') {
+            throw new Error(`Substitution '${name}' must resolve to a string, got ${typeof resolved}`);
+        }
+        if (resolved.includes('?.')) {
+            throw new Error(`Substitution '${name}' resolved to a string containing '?.', which would alter the path structure: '${resolved}'`);
+        }
+        map.set(name, resolved);
+    }
+    return map;
+}
+/**
  * Resolve a special root-reference token at the start of a string.
  * '$0' refers to the first argument passed to assignFrom / resolveValues.
  */
@@ -159,12 +198,13 @@ function getProtocolValue(value, protocols, options) {
  * Resolve path strings and protocols within an array (synchronous).
  * Recurses into nested arrays and plain objects.
  */
-function getArray(arr, source, aliasMap, withMethods, protocols, options) {
+function getArray(arr, source, aliasMap, withMethods, protocols, options, substitutionMap) {
     const permissionProcessor = options?.permissionProcessor;
     const result = [];
     for (const item of arr) {
         if (typeof item === 'string' && item.startsWith('?.')) {
-            const aliased = applyAliases(item, aliasMap);
+            const substituted = applySubstitutions(item, substitutionMap);
+            const aliased = applyAliases(substituted, aliasMap);
             const parts = parseCachedPath(aliased);
             result.push(parts.length === 0 ? source : navigatePath(source, parts, withMethods, permissionProcessor));
         }
@@ -174,7 +214,8 @@ function getArray(arr, source, aliasMap, withMethods, protocols, options) {
                 result.push(source);
             }
             else {
-                const aliased = applyAliases(rootRef.path, aliasMap);
+                const substitutedPath = applySubstitutions(rootRef.path, substitutionMap);
+                const aliased = applyAliases(substitutedPath, aliasMap);
                 const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
                 const parts = parseCachedPath(normalizedPath);
                 result.push(parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods, permissionProcessor));
@@ -184,7 +225,7 @@ function getArray(arr, source, aliasMap, withMethods, protocols, options) {
             result.push(getProtocolValue(item, protocols, options));
         }
         else if (Array.isArray(item)) {
-            result.push(getArray(item, source, aliasMap, withMethods, protocols, options));
+            result.push(getArray(item, source, aliasMap, withMethods, protocols, options, substitutionMap));
         }
         else if (item && typeof item === 'object') {
             const proto = Object.getPrototypeOf(item);
@@ -215,12 +256,14 @@ function getArray(arr, source, aliasMap, withMethods, protocols, options) {
  */
 export function getValues(pattern, source, options) {
     const { aliasMap, withMethods } = normalizeAliasOptions(options);
+    const substitutionMap = resolveSubstitutions(options?.substitutions, source, options);
     const protocols = options?.protocols;
     const permissionProcessor = options?.permissionProcessor;
     const result = {};
     for (const [key, value] of Object.entries(pattern)) {
         if (typeof value === 'string' && value.startsWith('?.')) {
-            const aliased = applyAliases(value, aliasMap);
+            const substituted = applySubstitutions(value, substitutionMap);
+            const aliased = applyAliases(substituted, aliasMap);
             const parts = parseCachedPath(aliased);
             result[key] = parts.length === 0 ? source : navigatePath(source, parts, withMethods, permissionProcessor);
         }
@@ -230,7 +273,8 @@ export function getValues(pattern, source, options) {
                 result[key] = source;
             }
             else {
-                const aliased = applyAliases(rootRef.path, aliasMap);
+                const substitutedPath = applySubstitutions(rootRef.path, substitutionMap);
+                const aliased = applyAliases(substitutedPath, aliasMap);
                 const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
                 const parts = parseCachedPath(normalizedPath);
                 result[key] = parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods, permissionProcessor);
@@ -240,7 +284,7 @@ export function getValues(pattern, source, options) {
             result[key] = getProtocolValue(value, protocols, options);
         }
         else if (Array.isArray(value)) {
-            result[key] = getArray(value, source, aliasMap, withMethods, protocols, options);
+            result[key] = getArray(value, source, aliasMap, withMethods, protocols, options, substitutionMap);
         }
         else if (typeof value === 'object' && value !== null) {
             const proto = Object.getPrototypeOf(value);
@@ -274,10 +318,12 @@ export function getValue(path, source, options) {
     else if (!path.startsWith('?.')) {
         return path;
     }
-    let aliased = path;
+    const substitutionMap = resolveSubstitutions(options?.substitutions, source, options);
+    const substituted = applySubstitutions(path, substitutionMap);
+    let aliased = substituted;
     const { aliasMap } = normalizeAliasOptions(options);
     if (aliasMap.size > 0) {
-        aliased = applyAliases(path, aliasMap);
+        aliased = applyAliases(substituted, aliasMap);
     }
     const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
     const parts = parseCachedPath(normalizedPath);

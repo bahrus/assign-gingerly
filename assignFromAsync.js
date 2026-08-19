@@ -35,6 +35,7 @@ export async function assignFromAsync(target, pattern, options, permissionProces
             withMethods: options.withMethods,
             aka: options.aka,
             akaMethods: options.akaMethods,
+            substitutions: options.substitutions,
             protocols: options.protocols,
             root: target,
             permissionProcessor
@@ -47,7 +48,7 @@ export async function assignFromAsync(target, pattern, options, permissionProces
     if (idRefNormalKeys.length > 0 && (options.pin || options.at)) {
         const ids = { ...options.pin, ...options.at };
         const { resolveIdVariable, parseIdRef } = await import('./resolve/resolveIdRef.js');
-        const { withMethods, aka, akaMethods, protocols, from } = options;
+        const { withMethods, aka, akaMethods, protocols, from, substitutions } = options;
         for (const key of idRefNormalKeys) {
             const parsed = parseIdRef(key);
             if (!parsed)
@@ -58,13 +59,13 @@ export async function assignFromAsync(target, pattern, options, permissionProces
             const value = expandedPattern[key];
             if (parsed.remainingPath) {
                 // Resolve the RHS value
-                const resolvedValue = await resolveValues({ __v: value }, from, { withMethods, aka, akaMethods, protocols, root: el, permissionProcessor });
+                const resolvedValue = await resolveValues({ __v: value }, from, { withMethods, aka, akaMethods, substitutions, protocols, root: el, permissionProcessor });
                 // Apply remaining path on the resolved element
                 assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissionProcessor);
             }
             else {
                 // No remaining path — resolve and assign directly to the element
-                const resolvedValue = await resolveValues(typeof value === 'object' && value !== null ? value : { __v: value }, from, { withMethods, aka, akaMethods, protocols, root: el, permissionProcessor });
+                const resolvedValue = await resolveValues(typeof value === 'object' && value !== null ? value : { __v: value }, from, { withMethods, aka, akaMethods, substitutions, protocols, root: el, permissionProcessor });
                 if ('__v' in resolvedValue) {
                     // Single value — can't assign to element root without a path
                 }

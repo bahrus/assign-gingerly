@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Substitution Tests</title>
+</head>
+<body>
+    <h1>Substitution Tests</h1>
+    <div id="results"></div>
+
+    <script type="module">
+        import assignFrom from '../assignFrom.js';
+        import { getValues, getValue } from '../resolve/getValues.js';
+        import { resolveValues } from '../resolve/resolveValues.js';
+
+        const results = [];
+        let testCount = 0;
+        let passCount = 0;
+
+        function test(name, fn) {
+            testCount++;
+            try {
+                fn();
+                passCount++;
+                results.push(`✓ ${name}`);
+                console.log(`✓ ${name}`);
+            } catch (error) {
+                results.push(`✗ ${name}: ${error.message}`);
+                console.error(`✗ ${name}:`, error);
+            }
+        }
+
+        function assertEqual(actual, expected, msg) {
+            if (actual !== expected) {
+                throw new Error(msg || `Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+            }
+        }
+
+        function assertThrows(name, fn, expectedMessage) {
+            try {
+                fn();
+                throw new Error(`${name}: expected to throw but did not`);
+            } catch (error) {
+                if (expectedMessage && !error.message.includes(expectedMessage)) {
+                    throw new Error(`${name}: expected error containing '${expectedMessage}', got '${error.message}'`);
+                }
+            }
+        }
+
+        // Test 1: Substitution used as a method argument
+        test('should substitute a value used as a method argument', () => {
+            const source = {
+                selector: '#main',
+                querySelectorAll: (sel) => ({ calledWith: sel })
+            };
+            const resolved = getValues(
+                { elements: '?.querySelectorAll?.sel' },
+                source,
+                {
+                    withMethods: ['querySelectorAll'],
+                    substitutions: { sel: '?.selector' }
+                }
+            );
+            assertEqual(resolved.elements.calledWith, '#main');
+        });
+
+        // Test 2: Substitution used as a property name
+        test('should substitute a value used as a property name', () => {
+            const source = { propName: 'foo', foo: 'bar' };
+            const resolved = getValues(
+                { value: '?.prop' },
+                source,
+                { substitutions: { prop: '?.propName' } }
+            );
+            assertEqual(resolved.value, 'bar');
+        });
+
+        // Test 3: Substitution combined with aka
+        test('should apply substitutions before aliases', () => {
+            const source = {
+                selector: '#main',
+                querySelectorAll: (sel) => ({ calledWith: sel })
+            };
+            const resolved = getValues(
+                { elements: '?.q?.s' },
+                source,
+                {
+                    withMethods: ['querySelectorAll'],
+                    aka: { q: 'querySelectorAll' },
+                    substitutions: { s: '?.selector' }
+                }
+            );
+            assertEqual(resolved.elements.calledWith, '#main');
+        });
+
+        // Test 4: Substitution in arrays
+        test('should substitute values inside arrays', () => {
+            const source = {
+                selA: 'one',
+                selB: 'two',
+                getElementById: (id) => ({ id })
+            };
+            const resolved = getValues(
+                { list: ['?.getElementById?.a', '?.getElementById?.b'] },
+                source,
+                {
+                    withMethods: ['getElementById'],
+                    substitutions: { a: '?.selA', b: '?.selB' }
+                }
+            );
+            assertEqual(resolved.list[0].id, 'one');
+            assertEqual(resolved.list[1].id, 'two');
+        });
+
+        // Test 5: Substitution via assignFrom
+        test('should work with assignFrom', () => {
+            const from = {
+                selector: '#main',
+                querySelectorAll: (sel) => ({ calledWith: sel })
+            };
+            const target = {};
+            assignFrom(target, {
+                elements: '?.querySelectorAll?.selector'
+            }, {
+                from,
+                withMethods: ['querySelectorAll'],
+                substitutions: { selector: '?.selector' }
+            });
+            assertEqual(target.elements.calledWith, '#main');
+        });
+
+        // Test 6: $0 root references still work with substitutions
+        test('should support $0 root references alongside substitutions', () => {
+            const target = { rootSelector: '#app' };
+            const source = { value: 'found' };
+            const resolved = getValues(
+                { result: '$0?.rootSelector' },
+                source,
+                {
+                    root: target,
+                    substitutions: { unused: '?.value' }
+                }
+            );
+            assertEqual(resolved.result, '#app');
+        });
+
+        // Test 7: Async resolveValues with substitutions
+        test('should work with async resolveValues', async () => {
+            const source = {
+                selector: '#async',
+                querySelectorAll: (sel) => ({ calledWith: sel })
+            };
+            const resolved = await resolveValues(
+                { elements: '?.querySelectorAll?.sel' },
+                source,
+                {
+                    withMethods: ['querySelectorAll'],
+                    substitutions: { sel: '?.selector' }
+                }
+            );
+            assertEqual(resolved.elements.calledWith, '#async');
+        });
+
+        // Test 8: Non-string substitution value throws
+        test('should throw when substitution resolves to a non-string', () => {
+            const source = { count: 42 };
+            assertThrows(
+                'non-string substitution',
+                () => getValues(
+                    { value: '?.count' },
+                    source,
+                    { substitutions: { count: '?.count' } }
+                ),
+                'must resolve to a string'
+            );
+        });
+
+        // Test 9: Substitution value containing ?. throws
+        test('should throw when substitution value contains ?.', () => {
+            const source = { bad: 'a?.b' };
+            assertThrows(
+                'injection guard',
+                () => getValues(
+                    { value: '?.bad' },
+                    source,
+                    { substitutions: { bad: '?.bad' } }
+                ),
+                "containing '?."
+            );
+        });
+
+        // Test 10: getValue single path substitution
+        test('should substitute in getValue for a single path', () => {
+            const source = { propName: 'foo', foo: 'bar' };
+            const resolved = getValue(
+                '?.prop',
+                source,
+                { substitutions: { prop: '?.propName' } }
+            );
+            assertEqual(resolved, 'bar');
+        });
+
+        window.testResults = {
+            total: testCount,
+            passed: passCount,
+            results
+        };
+
+        const resultsDiv = document.getElementById('results');
+        if (resultsDiv) {
+            resultsDiv.innerHTML = `<p>${passCount}/${testCount} tests passed</p>` +
+                results.map(r => `<div>${r}</div>`).join('');
+        }
+    </script>
+</body>
+</html>

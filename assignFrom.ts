@@ -58,6 +58,7 @@ function resolveTernaryValue(value: any, source: any, options: AssignFromOptions
         return getValue(value, source, {
             withMethods: options.withMethods,
             aka: options.aka,
+            substitutions: options.substitutions,
             protocols: options.protocols,
             root: options.root
         });
@@ -70,6 +71,7 @@ function resolveTernaryValue(value: any, source: any, options: AssignFromOptions
             return getValue(value, source, {
                 withMethods: options.withMethods,
                 aka: options.aka,
+                substitutions: options.substitutions,
                 protocols: options.protocols,
                 root: options.root
             });
@@ -395,7 +397,7 @@ function processIdRefNormalKeys(
   const ids = getEffectiveIds(options);
   if (!ids) return;
 
-  const { withMethods, aka, akaMethods, protocols, from } = options;
+  const { withMethods, aka, akaMethods, protocols, from, substitutions } = options;
   for (const key of idRefNormalKeys) {
     const parsed = parseIdRef(key);
     if (!parsed) continue;
@@ -407,14 +409,14 @@ function processIdRefNormalKeys(
     if (parsed.remainingPath) {
       const resolvedValue = getValues(
         { __v: value }, from,
-        { withMethods, aka, akaMethods, protocols, root: target, permissionProcessor }
+        { withMethods, aka, akaMethods, substitutions, protocols, root: target, permissionProcessor }
       );
       assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissionProcessor);
     } else {
       const resolvedValue = getValues(
         typeof value === 'object' && value !== null ? value : { __v: value },
         from,
-        { withMethods, aka, akaMethods, protocols, root: target, permissionProcessor }
+        { withMethods, aka, akaMethods, substitutions, protocols, root: target, permissionProcessor }
       );
       if (!('__v' in resolvedValue)) {
         assignGingerly(el, resolvedValue, options, permissionProcessor);
@@ -486,6 +488,7 @@ export function assignFrom(
                   withMethods: options.withMethods,
                   aka: options.aka,
                   akaMethods: options.akaMethods,
+                  substitutions: options.substitutions,
                   protocols: options.protocols,
                   root: target,
                   permissionProcessor
