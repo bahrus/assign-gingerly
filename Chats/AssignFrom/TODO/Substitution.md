@@ -327,5 +327,43 @@ assignFrom(target, {
 
 Substituted paths are cached by their final substituted string, not the original template string. If substitution values change frequently, this can grow `pathCache`. If this becomes an issue in practice, we can add a per-call cache bypass for strings containing substitution placeholders.
 
+## Bruce's Response
 
+Thanks for implementing the request.  It was a tough call in my mind to switch to this approach.  I think the advantages are:
+
+1.  I thought it would produce less confusion, because ultimately this functionality felt closer to what we did with aka compared to interpolation (from the root of the object).
+
+2.  I think it will be easier to extend as needed without inventing more strange symbols, and it seems like it will come up for only advanced, more obscure functionality, so a little more ceremony seems worth it.
+
+On the flip side, one could argue that having to look in two places to understand the full picture could be a bit more confusing.
+
+Possibly another con of this approach is that it might have been trickier to implement, and on that score, I would ask your input on that, if that gives you serious pause.
+
+The other doubt I have is explaining the subtle differences between aka and substitutions.  I think we need to document that difference clearly.  The best summary I can think of using to explain the difference is "static" substitutions vs "dynamic".
+
+I wanted to give you the chance to honestly voice where you land on this.  I'm open to the suggestion that we took the wrong path.  Speak now, or forever hold your peace.
+
+If you lean the same way or are neutral, can you create a detailed document in docs (spare us the implementation details), which README.md. links to, with a brief introduction.
+
+## Kimi's Response
+
+I lean in favor of the `substitutions` option approach, with one caveat about documentation.
+
+### Why I think this is the better path
+
+1. **It reuses existing machinery.** The user already learns `aka` as "replace this path segment with that path segment." `substitutions` is the same idea, except the replacement value is resolved from `from` rather than hard-coded. That is a smaller conceptual jump than introducing a new string interpolation syntax like `#{}` inside RHS path strings.
+
+2. **It avoids collisions with JS syntax.** `${}` looks like a template literal and will constantly mislead readers. `#{...}` is better but still a new DSL inside a string. Keeping the substitution declaration in the options object keeps the path string itself as plain `?.` syntax.
+
+3. **It extends cleanly.** If you later want substitution values from the target (`$0`), from protocols, or from nested objects, you can add those as additional `substitutions`-like options or allow richer RHS paths in the existing option — without inventing more punctuation inside the path strings.
+
+### The legitimate downside
+
+The "look in two places" concern is real. With interpolation syntax, the substitution is visible right where it is used. With the option, the reader has to scroll down to `substitutions` to see what `inertTarget` means. For a single-line example that is a minor cost; for a large config it can be annoying.
+
+I would mitigate that by making the naming convention obvious: use the exact same token in both places, and document that `substitutions` is a *dynamic* lookup table while `aka` is a *static* lookup table. That framing — static aliases vs. dynamic substitutions — is the clearest way I have found to explain the difference.
+
+### Verdict
+
+I do not think we took the wrong path. The option-based approach is more consistent with the rest of the API and easier to explain as a natural extension of `aka`. I will create the user-facing documentation and link it from `README.md`.
 

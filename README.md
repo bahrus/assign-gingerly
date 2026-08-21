@@ -100,7 +100,8 @@ assignFrom adds support for:
 3.  Protocol resolution (`globalThis://`, `localStorage://`, custom sync protocols).
 4.  Handler plugins via the ` =>` operator for custom logic (fire-and-forget in sync mode, awaitable in async mode).
 5.  Looped substitution with `where_x_in` / `where_y_in` / `where_z_in` for expanding template patterns into multiple concrete assignments.
-6.  Spread merging via the `"..."` key.
+6.  Dynamic substitutions via the `substitutions` option for injecting runtime string values into path segments. See [docs/substitutions.md](docs/substitutions.md).
+7.  Spread merging via the `"..."` key.
 
 Example:
 
