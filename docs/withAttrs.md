@@ -302,7 +302,8 @@ interface AttrConfig<T> {
   parser?: 
     | ((v: string | null) => any)   // Inline parser function
     | string                         // Named parser from globalParserRegistry
-    | [string, string];              // [CustomElementName, StaticMethodName]
+    | [string, string]               // [CustomElementName, StaticMethodName]
+    | { name: string; options?: any }; // Named class parser with constructor options
 }
 ```
 </details>
@@ -405,25 +406,24 @@ Instead of inline functions, you can reference parsers by name, making configs J
 ```TypeScript
 import { globalParserRegistry, parseWithAttrs } from 'assign-gingerly';
 
-// Register parsers once (typically in app initialization)
+// Register function-based parsers once (typically in app initialization)
 globalParserRegistry.register('timestamp', (v) => 
   v ? new Date(v).getTime() : null
 );
 
-globalParserRegistry.register('csv', (v) => 
-  v ? v.split(',').map(s => s.trim()) : []
-);
+// Register class-based parsers the same way
+globalParserRegistry.register('my-splitter', MySplitParser);
 
 // Use by name - config is now JSON serializable!
 const config = {
   base: 'data-',
   created: '${base}created',
   _created: {
-    parser: 'timestamp'  // String reference instead of function
+    parser: 'timestamp'  // Function parser by name
   },
   tags: '${base}tags',
   _tags: {
-    parser: 'csv'
+    parser: 'my-splitter'  // Class parser by name
   }
 };
 
@@ -436,17 +436,58 @@ const result = parseWithAttrs(element, config);
 
 #### **Built-in Named Parsers:**
 
-[TODO]: Check if this is all needed
-
 The following parsers are pre-registered in `globalParserRegistry`:
 
 - `'timestamp'` - Parses ISO date string to Unix timestamp (milliseconds)
 - `'date'` - Parses string to Date object
-- `'csv'` - Splits comma-separated values into trimmed array
 - `'int'` - Parses integer with `parseInt(v, 10)`
 - `'float'` - Parses float with `parseFloat(v)`
 - `'boolean'` - Presence check (same as `instanceOf: 'Boolean'`)
 - `'json'` - Parses JSON (same as `instanceOf: 'Object'` or `'Array'`)
+- `'splitter'` - Splits an attribute value into an array. A class parser with options:
+  - `delimiter?: string | { pattern: string; flags?: string }` - defaults to `/\s+/`
+  - `trim?: boolean` - default `true`
+  - `skipEmpty?: boolean` - default `true`
+  - `dedupe?: boolean` - default `false`
+
+**Using the `splitter` parser:**
+
+```TypeScript
+// HTML: <div data-tags="alpha beta gamma"></div>
+
+// Use the default delimiter (/\s+/)
+const result1 = parseWithAttrs(element, {
+  base: 'data-',
+  tags: '${base}tags',
+  _tags: {
+    parser: 'splitter'
+  }
+});
+// result1.tags === ['alpha', 'beta', 'gamma']
+
+// HTML: <div data-tags="alpha,beta,gamma"></div>
+
+// Use a custom literal delimiter
+const result2 = parseWithAttrs(element, {
+  base: 'data-',
+  tags: '${base}tags',
+  _tags: {
+    parser: 'splitter',
+    parserOptions: { delimiter: ',' }
+  }
+});
+// result2.tags === ['alpha', 'beta', 'gamma']
+
+// Same thing using the object form (self-contained options)
+const result3 = parseWithAttrs(element, {
+  base: 'data-',
+  tags: '${base}tags',
+  _tags: {
+    parser: { name: 'splitter', options: { delimiter: ',' } }
+  }
+});
+// result3.tags === ['alpha', 'beta', 'gamma']
+```
 
 **Custom Element Static Method Parsers:**
 
@@ -485,8 +526,9 @@ const result = parseWithAttrs(element, config);
 When a parser is specified, it can be:
 
 1. **Inline function** - `parser: (v) => v.toUpperCase()` - Used directly
-2. **String reference** - `parser: 'timestamp'` - Looks up in `globalParserRegistry`
-3. **Tuple reference** - `parser: ['my-widget', 'parseMethod']` - Looks up static method on custom element constructor
+2. **String reference** - `parser: 'timestamp'` - Looks up in scoped registry (if available) then `globalParserRegistry`. If the registered value is a class with a `parse` method, it is instantiated using `parserOptions`.
+3. **Object reference** - `parser: { name: 'splitter', options: { delimiter: ',' } }` - Looks up the named class parser and instantiates it with the provided options.
+4. **Tuple reference** - `parser: ['my-widget', 'parseMethod']` - Looks up a static method on the custom element constructor
 
 **Error Handling:**
 
@@ -503,7 +545,7 @@ parser: ['my-widget', 'nonExistent']
 
 // String not found in registry
 parser: 'unknown'
-// Error: Parser "unknown" not found in globalParserRegistry. If you want to reference a custom element static method, use tuple syntax: ["element-name", "methodName"]
+// Error: Parser "unknown" not found. Checked global registry.
 ```
 
 **Example: Organizing Parsers**

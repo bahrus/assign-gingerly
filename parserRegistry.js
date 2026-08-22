@@ -1,3 +1,5 @@
+import { SplitParser } from './SplitParser.js';
+import { ScopedParserRegistry } from './ScopedParserRegistry.js';
 /**
  * Registry for named parsers that can be referenced by string name
  * Enables JSON serialization of configs with custom parsers
@@ -7,7 +9,7 @@ export class ParserRegistry {
     /**
      * Register a parser with a given name
      * @param name - The name to register the parser under
-     * @param parser - The parser function
+     * @param parser - The parser function or class constructor
      */
     register(name, parser) {
         if (this.parsers.has(name)) {
@@ -18,7 +20,7 @@ export class ParserRegistry {
     /**
      * Get a parser by name
      * @param name - The name of the parser
-     * @returns The parser function or undefined if not found
+     * @returns The parser function, class constructor, or undefined if not found
      */
     get(name) {
         return this.parsers.get(name);
@@ -55,7 +57,6 @@ export const globalParserRegistry = new ParserRegistry();
 // Register common built-in parsers
 globalParserRegistry.register('timestamp', (v) => v ? new Date(v).getTime() : null);
 globalParserRegistry.register('date', (v) => v ? new Date(v) : null);
-globalParserRegistry.register('csv', (v) => v ? v.split(',').map((s) => s.trim()) : []);
 globalParserRegistry.register('int', (v) => v ? parseInt(v, 10) : null);
 globalParserRegistry.register('float', (v) => v ? parseFloat(v) : null);
 globalParserRegistry.register('boolean', (v) => v !== null);
@@ -69,7 +70,7 @@ globalParserRegistry.register('json', (v) => {
         throw new Error(`Failed to parse JSON: "${v}". Error: ${e}`);
     }
 });
-import { ScopedParserRegistry } from './ScopedParserRegistry.js';
+globalParserRegistry.register('splitter', SplitParser);
 /**
  * Symbol for storing scoped parser registry on synthesizer elements
  * Using Symbol.for ensures the same symbol is used across different versions of the package

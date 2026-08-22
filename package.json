@@ -51,6 +51,10 @@
     "./parserRegistry.js": {
       "default": "./parserRegistry.js"
     },
+    "./SplitParser.js": {
+      "default": "./SplitParser.js",
+      "types": "./SplitParser.ts"
+    },
     "./parseWithAttrs.js": {
       "default": "./parseWithAttrs.js",
       "types": "./parseWithAttrs.ts"

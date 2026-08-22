@@ -1,18 +1,20 @@
-import { ParserFunction } from './types/assign-gingerly/types';
+import { ParserFunction, AttrParserConstructor } from './types/assign-gingerly/types';
+import { SplitParser } from './SplitParser.js';
+import { ScopedParserRegistry } from './ScopedParserRegistry.js';
 
 /**
  * Registry for named parsers that can be referenced by string name
  * Enables JSON serialization of configs with custom parsers
  */
 export class ParserRegistry {
-  private parsers = new Map<string, ParserFunction>();
+  private parsers = new Map<string, ParserFunction | AttrParserConstructor>();
   
   /**
    * Register a parser with a given name
    * @param name - The name to register the parser under
-   * @param parser - The parser function
+   * @param parser - The parser function or class constructor
    */
-  register(name: string, parser: ParserFunction): void {
+  register(name: string, parser: ParserFunction | AttrParserConstructor): void {
     if (this.parsers.has(name)) {
       console.warn(`Parser "${name}" already registered, overwriting`);
     }
@@ -22,9 +24,9 @@ export class ParserRegistry {
   /**
    * Get a parser by name
    * @param name - The name of the parser
-   * @returns The parser function or undefined if not found
+   * @returns The parser function, class constructor, or undefined if not found
    */
-  get(name: string): ParserFunction | undefined {
+  get(name: string): ParserFunction | AttrParserConstructor | undefined {
     return this.parsers.get(name);
   }
   
@@ -70,10 +72,6 @@ globalParserRegistry.register('date', (v: string | null) =>
   v ? new Date(v) : null
 );
 
-globalParserRegistry.register('csv', (v: string | null) => 
-  v ? v.split(',').map((s: string) => s.trim()) : []
-);
-
 globalParserRegistry.register('int', (v: string | null) => 
   v ? parseInt(v, 10) : null
 );
@@ -95,7 +93,7 @@ globalParserRegistry.register('json', (v: string | null) => {
   }
 });
 
-import { ScopedParserRegistry } from './ScopedParserRegistry.js';
+globalParserRegistry.register('splitter', SplitParser);
 
 /**
  * Symbol for storing scoped parser registry on synthesizer elements
@@ -129,7 +127,7 @@ export function getParserRegistry(synthesizerElement: Element): ScopedParserRegi
 export function registerParser(
   synthesizerElement: Element,
   name: string,
-  parser: ParserFunction
+  parser: ParserFunction | AttrParserConstructor
 ): void {
   const registry = getParserRegistry(synthesizerElement);
   registry.register(name, parser);

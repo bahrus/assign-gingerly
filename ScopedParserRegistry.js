@@ -9,7 +9,7 @@ export class ScopedParserRegistry {
      * Register a parser with a given name
      * Resolves any pending waiters for this parser
      * @param name - The name to register the parser under
-     * @param parser - The parser function
+     * @param parser - The parser function or class constructor
      */
     register(name, parser) {
         if (this.parsers.has(name)) {
@@ -26,7 +26,7 @@ export class ScopedParserRegistry {
     /**
      * Get a parser by name
      * @param name - The name of the parser
-     * @returns The parser function or undefined if not found
+     * @returns The parser function, class constructor, or undefined if not found
      */
     get(name) {
         return this.parsers.get(name);
