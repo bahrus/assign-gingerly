@@ -122,6 +122,7 @@ function resolveSubstitutions(
                 ? { ...options, substitutions: undefined, root: undefined }
                 : undefined
         );
+        if(resolved === null || typeof resolved === 'undefined') continue;
         if (typeof resolved !== 'string') {
             throw new Error(
                 `Substitution '${name}' must resolve to a string, got ${typeof resolved}`
