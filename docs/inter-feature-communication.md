@@ -88,6 +88,7 @@ export async function integrateWithRoundabout(FaceUpClass, key, ctr) {
     }, ctr);
 }
 ```
+The `sourceOfTruth: true` entries mark attributes whose DOM value should mirror the host property. See [docs/withAttrs.md](docs/withAttrs.md#source-of-truth) for details.
 
 ### What's happening here
 
