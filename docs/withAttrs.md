@@ -434,7 +434,7 @@ const json = JSON.stringify(config);
 const result = parseWithAttrs(element, config);
 ```
 
-**Built-in Named Parsers:**
+#### **Built-in Named Parsers:**
 
 [TODO]: Check if this is all needed
 
