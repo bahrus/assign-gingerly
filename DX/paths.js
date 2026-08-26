@@ -38,6 +38,7 @@ const COMMAND_TOKEN_SUFFIXES = {
     YEq: ' Y=',
     MinusEq: ' -=',
     Arrow: ' =>',
+    EqAmp: ' =&',
 };
 function serializePath(prefix) {
     return prefix.length > 0 ? `?.${prefix}` : '?.';

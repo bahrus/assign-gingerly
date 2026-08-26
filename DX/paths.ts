@@ -41,6 +41,7 @@ const COMMAND_TOKEN_SUFFIXES = {
     YEq: ' Y=',
     MinusEq: ' -=',
     Arrow: ' =>',
+    EqAmp: ' =&',
 } as const;
 
 type CommandToken = keyof typeof COMMAND_TOKEN_SUFFIXES;
@@ -79,6 +80,7 @@ export type PathProxyCore = {
     readonly YEq: PathProxy<any>;
     readonly MinusEq: PathProxy<any>;
     readonly Arrow: PathProxy<any>;
+    readonly EqAmp: PathProxy<any>;
 };
 
 export type PathProxy<T> = {
