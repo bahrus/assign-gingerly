@@ -339,6 +339,10 @@ export function doAssign(...pairs: Record<string, any>[]): { assign: Record<stri
     return { assign: Object.assign({}, ...pairs) };
 }
 
+export function assign(...pairs: Record<string, any>[]): Record<string, any>{
+    return Object.assign({}, ...pairs);
+}
+
 /**
  * Compile-time loop expansion: generates one entry per key from a factory function.
  * Creates a typed proxy internally — the factory receives both the key and the proxy.
