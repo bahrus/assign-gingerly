@@ -1,34 +1,30 @@
 /**
- * builtIns.join handler for assignFrom.
+ * join — synchronous compute op for the ` =&` operator.
  *
  * Joins a resolved array into a single string. Supports nested sub-arrays
  * with "all-or-nothing" semantics: if any element in a nested sub-array
  * resolves to null/undefined, the entire sub-array is dropped.
  *
- * This handler is auto-loaded by processHandlerCommands when `do: 'builtIns.join'`
- * is encountered — no explicit import is needed.
+ * This is the sync-op successor to the old `builtIns.join` handler (which lived
+ * behind the async ` =>` pipeline). Unlike a handler, an op is a plain function —
+ * no class, no dynamic import, no await anywhere in its path.
  *
  * @example
  * assignFrom(oElement, {
- *     '?.textContent =>': {
- *         do: 'builtIns.join',
- *         resolve: {
- *             value: ['?.lastName', ', ', '?.firstName']
- *         }
+ *     '?.textContent =&': {
+ *         join: ['?.lastName', ', ', '?.firstName']
  *     }
  * }, { from: vm });
  *
  * @example
- * // With optional segment (all-or-nothing):
+ * // With optional segment (all-or-nothing) and a separator:
  * assignFrom(oElement, {
- *     '?.textContent =>': {
- *         do: 'builtIns.join',
- *         resolve: {
- *             value: ['?.lastName', [', ', '?.middleName'], ', ', '?.firstName']
- *         }
+ *     '?.textContent =&': {
+ *         join: ['?.lastName', ['?.middleName'], '?.firstName'],
+ *         separator: ', '
  *     }
  * }, { from: vm });
- * // If middleName is undefined, the sub-array [', ', undefined] is dropped entirely.
+ * // If middleName is undefined, the sub-array ['?.middleName'] is dropped entirely.
  */
 /**
  * Process nested arrays with all-or-nothing null semantics.
@@ -55,19 +51,11 @@ function processValue(value) {
     return result;
 }
 /**
- * JoinHandler — built-in handler for composing strings from resolved arrays.
- *
- * Returns the joined string via the return-value protocol, which causes
- * processHandlerCommands to assign it back to the LHS path.
+ * `join` sync op — args is the resolved `join:` array, extra carries sibling
+ * config keys (currently just `separator`, default `''`).
  */
-export class JoinHandler {
-    config;
-    constructor(config) {
-        this.config = config;
-    }
-    async assign(lhsTarget, resolvedParams) {
-        const { value, separator = '' } = resolvedParams;
-        const items = Array.isArray(value) ? processValue(value) : [value];
-        return items.join(separator);
-    }
+export function join(args, extra = {}) {
+    const { separator = '' } = extra;
+    const items = Array.isArray(args) ? processValue(args) : [args];
+    return items.join(separator);
 }

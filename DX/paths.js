@@ -15,7 +15,7 @@
  *
  * const $ = paths<Person>();
  *
- * // Use sp (split into parts) to create arrays for builtIns.join:
+ * // Use sp (split into parts) to create arrays for the ' =&' join op:
  * const value = sp`${$.lastName}, ${$.firstName}`;
  * // ['?.lastName', ', ', '?.firstName']
  *
@@ -321,7 +321,7 @@ export function forEachKeyIn(keys, factory, options) {
  * string representation — no `.Path` call needed inside sp template literals.
  *
  * Arrays passed as interpolations are preserved as nested arrays (for
- * all-or-nothing optional segments in builtIns.join).
+ * all-or-nothing optional segments in the ' =&' join op).
  *
  * @example
  * const $ = paths<Person>();

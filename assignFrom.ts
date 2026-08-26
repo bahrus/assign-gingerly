@@ -7,12 +7,15 @@
  * For async protocol handlers or awaitable handler execution, use assignFromAsync.
  * 
  * Handler commands (` =>`) are fire-and-forget (kicked off asynchronously, not awaited).
+ * Sync-op commands (` =&`) are always fully synchronous — see SYNC_OPS.
  */
 
 import { getValues, getValue } from './resolve/getValues.js';
 import assignGingerly from './assignGingerly.js';
 import { resolveIdVariable, parseIdRef } from './resolve/resolveIdRef.js';
 import { processInferredAssignments } from './inferredAssignments.js';
+import { resolveLhsPath } from './utils/resolveLhsPath.js';
+import { SYNC_OPS } from './syncOps/registry.js';
 import type { PermissionProcessor, AssignFromOptions, AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
 
 // Re-export types for consumers
@@ -47,6 +50,48 @@ export function isTernaryCommand(key: string): boolean {
 export function parseTernaryCommand(key: string): string | null {
     if (!isTernaryCommand(key)) return null;
     return key.substring(0, key.length - 3); // Remove ' ?=' suffix
+}
+
+/**
+ * Check if a key ends with the sync-op operator ' =&'.
+ */
+export function isSyncOpCommand(key: string): boolean {
+    return key.endsWith(' =&');
+}
+
+/**
+ * Parse a =& sync-op command and extract the LHS path.
+ */
+export function parseSyncOpCommand(key: string): string | null {
+    if (!isSyncOpCommand(key)) return null;
+    return key.substring(0, key.length - 3); // Remove ' =&' suffix
+}
+
+/**
+ * Throws if a resolved sync-op value (or anything nested inside it) is a thenable.
+ *
+ * getValues is synchronous by contract, but `options.protocols` handlers are
+ * typed to allow returning a Promise. A sync op has no await to catch that —
+ * left unchecked it would silently stringify as "[object Promise]" — so this
+ * turns it into a clear error instead.
+ */
+function assertNoThenable(value: any, opName: string, key: string): void {
+    if (value == null) return;
+    if (typeof value.then === 'function') {
+        throw new Error(
+            `assignFrom: sync op '${opName}' (key "${key}") received an async value — ` +
+            `a protocol in options.protocols returned a Promise, which ' =&' cannot await. ` +
+            `Use ' =>' with 'resolve:' instead for async values.`
+        );
+    }
+    if (Array.isArray(value)) {
+        for (const item of value) assertNoThenable(item, opName, key);
+    } else if (typeof value === 'object') {
+        const proto = Object.getPrototypeOf(value);
+        if (proto === Object.prototype || proto === null) {
+            for (const item of Object.values(value)) assertNoThenable(item, opName, key);
+        }
+    }
 }
 
 /**
@@ -354,6 +399,7 @@ export function categorizeKeys(expandedPattern: Record<string, any>) {
   const idRefNormalKeys: string[] = [];
   const idRefHandlerKeys: string[] = [];
   const ternaryKeys: string[] = [];
+  const syncOpKeys: string[] = [];
 
   for (const key of Object.keys(expandedPattern)) {
     if (isHandlerCommand(key)) {
@@ -364,6 +410,8 @@ export function categorizeKeys(expandedPattern: Record<string, any>) {
       }
     } else if (isTernaryCommand(key)) {
       ternaryKeys.push(key);
+    } else if (isSyncOpCommand(key)) {
+      syncOpKeys.push(key);
     } else if (key.startsWith('#[')) {
       idRefNormalKeys.push(key);
     } else {
@@ -371,7 +419,7 @@ export function categorizeKeys(expandedPattern: Record<string, any>) {
     }
   }
 
-  return { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys };
+  return { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys, syncOpKeys };
 }
 
 /**
@@ -447,7 +495,7 @@ export function assignFrom(
   const expandedPattern = expandSubstitutions(pattern, options);
 
   // Categorize keys
-  const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys } = categorizeKeys(expandedPattern);
+  const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys, syncOpKeys } = categorizeKeys(expandedPattern);
 
   const resolveOptions = { ...options, root: target, permissionProcessor } as any;
 
@@ -466,6 +514,36 @@ export function assignFrom(
     }
     if (Object.keys(ternaryResolved).length > 0) {
       assignGingerly(target, ternaryResolved, options, permissionProcessor);
+    }
+  }
+
+  // Process =& sync-op keys (sync — always, no dynamic import, no await, ever)
+  if (syncOpKeys.length > 0) {
+    for (const key of syncOpKeys) {
+      const lhsPath = parseSyncOpCommand(key);
+      if (lhsPath === null) continue;
+      const config = expandedPattern[key];
+      if (!config || typeof config !== 'object' || Array.isArray(config)) {
+        throw new Error(`assignFrom: sync-op command "${key}" requires a config object naming exactly one op`);
+      }
+
+      const opName = Object.keys(config).find(k => k in SYNC_OPS);
+      if (!opName) {
+        throw new Error(`assignFrom: sync-op command "${key}" does not name a known op (${Object.keys(SYNC_OPS).join(', ')})`);
+      }
+
+      const resolvedConfig = getValues(config, options.from, resolveOptions);
+      assertNoThenable(resolvedConfig, opName, key);
+
+      const { [opName]: args, ...extra } = resolvedConfig;
+      const result = SYNC_OPS[opName](args, extra);
+      if (result === undefined) continue;
+
+      const { lhsParent, lhsKey } = resolveLhsPath(target, lhsPath, options);
+      if (lhsParent != null && lhsKey != null
+          && !permissionProcessor?.redirectRestrictedProp(lhsParent, lhsKey, result)) {
+        lhsParent[lhsKey] = result;
+      }
     }
   }
 

@@ -7,7 +7,7 @@
  * import { builtInEmoji } from 'assign-gingerly/builtInEmoji.js';
  *
  * assignFrom(target, {
- *     '?.el =>': { do: '🔗', get: { value: ['?.first', ' ', '?.last'] } }
+ *     '?.el =>': { do: '🏷️', get: { template: [...] } }
  * }, { from: vm, handlers: builtInEmoji });
  */
 /**
@@ -17,14 +17,16 @@
  * |-------|---------|
  * | 📦 | builtIns.lazyLoad |
  * | 🎚️ | builtIns.lazyLoadSwitch |
- * | 🔗 | builtIns.join |
  * | 🏷️ | builtIns.microDataJoin |
  * | 📋 | builtIns.manageTemplateList |
+ *
+ * `join` is no longer a `do:` handler — it moved to the synchronous ` =&` operator
+ * (see syncOps/join.ts) and isn't looked up through options.handlers, so it has no
+ * emoji alias here.
  */
 export const builtInEmoji = {
     '📦': 'builtIns.lazyLoad',
     '🎚️': 'builtIns.lazyLoadSwitch',
-    '🔗': 'builtIns.join',
     '🏷️': 'builtIns.microDataJoin',
     '📋': 'builtIns.manageTemplateList',
     '📊': 'builtIns.rangeSelector',

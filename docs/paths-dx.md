@@ -144,7 +144,7 @@ Non-proxy values (numbers, booleans, plain strings) pass through unchanged.
 
 ---
 
-## `sp` — Split into Parts (for `builtIns.join`)
+## `sp` — Split into Parts (for the ` =&` join op)
 
 Tagged template literal that produces an array of path strings + literal strings. Proxy objects are auto-extracted (no `.Path` needed inside the tag).
 

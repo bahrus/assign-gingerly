@@ -6,7 +6,7 @@
 
 import { resolveValues } from './resolve/resolveValues.js';
 import { getValues } from './resolve/getValues.js';
-import { evaluatePathWithMethods } from './assignGingerly.js';
+import { resolveLhsPath } from './utils/resolveLhsPath.js';
 import { findClassPrototypeInPath } from './utils/findClassPrototypeInPath.js';
 import type { PermissionProcessor } from './types/assign-gingerly/types.js';
 import type { AssignFromOptions, AssignFromHandlerConstructor } from './assignFromAsync.js';
@@ -14,11 +14,13 @@ import type { AssignFromOptions, AssignFromHandlerConstructor } from './assignFr
 /**
  * Map of built-in handler names to their module paths.
  * These are auto-loaded on demand — no explicit import required.
+ *
+ * `join` moved to a synchronous ` =&` op (see syncOps/join.ts) — it never had
+ * side effects or anything to await, so it didn't belong behind this async pipeline.
  */
 const BUILT_IN_MAP: Record<string, string> = {
     'builtIns.lazyLoad': './handlers/lazyLoad.js',
     'builtIns.lazyLoadSwitch': './handlers/lazyLoadSwitch.js',
-    'builtIns.join': './handlers/join.js',
     'builtIns.microDataJoin': './handlers/microDataJoin.js',
     'builtIns.manageTemplateList': './handlers/manageTemplateList.js',
     'builtIns.rangeSelector': './handlers/rangeSelector.js',
@@ -121,55 +123,8 @@ export async function processHandlerCommands(
 
         // Resolve the LHS path, preserving parent + key for return-value assignment.
         // lhsParent[lhsKey] === lhsTarget (the current value at the path)
-        let lhsTarget: any;
-        let lhsParent: any = undefined;
-        let lhsKey: string | undefined = undefined;
+        const { lhsTarget, lhsParent, lhsKey } = resolveLhsPath(target, lhsPath, options);
 
-        if (lhsPath.startsWith('?.')) {
-            const pathParts = lhsPath.split('?.').filter(p => p.length > 0);
-            const withMethodsSet = options.withMethods
-                ? options.withMethods instanceof Set
-                    ? options.withMethods
-                    : new Set(options.withMethods)
-                : undefined;
-
-            if (withMethodsSet && pathParts.length > 0) {
-                const result = evaluatePathWithMethods(target, pathParts, undefined, withMethodsSet);
-                lhsParent = result.target;
-                lhsKey = result.lastKey;
-                lhsTarget = result.target[result.lastKey];
-                // If last key is a method, call it to get the target
-                if (result.isMethod && typeof result.target[result.lastKey] === 'function') {
-                    lhsTarget = result.target[result.lastKey].call(result.target);
-                    lhsParent = undefined; // Can't assign back to a method call result
-                    lhsKey = undefined;
-                }
-            } else {
-                // Simple path navigation — walk to parent, keep last key
-                if (pathParts.length === 0) {
-                    lhsTarget = target;
-                } else if (pathParts.length === 1) {
-                    lhsParent = target;
-                    lhsKey = pathParts[0];
-                    lhsTarget = target[pathParts[0]];
-                } else {
-                    let current = target;
-                    for (let i = 0; i < pathParts.length - 1; i++) {
-                        if (current == null) break;
-                        current = current[pathParts[i]];
-                    }
-                    lhsParent = current;
-                    lhsKey = pathParts[pathParts.length - 1];
-                    lhsTarget = current != null ? current[lhsKey] : undefined;
-                }
-            }
-        } else if (lhsPath) {
-            lhsParent = target;
-            lhsKey = lhsPath;
-            lhsTarget = target[lhsPath];
-        } else {
-            lhsTarget = target;
-        }
         // Execute handlers sequentially, sharing the same lhsTarget
         for (const config of configs) {
             //return; //1.3ms

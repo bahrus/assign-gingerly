@@ -22,6 +22,7 @@
     "handlers/**",
     "inferencer/**",
     "resolve/**",
+    "syncOps/**",
     "utils/**",
     "README.md",
     "LICENSE",
@@ -103,9 +104,13 @@
       "default": "./handlers/lazyLoadSwitch.js",
       "types": "./handlers/lazyLoadSwitch.ts"
     },
-    "./handlers/join.js": {
-      "default": "./handlers/join.js",
-      "types": "./handlers/join.ts"
+    "./syncOps/join.js": {
+      "default": "./syncOps/join.js",
+      "types": "./syncOps/join.ts"
+    },
+    "./syncOps/registry.js": {
+      "default": "./syncOps/registry.js",
+      "types": "./syncOps/registry.ts"
     },
     "./handlers/microDataJoin.js": {
       "default": "./handlers/microDataJoin.js",

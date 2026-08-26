@@ -851,7 +851,8 @@ While we are in the business of passing values of object A into object B, we mig
 | ` -=` | Delete | Remove properties from an object | `'?.data -=': 'key'` |
 | ` Y=` | Merge | Recursively `assignGingerly` into a sub-object | `'style Y=': { width: '100px' }` |
 | ` ?=` | Ternary | Conditional assignment (assignFrom only) — [details](docs/ternary-assignment.md) | `'?.text ?=': ['?.cond', 'yes', 'no']` |
-| ` =>` | Handler | Invoke a handler plugin (assignFrom only) | `'?.el =>': { do: 'builtIns.join', ... }` |
+| ` =>` | Handler | Invoke a handler plugin (assignFrom only) | `'?.el =>': { do: 'builtIns.lazyLoad', ... }` |
+| ` =&` | Sync op | Compute a value synchronously and assign it back (assignFrom only) — no dynamic import, no await, ever | `'?.text =&': { join: ['?.first', ' ', '?.last'] }` |
 
 All operators use a space before the suffix to distinguish them from property names. They compose with `?.` nested paths and `withMethods`.
 
@@ -2691,16 +2692,18 @@ await assignFromAsync(myElement, {
 
 Import paths must be local (relative, absolute, or bare specifiers — no cross-domain URLs). The module's default export is checked first; otherwise the first exported class with an `assign` method is used.
 
-Built-in handlers (`builtIns.lazyLoad`, `builtIns.join`, etc.) auto-load without needing to be listed in `handlers`.
+Built-in handlers (`builtIns.lazyLoad`, `builtIns.microDataJoin`, etc.) auto-load without needing to be listed in `handlers`.
+
+> `join` isn't in this list — it's a synchronous [` =&` op](#sync-op-join) now, not an async `do:` handler, so it's never dynamically imported and never awaited.
 
 **Handler aliases:** The `handlers` option also accepts built-in names as values, allowing you to define short aliases (including emoji) for concise configs:
 
 ```JavaScript
 import { builtInEmoji } from 'assign-gingerly/builtInEmoji.js';
-// { '📦': 'builtIns.lazyLoad', '🎚️': 'builtIns.lazyLoadSwitch', '🔗': 'builtIns.join', '🏷️': 'builtIns.microDataJoin', '📋': 'builtIns.manageTemplateList' }
+// { '📦': 'builtIns.lazyLoad', '🎚️': 'builtIns.lazyLoadSwitch', '🏷️': 'builtIns.microDataJoin', '📋': 'builtIns.manageTemplateList' }
 
 assignFrom(target, {
-    '?.textContent =>': { do: '🔗', get: { value: ['?.first', ' ', '?.last'] } }
+    '?.el =>': { do: '🏷️', get: { template: [...] } }
 }, { from: vm, handlers: builtInEmoji });
 
 // Or define your own:
@@ -2960,9 +2963,15 @@ await assignFromAsync(document.body, {
 - Mixed `do` values — fully supported, each handler is looked up independently.
 - Error handling — fail-fast. If a handler throws, remaining handlers are skipped.
 
-### Built-in handler: `builtIns.join`
+**Return-value protocol:**
 
-Joins a resolved array into a single string. Supports nested sub-arrays with "all-or-nothing" semantics for optional segments. Uses the **return-value protocol** — the handler returns the joined string, which `processHandlerCommands` assigns back to the LHS path.
+When a handler's `assign()` method returns a non-`undefined` value, `processHandlerCommands` assigns it back to the LHS path. Handlers like `builtIns.lazyLoad` return `undefined` (void) and operate by side effects instead.
+
+### Sync op: join (` =&`)
+
+` =&` is a separate operator from ` =>`, for computed values that have nothing to await — no dynamic import, no handler class, no microtask hop, ever. The RHS names exactly one op from a small built-in registry (`syncOps/registry.ts`); sibling keys are that op's own config. `join` is the first (and so far only) op in the registry.
+
+`join` resolves an array of `?.` paths and literals, then joins it into a single string. It supports nested sub-arrays with "all-or-nothing" semantics for optional segments.
 
 ```JavaScript
 const vm = {
@@ -2971,11 +2980,8 @@ const vm = {
 };
 
 assignFrom(oElement, {
-    '?.textContent =>': {
-        do: 'builtIns.join',
-        get: {
-            value: ['?.lastName', ', ', '?.firstName']
-        }
+    '?.textContent =&': {
+        join: ['?.lastName', ', ', '?.firstName']
     }
 }, { from: vm });
 
@@ -2984,11 +2990,11 @@ assignFrom(oElement, {
 
 **How it works:**
 
-1. The `get.value` array is resolved by `getValues` — `?.` path strings are replaced with actual values from `options.from`.
-2. Top-level `null`/`undefined` values are filtered out.
+1. The whole config object (`{ join: [...], separator: '...' }`) is resolved in one pass by `getValues` — `?.` path strings anywhere inside it, including nested inside the `join` array, are replaced with actual values from `options.from`.
+2. Top-level `null`/`undefined` values in the resolved array are filtered out.
 3. Nested sub-arrays use **all-or-nothing** semantics: if any element in a sub-array resolves to `null`/`undefined`, the entire sub-array is dropped.
-4. Remaining elements are joined with the separator (default: `''`, empty string).
-5. The joined string is returned and assigned to the LHS path.
+4. Remaining elements are joined with `separator` (default: `''`, empty string).
+5. The joined string is assigned straight to the LHS path — every sync op always produces a value to assign; there's no opt-in return-value protocol to it like ` =>` has.
 
 **Optional segments with nested arrays:**
 
@@ -3000,11 +3006,8 @@ const vm = {
 };
 
 assignFrom(oElement, {
-    '?.textContent =>': {
-        do: 'builtIns.join',
-        get: {
-            value: ['?.lastName', [', ', '?.middleName'], ', ', '?.firstName']
-        }
+    '?.textContent =&': {
+        join: ['?.lastName', [', ', '?.middleName'], ', ', '?.firstName']
     }
 }, { from: vm });
 
@@ -3019,21 +3022,16 @@ assignFrom(oElement, {
 
 ```JavaScript
 assignFrom(oElement, {
-    '?.textContent =>': {
-        do: 'builtIns.join',
-        get: {
-            value: ['?.firstName', '?.lastName'],
-            separator: ' | '
-        }
+    '?.textContent =&': {
+        join: ['?.firstName', '?.lastName'],
+        separator: ' | '
     }
 }, { from: vm });
 
 // oElement.textContent = 'Helaena | Targaryen'
 ```
 
-**Return-value protocol:**
-
-When a handler's `assign()` method returns a non-`undefined` value, `processHandlerCommands` assigns it back to the LHS path. This is how `builtIns.join` sets `textContent` — the handler computes the string and returns it. Existing handlers like `builtIns.lazyLoad` return `undefined` (void) and operate by side effects, so they're unaffected.
+**On `options.protocols`:** `getValues` runs synchronously and calls protocol handlers without awaiting them. `options.protocols` is typed to allow an async handler (`(key: string) => any | Promise<any>`), because ` =>`'s `resolve:` path can use one — but ` =&` has no await to catch a Promise coming back from one. If a resolved value under ` =&` turns out to be a thenable, assignFrom throws immediately rather than silently assigning `"[object Promise]"`. Use ` =>` with `resolve:` for handler configs that need an async protocol.
 
 ### Built-in handler: `builtIns.microDataJoin`
 
@@ -3095,7 +3093,7 @@ Produces:
 
 **Optional segments (nested arrays):**
 
-Same all-or-nothing semantics as `builtIns.join` — if any `val` in a nested sub-array is null/undefined, the entire sub-array is dropped:
+Same all-or-nothing semantics as the [`join` sync op](#sync-op-join) — if any `val` in a nested sub-array is null/undefined, the entire sub-array is dropped:
 
 ```JavaScript
 get: {
@@ -3239,7 +3237,7 @@ assignFrom(element, {
 
 ## Typed Path Authoring with `paths`, `sp`, and `md`
 
-For JSON generated config files generated from TypeScript/`.mts`/`mjs` files during a build or server-side rendering, the `paths` utility provides compile-time autocomplete and type safety for `?.`-prefixed path strings. The `sp` tagged template literal ("split into parts") produces arrays suitable for `builtIns.join`. The `md` tagged template literal produces `{prop, val}` objects suitable for `builtIns.microDataJoin`.
+For JSON generated config files generated from TypeScript/`.mts`/`mjs` files during a build or server-side rendering, the `paths` utility provides compile-time autocomplete and type safety for `?.`-prefixed path strings. The `sp` tagged template literal ("split into parts") produces arrays suitable for the [`join` sync op](#sync-op-join). The `md` tagged template literal produces `{prop, val}` objects suitable for `builtIns.microDataJoin`.
 
 ```TypeScript
 import { paths, sp } from 'assign-gingerly/DX/paths.js';
@@ -3256,11 +3254,8 @@ const $ = paths<Person>();
 // sp produces: ['?.lastName', ', ', '?.firstName']
 // with full autocomplete on $.lastName, $.firstName, etc.
 export default {
-    '?.textContent =>': {
-        do: 'builtIns.join',
-        get: {
-            value: sp`${$.lastName}, ${$.firstName}`
-        }
+    '?.textContent =&': {
+        join: sp`${$.lastName}, ${$.firstName}`
     }
 };
 ```
@@ -3339,7 +3334,7 @@ md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, format: 'long' }}`
 
 | Tag | Output for proxy interpolation | Use with |
 |-----|-------------------------------|----------|
-| `sp` | `'?.firstName'` (path string) | `builtIns.join` |
+| `sp` | `'?.firstName'` (path string) | the `join` sync op |
 | `md` | `{ prop: 'firstName', val: '?.firstName' }` | `builtIns.microDataJoin` |
 
 Both auto-detect path proxies (no `.Path` needed inside template literals) and preserve nested arrays for optional segments.
