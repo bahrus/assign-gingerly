@@ -150,6 +150,9 @@ target.assignGingerly(resolved);
 | `'?.a?.b?.c'` | Resolves `source.a.b.c` |
 | `'?..className'` | Resolves `source['.className']` (preserves leading dot) |
 | `'?.'` | Resolves to the `source` object itself |
+| `'?.count?.toLocaleString'` | Calls `source.count.toLocaleString()` when `toLocaleString` is in `withMethods` (a method as the last segment is invoked with zero args) |
+| `'?.count?.toLocaleString?.en'` | Calls `source.count.toLocaleString('en')` — the segment after a method is passed as a string argument |
+| `'?.wrap?.deref\|?.count'` | A trailing `\|` forces a zero-arg call (`wrap.deref()`) even when a segment follows; then the chain continues (`.count`). Works on the last segment too (`'?.count?.toLocaleString\|'`). Only applies when the name (minus `\|`) is in `withMethods`; otherwise `\|` is part of a literal key. |
 | `'literal'` | Passes through as-is (no `?.` prefix) |
 | `42` | Passes through as-is (not a string) |
 | `null` | Passes through as-is |

@@ -309,6 +309,54 @@
                 assert(result.literal === 'prefix$0', 'resolveValues should not treat $0 in the middle of a string as a special reference');
             }
 
+            // Test 28: RHS path ending with a method (no |) is invoked with zero args
+            {
+                const source = { count: 1234567 };
+                const result = await resolveValues({
+                    text: '?.count?.toLocaleString'
+                }, source, { withMethods: ['toLocaleString'] });
+                assert(result.text === (1234567).toLocaleString(), 'RHS ending with a method should be called');
+            }
+
+            // Test 29: RHS path ending with a method + trailing | is invoked with zero args
+            {
+                const source = { count: 1234567 };
+                const result = await resolveValues({
+                    text: '?.count?.toLocaleString|'
+                }, source, { withMethods: ['toLocaleString'] });
+                assert(result.text === (1234567).toLocaleString(), 'RHS ending with a |-marked method should be called with zero args');
+            }
+
+            // Test 30: assignFrom with RHS ending in a method, with and without |
+            {
+                const source = { count: 1234567 };
+                const target = {};
+                await assignFrom(target, {
+                    plain: '?.count?.toLocaleString',
+                    piped: '?.count?.toLocaleString|'
+                }, { from: source, withMethods: ['toLocaleString'] });
+                assert(target.plain === (1234567).toLocaleString(), 'assignFrom RHS ending with a method should be called');
+                assert(target.piped === (1234567).toLocaleString(), 'assignFrom RHS ending with a |-marked method should be called');
+            }
+
+            // Test 31: trailing | on an intermediate segment forces a zero-arg call and continues the chain
+            {
+                const source = { wrap: { deref() { return { count: 42 }; } } };
+                const result = await resolveValues({
+                    val: '?.wrap?.deref|?.count'
+                }, source, { withMethods: ['deref'] });
+                assert(result.val === 42, 'intermediate |-marked method should be called with zero args then chain continues');
+            }
+
+            // Test 32: | on a segment not listed in withMethods stays a literal property name
+            {
+                const source = { 'weird|': { v: 7 } };
+                const result = await resolveValues({
+                    val: '?.weird|?.v'
+                }, source, { withMethods: ['toLocaleString'] });
+                assert(result.val === 7, '| on a non-method segment should be treated as a literal key');
+            }
+
             // Display results
             const resultsDiv = document.getElementById('test-results');
             resultsDiv.innerHTML = `

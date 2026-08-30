@@ -145,12 +145,23 @@ function navigatePath(source, parts, withMethods, permissionProcessor) {
     while (i < parts.length) {
         if (current == null)
             return current;
-        const part = parts[i];
-        if (isAllowedMethod(part, withMethods, permissionProcessor)) {
+        const rawPart = parts[i];
+        // A trailing | forces a zero-argument method call: 'toLocaleString|' calls
+        // toLocaleString() without consuming the next segment. Only applies to
+        // names listed in withMethods; otherwise | is part of a literal key.
+        const isZeroArg = rawPart.endsWith('|')
+            && isAllowedMethod(rawPart.slice(0, -1), withMethods, permissionProcessor);
+        const part = isZeroArg ? rawPart.slice(0, -1) : rawPart;
+        if (isZeroArg || isAllowedMethod(part, withMethods, permissionProcessor)) {
             const method = current[part];
             if (typeof method === 'function') {
                 const nextPart = parts[i + 1];
-                if (nextPart !== undefined && !isAllowedMethod(nextPart, withMethods, permissionProcessor)) {
+                // Consecutive methods (including a |-marked next segment) mean a
+                // zero-arg call; otherwise the next segment is the string argument.
+                const nextIsMethod = nextPart !== undefined
+                    && (isAllowedMethod(nextPart, withMethods, permissionProcessor)
+                        || (nextPart.endsWith('|') && isAllowedMethod(nextPart.slice(0, -1), withMethods, permissionProcessor)));
+                if (!isZeroArg && nextPart !== undefined && !nextIsMethod) {
                     current = method.call(current, nextPart);
                     i += 2;
                 }
@@ -165,7 +176,7 @@ function navigatePath(source, parts, withMethods, permissionProcessor) {
             }
         }
         else {
-            current = current[part];
+            current = current[rawPart];
             i++;
         }
     }
