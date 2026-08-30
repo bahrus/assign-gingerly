@@ -60,7 +60,12 @@ function appendCommandSuffix(prefix: string, token: CommandToken): string {
 
 function getReservedToken(prop: string): CommandToken | 'Path' | undefined {
     if (prop === 'Path') return prop;
-    if (prop in COMMAND_TOKEN_SUFFIXES) return prop as CommandToken;
+    // Own-property check only — `prop in COMMAND_TOKEN_SUFFIXES` would also match
+    // inherited Object.prototype members (`toString`, `valueOf`, `toLocaleString`,
+    // `hasOwnProperty`, `constructor`, …), so a path segment named after one of
+    // those (e.g. `$.count.toLocaleString`) would be mistaken for a command token
+    // and produce a garbled path.
+    if (Object.hasOwn(COMMAND_TOKEN_SUFFIXES, prop)) return prop as CommandToken;
     return undefined;
 }
 
@@ -70,26 +75,36 @@ function getReservedToken(prop: string): CommandToken | 'Path' | undefined {
  * with a serialized path string accessor — while providing full autocomplete.
  * Enhanced: also callable (for method call syntax) and includes reserved
  * command markers such as `Each`, `EqNot`, and `PlusEq`.
+ *
+ * `Extra` carries alias keys (`aka`) and method names (`withMethods`) passed to
+ * `paths(...)` so they are accepted at every level of the chain — e.g.
+ * `$.count['🌐']` when `paths({ aka: { '🌐': 'toLocaleString' } })`.
  */
-export type PathProxyCore = {
+export type PathProxyCore<Extra extends string = never> = {
     readonly Path: string;
-    readonly Each: PathProxy<any>;
-    readonly EqNot: PathProxy<any>;
-    readonly PlusEq: PathProxy<any>;
-    readonly QMEq: PathProxy<any>;
-    readonly YEq: PathProxy<any>;
-    readonly MinusEq: PathProxy<any>;
-    readonly Arrow: PathProxy<any>;
-    readonly EqAmp: PathProxy<any>;
+    readonly Each: PathProxy<any, Extra>;
+    readonly EqNot: PathProxy<any, Extra>;
+    readonly PlusEq: PathProxy<any, Extra>;
+    readonly QMEq: PathProxy<any, Extra>;
+    readonly YEq: PathProxy<any, Extra>;
+    readonly MinusEq: PathProxy<any, Extra>;
+    readonly Arrow: PathProxy<any, Extra>;
+    readonly EqAmp: PathProxy<any, Extra>;
+} & {
+    readonly [K in Extra]: PathProxy<any, Extra> & PathProxyCore<Extra>
+        & ((...args: any[]) => PathProxy<any, Extra> & PathProxyCore<Extra>);
 };
 
-export type PathProxy<T> = {
+type PathLeaf<Extra extends string = never> =
+    PathProxyCore<Extra> & ((...args: any[]) => PathProxy<any, Extra> & PathProxyCore<Extra>);
+
+export type PathProxy<T, Extra extends string = never> = {
     [K in keyof T]-?: T[K] extends ((...args: any[]) => infer R)
-        ? ((...args: any[]) => PathProxy<NonNullable<R>> & PathProxyCore) & PathProxy<NonNullable<R>> & PathProxyCore
+        ? ((...args: any[]) => PathProxy<NonNullable<R>, Extra> & PathProxyCore<Extra>) & PathProxy<NonNullable<R>, Extra> & PathProxyCore<Extra>
         : T[K] extends (object | undefined | null)
-            ? PathProxy<NonNullable<T[K]>> & PathProxyCore & ((...args: any[]) => PathProxy<any> & PathProxyCore)
-            : PathProxyCore & ((...args: any[]) => PathProxy<any> & PathProxyCore);
-} & PathProxyCore & ((...args: any[]) => PathProxy<any> & PathProxyCore);
+            ? PathProxy<NonNullable<T[K]>, Extra> & PathProxyCore<Extra> & ((...args: any[]) => PathProxy<any, Extra> & PathProxyCore<Extra>)
+            : PathLeaf<Extra>;
+} & PathLeaf<Extra>;
 
 /**
  * Options for paths proxy creation.
@@ -239,11 +254,18 @@ function createPathProxy(prefix: string, options?: PathsOptions): any {
  * // With aka (reverse alias applied):
  * const $ = paths<MyEl>({ aka: { q: 'querySelector' } });
  * $.querySelector('.user').textContent.Path  // '?.q?..user?.textContent'
- * 
+ *
+ * // To write alias keys (emoji) directly in the chain, pass their union as the
+ * // second type argument — TypeScript cannot infer it while `T` is explicit:
+ * import { akaMethods as m } from 'assign-gingerly/DX/emojis.js';
+ * const $ = paths<MyEl, keyof typeof m>({ aka: m });
+ * $.count['🌐'].Path                          // '?.count?.🌐'
+ * // (or just use the real method name: $.count.toLocaleString — reverse-aliased to 🌐)
+ *
  * // Inside sp template literals, .Path is not needed:
  * sp`${$.lastName}, ${$.firstName}`  // ['?.lastName', ', ', '?.firstName']
  */
-export function paths<T>(options?: PathsOptions): PathProxy<T> {
+export function paths<T, Extra extends string = never>(options?: PathsOptions): PathProxy<T, Extra> {
     return createPathProxy('', options) as any;
 }
 

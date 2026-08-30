@@ -79,4 +79,25 @@ test.describe('assign-gingerly DX reserved tokens', () => {
       { prop: 'bar', val: '?.bar' },
     ]);
   });
+
+  test('path segments named after Object.prototype members are treated as plain segments', () => {
+    // Regression: getReservedToken used `prop in COMMAND_TOKEN_SUFFIXES`, which
+    // is true for inherited members like `toLocaleString`/`toString`/`valueOf`,
+    // so `$.count.toLocaleString` produced a garbled path containing the native
+    // function source.
+    const $ = paths<any>();
+
+    expect($.count.toLocaleString.Path).toBe('?.count?.toLocaleString');
+    expect($.count.toLocaleString().Path).toBe('?.count?.toLocaleString');
+    expect($.foo.toString.Path).toBe('?.foo?.toString');
+    expect($.foo.valueOf.Path).toBe('?.foo?.valueOf');
+    expect($.foo.constructor.Path).toBe('?.foo?.constructor');
+    expect($.foo.hasOwnProperty.Path).toBe('?.foo?.hasOwnProperty');
+
+    // With reverse aliasing, the trailing method name maps to its emoji alias.
+    const $a = paths<any>({ aka: { '🌐': 'toLocaleString' } });
+    expect(set($a.countData.textContent).to($a.count.toLocaleString())).toEqual({
+      '?.countData?.textContent': '?.count?.🌐',
+    });
+  });
 });

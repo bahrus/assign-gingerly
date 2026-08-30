@@ -55,6 +55,32 @@ $.clone.querySelector('.status').className.Path  // '?.clone?.q?..status?.classN
 $.template.content.cloneNode(true).Path          // '?.template?.content?.cloneNode?.true'
 ```
 
+A trailing method with no arguments is just another segment — `$.count.toLocaleString`
+serializes to `'?.count?.toLocaleString'` (and reverse-aliases, e.g. to `'?.count?.🌐'`
+when `aka` maps `'🌐' -> 'toLocaleString'`). The parentheses are optional:
+`$.count.toLocaleString()` produces the same path. Segment names that collide with
+`Object.prototype` members (`toString`, `valueOf`, `toLocaleString`, `hasOwnProperty`,
+`constructor`, …) are handled as plain segments, not command tokens.
+
+### Writing alias keys (emoji) directly in the chain
+
+`$.count.toLocaleString` type-checks because every leaf proxy is callable and therefore
+carries `Object.prototype`/`Function.prototype` members. Writing the alias key itself —
+`$.count['🌐']` — does **not** type-check by default, because the proxy type only knows
+`keyof T` plus the reserved tokens. Pass the alias-key union as the second type argument
+to surface them (TypeScript cannot infer it while `T` is explicit):
+
+```ts
+import { akaMethods as m } from 'assign-gingerly/DX/emojis.js';
+
+const $ = paths<MyVM, keyof typeof m>({ aka: m });
+$.count['🌐'].Path        // '?.count?.🌐'
+$.clone['🔍']('.status')  // '?.clone?.🔍?..status'
+```
+
+Typo detection is preserved — only the exact alias keys are added, so `$.count['🌐🌐']`
+and `$.count.toLocaleStrings` still error.
+
 ### Bare proxy = self-reference
 
 ```ts
@@ -67,6 +93,9 @@ $.Path   // '?.' (the source object itself)
 |--------|--------|
 | `aka` | Reverse aliases: `querySelector` in code ? `q` in output path |
 | `withMethods` | Declares method names (for future disambiguation use) |
+
+The optional second type parameter, `paths<T, Extra extends string>`, adds `Extra` as
+valid chain segments at every level (see "Writing alias keys directly" above).
 
 ---
 

@@ -52,7 +52,12 @@ function appendCommandSuffix(prefix, token) {
 function getReservedToken(prop) {
     if (prop === 'Path')
         return prop;
-    if (prop in COMMAND_TOKEN_SUFFIXES)
+    // Own-property check only — `prop in COMMAND_TOKEN_SUFFIXES` would also match
+    // inherited Object.prototype members (`toString`, `valueOf`, `toLocaleString`,
+    // `hasOwnProperty`, `constructor`, …), so a path segment named after one of
+    // those (e.g. `$.count.toLocaleString`) would be mistaken for a command token
+    // and produce a garbled path.
+    if (Object.hasOwn(COMMAND_TOKEN_SUFFIXES, prop))
         return prop;
     return undefined;
 }
@@ -192,6 +197,13 @@ function createPathProxy(prefix, options) {
  * // With aka (reverse alias applied):
  * const $ = paths<MyEl>({ aka: { q: 'querySelector' } });
  * $.querySelector('.user').textContent.Path  // '?.q?..user?.textContent'
+ *
+ * // To write alias keys (emoji) directly in the chain, pass their union as the
+ * // second type argument — TypeScript cannot infer it while `T` is explicit:
+ * import { akaMethods as m } from 'assign-gingerly/DX/emojis.js';
+ * const $ = paths<MyEl, keyof typeof m>({ aka: m });
+ * $.count['🌐'].Path                          // '?.count?.🌐'
+ * // (or just use the real method name: $.count.toLocaleString — reverse-aliased to 🌐)
  *
  * // Inside sp template literals, .Path is not needed:
  * sp`${$.lastName}, ${$.firstName}`  // ['?.lastName', ', ', '?.firstName']
