@@ -51,6 +51,7 @@ export const akaMethods = {
     '🚨': 'error',
     '🤱': 'appendChild',
     '😣': 'focus',
+    '🌐': 'toLocaleString',
     //'🧩': 'includes'
 };
 export const aka = {
