@@ -68,6 +68,22 @@ export function parseSyncOpCommand(key: string): string | null {
 }
 
 /**
+ * Check if a key ends with the multi-invoke operator ' =*'.
+ */
+export function isMultiInvokeCommand(key: string): boolean {
+    return key.endsWith(' =*');
+}
+
+/**
+ * Parse a =* multi-invoke command and extract the base LHS path — the path a
+ * `withMethods` method sits at, to be called once per argument-list on the RHS.
+ */
+export function parseMultiInvokeCommand(key: string): string | null {
+    if (!isMultiInvokeCommand(key)) return null;
+    return key.substring(0, key.length - 3); // Remove ' =*' suffix
+}
+
+/**
  * Throws if a resolved sync-op value (or anything nested inside it) is a thenable.
  *
  * getValues is synchronous by contract, but `options.protocols` handlers are
@@ -349,12 +365,18 @@ export function expandSubstitutions(
 }
 
 /**
- * Convert entries to an object, merging duplicate handler (` =>`) keys into arrays.
+ * Convert entries to an object. Duplicate keys — which `where_x_in` expansion can
+ * produce — are collapsed with last-wins, except:
+ *  - ` =>` handler keys merge into the Multiple Handlers array form.
+ *  - ` =*` multi-invoke keys concatenate their argument-list arrays, so an
+ *    expanded pattern still invokes the method once per expansion.
  */
 export function mergeHandlerDuplicates(entries: [string, any][]): Record<string, any> {
   const result: Record<string, any> = {};
   for (const [key, value] of entries) {
-    if (key.endsWith(' =>') && key in result) {
+    if (key in result && key.endsWith(' =*') && Array.isArray(result[key]) && Array.isArray(value)) {
+      result[key] = (result[key] as any[]).concat(value);
+    } else if (key.endsWith(' =>') && key in result) {
       const existing = result[key];
       if (Array.isArray(existing)) {
         existing.push(value);
@@ -400,6 +422,7 @@ export function categorizeKeys(expandedPattern: Record<string, any>) {
   const idRefHandlerKeys: string[] = [];
   const ternaryKeys: string[] = [];
   const syncOpKeys: string[] = [];
+  const multiInvokeKeys: string[] = [];
 
   for (const key of Object.keys(expandedPattern)) {
     if (isHandlerCommand(key)) {
@@ -412,6 +435,8 @@ export function categorizeKeys(expandedPattern: Record<string, any>) {
       ternaryKeys.push(key);
     } else if (isSyncOpCommand(key)) {
       syncOpKeys.push(key);
+    } else if (isMultiInvokeCommand(key)) {
+      multiInvokeKeys.push(key);
     } else if (key.startsWith('#[')) {
       idRefNormalKeys.push(key);
     } else {
@@ -419,7 +444,7 @@ export function categorizeKeys(expandedPattern: Record<string, any>) {
     }
   }
 
-  return { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys, syncOpKeys };
+  return { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys, syncOpKeys, multiInvokeKeys };
 }
 
 /**
@@ -495,7 +520,7 @@ export function assignFrom(
   const expandedPattern = expandSubstitutions(pattern, options);
 
   // Categorize keys
-  const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys, syncOpKeys } = categorizeKeys(expandedPattern);
+  const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys, syncOpKeys, multiInvokeKeys } = categorizeKeys(expandedPattern);
 
   const resolveOptions = { ...options, root: target, permissionProcessor } as any;
 
@@ -543,6 +568,26 @@ export function assignFrom(
       if (lhsParent != null && lhsKey != null
           && !permissionProcessor?.redirectRestrictedProp(lhsParent, lhsKey, result)) {
         lhsParent[lhsKey] = result;
+      }
+    }
+  }
+
+  // Process =* multi-invoke keys (sync): call a withMethods method sitting at the
+  // base path once per argument-list on the RHS. Each argument-list is resolved
+  // against `from` (so `?.` paths and `!!` markers work), then delegated to
+  // assignGingerly as a single array-valued key — which spreads it as call args.
+  if (multiInvokeKeys.length > 0) {
+    for (const key of multiInvokeKeys) {
+      const basePath = parseMultiInvokeCommand(key);
+      if (basePath === null) continue;
+      const callList = expandedPattern[key];
+      if (!Array.isArray(callList)) {
+        throw new Error(`assignFrom: multi-invoke command "${key}" requires an array of argument-lists`);
+      }
+      for (const rawArgs of callList) {
+        const argList = Array.isArray(rawArgs) ? rawArgs : [rawArgs];
+        const resolved = getValues({ __args: argList }, options.from, resolveOptions).__args;
+        assignGingerly(target, { [basePath]: resolved }, options, permissionProcessor);
       }
     }
   }

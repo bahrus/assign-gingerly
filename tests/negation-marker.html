@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>assignFrom - !/!! Negation & Coercion Marker Tests</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>assignFrom - !/!! Negation &amp; Coercion Marker Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0"></div>
+
+    <script type="module">
+        import { assignFrom } from '../assignFrom.js';
+        import { getValues, getValue } from '../resolve/getValues.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function test(name, fn) {
+            try {
+                fn();
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+        }
+
+        function expect(actual) {
+            return {
+                toEqual(expected) {
+                    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${expected} but got ${actual}`);
+                    }
+                }
+            };
+        }
+
+        const src = { isTrue: false, isHidden: true, name: 'gg', count: 0, nested: { flag: 1 } };
+
+        // --- getValues: object position ---
+        test('!! coerces a truthy path to true', () => {
+            expect(getValues({ v: '!!?.isHidden' }, src).v).toBe(true);
+        });
+        test('!! coerces a falsy path to false', () => {
+            expect(getValues({ v: '!!?.isTrue' }, src).v).toBe(false);
+        });
+        test('! negates a path', () => {
+            expect(getValues({ v: '!?.isTrue' }, src).v).toBe(true);
+        });
+        test('!!! negates (odd count)', () => {
+            expect(getValues({ v: '!!!?.isHidden' }, src).v).toBe(false);
+        });
+        test('!! on a missing path yields false (idempotent remove)', () => {
+            expect(getValues({ v: '!!?.missing?.deep' }, src).v).toBe(false);
+        });
+        test('! on a missing path yields true', () => {
+            expect(getValues({ v: '!?.missing' }, src).v).toBe(true);
+        });
+        test('!! coerces 0 to false', () => {
+            expect(getValues({ v: '!!?.count' }, src).v).toBe(false);
+        });
+
+        // --- literals are untouched ---
+        test('!important stays a literal string', () => {
+            expect(getValues({ v: '!important' }, src).v).toBe('!important');
+        });
+        test('!foo (no path) stays a literal string', () => {
+            expect(getValues({ v: '!foo' }, src).v).toBe('!foo');
+        });
+        test('lone ! stays a literal string', () => {
+            expect(getValues({ v: '!' }, src).v).toBe('!');
+        });
+        test('plain path still resolves normally', () => {
+            expect(getValues({ v: '?.name' }, src).v).toBe('gg');
+        });
+
+        // --- array position ---
+        test('!! resolves inside an array value', () => {
+            expect(getValues({ v: ['cls', '!!?.isTrue', '?.name'] }, src).v).toEqual(['cls', false, 'gg']);
+        });
+
+        // --- nested plain object ---
+        test('!! resolves inside a nested plain object', () => {
+            expect(getValues({ o: { a: '!!?.isTrue', b: '?.name' } }, src).o).toEqual({ a: false, b: 'gg' });
+        });
+
+        // --- $0 root reference ---
+        test('!! works with a $0 root reference', () => {
+            expect(getValue('!!$0?.isTrue', src, { root: src })).toBe(false);
+        });
+
+        // --- getValue direct ---
+        test('getValue: !! coerces', () => {
+            expect(getValue('!!?.isHidden', src)).toBe(true);
+        });
+        test('getValue: !important stays literal', () => {
+            expect(getValue('!important', src)).toBe('!important');
+        });
+
+        // --- end to end: Form 1 classList.toggle with a coerced force arg ---
+        test('assignFrom: !! force arg removes on falsy', () => {
+            const el = document.createElement('div');
+            el.classList.add('c');
+            assignFrom(el, { '?.classList?.toggle': ['c', '!!?.isTrue'] }, { from: src, withMethods: ['toggle'] });
+            expect(el.classList.contains('c')).toBe(false);
+        });
+        test('assignFrom: !! force arg adds on truthy', () => {
+            const el = document.createElement('div');
+            assignFrom(el, { '?.classList?.toggle': ['c', '!!?.isHidden'] }, { from: src, withMethods: ['toggle'] });
+            expect(el.classList.contains('c')).toBe(true);
+        });
+        test('assignFrom: !! force arg is idempotent on a missing source value', () => {
+            const el = document.createElement('div');
+            el.classList.add('c');
+            // A bare '?.missing' would flip (toggle with undefined); '!!' pins it to false.
+            assignFrom(el, { '?.classList?.toggle': ['c', '!!?.missing'] }, { from: src, withMethods: ['toggle'] });
+            assignFrom(el, { '?.classList?.toggle': ['c', '!!?.missing'] }, { from: src, withMethods: ['toggle'] });
+            expect(el.classList.contains('c')).toBe(false);
+        });
+
+        // Display results
+        const total = passed + failed;
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const completeEl = document.getElementById('test-complete');
+
+        statusEl.innerHTML = `<span class="${failed === 0 ? 'pass' : 'fail'}">${passed}/${total} tests passed</span>`;
+
+        results.forEach(result => {
+            const div = document.createElement('div');
+            div.className = `test-item ${result.status}`;
+            div.innerHTML = `<strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}${result.error ? `<div class="error">${result.error}</div>` : ''}`;
+            resultsEl.appendChild(div);
+        });
+
+        completeEl.setAttribute('data-passed', passed.toString());
+        completeEl.setAttribute('data-failed', failed.toString());
+        completeEl.setAttribute('data-total', total.toString());
+
+        console.log(`Tests complete: ${passed}/${total} passed`);
+    </script>
+</body>
+</html>

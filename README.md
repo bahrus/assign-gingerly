@@ -102,6 +102,8 @@ assignFrom adds support for:
 5.  Looped substitution with `where_x_in` / `where_y_in` / `where_z_in` for expanding template patterns into multiple concrete assignments.
 6.  Dynamic substitutions via the `substitutions` option for injecting runtime string values into path segments. See [docs/substitutions.md](docs/substitutions.md).
 7.  Spread merging via the `"..."` key.
+8.  Boolean coercion / negation of a resolved value via a leading `!` marker: `'!!?.isOpen'` resolves `?.isOpen` then coerces to a real boolean, `'!?.isOpen'` negates it (`!!!` negates, and so on). Only honored in front of a `?.` path, `$0` reference, or protocol — a plain literal like `'!important'` is left untouched. Nullish coerces to `false`, which makes `!!` the safe way to feed an optional source value into a boolean sink (`hidden`, `disabled`, `classList.toggle`'s force argument, …).
+9.  Multiple invocations of one `withMethods` method via the ` =*` operator — see [docs/multi-invoke.md](docs/multi-invoke.md).
 
 Example:
 
@@ -853,6 +855,7 @@ While we are in the business of passing values of object A into object B, we mig
 | ` ?=` | Ternary | Conditional assignment (assignFrom only) — [details](docs/ternary-assignment.md) | `'?.text ?=': ['?.cond', 'yes', 'no']` |
 | ` =>` | Handler | Invoke a handler plugin (assignFrom only) | `'?.el =>': { do: 'builtIns.lazyLoad', ... }` |
 | ` =&` | Sync op | Compute a value synchronously and assign it back (assignFrom only) — no dynamic import, no await, ever | `'?.text =&': { join: ['?.first', ' ', '?.last'] }` |
+| ` =*` | Multi-invoke | Call a `withMethods` method once per argument-list (assignFrom only) — [details](docs/multi-invoke.md) | `` '?.classList?.toggle =*': [['a', '!!?.x'], ['b', '!!?.y']] `` |
 
 All operators use a space before the suffix to distinguish them from property names. They compose with `?.` nested paths and `withMethods`.
 
@@ -956,6 +959,45 @@ console.log(obj);
 The `=!` command syntax is `<path> =!` where the path uses the `?.` nested notation for nested properties, or a plain key for direct properties.
 
 For existing values, the toggle is performed using JavaScript's logical NOT operator (`!value`), regardless of what type it is.
+
+## Example 5a - Conditional class lists with the `!!` marker and `=*` command
+
+The imperative pattern
+
+```JS
+if (vm.isOpen) el.classList.add('isOpenCls');
+else           el.classList.remove('isOpenCls');
+```
+
+is just `el.classList.toggle('isOpenCls', vm.isOpen)`. In `assignFrom` that is a `toggle`
+call in `withMethods` with a resolved force argument — and the `!!` marker coerces the
+resolved value to a real boolean so a missing source value *removes* the class instead of
+flipping it:
+
+```TypeScript
+assignFrom(el, {
+    '?.classList?.toggle': ['isOpenCls', '!!?.isOpen']
+}, { from: vm, withMethods: ['toggle'] });
+```
+
+For several classes at once, the `=*` operator runs the method once per argument-list:
+
+```TypeScript
+const vm = { isOpen: true, isLoading: false, hasError: true };
+
+assignFrom(el, {
+    '?.classList?.toggle =*': [
+        ['isOpenCls',  '!!?.isOpen'],
+        ['loadingCls', '!!?.isLoading'],
+        ['errorCls',   '!!?.hasError'],
+    ]
+}, { from: vm, withMethods: ['toggle'] });
+
+// toggle('isOpenCls', true); toggle('loadingCls', false); toggle('errorCls', true)
+```
+
+See [docs/multi-invoke.md](docs/multi-invoke.md) for the full `=*` semantics, including its
+interaction with `where_x_in`.
 
 ## Example 6 - Deleting properties with -= command
 

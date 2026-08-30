@@ -21,14 +21,14 @@
  */
 import { resolveValues } from './resolve/resolveValues.js';
 import assignGingerly from './assignGingerly.js';
-import { expandSubstitutions, categorizeKeys, handleSpreads } from './assignFrom.js';
+import { expandSubstitutions, categorizeKeys, handleSpreads, parseMultiInvokeCommand } from './assignFrom.js';
 // Module cache for processHandlerCommands — avoids await on dynamic import after first call
 let _processHandlerCommands;
 export async function assignFromAsync(target, pattern, options, permissionProcessor) {
     // First: expand looped substitution variables (${x}, ${y}, ${z})
     const expandedPattern = expandSubstitutions(pattern, options);
     // Categorize keys
-    const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys } = categorizeKeys(expandedPattern);
+    const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, multiInvokeKeys } = categorizeKeys(expandedPattern);
     // Process normal keys via resolveValues + assignGingerly
     if (Object.keys(normalPattern).length > 0) {
         const resolved = await resolveValues(normalPattern, options.from, {
@@ -43,6 +43,28 @@ export async function assignFromAsync(target, pattern, options, permissionProces
         // Recursively handle "..." spread keys at all nesting levels
         handleSpreads(resolved);
         assignGingerly(target, resolved, options, permissionProcessor);
+    }
+    // Process =* multi-invoke keys: call a withMethods method sitting at the base
+    // path once per argument-list on the RHS (see assignFrom for the sync form).
+    if (multiInvokeKeys && multiInvokeKeys.length > 0) {
+        const { withMethods, aka, akaMethods, substitutions, protocols, from } = options;
+        for (const key of multiInvokeKeys) {
+            const basePath = parseMultiInvokeCommand(key);
+            if (basePath === null)
+                continue;
+            const callList = expandedPattern[key];
+            if (!Array.isArray(callList)) {
+                throw new Error(`assignFrom: multi-invoke command "${key}" requires an array of argument-lists`);
+            }
+            for (const rawArgs of callList) {
+                const argList = Array.isArray(rawArgs) ? rawArgs : [rawArgs];
+                const resolved = await resolveValues({ __args: argList }, from, {
+                    withMethods, aka, akaMethods, substitutions, protocols,
+                    root: target, permissionProcessor
+                });
+                assignGingerly(target, { [basePath]: resolved.__args }, options, permissionProcessor);
+            }
+        }
     }
     // Process #[x] normal keys — resolve element, then apply remaining path + value
     if (idRefNormalKeys.length > 0 && (options.pin || options.at)) {

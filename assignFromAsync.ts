@@ -24,7 +24,7 @@ import {IAssignGingerlyOptions} from './types/assign-gingerly/types.js';
 import assignGingerly from './assignGingerly.js';
 import type { PermissionProcessor, AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
 import {
-  expandSubstitutions, categorizeKeys, handleSpreads, isHandlerCommand
+  expandSubstitutions, categorizeKeys, handleSpreads, isHandlerCommand, parseMultiInvokeCommand
 } from './assignFrom.js';
 
 export interface AssignFromOptions extends IAssignGingerlyOptions {
@@ -61,7 +61,7 @@ export async function assignFromAsync(
   const expandedPattern = expandSubstitutions(pattern, options);
 
   // Categorize keys
-  const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys } = categorizeKeys(expandedPattern);
+  const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, multiInvokeKeys } = categorizeKeys(expandedPattern);
 
   // Process normal keys via resolveValues + assignGingerly
   if (Object.keys(normalPattern).length > 0) {
@@ -79,6 +79,28 @@ export async function assignFromAsync(
     handleSpreads(resolved);
 
     assignGingerly(target, resolved, options, permissionProcessor);
+  }
+
+  // Process =* multi-invoke keys: call a withMethods method sitting at the base
+  // path once per argument-list on the RHS (see assignFrom for the sync form).
+  if (multiInvokeKeys && multiInvokeKeys.length > 0) {
+    const { withMethods, aka, akaMethods, substitutions, protocols, from } = options;
+    for (const key of multiInvokeKeys) {
+      const basePath = parseMultiInvokeCommand(key);
+      if (basePath === null) continue;
+      const callList = expandedPattern[key];
+      if (!Array.isArray(callList)) {
+        throw new Error(`assignFrom: multi-invoke command "${key}" requires an array of argument-lists`);
+      }
+      for (const rawArgs of callList) {
+        const argList = Array.isArray(rawArgs) ? rawArgs : [rawArgs];
+        const resolved = await resolveValues({ __args: argList }, from, {
+          withMethods, aka, akaMethods, substitutions, protocols,
+          root: target, permissionProcessor
+        });
+        assignGingerly(target, { [basePath]: resolved.__args }, options, permissionProcessor);
+      }
+    }
   }
 
   // Process #[x] normal keys — resolve element, then apply remaining path + value

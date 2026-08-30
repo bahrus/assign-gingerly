@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>assignFrom - =* Multi-Invoke Command Tests</title>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .status { font-size: 24px; margin: 20px 0; }
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-item { padding: 8px; margin: 4px 0; border-left: 3px solid #ddd; }
+        .test-item.pass { border-left-color: green; background: #f0fff0; }
+        .test-item.fail { border-left-color: red; background: #fff0f0; }
+        .error { color: red; font-family: monospace; font-size: 0.9em; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h1>assignFrom - =* Multi-Invoke Command Tests</h1>
+    <div class="status" id="status">Running tests...</div>
+    <div id="results"></div>
+    <div id="test-complete" data-passed="0" data-failed="0" data-total="0"></div>
+
+    <script type="module">
+        import { assignFrom } from '../assignFrom.js';
+        import { assignFromAsync } from '../assignFromAsync.js';
+
+        const results = [];
+        let passed = 0;
+        let failed = 0;
+
+        function test(name, fn) {
+            try {
+                const r = fn();
+                if (r && typeof r.then === 'function') {
+                    return r.then(() => { passed++; results.push({ name, status: 'pass' }); })
+                             .catch(error => { failed++; results.push({ name, status: 'fail', error: error.message }); });
+                }
+                passed++;
+                results.push({ name, status: 'pass' });
+            } catch (error) {
+                failed++;
+                results.push({ name, status: 'fail', error: error.message });
+            }
+        }
+
+        function expect(actual) {
+            return {
+                toEqual(expected) {
+                    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+                        throw new Error(`Expected ${JSON.stringify(expected)} but got ${JSON.stringify(actual)}`);
+                    }
+                },
+                toBe(expected) {
+                    if (actual !== expected) {
+                        throw new Error(`Expected ${expected} but got ${actual}`);
+                    }
+                }
+            };
+        }
+
+        // Spy element: records every classList call, and mirrors add/remove/toggle onto a real Set.
+        function spyEl() {
+            const calls = [];
+            const s = new Set();
+            return {
+                calls,
+                classList: {
+                    toggle: (t, f) => {
+                        calls.push(['toggle', t, f]);
+                        if (f === undefined) { s.has(t) ? s.delete(t) : s.add(t); }
+                        else if (f) s.add(t); else s.delete(t);
+                    },
+                    add: (...c) => { calls.push(['add', ...c]); c.forEach(x => s.add(x)); },
+                    contains: (t) => s.has(t),
+                    _s: s
+                }
+            };
+        }
+
+        const vm = { isTrue: true, isLoading: false, hasError: true };
+
+        const tasks = [];
+
+        tasks.push(test('invokes the method once per argument-list, in order', () => {
+            const el = spyEl();
+            assignFrom(el, {
+                '?.classList?.toggle =*': [
+                    ['isTrueCls', '!!?.isTrue'],
+                    ['loadingCls', '!!?.isLoading'],
+                    ['errorCls', '!!?.hasError'],
+                ]
+            }, { from: vm, withMethods: ['toggle'] });
+            expect(el.calls).toEqual([
+                ['toggle', 'isTrueCls', true],
+                ['toggle', 'loadingCls', false],
+                ['toggle', 'errorCls', true],
+            ]);
+        }));
+
+        tasks.push(test('applies the resulting class state', () => {
+            const el = spyEl();
+            assignFrom(el, {
+                '?.classList?.toggle =*': [
+                    ['a', '!!?.isTrue'],
+                    ['b', '!!?.isLoading'],
+                    ['c', '!!?.hasError'],
+                ]
+            }, { from: vm, withMethods: ['toggle'] });
+            expect([...el.classList._s].sort()).toEqual(['a', 'c']);
+        }));
+
+        tasks.push(test('non-array element is treated as a single positional arg', () => {
+            const el = spyEl();
+            assignFrom(el, { '?.classList?.add =*': ['a', 'b', 'c'] }, { from: vm, withMethods: ['add'] });
+            expect(el.calls).toEqual([['add', 'a'], ['add', 'b'], ['add', 'c']]);
+        }));
+
+        tasks.push(test('single-element list is just one call', () => {
+            const el = spyEl();
+            assignFrom(el, { '?.classList?.toggle =*': [['solo', '!!?.isTrue']] }, { from: vm, withMethods: ['toggle'] });
+            expect(el.calls).toEqual([['toggle', 'solo', true]]);
+        }));
+
+        tasks.push(test('plain ?. path args resolve against from', () => {
+            const el = spyEl();
+            assignFrom(el, { '?.classList?.toggle =*': [['x', '?.isLoading']] }, { from: vm, withMethods: ['toggle'] });
+            expect(el.calls).toEqual([['toggle', 'x', false]]);
+        }));
+
+        tasks.push(test('empty list is a no-op', () => {
+            const el = spyEl();
+            assignFrom(el, { '?.classList?.toggle =*': [] }, { from: vm, withMethods: ['toggle'] });
+            expect(el.calls).toEqual([]);
+        }));
+
+        tasks.push(test('non-array RHS throws', () => {
+            let threw = false;
+            try {
+                assignFrom(spyEl(), { '?.classList?.toggle =*': 'nope' }, { from: vm, withMethods: ['toggle'] });
+            } catch (e) { threw = true; }
+            expect(threw).toBe(true);
+        }));
+
+        tasks.push(test('composes with a normal key in the same pattern', () => {
+            const el = spyEl();
+            assignFrom(el, {
+                '?.title': '?.isTrue',
+                '?.classList?.toggle =*': [['m', '!!?.hasError']],
+            }, { from: vm, withMethods: ['toggle'] });
+            expect(el.title).toBe(true);
+            expect(el.calls).toEqual([['toggle', 'm', true]]);
+        }));
+
+        tasks.push(test('expands with where_x_in substitution', () => {
+            const el = spyEl();
+            assignFrom(el, {
+                '?.classList?.toggle =*': [['${x}Cls', '!!?.${x}']]
+            }, { from: { foo: 1, bar: 0 }, withMethods: ['toggle'], where_x_in: ['foo', 'bar'] });
+            expect(el.calls).toEqual([['toggle', 'fooCls', true], ['toggle', 'barCls', false]]);
+        }));
+
+        tasks.push(test('assignFromAsync mirrors the sync behavior', async () => {
+            const el = spyEl();
+            await assignFromAsync(el, {
+                '?.classList?.toggle =*': [
+                    ['isTrueCls', '!!?.isTrue'],
+                    ['loadingCls', '!!?.isLoading'],
+                ]
+            }, { from: vm, withMethods: ['toggle'] });
+            expect(el.calls).toEqual([
+                ['toggle', 'isTrueCls', true],
+                ['toggle', 'loadingCls', false],
+            ]);
+        }));
+
+        Promise.all(tasks).then(() => {
+            const total = passed + failed;
+            const statusEl = document.getElementById('status');
+            const resultsEl = document.getElementById('results');
+            const completeEl = document.getElementById('test-complete');
+
+            statusEl.innerHTML = `<span class="${failed === 0 ? 'pass' : 'fail'}">${passed}/${total} tests passed</span>`;
+
+            results.forEach(result => {
+                const div = document.createElement('div');
+                div.className = `test-item ${result.status}`;
+                div.innerHTML = `<strong>${result.status === 'pass' ? '✓' : '✗'}</strong> ${result.name}${result.error ? `<div class="error">${result.error}</div>` : ''}`;
+                resultsEl.appendChild(div);
+            });
+
+            completeEl.setAttribute('data-passed', passed.toString());
+            completeEl.setAttribute('data-failed', failed.toString());
+            completeEl.setAttribute('data-total', total.toString());
+
+            console.log(`Tests complete: ${passed}/${total} passed`);
+        });
+    </script>
+</body>
+</html>

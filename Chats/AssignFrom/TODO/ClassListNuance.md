@@ -315,3 +315,204 @@ assignFrom(oElement, {
 ```
 
 If no such simplification jumps out, please proceed with `!!` + ditto notation and add your implementation notes below.
+
+---
+
+## Response to Bruce's Response III
+
+One does jump out, and it's *less* code than ditto — so I'm taking you up on "if something
+better comes along." Your `@doForEach` wrapper instinct is the right shape; it just doesn't
+need to be a wrapper object, and it doesn't need to touch `assignGingerly` at all.
+
+### The simplification: a dedicated LHS suffix operator
+
+Put the "invoke N times" intent on the **key**, in the same visual family as ` +=` ` Y=`
+` ?=` ` =>` ` =&` that your users already read:
+
+```JS
+assignFrom(oElement, {
+    '?.classList?.toggle =*': [
+        ['isTrueCls',  '!!?.isTrue'],
+        ['loadingCls', '!!?.isLoading'],
+        ['errorCls',   '!!?.hasError'],
+    ]
+}, { from: vm, withMethods: ['toggle'] });
+```
+
+RHS is a flat array; each element is one argument-list. `=*` reads as "assign, splat many."
+(Glyph is bikeshed-able — ` **`, ` =>>` also work. Pick your favorite; the mechanism doesn't
+care.)
+
+### Why this is easier to implement than ditto
+
+It rides the rail `?=` and `=&` already laid. In [assignFrom.ts](../../../assignFrom.ts):
+
+1. **`categorizeKeys`** — add `multiInvokeKeys` next to `ternaryKeys` / `syncOpKeys`, and one
+   `isMultiInvokeCommand(key)` = `key.endsWith(' =*')` (with a `parseMultiInvokeCommand` that
+   strips the 3-char suffix, exactly like `parseTernaryCommand`).
+2. **New handling block** (copy the shape of the `ternaryKeys` block at
+   [assignFrom.ts:503](../../../assignFrom.ts)):
+
+   ```ts
+   if (multiInvokeKeys.length > 0) {
+     for (const key of multiInvokeKeys) {
+       const basePath = parseMultiInvokeCommand(key);          // '?.classList?.toggle'
+       const callList = expandedPattern[key];
+       if (!Array.isArray(callList)) continue;
+       for (const rawArgs of callList) {
+         const argList = Array.isArray(rawArgs) ? rawArgs : [rawArgs];
+         const resolved = getValues({ x: argList }, options.from, resolveOptions).x;
+         assignGingerly(target, { [basePath]: resolved }, options, permissionProcessor);
+       }
+     }
+   }
+   ```
+
+That's the whole feature. Each iteration hands `assignGingerly` a **single** key with an
+array value — the existing `method.apply(target, [...value])` path at
+[assignGingerly.ts:701](../../../assignGingerly.ts) fires unchanged.
+
+- **No `mergeHandlerDuplicates` change** — the key `'?.classList?.toggle =*'` is unique;
+  there's no collision to preserve.
+- **No `assignGingerly` change** — no new "loop the outer array" branch, no all-arrays
+  heuristic, no sentinel. The loop lives in `assignFrom` and calls the *existing* single-call
+  path N times.
+- **Order preserved** (array order). One-element list is just one call — no special case.
+
+### vs. your `@doForEach` wrapper
+
+Functionally equivalent; the operator is just lighter. The wrapper needs `assignGingerly` (or
+an unwrap pass) to recognize `{ '@doForEach': [...] }` sitting where a normal RHS value goes,
+and the method-call site it must hook exists in ~4 places in `assignGingerly.ts` (lines ~532,
+660, 700, 785). The suffix operator keeps every new line in `assignFrom.ts` beside the
+operators it resembles, and reuses `assignGingerly` as a black box. If you prefer the
+`@doForEach` spelling for readability, it can still be sugar that `categorizeKeys` rewrites
+into the same internal loop — but I'd ship the operator.
+
+### On ditto
+
+Still worth doing — but decouple it from this. Its real payoff is the cases in
+[DittoNotation.md](../../../requirements/TODO/DittoNotation.md) (repeated ` =>` handlers,
+ordered plain-key ops, config-fragment composition), none of which the `=*` operator covers.
+`=*` is the narrow, cheap answer to *this* thread; ditto is a separate ergonomic bet.
+
+---
+
+## Implementation Notes
+
+### 1. `!!` / `!` coercion marker — [resolve/getValues.ts](../../../resolve/getValues.ts)
+
+**Semantics.** A value string with a leading run of `!` is a coercion marker **only when what
+remains (after stripping the `!`s) is itself a resolvable reference** — i.e. it starts with
+`?.`, starts with `$0`, or contains `://` and names a registered protocol. Otherwise the
+`!`-prefixed string is a plain literal (so a CSS-ish `'!important'` or any string that just
+happens to start with `!` is untouched).
+
+- `'!!?.x'`  → resolve `?.x`, return `Boolean(resolved)`
+- `'!?.x'`   → resolve `?.x`, return `!resolved`
+- `'!!!?.x'` → `!` applied 3× → same as `'!?.x'`
+
+Implementation: apply `!` `n` times where `n` = count of leading `!` (`for (let i=0;i<n;i++) v = !v;` — `!!x` naturally becomes `!(!x)` = `Boolean(x)`).
+
+**Touch points** — the same four branches that already special-case `?.` / `$0` / protocol:
+- `getValues` object-value loop ([getValues.ts:332](../../../resolve/getValues.ts))
+- `getArray` item loop ([getValues.ts:273](../../../resolve/getValues.ts)) — this is the one
+  `=*` and Form 1 actually use
+- `$0` handling inside both of the above
+- `getValue` single-path entry ([getValues.ts:375](../../../resolve/getValues.ts))
+
+Factor the "strip leading `!`s → detect marker → resolve remainder → re-apply `!`s" into one
+helper the four sites call, so behavior can't drift between them.
+
+**Details.**
+- Strip the `!`s *before* `applySubstitutions` / `applyAliases` / `parseCachedPath`; the path
+  cache keys on the bare path.
+- `aka` / `substitutions` / `withMethods` on the remainder all keep working (they run on the
+  stripped string).
+- Nullish resolves to `false` under `!!` (`Boolean(undefined) === false`) — which is exactly
+  the Form 1 fix: `['isTrueCls', '!!?.isTrue']` removes on missing instead of flipping.
+- Tests: `!!` truthy/falsy/nullish; `!` negation; `!!` in array position; `!!$0?.x`;
+  `'!literal'` stays literal; `!!` + `aka`.
+- README: add a row to the operator/marker docs and a line in the assignFrom resolution list.
+
+### 2. `=*` multi-invoke operator — [assignFrom.ts](../../../assignFrom.ts)
+
+- `isMultiInvokeCommand` / `parseMultiInvokeCommand` beside the ` ?=` / ` =&` helpers
+  ([assignFrom.ts:41-67](../../../assignFrom.ts)); suffix is `' =*'` (3 chars, leading space).
+- `categorizeKeys`: push to a new `multiInvokeKeys` array; thread it through the return object
+  and the destructure at [assignFrom.ts:498](../../../assignFrom.ts).
+- Handling block as sketched above — place it near the `ternaryKeys` block so it runs before
+  the normal-key pass (order among sibling operators isn't load-bearing here, but keep it
+  deterministic: `=*` after `?=`/`=&`, before normal).
+- Resolve each arg-list with `getValues` (so `!!` markers and `?.` paths inside resolve
+  against `from`), then delegate `assignGingerly(target, { [basePath]: resolvedArgs }, options, pp)`.
+- **Scope note:** arg-list elements support bare paths, `!!`/`!` markers, protocols, `$0`,
+  literals. They do **not** get `?=` comparison grammar (`['?.status','===','error']`) —
+  `getValues` doesn't evaluate comparisons. If that's wanted later, detect an array-valued
+  element and route it through `evaluateTernary`'s value resolver; out of scope for the first
+  cut. (This is why the example above uses `'!!?.hasError'`, not the `['?.status', …]` form.)
+- Mirror into `assignFromAsync` — same categorization, `await`-friendly delegation to
+  `assignGingerlyAsync` if that path exists; otherwise the sync delegation is fine since each
+  call is a plain method invoke.
+- Guard: non-array RHS → no-op (or throw, matching how `=&` throws on a bad config); a
+  non-array element inside the list → treat as a single positional arg (`[el]`).
+- Tests: N calls in order; one-element list; `!!` markers inside; interaction with
+  `withMethods` Set; `permissionProcessor` restricted-method still blocks each call;
+  `=*` alongside normal keys and `?=` in the same pattern.
+- README: operator table row (` =*` | Multi-invoke | call a `withMethods` method once per
+  argument-list | `` '?.classList?.toggle =*': [['a','!!?.x'],['b','!!?.y']] ``).
+
+  ## Bruce's Response IV
+
+Okay, let's proceed with  supporting !/!!/!!! etc and =*
+
+---
+
+## Status — Implemented
+
+Both features are in, `.ts` + `.js` mirrored, full Playwright suite green on
+chromium/firefox/webkit (111 passing, 29 of them new).
+
+### `!` / `!!` / `!!!` coercion-negation marker
+
+- [resolve/getValues.ts](../../../resolve/getValues.ts) / `.js`: the four string-resolution
+  sites (`getValues` object values, `getArray` items, both `$0` paths, `getValue`) now route
+  through one shared `resolveStringValue` helper. A leading run of `!` is stripped, the
+  remainder resolved, then `!` re-applied `count` times (`!!x` → `Boolean(x)`, `!x` → negate,
+  `!!!x` → negate…).
+- Honored **only** in front of a `?.` path, `$0` reference, or recognized protocol. A bare
+  literal such as `!important` or `!foo` passes through untouched. The `!`-check runs before
+  the protocol sniff so `!!globalThis://x` isn't misread as a broken protocol.
+- Nullish coerces to `false` — so `['isTrueCls', '!!?.isTrue']` (Form 1) now *removes* on a
+  missing source value instead of flipping. That closes the sharpest edge from the original
+  thread.
+- Also refactored away the triplicated `?.` / `$0` / protocol branch logic in `getValues` /
+  `getArray` — net **−13 lines** in the `.ts` despite the new feature.
+- Tests: [tests/negation-marker.html](../../../tests/negation-marker.html) (19 cases).
+
+### ` =*` multi-invoke operator
+
+- Helpers `isMultiInvokeCommand` / `parseMultiInvokeCommand` and a `multiInvokeKeys` bucket in
+  `categorizeKeys` ([assignFrom.ts](../../../assignFrom.ts) / `.js`), beside `?=` / `=&`.
+- Handling block: for each argument-list, `getValues`-resolve it against `from`, then
+  `assignGingerly(target, { [basePath]: resolved })` — reusing the existing "array value →
+  spread as method args" path. **No change to `assignGingerly`.**
+- `mergeHandlerDuplicates` widened: ` =*` keys whose values collide (which `where_x_in`
+  expansion produces) **concatenate** their argument-list arrays instead of last-wins — so
+  `'?.classList?.toggle =*': [['${x}Cls','!!?.${x}']]` with `where_x_in: ['foo','bar']` fires
+  two `toggle` calls. This was the one gap the earlier "Piece 3" discussion predicted; the fix
+  is 3 lines because ` =*` values are always arrays.
+- Mirrored into `assignFromAsync` ([assignFromAsync.ts](../../../assignFromAsync.ts) / `.js`),
+  resolving each argument-list with `resolveValues` (async protocols work inside).
+- Non-array element in the list → single positional arg (so `'?.classList?.add =*': ['a','b']`
+  is a valid "add each" shorthand). Non-array RHS throws, matching `=&`.
+- As noted in the plan, argument elements take bare paths / `!!` markers / protocols / `$0` /
+  literals but **not** the `?=` comparison grammar (`['?.status','===','error']`) — deferred.
+- Tests: [tests/multi-invoke.html](../../../tests/multi-invoke.html) (10 cases).
+
+### Docs
+
+- [docs/multi-invoke.md](../../../docs/multi-invoke.md) — full `=*` reference.
+- README: operator-table row for ` =*`, feature-list bullets for the `!!` marker and `=*`, and
+  a new "Example 5a" showing the conditional-class-list pattern end to end.
+

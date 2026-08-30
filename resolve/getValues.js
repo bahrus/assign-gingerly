@@ -189,6 +189,80 @@ function hasProtocol(value) {
     return value.includes('://');
 }
 /**
+ * Detect a leading run of `!` characters used as a boolean coercion / negation
+ * marker (`!` = negate, `!!` = coerce to boolean, `!!!` = negate, …). Returns the
+ * count and the remaining string, or null when the value does not start with `!`.
+ *
+ * The marker is only *honored* when the remainder is itself a resolvable
+ * reference (see `looksLikeReference`); otherwise the original string is a plain
+ * literal — e.g. a CSS `!important` passes through untouched.
+ */
+function parseNegationMarker(value) {
+    let count = 0;
+    while (count < value.length && value.charCodeAt(count) === 33 /* '!' */)
+        count++;
+    if (count === 0)
+        return null;
+    return { count, rest: value.slice(count) };
+}
+/**
+ * Whether a string should be resolved as a value reference rather than kept as a
+ * literal: a `?.` path, a `$0` root reference, or a recognized protocol.
+ */
+function looksLikeReference(value, protocols) {
+    return value.startsWith('?.')
+        || value.startsWith('$0')
+        || (!!protocols && hasProtocol(value));
+}
+/**
+ * Resolve a single reference string (`?.` path, `$0` root ref, or protocol) to
+ * its value. Callers must confirm `looksLikeReference(value)` first.
+ */
+function resolveReferenceString(value, source, aliasMap, withMethods, protocols, options, substitutionMap) {
+    const permissionProcessor = options?.permissionProcessor;
+    if (value.startsWith('?.')) {
+        const substituted = applySubstitutions(value, substitutionMap);
+        const aliased = applyAliases(substituted, aliasMap);
+        const parts = parseCachedPath(aliased);
+        return parts.length === 0 ? source : navigatePath(source, parts, withMethods, permissionProcessor);
+    }
+    if (value.startsWith('$0')) {
+        const rootRef = resolveRootReference(value, source, options?.root);
+        if (rootRef === null)
+            return source;
+        const substitutedPath = applySubstitutions(rootRef.path, substitutionMap);
+        const aliased = applyAliases(substitutedPath, aliasMap);
+        const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
+        const parts = parseCachedPath(normalizedPath);
+        return parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods, permissionProcessor);
+    }
+    // protocol — looksLikeReference already ensured protocols is defined
+    return getProtocolValue(value, protocols, options);
+}
+/**
+ * Resolve a string RHS value: a reference (`?.` / `$0` / protocol), a
+ * `!`-prefixed coercion/negation of a reference, or a plain literal.
+ */
+function resolveStringValue(value, source, aliasMap, withMethods, protocols, options, substitutionMap) {
+    // A leading `!` run can only be a coercion/negation marker or a literal —
+    // no `?.` path, `$0` ref, or protocol name starts with `!`. Check it first so
+    // `hasProtocol` inside `looksLikeReference` can't misread `!!proto://x`.
+    if (value.charCodeAt(0) === 33 /* '!' */) {
+        const neg = parseNegationMarker(value);
+        if (neg !== null && looksLikeReference(neg.rest, protocols)) {
+            let resolved = resolveReferenceString(neg.rest, source, aliasMap, withMethods, protocols, options, substitutionMap);
+            for (let i = 0; i < neg.count; i++)
+                resolved = !resolved;
+            return resolved;
+        }
+        return value;
+    }
+    if (looksLikeReference(value, protocols)) {
+        return resolveReferenceString(value, source, aliasMap, withMethods, protocols, options, substitutionMap);
+    }
+    return value;
+}
+/**
  * Resolve a protocol-prefixed value synchronously.
  */
 function getProtocolValue(value, protocols, options) {
@@ -212,30 +286,10 @@ function getProtocolValue(value, protocols, options) {
  * Recurses into nested arrays and plain objects.
  */
 function getArray(arr, source, aliasMap, withMethods, protocols, options, substitutionMap) {
-    const permissionProcessor = options?.permissionProcessor;
     const result = [];
     for (const item of arr) {
-        if (typeof item === 'string' && item.startsWith('?.')) {
-            const substituted = applySubstitutions(item, substitutionMap);
-            const aliased = applyAliases(substituted, aliasMap);
-            const parts = parseCachedPath(aliased);
-            result.push(parts.length === 0 ? source : navigatePath(source, parts, withMethods, permissionProcessor));
-        }
-        else if (typeof item === 'string' && item.startsWith('$0')) {
-            const rootRef = resolveRootReference(item, source, options?.root);
-            if (rootRef === null) {
-                result.push(source);
-            }
-            else {
-                const substitutedPath = applySubstitutions(rootRef.path, substitutionMap);
-                const aliased = applyAliases(substitutedPath, aliasMap);
-                const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
-                const parts = parseCachedPath(normalizedPath);
-                result.push(parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods, permissionProcessor));
-            }
-        }
-        else if (typeof item === 'string' && protocols && hasProtocol(item)) {
-            result.push(getProtocolValue(item, protocols, options));
+        if (typeof item === 'string') {
+            result.push(resolveStringValue(item, source, aliasMap, withMethods, protocols, options, substitutionMap));
         }
         else if (Array.isArray(item)) {
             result.push(getArray(item, source, aliasMap, withMethods, protocols, options, substitutionMap));
@@ -271,30 +325,10 @@ export function getValues(pattern, source, options) {
     const { aliasMap, withMethods } = normalizeAliasOptions(options);
     const substitutionMap = resolveSubstitutions(options?.substitutions, source, options);
     const protocols = options?.protocols;
-    const permissionProcessor = options?.permissionProcessor;
     const result = {};
     for (const [key, value] of Object.entries(pattern)) {
-        if (typeof value === 'string' && value.startsWith('?.')) {
-            const substituted = applySubstitutions(value, substitutionMap);
-            const aliased = applyAliases(substituted, aliasMap);
-            const parts = parseCachedPath(aliased);
-            result[key] = parts.length === 0 ? source : navigatePath(source, parts, withMethods, permissionProcessor);
-        }
-        else if (typeof value === 'string' && value.startsWith('$0')) {
-            const rootRef = resolveRootReference(value, source, options?.root);
-            if (rootRef === null) {
-                result[key] = source;
-            }
-            else {
-                const substitutedPath = applySubstitutions(rootRef.path, substitutionMap);
-                const aliased = applyAliases(substitutedPath, aliasMap);
-                const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
-                const parts = parseCachedPath(normalizedPath);
-                result[key] = parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods, permissionProcessor);
-            }
-        }
-        else if (typeof value === 'string' && protocols && hasProtocol(value)) {
-            result[key] = getProtocolValue(value, protocols, options);
+        if (typeof value === 'string') {
+            result[key] = resolveStringValue(value, source, aliasMap, withMethods, protocols, options, substitutionMap);
         }
         else if (Array.isArray(value)) {
             result[key] = getArray(value, source, aliasMap, withMethods, protocols, options, substitutionMap);
@@ -323,6 +357,15 @@ export function getValues(pattern, source, options) {
  * @returns The resolved value, or undefined if any segment is nullish
  */
 export function getValue(path, source, options) {
+    // Leading `!` run: coerce/negate the resolved reference (`!` negate, `!!` boolean, …).
+    // Only honored in front of a `?.` path or `$0` root reference — otherwise literal.
+    const neg = parseNegationMarker(path);
+    if (neg !== null && (neg.rest.startsWith('?.') || neg.rest.startsWith('$0'))) {
+        let resolved = getValue(neg.rest, source, options);
+        for (let i = 0; i < neg.count; i++)
+            resolved = !resolved;
+        return resolved;
+    }
     const rootRef = resolveRootReference(path, source, options?.root);
     if (rootRef) {
         path = rootRef.path;
