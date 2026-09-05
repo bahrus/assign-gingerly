@@ -200,6 +200,10 @@
       "default": "./DX/emojis.js",
       "types": "./DX/emojis.ts"
     },
+    "./DX/strictDefaultPermissions.js": {
+      "default": "./DX/strictDefaultPermissions.js",
+      "types": "./DX/strictDefaultPermissions.ts"
+    },
     "./assignFeatures.js": {
       "default": "./assignFeatures.js",
       "types": "./assignFeatures.ts"

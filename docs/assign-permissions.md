@@ -61,12 +61,12 @@ interface AssignPermissions {
   /** Sanitizer options (Phase III+, reserved for future use) */
   sanitizerOptions?: Record<string, any>;
 
-  /** Restricted method policies (Phase IV+, not yet implemented) */
+  /** Restricted method policies — blocks or augments withMethods/akaMethods calls */
   restrictedMethodSettings?: Array<string | RestrictedMethodConfig>;
 }
 ```
 
-Only `restrictedPropSettings` is implemented today. The other fields are reserved for future phases.
+`sanitizerOptions` is reserved for future use and has no runtime effect on its own today, but its value is resolvable from `restrictedMethodSettings` via the `?.sanitizerOptions` appendArgs path (see below). Everything else is implemented.
 
 ---
 
@@ -172,9 +172,37 @@ const permissionProcessor = new PermissionProcessor({
 
 With `attr: true`, `setAttribute('src', ...)` and direct `src` assignments are checked with the same origin rules.
 
-### Phase IV — restricted method settings
+### Method settings — blocking or augmenting `withMethods`/`akaMethods` calls
 
-The `restrictedMethodSettings` field is defined in the type declaration but is **not yet implemented** in the current `PermissionProcessor`. It is reserved for future work that will allow blocking or wrapping dangerous method calls such as `setHTMLUnsafe` and `replaceWithHTML`.
+`restrictedMethodSettings` governs method calls reached through `withMethods`, `akaMethods`, and the `|` zero-arg marker — the surface that libraries such as [do-assign](https://github.com/bahrus/do-assign) expose to declarative attributes. It is matched **by method name**, independent of which object the method lives on.
+
+```JavaScript
+const permissionProcessor = new PermissionProcessor({
+  restrictedMethodSettings: ['setHTMLUnsafe']
+});
+
+const target = { value: 'safe', setHTMLUnsafe(v) { this.value = v; } };
+
+assignGingerly(target, { '?.setHTMLUnsafe': 'blocked' }, { withMethods: ['setHTMLUnsafe'] }, permissionProcessor);
+
+console.log(target.value); // 'safe' — the call never happened
+```
+
+A string entry blocks the named method outright: `isAllowedMethod` (used by every `withMethods`/`akaMethods` code path, sync and async) treats it as if it were never listed in `withMethods`, so the assignment falls back to ordinary property access instead of invoking the method. This applies equally to `akaMethods` aliases and to methods encountered in the middle of a chained path.
+
+An object entry (`{ method, appendArgs }`) does **not** block the call — it appends extra arguments to every invocation of that method. String entries in `appendArgs` starting with `?.` are resolved against the permissions object itself (for example `?.sanitizerOptions` or `?.customSettings`), which is how a sanitizer's options can be threaded through to a `useMethod`-style call without hardcoding them at each call site:
+
+```JavaScript
+const permissionProcessor = new PermissionProcessor({
+  sanitizerOptions: { allowElements: ['div'] },
+  restrictedMethodSettings: [
+    { method: 'setHTMLUnsafe', appendArgs: ['?.sanitizerOptions'] }
+  ]
+});
+// target.setHTMLUnsafe(value) is called as target.setHTMLUnsafe(value, { allowElements: ['div'] })
+```
+
+Because matching is by name only, pick method names carefully: a name blocked here is blocked for every target, not just DOM elements. `addArgs` is accepted as a deprecated alias for `appendArgs`. A method may not appear more than once across `restrictedMethodSettings` entries — duplicates throw at construction time, the same as `restrictedPropSettings`.
 
 ---
 
@@ -194,6 +222,70 @@ This flag is independent of `allowCrossDomain` on a per-property basis. It gover
 
 ---
 
+## Strict default profile: `strictDefaultPermissions`
+
+Libraries built on top of `assign-gingerly` that expose `withMethods`/`akaMethods`
+power to declarative sources — most notably HTML attributes, as
+[do-assign](https://github.com/bahrus/do-assign) does — hand a lot of leverage to
+whatever produced that markup. Unfettered, that's an XSS risk: attacker-controlled
+attributes could drive `innerHTML` assignment, cross-origin navigation, or calls to
+`insertAdjacentHTML`.
+
+`DX/strictDefaultPermissions.ts` exports a ready-made, restrictive `AssignPermissions`
+object for exactly this situation — a shareable default so each consumer doesn't have
+to design its own policy from scratch.
+
+```JavaScript
+import { strictDefaultPermissions } from 'assign-gingerly/DX/strictDefaultPermissions.js';
+import { PermissionProcessor } from 'assign-gingerly/assignPermissions/PermissionProcessor.js';
+import assignGingerly from 'assign-gingerly/assignGingerly.js';
+
+const permissionProcessor = new PermissionProcessor(strictDefaultPermissions);
+assignGingerly(target, untrustedSource, options, permissionProcessor);
+```
+
+It blocks, by default:
+
+| Category | Names | Behavior |
+|----------|-------|----------|
+| Markup/CSS injection | `innerHTML`, `outerHTML`, `srcdoc`, `cssText` | Blocked outright (Phase I) — no generic safe redirect exists. |
+| URL-bearing props/attrs | `src`, `href`, `action`, `formAction` | Same-origin values allowed (Phase III `allowFromSameDomain`); cross-origin, `javascript:`, and malformed URLs blocked. Applies to both the property and the matching attribute. |
+| Inline event-handler attributes | `onclick`, `onerror`, `onload`, and ~50 more (see `xssSensitiveAttrs`) | Blocked outright for both the property and `setAttribute`, since the browser compiles the attribute form into a live handler. |
+| HTML/rich-text injection methods | `insertAdjacentHTML`, `setHTMLUnsafe`, `execCommand` | Blocked outright via `restrictedMethodSettings` (method-name based — see caveat below). |
+
+Each category is also exported individually (`xssSensitiveMarkupProps`,
+`xssSensitiveUrlProps`, `xssSensitiveAttrs`, `xssSensitiveMethods`) so you can spread
+them into your own config instead of taking the whole default:
+
+```JavaScript
+import { xssSensitiveMarkupProps, xssSensitiveAttrs } from 'assign-gingerly/DX/strictDefaultPermissions.js';
+
+const permissionProcessor = new PermissionProcessor({
+  restrictedPropSettings: [
+    ...xssSensitiveMarkupProps,
+    { props: xssSensitiveAttrs, attr: true },
+    'value', // add your own app-specific restriction
+  ],
+});
+```
+
+**Caveats specific to this default:**
+
+- `restrictedMethodSettings` blocks a method **by name**, not by target type (see
+  "Method settings" above), so the method list is deliberately narrow — limited to
+  names unlikely to collide with an unrelated method on a plain (non-DOM) object.
+- The event-handler attribute list is not exhaustive; there's no wildcard/regex
+  support in `restrictedPropSettings` today. Spread `xssSensitiveAttrs` and add
+  names for handlers not already listed.
+- Blocking the `on*` **properties** (not just the attributes) means this profile is
+  too strict for trusted script that intentionally assigns handler functions via
+  `assignGingerly(el, { onclick: fn })`. Use it for the untrusted-input pipeline
+  specifically, not for every call site in an app.
+- Like the rest of the permission layer, this is not a sandbox — it only governs
+  assignments and method calls made through `assignGingerly`/`assignFrom`/etc.
+
+---
+
 ## Validation rules
 
 - A property cannot appear twice in `restrictedPropSettings`. Duplicate entries throw at construction time.
@@ -205,7 +297,7 @@ This flag is independent of `allowCrossDomain` on a per-property basis. It gover
 ## Caveats and security notes
 
 - The permission layer is **not a sandbox**. It only blocks or redirects property assignments and `setAttribute` calls that the package itself performs. Direct JavaScript code, event handlers written in script, or other libraries can still mutate the target.
-- `restrictedPropSettings` governs **properties**, not arbitrary method calls. Dangerous methods like `setHTMLUnsafe` are not blocked by Phase I–III. Use the type-level `restrictedMethodSettings` field as a placeholder for the future Phase IV implementation.
+- `restrictedPropSettings` governs **properties** reached through ordinary assignment and `setAttribute`. Method calls reached through `withMethods`/`akaMethods` (e.g. `setHTMLUnsafe`) are governed separately by `restrictedMethodSettings`, matched by method name across all targets — see above.
 - Permissions are **not inherited** by default. You must pass the same `PermissionProcessor` instance to every `assign*` call, handler, and nested operation.
 - Never construct `AssignPermissions` from an HTML attribute, URL parameter, or untrusted JSON. The permissions object itself is a trusted-script configuration.
 
@@ -274,4 +366,5 @@ assignGingerly(img, { src: 'https://evil.example.com/x.png' }, undefined, proces
 - Type definitions: `types/assign-gingerly/types.d.ts` (`AssignPermissions`, `RestrictedPropSetting`, `RestrictedMethodConfig`, `PermissionProcessor`)
 - Implementation: `assignPermissions/PermissionProcessor.ts`
 - Origin checks: `assignPermissions/isAllowedUrl.ts`, `assignPermissions/isAllowedImportPath.ts`
+- Strict default profile: `DX/strictDefaultPermissions.ts`
 - Test page: `tests/restricted-prop-settings.html`
