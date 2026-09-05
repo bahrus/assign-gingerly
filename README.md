@@ -82,7 +82,7 @@ The third fundamental utility function is:
 **`assignFrom` is synchronous** — it resolves paths, expands substitutions, handles spreads, processes `#[x]` refs, and runs inferred assignments all without yielding to the event loop. Handler commands (` =>`), `beVigilant`, and `enhance` are fire-and-forget (kicked off asynchronously in the background).
 
 **`assignFromAsync`** is the awaitable variant for when you need to:
-- Use async protocol handlers (e.g., `fetch`-based resolution)
+- Use async protocol handlers (e.g., `fetch`-based resolution — protocols are introduced just below, and covered in full in [Protocol Resolution](#protocol-resolution-in-getvalues-and-assignfrom) later in this doc)
 - `await` handler completion before proceeding
 - Wait for `enhance` (EMC JSON imports) to finish
 
@@ -97,7 +97,7 @@ assignFrom adds support for:
 
 1.  Resolving RHS path strings against a source object (`from`).
 2.  Target-relative root references via `$0` so paths can resolve from the first argument passed to `assignFrom`/`assignFromAsync` (the target object) instead of the `from` object.
-3.  Protocol resolution (`globalThis://`, `localStorage://`, custom sync protocols).
+3.  Protocol resolution (`globalThis://`, `localStorage://`, custom sync protocols) — don't worry if this is unfamiliar yet, it's explained in full in [Protocol Resolution in `getValues` and `assignFrom`](#protocol-resolution-in-getvalues-and-assignfrom) later in this doc.
 4.  Handler plugins via the ` =>` operator for custom logic (fire-and-forget in sync mode, awaitable in async mode).
 5.  Looped substitution with `where_x_in` / `where_y_in` / `where_z_in` for expanding template patterns into multiple concrete assignments.
 6.  Dynamic substitutions via the `substitutions` option for injecting runtime string values into path segments. See [docs/substitutions.md](docs/substitutions.md).
