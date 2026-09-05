@@ -8,6 +8,7 @@ export {buildCSSQuery} from './buildCSSQuery.js';
 export {resolveTemplate} from './resolve/resolveTemplate.js';
 export {getHost} from './getHost.js';
 export {resolveValues, resolveValue} from './resolve/resolveValues.js';
+export {getValues, getValue, hasProtocol, parseProtocolRef, isPlainObject} from './resolve/getValues.js';
 export {assignFromAsync} from './assignFromAsync.js';
 export {assignFrom} from './assignFrom.js';
 export {assignFeatures, FeaturesRegistry, captureFeatureInitVals, PropertyBag, suggestFeatureInfo, getFeatureInfoSuggestions} from './assignFeatures.js';

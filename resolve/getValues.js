@@ -183,10 +183,46 @@ function navigatePath(source, parts, withMethods, permissionProcessor) {
     return current;
 }
 /**
- * Checks if a string value looks like a protocol reference.
+ * Whether a string carries a protocol prefix (contains `://`).
+ *
+ * Exported as the single source of truth for the outer USL grammar, so
+ * downstream packages (and resolveValues) don't re-implement the check.
  */
-function hasProtocol(value) {
+export function hasProtocol(value) {
     return value.includes('://');
+}
+/**
+ * Split a protocol-prefixed value string into its outer-grammar parts:
+ * `‹protocol›://‹key›?.‹path›`.
+ *
+ * - `protocol` is the text before `://` (`''` when there is no `://`).
+ * - `key` is the text between `://` and the first `?.` (or end of string).
+ * - `path` is the `?.`-onward remainder (starting with `?.`), or `null`.
+ *
+ * Pure string parsing — no handler lookup, no resolution. Shared by the sync
+ * (`getProtocolValue`) and async (`resolveProtocolValue`) resolvers.
+ */
+export function parseProtocolRef(value) {
+    const protoEnd = value.indexOf('://');
+    if (protoEnd === -1)
+        return { protocol: '', key: value, path: null };
+    const protocol = value.substring(0, protoEnd);
+    const rest = value.substring(protoEnd + 3);
+    const pathStart = rest.indexOf('?.');
+    const key = pathStart === -1 ? rest : rest.substring(0, pathStart);
+    const path = pathStart === -1 ? null : rest.substring(pathStart);
+    return { protocol, key, path };
+}
+/**
+ * Whether a value is a plain object (prototype is `Object.prototype` or `null`),
+ * as opposed to an array, a class instance, or a primitive. Used to decide
+ * whether a nested value should be recursed into as a pattern.
+ */
+export function isPlainObject(value) {
+    if (!value || typeof value !== 'object')
+        return false;
+    const proto = Object.getPrototypeOf(value);
+    return proto === Object.prototype || proto === null;
 }
 /**
  * Detect a leading run of `!` characters used as a boolean coercion / negation
@@ -266,15 +302,10 @@ function resolveStringValue(value, source, aliasMap, withMethods, protocols, opt
  * Resolve a protocol-prefixed value synchronously.
  */
 function getProtocolValue(value, protocols, options) {
-    const protoEnd = value.indexOf('://');
-    const protocol = value.substring(0, protoEnd);
+    const { protocol, key, path } = parseProtocolRef(value);
     const handler = protocols[protocol];
     if (!handler)
         return value; // not a recognized protocol
-    const rest = value.substring(protoEnd + 3);
-    const pathStart = rest.indexOf('?.');
-    const key = pathStart === -1 ? rest : rest.substring(0, pathStart);
-    const path = pathStart === -1 ? null : rest.substring(pathStart);
     const resolved = handler(key);
     if (path) {
         return getValue(path, resolved, options);
@@ -295,13 +326,7 @@ function getArray(arr, source, aliasMap, withMethods, protocols, options, substi
             result.push(getArray(item, source, aliasMap, withMethods, protocols, options, substitutionMap));
         }
         else if (item && typeof item === 'object') {
-            const proto = Object.getPrototypeOf(item);
-            if (proto === Object.prototype || proto === null) {
-                result.push(getValues(item, source, options));
-            }
-            else {
-                result.push(item);
-            }
+            result.push(isPlainObject(item) ? getValues(item, source, options) : item);
         }
         else {
             result.push(item);
@@ -334,13 +359,7 @@ export function getValues(pattern, source, options) {
             result[key] = getArray(value, source, aliasMap, withMethods, protocols, options, substitutionMap);
         }
         else if (typeof value === 'object' && value !== null) {
-            const proto = Object.getPrototypeOf(value);
-            if (proto === Object.prototype || proto === null) {
-                result[key] = getValues(value, source, options);
-            }
-            else {
-                result[key] = value;
-            }
+            result[key] = isPlainObject(value) ? getValues(value, source, options) : value;
         }
         else {
             result[key] = value;

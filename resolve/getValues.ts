@@ -17,7 +17,7 @@
  * }, source, { withMethods: ['querySelector'], aka: { q: 'querySelector' } });
  */
 
-import type { GetValuesOptions, PermissionProcessor } from '../types/assign-gingerly/types.js';
+import type { GetValuesOptions, ParsedProtocolRef, PermissionProcessor, SyncProtocolHandlers } from '../types/assign-gingerly/types.js';
 
 export function normalizeAliasOptions(options?: {
     aka?: Record<string, string>;
@@ -221,10 +221,46 @@ function navigatePath(
 }
 
 /**
- * Checks if a string value looks like a protocol reference.
+ * Whether a string carries a protocol prefix (contains `://`).
+ *
+ * Exported as the single source of truth for the outer USL grammar, so
+ * downstream packages (and resolveValues) don't re-implement the check.
  */
-function hasProtocol(value: string): boolean {
+export function hasProtocol(value: string): boolean {
     return value.includes('://');
+}
+
+/**
+ * Split a protocol-prefixed value string into its outer-grammar parts:
+ * `‹protocol›://‹key›?.‹path›`.
+ *
+ * - `protocol` is the text before `://` (`''` when there is no `://`).
+ * - `key` is the text between `://` and the first `?.` (or end of string).
+ * - `path` is the `?.`-onward remainder (starting with `?.`), or `null`.
+ *
+ * Pure string parsing — no handler lookup, no resolution. Shared by the sync
+ * (`getProtocolValue`) and async (`resolveProtocolValue`) resolvers.
+ */
+export function parseProtocolRef(value: string): ParsedProtocolRef {
+    const protoEnd = value.indexOf('://');
+    if (protoEnd === -1) return { protocol: '', key: value, path: null };
+    const protocol = value.substring(0, protoEnd);
+    const rest = value.substring(protoEnd + 3);
+    const pathStart = rest.indexOf('?.');
+    const key = pathStart === -1 ? rest : rest.substring(0, pathStart);
+    const path = pathStart === -1 ? null : rest.substring(pathStart);
+    return { protocol, key, path };
+}
+
+/**
+ * Whether a value is a plain object (prototype is `Object.prototype` or `null`),
+ * as opposed to an array, a class instance, or a primitive. Used to decide
+ * whether a nested value should be recursed into as a pattern.
+ */
+export function isPlainObject(value: any): boolean {
+    if (!value || typeof value !== 'object') return false;
+    const proto = Object.getPrototypeOf(value);
+    return proto === Object.prototype || proto === null;
 }
 
 /**
@@ -249,7 +285,7 @@ function parseNegationMarker(value: string): { count: number; rest: string } | n
  */
 function looksLikeReference(
     value: string,
-    protocols: Record<string, (key: string) => any> | undefined
+    protocols: SyncProtocolHandlers | undefined
 ): boolean {
     return value.startsWith('?.')
         || value.startsWith('$0')
@@ -265,7 +301,7 @@ function resolveReferenceString(
     source: any,
     aliasMap: Map<string, string>,
     withMethods: Set<string> | undefined,
-    protocols: Record<string, (key: string) => any> | undefined,
+    protocols: SyncProtocolHandlers | undefined,
     options: GetValuesOptions | undefined,
     substitutionMap: Map<string, string> | undefined
 ): any {
@@ -298,7 +334,7 @@ function resolveStringValue(
     source: any,
     aliasMap: Map<string, string>,
     withMethods: Set<string> | undefined,
-    protocols: Record<string, (key: string) => any> | undefined,
+    protocols: SyncProtocolHandlers | undefined,
     options: GetValuesOptions | undefined,
     substitutionMap: Map<string, string> | undefined
 ): any {
@@ -325,20 +361,13 @@ function resolveStringValue(
  */
 function getProtocolValue(
     value: string,
-    protocols: Record<string, (key: string) => any>,
+    protocols: SyncProtocolHandlers,
     options?: GetValuesOptions
 ): any {
-    const protoEnd = value.indexOf('://');
-    const protocol = value.substring(0, protoEnd);
+    const { protocol, key, path } = parseProtocolRef(value);
 
     const handler = protocols[protocol];
     if (!handler) return value; // not a recognized protocol
-
-    const rest = value.substring(protoEnd + 3);
-
-    const pathStart = rest.indexOf('?.');
-    const key = pathStart === -1 ? rest : rest.substring(0, pathStart);
-    const path = pathStart === -1 ? null : rest.substring(pathStart);
 
     const resolved = handler(key);
 
@@ -357,7 +386,7 @@ function getArray(
     source: any,
     aliasMap: Map<string, string>,
     withMethods: Set<string> | undefined,
-    protocols: Record<string, (key: string) => any> | undefined,
+    protocols: SyncProtocolHandlers | undefined,
     options?: GetValuesOptions,
     substitutionMap?: Map<string, string>
 ): any[] {
@@ -368,12 +397,7 @@ function getArray(
         } else if (Array.isArray(item)) {
             result.push(getArray(item, source, aliasMap, withMethods, protocols, options, substitutionMap));
         } else if (item && typeof item === 'object') {
-            const proto = Object.getPrototypeOf(item);
-            if (proto === Object.prototype || proto === null) {
-                result.push(getValues(item, source, options));
-            } else {
-                result.push(item);
-            }
+            result.push(isPlainObject(item) ? getValues(item, source, options) : item);
         } else {
             result.push(item);
         }
@@ -410,12 +434,7 @@ export function getValues(
         } else if (Array.isArray(value)) {
             result[key] = getArray(value, source, aliasMap, withMethods, protocols, options, substitutionMap);
         } else if (typeof value === 'object' && value !== null) {
-            const proto = Object.getPrototypeOf(value);
-            if (proto === Object.prototype || proto === null) {
-                result[key] = getValues(value, source, options);
-            } else {
-                result[key] = value;
-            }
+            result[key] = isPlainObject(value) ? getValues(value, source, options) : value;
         } else {
             result[key] = value;
         }

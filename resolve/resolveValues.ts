@@ -1,46 +1,38 @@
 /**
  * resolveValues.ts — Async value resolution for path strings.
- * 
+ *
  * Thin async wrapper around getValues that adds support for async protocol handlers.
  * For synchronous-only use cases, import getValues/getValue directly for better performance.
- * 
+ *
+ * The outer-grammar primitives (`hasProtocol`, `parseProtocolRef`, `isPlainObject`)
+ * live in getValues.js and are re-exported here for convenience.
+ *
  * Re-exports ResolveValuesOptions for backward compatibility.
  */
 
-import { getValue, getValues } from './getValues.js';
-import type { ResolveValuesOptions } from '../types/assign-gingerly/types.js';
+import { getValue, getValues, hasProtocol, isPlainObject, parseProtocolRef } from './getValues.js';
+import type { ProtocolHandlers, ResolveValuesOptions } from '../types/assign-gingerly/types.js';
 
 export type { ResolveValuesOptions };
 
 // Re-export getValue as resolveValue for backward compatibility
 export { getValue as resolveValue };
 
-/**
- * Checks if a string value looks like a protocol reference.
- */
-function hasProtocol(value: string): boolean {
-    return value.includes('://');
-}
-
+// Re-export the shared outer-grammar primitives (defined in getValues.js)
+export { hasProtocol, parseProtocolRef, isPlainObject };
 
 /**
  * Resolves a protocol-prefixed value asynchronously.
  */
 async function resolveProtocolValue(
     value: string,
-    protocols: Record<string, (key: string) => any | Promise<any>>,
+    protocols: ProtocolHandlers,
     options?: ResolveValuesOptions
 ): Promise<any> {
-    const protoEnd = value.indexOf('://');
-    const protocol = value.substring(0, protoEnd);
+    const { protocol, key, path } = parseProtocolRef(value);
 
     const handler = protocols[protocol];
     if (!handler) return value;
-
-    const rest = value.substring(protoEnd + 3);
-    const pathStart = rest.indexOf('?.');
-    const key = pathStart === -1 ? rest : rest.substring(0, pathStart);
-    const path = pathStart === -1 ? null : rest.substring(pathStart);
 
     const resolved = await handler(key);
 
@@ -56,7 +48,7 @@ async function resolveProtocolValue(
 async function resolveArray(
     arr: any[],
     source: any,
-    protocols: Record<string, (key: string) => any | Promise<any>> | undefined,
+    protocols: ProtocolHandlers | undefined,
     options?: ResolveValuesOptions
 ): Promise<any[]> {
     const result: any[] = [];
@@ -70,8 +62,7 @@ async function resolveArray(
         } else if (Array.isArray(item)) {
             result.push(await resolveArray(item, source, protocols, options));
         } else if (item && typeof item === 'object') {
-            const proto = Object.getPrototypeOf(item);
-            if (proto === Object.prototype || proto === null) {
+            if (isPlainObject(item)) {
                 result.push(options?.protocols ? await resolveValues(item, source, options) : getValues(item, source, options));
             } else {
                 result.push(item);
@@ -85,10 +76,10 @@ async function resolveArray(
 
 /**
  * Async resolve RHS path strings in a pattern object against a source object.
- * 
+ *
  * Supports async protocol handlers (e.g., fetch, IndexedDB).
  * For synchronous-only patterns, use `getValues` from 'assign-gingerly/getValues.js' instead.
- * 
+ *
  * @param pattern - Object whose RHS values may contain `?.` path strings
  * @param source - Object to resolve paths against
  * @param options - Optional withMethods, aka, and protocol handlers
@@ -112,8 +103,7 @@ export async function resolveValues(
         } else if (Array.isArray(value)) {
             result[key] = await resolveArray(value, source, protocols, options);
         } else if (typeof value === 'object' && value !== null) {
-            const proto = Object.getPrototypeOf(value);
-            if (proto === Object.prototype || proto === null) {
+            if (isPlainObject(value)) {
                 result[key] = options?.protocols ? await resolveValues(value, source, options) : getValues(value, source, options);
             } else {
                 result[key] = value;
