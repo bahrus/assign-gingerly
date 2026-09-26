@@ -1594,7 +1594,83 @@ When you access `element.enh.set.enhKey.property`, the proxy:
    - If a non-matching object already exists at `element.enh[enhKey]`, it's passed as `initVals`
    - Stores the spawned instance at `element.enh[enhKey]`
 3. **Reuses existing instances**: If the enhancement already exists and is the correct type, it reuses it
-4. **Falls back to plain objects**: If no registry item is found, creates a plain object at `element.enh[enhKey]`
+4. **Falls back to plain objects, and waits for registration**: If no registry item is found yet, creates a plain object at `element.enh[enhKey]` and calls `registry.whenDefined(enhKey)` to spawn the real instance automatically once the registry item eventually arrives — see [Setting Properties Before the Registry Item Exists](#setting-properties-before-the-registry-item-exists) below
+
+</details>
+
+### Setting Properties Before the Registry Item Exists
+
+Code doesn't always run in the order you'd like — a module might set
+properties on an enhancement before whatever registers that enhancement's
+config has had a chance to run. `enh.set` handles this automatically, the
+same way `element.enh.set.enhKey.property = value` does when the registry
+item is already there:
+
+```TypeScript
+import 'assign-gingerly/object-extension.js';
+
+const myElement = document.createElement('div');
+
+// Nothing has called `registry.push(...)` for 'myEnh' yet.
+myElement.enh.set.myEnh.myProp = 'hello';        // plain placeholder, collected as pending initVals
+myElement.enh.myEnh.anotherProp = 'world';        // direct property access works too, same placeholder
+
+console.log(myElement.enh.myEnh instanceof MyEnhancement); // false -- still a plain object
+
+// ...later, whenever the registry item shows up...
+const registry = myElement.customElementRegistry.enhancementRegistry;
+registry.push({ spawn: MyEnhancement, enhKey: 'myEnh' });
+
+// The spawn happens automatically once `whenDefined` resolves -- no need to
+// touch `myElement.enh.myEnh` again yourself.
+await registry.whenDefined('myEnh');
+console.log(myElement.enh.myEnh instanceof MyEnhancement); // true
+console.log(myElement.enh.myEnh.myProp);                   // 'hello' -- both properties
+console.log(myElement.enh.myEnh.anotherProp);               // 'world' -- survived as initVals
+```
+
+<details>
+<summary>How it works</summary>
+
+1. The first `enh.set.enhKey.property = value` assignment for an
+   unregistered `enhKey` creates a plain object at `element.enh[enhKey]` (as
+   always) and, in addition, calls
+   `registry.whenDefined(enhKey).then(() => element.enh.get(enhKey))`.
+2. Because that call only happens inside the `if (self[prop] === undefined)`
+   branch, it fires exactly once per element/`enhKey` pair — further property
+   assignments before registration just add to the same placeholder object,
+   they don't queue additional spawn attempts.
+3. `registry.whenDefined(enhKey)` resolves once a matching `enhKey` is
+   `push`ed into the registry (see below).
+4. Once it resolves, `enh.get(enhKey)` runs — the same method used everywhere
+   else in this library. It finds the plain placeholder already sitting at
+   `element.enh[enhKey]`, treats it as `initVals` (this is the same
+   "non-matching object passed as `initVals`" behavior described in step 2 of
+   [How It Works](#basic-usage) above — nothing new here), constructs the real
+   instance, and overwrites the placeholder with it.
+
+**`EnhancementRegistry.whenDefined(enhKey)`** — mirrors
+[`customElements.whenDefined(name)`](https://developer.mozilla.org/en-US/docs/Web/API/CustomElementRegistry/whenDefined):
+
+- If `enhKey` is already registered, resolves once any of its pending
+  [Custom Element Features](#custom-element-features) setup has settled (see
+  `features` on `EnhancementConfig`).
+- If `enhKey` isn't registered yet, first waits for a future `registry.push(...)`
+  call whose config (a single item, or an array) includes a matching `enhKey`,
+  then does the same features-setup wait.
+- **If `enhKey` is never registered, this promise never resolves** — same
+  tradeoff `customElements.whenDefined` makes. Don't `await` it unconditionally
+  in code paths where registration isn't guaranteed to eventually happen.
+
+**Limitations while waiting:**
+- The placeholder is a plain object — no reactivity, no defaults, no
+  validation. Reading a property other than the ones you've explicitly set
+  (e.g. checking `resolved`) just returns `undefined`, since nothing has
+  spawned yet.
+- `mountCtx` still isn't available through this path (same restriction as
+  `enh.set` generally — see the note in
+  [Passing Custom Context](#constructor-signature) above); the eventual
+  `enh.get(enhKey)` call is made with no `mountCtx`.
 
 </details>
 

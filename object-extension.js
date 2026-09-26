@@ -317,6 +317,16 @@ class ElementEnhancementContainer {
                     // No registry item found - create plain object if needed
                     if (self[prop] === undefined) {
                         self[prop] = {};
+                        // Declarative-out-of-sequence: `prop`'s enhancement config hasn't
+                        // been registered yet. Once it is, hand the plain object we just
+                        // created off to `get()` as pending initVals and let it spawn
+                        // normally -- `get()` already treats a non-instance value sitting
+                        // in this slot as initVals to merge in (see the `existingInitVals`
+                        // check above). If `prop` is never registered, this never
+                        // resolves (same tradeoff as `customElements.whenDefined`).
+                        const laterRegistry = registry
+                            ?? (typeof customElements !== 'undefined' ? customElements.enhancementRegistry : undefined);
+                        laterRegistry?.whenDefined(prop).then(() => self.get(prop));
                     }
                     return self[prop];
                 }

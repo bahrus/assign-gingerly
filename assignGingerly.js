@@ -63,10 +63,27 @@ export class EnhancementRegistry extends EventTarget {
         }
     }
     /**
-     * Wait for all pending setups for a given enhancement key to complete.
+     * Resolves once `enhKey` is defined -- i.e. registered via `push` -- and
+     * ready (any pending `features` setup for it has settled). Mirrors
+     * `customElements.whenDefined(name)`: if the key isn't registered yet, waits
+     * for a future `push` that registers it; if it's never registered, this
+     * never resolves (same tradeoff as the platform method).
      * @param enhKey - Enhancement key to wait for
      */
     async whenDefined(enhKey) {
+        if (!this.findByEnhKey(enhKey)) {
+            await new Promise((resolve) => {
+                const handler = (event) => {
+                    const config = event.config;
+                    const items = Array.isArray(config) ? config : [config];
+                    if (items.some(item => item.enhKey === enhKey)) {
+                        this.removeEventListener(EnhancementRegisteredEvent.eventName, handler);
+                        resolve();
+                    }
+                };
+                this.addEventListener(EnhancementRegisteredEvent.eventName, handler);
+            });
+        }
         const pending = this.#pendingSetups.get(enhKey);
         if (pending && pending.length > 0) {
             await Promise.all(pending);
