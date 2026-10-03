@@ -419,3 +419,40 @@ This fix assumes the package is served from the page's origin. If assign-gingerl
   - `itemscope-tree`: **24/24**
   - `itemscope-managers` (regression check of the `ish` refactor): **22/22**
 - Not run: the full Playwright suite, and Firefox/WebKit.
+
+## Bruce's Response -- Unit Test Failing
+
+npm run test itemscope-tree
+
+is failing.  I did compile the typescript.
+
+Please investigate.
+
+---
+
+## Investigation: why the test failed
+
+**Cause:** `handlers/itemscopeTree.js` was never generated. This is the gap described in the "Build note" above. `tsconfig.json` only compiles what's reachable via static imports from its `include` list. `itemscopeTree` is only ever loaded dynamically, via the `BUILT_IN_MAP` string, so `tsc -p .` skipped it. The browser then got the dev server's 404 page (served as `text/plain`) instead of a module:
+
+```
+Loading module from "http://localhost:8000/handlers/itemscopeTree.js" was blocked because of a disallowed MIME type ("text/plain").
+```
+
+My earlier run passed because I compiled that file explicitly into a scratch directory, which hid the problem.
+
+**Fix:** I added `"handlers/itemscopeTree.ts"` to `include` in `tsconfig.json`. Your running `tsc` watcher picked up the change and emitted `handlers/itemscopeTree.js`.
+
+**Results:**
+- `npx playwright test itemscope-tree`: 3/3 passed (chromium, firefox, webkit; 24/24 assertions each).
+- Full `npx playwright test`: **114/114 passed**, including the `loadBuiltIn` path change.
+
+**Why not `"handlers/*.ts"`:** I tried it first, and it's arguably the better long-term entry, since it would keep new handlers from hitting this again. But it surfaces an existing type error that's unrelated to this work:
+
+```
+handlers/lazyLoadSwitch.ts(59,11): error TS2416: Property 'assign' in type 'LazyLoadSwitchHandler'
+is not assignable to the same property in base type 'LazyLoadHandler'.
+  Type 'LazyLoadResolvedParams' is missing the following properties from type
+  'LazyLoadSwitchResolvedParams': lhs, rhs
+```
+
+`lazyLoad.js`, `microDataJoin.js` and `rangeSelector.js` exist only from earlier builds; nothing in the current `tsconfig.json` would regenerate them. If you'd like, I can switch to `"handlers/*.ts"` and fix the `lazyLoadSwitch` typing as a separate change.

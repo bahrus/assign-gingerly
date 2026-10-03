@@ -15,6 +15,7 @@
 		"DX/paths.ts",
 		"DX/IterableMixin.ts",
 		"DX/strictDefaultPermissions.ts",
+		"handlers/itemscopeTree.ts",
 	],
 	"exclude":[
 		"node_modules/*"

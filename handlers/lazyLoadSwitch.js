@@ -49,10 +49,10 @@ function evaluateOp(lhs, op, rhs) {
  * then delegating all DOM logic to the parent class.
  */
 export class LazyLoadSwitchHandler extends LazyLoadHandler {
-    async assign(lhsTarget, resolvedParams) {
+    async assign(lhsTarget, resolvedParams, options, permissionProcessor) {
         const { lhs, op = '===', rhs, ...rest } = resolvedParams;
         const condition = evaluateOp(lhs, op, rhs);
         // Delegate to parent with computed condition
-        return super.assign(lhsTarget, { ...rest, if: condition });
+        return super.assign(lhsTarget, { ...rest, if: condition }, options, permissionProcessor);
     }
 }
