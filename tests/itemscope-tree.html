@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>builtIns.itemscopeTree Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+    #results { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>builtIns.itemscopeTree Tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    import { assignFromAsync, ItemscopeRegistry } from '../index.js';
+    import { builtInEmoji } from '../DX/emojis.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+
+    function assert(condition, message) {
+      if (condition) {
+        results.push(`<div class="pass">✓ ${message}</div>`);
+        passed++;
+      } else {
+        results.push(`<div class="fail">✗ ${message}</div>`);
+        failed++;
+        console.error('Failed:', message);
+      }
+    }
+
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) {
+        console.error(`Expected: ${expected}, Actual: ${actual}`);
+      }
+      assert(actual === expected, message);
+    }
+
+    /**
+     * Create a target element with its own (fake) scoped itemscope registry,
+     * so each test can register managers without colliding with others.
+     */
+    function scopedTarget(html) {
+      const host = document.createElement('div');
+      host.innerHTML = html;
+      const target = host.firstElementChild;
+      const registry = new ItemscopeRegistry();
+      Object.defineProperty(target, 'customElementRegistry', {
+        value: { itemscopeRegistry: registry },
+      });
+      return { target, registry };
+    }
+
+    const pattern = { '?. =>': { do: 'builtIns.itemscopeTree' } };
+
+    class ImageHandler {
+      constructor(element, initVals) {
+        this.element = element;
+        Object.assign(this, initVals);
+      }
+      static instantiate(image, ctx) {
+        const img = document.createElement('img');
+        const { url, description } = image;
+        img.src = url;
+        img.alt = description;
+        return img;
+      }
+    }
+
+    const vm = {
+      image: {
+        url: 'https://example.com/moon.jpg',
+        description: 'Lunar Surface'
+      }
+    };
+
+    async function runTests() {
+      results.push('<h2>Initial instantiation</h2>');
+
+      // Test 1: basic instantiation, appended after <summary>
+      {
+        const { target, registry } = scopedTarget(
+          '<details id=api-response><summary>API Response</summary></details>'
+        );
+        registry.define('ImageISM', { manager: ImageHandler });
+        await assignFromAsync(target, pattern, { from: vm });
+
+        assertEquals(target.children.length, 2, 'appends one element');
+        const img = target.children[1];
+        assertEquals(img.localName, 'img', 'appended element is the img from instantiate');
+        assertEquals(img.getAttribute('itemscope'), 'ImageISM', 'sets itemscope to the manager name');
+        assertEquals(img.getAttribute('src'), vm.image.url, 'instantiate sets src');
+        assertEquals(img.alt, 'Lunar Surface', 'instantiate sets alt');
+        assert(!img.hasAttribute('itemprop'), 'no itemprop when target lacks itemscope');
+
+        // Test 2: ish manager instantiated synchronously with the value
+        assert(img.ish instanceof ImageHandler, 'ish is an ImageHandler instance');
+        assertEquals(img.ish.element, img, 'manager receives the element');
+        assertEquals(img.ish.url, vm.image.url, 'manager receives the value as initVals');
+
+        // Test 3: second call does not duplicate
+        await assignFromAsync(target, pattern, { from: vm });
+        assertEquals(target.querySelectorAll(':scope > [itemscope=ImageISM]').length, 1,
+          'second call does not create a duplicate');
+      }
+
+      // Test 4: nested descendant does not block creation
+      {
+        const { target, registry } = scopedTarget(
+          '<div><section><span itemscope=ImageISM></span></section></div>'
+        );
+        registry.define('ImageISM', { manager: ImageHandler });
+        await assignFromAsync(target, pattern, { from: vm });
+        assertEquals(target.querySelectorAll(':scope > [itemscope=ImageISM]').length, 1,
+          'nested (non-child) itemscope does not block creation');
+      }
+
+      // Test 5: itemprop added when target has itemscope
+      {
+        const { target, registry } = scopedTarget('<div itemscope=ProfileISM></div>');
+        registry.define('ImageISM', { manager: ImageHandler });
+        await assignFromAsync(target, pattern, { from: vm });
+        const img = target.firstElementChild;
+        assertEquals(img?.getAttribute('itemprop'), 'image', 'itemprop set to key when target has itemscope');
+        assertEquals(img?.getAttribute('itemscope'), 'ImageISM', 'itemscope still set to manager name');
+      }
+
+      // Test 6: itemscope set by instantiate is overwritten with manager name
+      {
+        const { target, registry } = scopedTarget('<div></div>');
+        registry.define('ImageISM', {
+          manager: class extends ImageHandler {
+            static instantiate(image, ctx) {
+              const img = super.instantiate(image, ctx);
+              img.setAttribute('itemscope', 'somethingElse');
+              return img;
+            }
+          }
+        });
+        await assignFromAsync(target, pattern, { from: vm });
+        assertEquals(target.firstElementChild?.getAttribute('itemscope'), 'ImageISM',
+          'itemscope overwritten with manager name');
+      }
+
+      results.push('<h2>Skipping</h2>');
+
+      // Test 7: skip cases
+      {
+        const { target, registry } = scopedTarget('<div></div>');
+        class Basic {
+          constructor(element, initVals) { Object.assign(this, initVals); }
+          static instantiate() { return document.createElement('span'); }
+        }
+        registry.define('ListISM', { manager: Basic });
+        registry.define('TitleISM', { manager: Basic });
+        registry.define('NothingISM', { manager: Basic });
+        registry.define('NoFactoryISM', { manager: class { constructor() {} } });
+        registry.define('NullResultISM', { manager: class { static instantiate() { return null; } } });
+        registry.define('TextResultISM', { manager: class { static instantiate() { return document.createTextNode('x'); } } });
+
+        await assignFromAsync(target, pattern, {
+          from: {
+            unregistered: { a: 1 },
+            list: [{ a: 1 }],
+            title: 'foo',
+            nothing: null,
+            noFactory: { a: 1 },
+            nullResult: { a: 1 },
+            textResult: { a: 1 },
+          }
+        });
+        assertEquals(target.childNodes.length, 0,
+          'skips unregistered, array, primitive, null, no instantiate, null result, non-element result');
+      }
+
+      results.push('<h2>Ordering, naming, context</h2>');
+
+      // Test 8: Object.keys order; camelCase → PascalCase + ISM
+      {
+        const { target, registry } = scopedTarget('<div></div>');
+        const make = tag => class {
+          constructor(element, initVals) { Object.assign(this, initVals); }
+          static instantiate() { return document.createElement(tag); }
+        };
+        registry.define('HeroImageISM', { manager: make('img') });
+        registry.define('CaptionISM', { manager: make('p') });
+        await assignFromAsync(target, pattern, { from: { caption: { a: 1 }, heroImage: { b: 2 } } });
+        const names = [...target.children].map(el => el.getAttribute('itemscope')).join(',');
+        assertEquals(names, 'CaptionISM,HeroImageISM', 'appends in Object.keys order, camelCase key maps to PascalCaseISM');
+      }
+
+      // Test 9: ctx contents
+      {
+        const { target, registry } = scopedTarget('<div></div>');
+        let ctx;
+        registry.define('ImageISM', {
+          manager: class extends ImageHandler {
+            static instantiate(image, c) { ctx = c; return super.instantiate(image, c); }
+          }
+        });
+        const options = { from: vm };
+        await assignFromAsync(target, pattern, options);
+        assertEquals(ctx?.target, target, 'ctx.target is the target');
+        assertEquals(ctx?.key, 'image', 'ctx.key is the VM key');
+        assertEquals(ctx?.from, vm, 'ctx.from is the VM');
+        assertEquals(ctx?.registry, registry, 'ctx.registry is the registry used');
+        assertEquals(ctx?.options?.from, vm, 'ctx.options is the assignFrom options');
+      }
+
+      results.push('<h2>Registries and aliases</h2>');
+
+      // Test 10: falls back to the global itemscopeRegistry
+      {
+        customElements.itemscopeRegistry.define('GlobalPicISM', { manager: ImageHandler });
+        const target = document.createElement('div');
+        await assignFromAsync(target, pattern, { from: { globalPic: vm.image } });
+        assertEquals(target.firstElementChild?.getAttribute('itemscope'), 'GlobalPicISM',
+          'uses the global itemscopeRegistry');
+
+        // Scoped registry is preferred: GlobalPicISM isn't in it, so nothing is created
+        const { target: scoped } = scopedTarget('<div></div>');
+        await assignFromAsync(scoped, pattern, { from: { globalPic: vm.image } });
+        assertEquals(scoped.childNodes.length, 0, 'scoped registry takes precedence over global');
+      }
+
+      // Test 11: 🌳 emoji alias
+      {
+        const { target, registry } = scopedTarget('<div></div>');
+        registry.define('ImageISM', { manager: ImageHandler });
+        await assignFromAsync(target, { '?. =>': { do: '🌳' } }, { from: vm, handlers: builtInEmoji });
+        assertEquals(target.firstElementChild?.getAttribute('itemscope'), 'ImageISM', '🌳 alias resolves to builtIns.itemscopeTree');
+      }
+
+      const testComplete = document.getElementById('test-complete');
+      testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
+      testComplete.setAttribute('data-passed', passed);
+      testComplete.setAttribute('data-failed', failed);
+
+      results.push(`<h2>Summary: ${passed} passed, ${failed} failed</h2>`);
+      document.getElementById('results').innerHTML = results.join('');
+    }
+
+    runTests().catch(e => {
+      console.error('Test error:', e);
+      document.getElementById('results').innerHTML += `<div class="fail">Test suite error: ${e.message}</div>`;
+      document.getElementById('test-complete').setAttribute('data-status', 'error');
+    });
+  </script>
+</body>
+</html>

@@ -216,3 +216,206 @@ Skip it.  No waiting.
 Agreed.
 
 Naming.  I like the `builtIns.itemscopeTree` the most.  Subject to change, but I'm 90% happy with that suggestion.
+
+If we are on the same page, please add your implementation notes below.
+
+---
+
+## Implementation Notes
+
+We're on the same page for everything except one point: the `ImageISM` naming has a knock-on effect that needs your sign-off. It's covered first.
+
+### On the `ImageISM` default name
+
+I like the convention:
+
+- It keeps generic VM keys (`image`, `user`, `item`) from accidentally colliding with unrelated managers in the registry.
+- It makes "this manager takes part in `itemscopeTree`" an explicit opt-in, readable from the registration alone.
+
+**But it conflicts with the expected output.** The existing `ish` path (`handleIshProperty.ts`) uses the element's `itemscope` attribute value **as the registry key**. Since you want the `ish` manager instantiated in Phase I (Q3), the element has to carry the name it was registered under:
+
+```html
+<details id=api-response>
+    <summary>API Response</summary>
+    <img itemscope=ImageISM src="https:..." alt="Lunar Surface">
+</details>
+```
+
+This also lines up with microdata semantics: `itemprop` holds the **property** (`image`), and the `itemscope` value is effectively the **type** (`ImageISM`). When the target itself has `itemscope` (your rule for Q2), we'd get:
+
+```html
+<div itemscope=ProfileISM>
+    <img itemprop=image itemscope=ImageISM ...>
+</div>
+```
+
+**Proposal:** adopt `<PascalCasedKey>ISM`, derived by a single internal function, `toManagerName(key)`: `image` → `ImageISM`, `heroImage` → `HeroImageISM`. The explicit key→manager mapping stays a future phase, and that function is the one place it would plug in. Note that `itemscope` attribute matching is case-sensitive, so the casing has to be exact.
+
+> **Please confirm:** `itemscope=ImageISM` (not `itemscope=image`) on the generated element.
+
+### Module and registration
+
+| File | Change |
+|------|--------|
+| `handlers/itemscopeTree.ts` | New. Exports `ItemscopeTreeHandler` with a **synchronous** `assign()` |
+| `processHandlerCommands.ts` | Add `'builtIns.itemscopeTree': './handlers/itemscopeTree.js'` to `BUILT_IN_MAP` |
+| `handleIshProperty.ts` | Extract a sync helper (see "Instantiating the `ish` manager synchronously" below) |
+| `types/assign-gingerly/types.d.ts` | `ItemscopeTreeConfig`, `ItemscopeTreeContext`, optional static `instantiate` on `ItemscopeManager` |
+| `DX/emojis.ts` | `'🌳': 'builtIns.itemscopeTree'` (unused so far), if you want an emoji alias |
+| `tests/itemscope-tree.html` + `.spec.ts` | New Playwright tests |
+| `README.md` | Section for the new built-in |
+
+The handler module itself is still loaded through the async `loadBuiltIn`; that can't be avoided, and it's cached after first use. Everything inside `assign()` is synchronous: no `await`, and `instantiate` isn't awaited.
+
+### Types (in `types.d.ts`)
+
+```ts
+export interface ItemscopeTreeContext {
+    target: Element;
+    key: string;
+    from: any;
+    options: AssignFromOptions;
+    registry: ItemscopeRegistry;
+}
+
+export type ItemscopeManager<T = any> = {
+    new (element: HTMLElement, initVals?: Partial<T>): T;
+    /** Optional factory used by builtIns.itemscopeTree. Synchronous by contract. */
+    instantiate?(value: any, ctx: ItemscopeTreeContext): HTMLElement | null | undefined;
+}
+
+export interface ItemscopeTreeConfig extends HandlerConfig {
+    do: 'builtIns.itemscopeTree';
+}
+```
+
+### Algorithm for `assign(lhsTarget, resolvedParams, options)`
+
+```ts
+assign(target, _resolvedParams, options) {
+    const { from } = options;
+    if (!(target instanceof Element) || from === null || typeof from !== 'object') return;
+
+    const registry = target.customElementRegistry?.itemscopeRegistry
+        ?? customElements.itemscopeRegistry;
+    if (!registry) return;
+
+    const addItemprop = target.hasAttribute('itemscope');
+
+    // One pass over direct children → Set of existing itemscope values (Q6).
+    // O(children + keys), no selector escaping needed.
+    const existing = new Set<string>();
+    for (const child of target.children) {
+        const v = child.getAttribute('itemscope');
+        if (v) existing.add(v);
+    }
+
+    for (const key of Object.keys(from)) {                 // Q9: key order
+        const value = from[key];
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) continue; // Q7
+        const managerName = toManagerName(key);
+        if (existing.has(managerName)) continue;           // Phase II territory
+        const config = registry.get(managerName);
+        if (!config) continue;                             // Q8: no waiting
+        const { manager } = config;
+        if (typeof manager.instantiate !== 'function') continue;
+
+        const result = manager.instantiate(value, { target, key, from, options, registry });
+        if (!(result instanceof HTMLElement)) continue;    // Q4: skip silently
+
+        const nodes = [result];                            // array-shaped for future multi-node
+        const [first] = nodes;
+        first.setAttribute('itemscope', managerName);      // overwrites anything instantiate set
+        if (addItemprop) first.setAttribute('itemprop', key);
+        for (const node of nodes) target.appendChild(node); // Q5: appendChild only
+        existing.add(managerName);
+
+        defineIshCore(first, config, options, assignGingerly);
+        first.ish = value;                                 // constructs manager (Q3)
+    }
+}
+```
+
+Notes:
+- **Order of operations:** instantiate → set attributes → `appendChild` → `ish`. The manager constructor therefore runs on a connected element, so it can look at its parent or host if it needs to.
+- **Future multiple nodes:** only `first` gets `itemscope`/`itemprop`. When we support more nodes, the others would get `id`s and `first` would get an `itemref` pointing at them, as you suggested.
+- **`instanceof HTMLElement`:** this excludes SVG/MathML elements. That's fine for Phase I; flag it if you'd rather use `Element`.
+
+### Instantiating the `ish` manager synchronously
+
+Today, assigning `{ish: value}` through `assignGingerly` is **async**: it dynamically imports `handleIshProperty.js`, and `defineIshProperty` may `await waitForEvent`. Going through that path would break the sync default.
+
+The handler already holds `config` from `registry.get()`, so I'd split `defineIshProperty` into:
+
+- `defineIshCore(element, config, options, assignGingerlyFn)`: **sync**. It contains the existing `Object.defineProperty(element, 'ish', {get, set})` body unchanged, with the queue and the `new config.manager(element, initVals)` on first set.
+- `defineIshProperty(...)`: the existing async wrapper. It keeps the registry lookup and `waitForEvent`, then calls `defineIshCore`.
+
+The handler imports `defineIshCore` statically, which is fine because the handler module is itself lazily loaded. The `ish` behavior stays identical; it just gains a sync entry point.
+
+One gap: the registry's `_trackSetup` / `whenDefined` bookkeeping isn't involved here, since there's no promise to track. I think that's correct, but say so if something relies on it.
+
+### Tests (`tests/itemscope-tree.html` + `.spec.ts`)
+
+1. Basic: `image` → `<img itemscope=ImageISM src alt>` appended after `<summary>`.
+2. `img.ish` is an `ImageHandler` instance constructed with `image` as `initVals`.
+3. Second call with the same VM → no duplicate (direct-child check).
+4. A nested descendant `[itemscope=ImageISM]` (not a direct child) does **not** block creation.
+5. Target with `itemscope` → `itemprop=image` added; without it → no `itemprop`.
+6. Skips: unregistered key; array value; primitive; `null`; manager without `instantiate`; `instantiate` returning `null` or a text node.
+7. Multiple keys → appended in `Object.keys` order.
+8. Scoped registry: target's `customElementRegistry.itemscopeRegistry` is preferred over the global one.
+9. `camelCase` key → `PascalCaseISM` lookup.
+
+### Deferred (Phase II+)
+
+- Updating existing scopes (the `existing.has(...)` branch → set `ish = value`).
+- Pulling from a section of the VM (e.g. `get: { from: '?.section' }` overriding `options.from`).
+- Explicit key→manager mapping, multi-node with `itemref`, async `instantiate`, insert `method`, waiting for late registration, arrays.
+
+## Bruce's Response II
+
+> **Please confirm:** `itemscope=ImageISM` (not `itemscope=image`) on the generated element.
+
+Confirmed.
+
+---
+
+## Implementation Summary
+
+Phase I is implemented as described in the notes above. The `.ts` files are edited; the `.js` is left to your build.
+
+| File | Change |
+|------|--------|
+| `handlers/itemscopeTree.ts` | **New.** `ItemscopeTreeHandler` (sync `assign()`) and the exported `toManagerName(key)` |
+| `handleIshProperty.ts` | Extracted the sync `defineIshCore(element, config, options, assignGingerlyFn)`; `defineIshProperty` now calls it after its async lookup/wait |
+| `processHandlerCommands.ts` | `BUILT_IN_MAP` entry, plus a **path-resolution fix** (see below) |
+| `types/assign-gingerly/types.d.ts` | Optional static `instantiate` on `ItemscopeManager`, new `ItemscopeTreeContext` and `ItemscopeTreeConfig` |
+| `DX/emojis.ts` | `🌳` → `builtIns.itemscopeTree` (the doc table also gained the missing `📊` row) |
+| `tests/itemscope-tree.html` + `.spec.ts` | **New.** 24 assertions covering tests 1–9 from the notes, plus the overwriting of an `itemscope` set by `instantiate`, and the `🌳` alias |
+| `README.md` | New "Built-in handler: `builtIns.itemscopeTree`" section after `rangeSelector` |
+
+### Pre-existing bug found: built-in handlers couldn't load
+
+`loadBuiltIn` passed `BUILT_IN_MAP` paths such as `./handlers/lazyLoad.js` to `findClassPrototypeInPath`. That function does the `import()` inside `utils/findClassPrototypeInPath.js`, so the path resolved to **`/utils/handlers/...`**, which returns a 404. This affected every `builtIns.*` handler, not just the new one; there were no tests for them in `tests/` to catch it.
+
+The fix, in `loadBuiltIn`:
+
+```ts
+const cls = await findClassPrototypeInPath(new URL(path, import.meta.url).pathname, handlerCriteria);
+```
+
+The path now resolves relative to `processHandlerCommands.js` and still passes through `isAllowedImportPath` (a same-origin `/handlers/...` path).
+
+This fix assumes the package is served from the page's origin. If assign-gingerly were loaded from a CDN, `isAllowedImportPath` checks the path against `document.baseURI`, while `import()` resolves it against the CDN module. That mismatch predates this change, but it's worth revisiting: built-ins come from a fixed internal map, so arguably they shouldn't go through the allow-list at all.
+
+### Build note
+
+`tsconfig.json` only reaches modules through static imports from `index.ts`, so `handlers/itemscopeTree.ts` isn't covered by `tsc -p .`. The same is true of the other lazily loaded handlers, such as `microDataJoin` and `lazyLoad`. Whatever build produces those `.js` files will need to pick this one up too.
+
+### Verified
+
+- `tsc --noEmit` is clean for the project, and for the new handler together with `index.ts`.
+- Compiled into a scratch directory (the repo's `.js` was untouched) and run in Chromium:
+  - `itemscope-tree`: **24/24**
+  - `itemscope-managers` (regression check of the `ish` refactor): **22/22**
+- Not run: the full Playwright suite, and Firefox/WebKit.

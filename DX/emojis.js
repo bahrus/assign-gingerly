@@ -19,6 +19,8 @@
  * | 🎚️ | builtIns.lazyLoadSwitch |
  * | 🏷️ | builtIns.microDataJoin |
  * | 📋 | builtIns.manageTemplateList |
+ * | 📊 | builtIns.rangeSelector |
+ * | 🌳 | builtIns.itemscopeTree |
  *
  * `join` is no longer a `do:` handler — it moved to the synchronous ` =&` operator
  * (see syncOps/join.ts) and isn't looked up through options.handlers, so it has no
@@ -30,6 +32,7 @@ export const builtInEmoji = {
     '🏷️': 'builtIns.microDataJoin',
     '📋': 'builtIns.manageTemplateList',
     '📊': 'builtIns.rangeSelector',
+    '🌳': 'builtIns.itemscopeTree',
 };
 export const akaMethods = {
     '🔍': 'querySelector',

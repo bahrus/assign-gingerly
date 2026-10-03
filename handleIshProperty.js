@@ -54,6 +54,21 @@ async function defineIshProperty(element, managerName, options, assignGingerlyFn
             throw new Error(`Manager "${managerName}" not found after registration event`);
         }
     }
+    defineIshCore(element, config, options, assignGingerlyFn);
+}
+/**
+ * Synchronously define the 'ish' property on an element, given an already-resolved
+ * manager config. The manager is instantiated on the first set.
+ *
+ * Used directly by builtIns.itemscopeTree, which already holds the config and must
+ * stay synchronous.
+ *
+ * @param element - The HTMLElement to define the 'ish' property on
+ * @param config - The resolved manager configuration
+ * @param options - Optional assignGingerly options
+ * @param assignGingerlyFn - Reference to the assignGingerly function for recursive calls
+ */
+export function defineIshCore(element, config, options, assignGingerlyFn) {
     // Create manager instance
     let managerInstance = null;
     const valueQueue = [];

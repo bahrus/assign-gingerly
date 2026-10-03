@@ -24,6 +24,7 @@ const BUILT_IN_MAP: Record<string, string> = {
     'builtIns.microDataJoin': './handlers/microDataJoin.js',
     'builtIns.manageTemplateList': './handlers/manageTemplateList.js',
     'builtIns.rangeSelector': './handlers/rangeSelector.js',
+    'builtIns.itemscopeTree': './handlers/itemscopeTree.js',
 };
 
 /**
@@ -49,7 +50,9 @@ async function loadBuiltIn(name: string): Promise<AssignFromHandlerConstructor |
     if (cached) return cached;
     const path = BUILT_IN_MAP[name];
     if (!path) return undefined;
-    const cls = await findClassPrototypeInPath(path, handlerCriteria);
+    // Resolve relative to this module — findClassPrototypeInPath's import() would
+    // otherwise resolve it relative to utils/.
+    const cls = await findClassPrototypeInPath(new URL(path, import.meta.url).pathname, handlerCriteria);
     handlerCache.set(name, cls);
     return cls as AssignFromHandlerConstructor;
 }

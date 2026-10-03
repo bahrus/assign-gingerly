@@ -3353,6 +3353,65 @@ assignFrom(element, {
 - Fully JSON-serializable — no functions, no special types
 - Lazy-loaded on demand like all built-in handlers
 
+### Built-in handler: `builtIns.itemscopeTree`
+
+Builds itemscope-managed elements from the top-level keys of a VM (for example, a JSON API response). For each key, it looks up an [itemscope manager](#itemscope-managers-chrome-146) named `<PascalCasedKey>ISM`, and calls that manager class's static `instantiate` method to create the element.
+
+```html
+<details id=api-response>
+    <summary>API Response</summary>
+</details>
+```
+
+```JavaScript
+class ImageHandler {
+    constructor(element, initVals) { /* regular itemscope manager */ }
+    static instantiate(image, ctx) {
+        const img = document.createElement('img');
+        const { url, description } = image;
+        img.src = url;
+        img.alt = description;
+        return img;
+    }
+}
+
+customElements.itemscopeRegistry.define('ImageISM', { manager: ImageHandler });
+
+await assignFromAsync(document.getElementById('api-response'), {
+    '?. =>': { do: 'builtIns.itemscopeTree' }
+}, {
+    from: { image: { url: 'https:...', description: 'Lunar Surface' } }
+});
+```
+
+Result:
+
+```html
+<details id=api-response>
+    <summary>API Response</summary>
+    <img itemscope=ImageISM src="https:..." alt="Lunar Surface">
+</details>
+```
+
+**How it works:**
+
+1. Iterates the top-level keys of `from`, in `Object.keys` order.
+2. Maps each key to a manager name: `image` → `ImageISM`, `heroImage` → `HeroImageISM`.
+3. Skips the key if:
+   - the value isn't a non-array object;
+   - no manager with that name is registered (it doesn't wait for registration);
+   - the manager has no static `instantiate`;
+   - the target already has a **direct child** with that `itemscope`.
+4. Calls `instantiate(value, ctx)` **synchronously**, where `ctx` is `{ target, key, from, options, registry }`. It skips the key unless the result is an `HTMLElement`.
+5. Sets `itemscope=<managerName>` on the element. If the target itself has `itemscope`, it also sets `itemprop=<key>`.
+6. Appends the element to the target (`appendChild`).
+7. Instantiates the element's `ish` manager synchronously with the value, so `img.ish` is an `ImageHandler` constructed with `(img, image)`.
+
+**Notes:**
+- Uses the target's scoped `customElementRegistry.itemscopeRegistry` when it has one, falling back to `customElements.itemscopeRegistry`.
+- Emoji alias: `🌳` (via `builtInEmoji`).
+- Phase I only creates elements; updating existing ones is planned.
+
 ## Typed Path Authoring with `paths`, `sp`, and `md`
 
 For JSON generated config files generated from TypeScript/`.mts`/`mjs` files during a build or server-side rendering, the `paths` utility provides compile-time autocomplete and type safety for `?.`-prefixed path strings. The `sp` tagged template literal ("split into parts") produces arrays suitable for the [`join` sync op](#sync-op-join). The `md` tagged template literal produces `{prop, val}` objects suitable for `builtIns.microDataJoin`.

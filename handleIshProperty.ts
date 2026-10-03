@@ -1,4 +1,4 @@
-import type { IAssignGingerlyOptions } from './types/assign-gingerly/types.js';
+import type { IAssignGingerlyOptions, ItemscopeManagerConfig } from './types/assign-gingerly/types.js';
 
 /**
  * Handle the 'ish' property assignment for HTMLElements with itemscope attributes.
@@ -75,6 +75,27 @@ async function defineIshProperty(
     }
   }
 
+  defineIshCore(element, config, options, assignGingerlyFn);
+}
+
+/**
+ * Synchronously define the 'ish' property on an element, given an already-resolved
+ * manager config. The manager is instantiated on the first set.
+ *
+ * Used directly by builtIns.itemscopeTree, which already holds the config and must
+ * stay synchronous.
+ *
+ * @param element - The HTMLElement to define the 'ish' property on
+ * @param config - The resolved manager configuration
+ * @param options - Optional assignGingerly options
+ * @param assignGingerlyFn - Reference to the assignGingerly function for recursive calls
+ */
+export function defineIshCore(
+  element: HTMLElement,
+  config: ItemscopeManagerConfig,
+  options: IAssignGingerlyOptions | undefined,
+  assignGingerlyFn: (target: any, source: any, options?: IAssignGingerlyOptions) => any
+): void {
   // Create manager instance
   let managerInstance: any = null;
   const valueQueue: any[] = [];
@@ -97,7 +118,7 @@ async function defineIshProperty(
       if (!managerInstance) {
         // Merge all queued values for initVals
         const initVals = Object.assign({}, ...valueQueue);
-        managerInstance = new config!.manager(element, initVals);
+        managerInstance = new config.manager(element, initVals);
         valueQueue.length = 0; // Clear queue
       } else {
         // Process queue asynchronously

@@ -20,6 +20,7 @@ const BUILT_IN_MAP = {
     'builtIns.microDataJoin': './handlers/microDataJoin.js',
     'builtIns.manageTemplateList': './handlers/manageTemplateList.js',
     'builtIns.rangeSelector': './handlers/rangeSelector.js',
+    'builtIns.itemscopeTree': './handlers/itemscopeTree.js',
 };
 /**
  * Criteria for locating an assignFrom handler class: must expose an `assign` method
@@ -44,7 +45,9 @@ async function loadBuiltIn(name) {
     const path = BUILT_IN_MAP[name];
     if (!path)
         return undefined;
-    const cls = await findClassPrototypeInPath(path, handlerCriteria);
+    // Resolve relative to this module — findClassPrototypeInPath's import() would
+    // otherwise resolve it relative to utils/.
+    const cls = await findClassPrototypeInPath(new URL(path, import.meta.url).pathname, handlerCriteria);
     handlerCache.set(name, cls);
     return cls;
 }
