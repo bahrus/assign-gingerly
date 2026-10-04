@@ -31,6 +31,7 @@ All exported TypeScript interfaces and types must be defined in `types/assign-gi
 - Module files (`.ts`) should **import types** from `types/assign-gingerly/types.d.ts` (or `types.js` for the path) rather than defining them locally.
 - **Type-only exports** (`export type { ... }`) from module files are acceptable as re-exports for consumer convenience, but the definition lives in `types.d.ts`.
 - **Internal/private types** (not exported from the package) may remain in their module file if they're only used locally.
+- **Callback / hook contexts get a named type.** Whenever library code calls a user-supplied function or method (e.g. a manager's static `instantiate`, a handler's `assign`, a protocol handler, an event callback) with a context or parameter object, define an exported interface for that object in `types.d.ts`. Name it after the method or feature it serves (e.g. `ItemscopeTreeContext` for `instantiate`), and reference it in that method's signature. Never use an anonymous object-literal type for such contexts.
 
 ## Coding Best Practices
 

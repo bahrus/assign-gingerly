@@ -148,18 +148,46 @@
           'itemscope overwritten with manager name');
       }
 
-      results.push('<h2>Skipping</h2>');
+      results.push('<h2>Value types and skipping</h2>');
 
-      // Test 7: skip cases
+      // Test 7a: all value types are passed through to instantiate and ish
       {
         const { target, registry } = scopedTarget('<div></div>');
+        const received = {};
         class Basic {
-          constructor(element, initVals) { Object.assign(this, initVals); }
-          static instantiate() { return document.createElement('span'); }
+          constructor(element, initVals) { this.initVals = initVals; }
+          static instantiate(value, ctx) {
+            received[ctx.key] = value;
+            return document.createElement('span');
+          }
         }
         registry.define('ListISM', { manager: Basic });
         registry.define('TitleISM', { manager: Basic });
         registry.define('NothingISM', { manager: Basic });
+        const list = ['x', 'y'];
+        await assignFromAsync(target, pattern, { from: { list, title: 'foo', nothing: null } });
+        assertEquals(target.children.length, 3, 'array, string and null values are all instantiated');
+        assertEquals(received.list, list, 'array value passed as-is');
+        assertEquals(received.title, 'foo', 'string value passed as-is');
+        assertEquals(received.nothing, null, 'null value passed as-is');
+        const [listEl, titleEl, nothingEl] = target.children;
+        assertEquals(JSON.stringify(listEl.ish.initVals), '{"0":"x","1":"y"}', 'array spreads into initVals');
+        assertEquals(JSON.stringify(titleEl.ish.initVals), '{"0":"f","1":"o","2":"o"}', 'string spreads into initVals');
+        assertEquals(JSON.stringify(nothingEl.ish.initVals), '{}', 'null gives empty initVals');
+
+        // Later null / undefined sets are skipped rather than throwing
+        const instance = titleEl.ish;
+        titleEl.ish = null;
+        titleEl.ish = undefined;
+        titleEl.ish = { extra: 1 };
+        await new Promise(resolve => setTimeout(resolve, 0));
+        assertEquals(titleEl.ish, instance, 'manager instance kept across later sets');
+        assertEquals(instance.extra, 1, 'later object set merges after skipped null / undefined');
+      }
+
+      // Test 7b: skip cases
+      {
+        const { target, registry } = scopedTarget('<div></div>');
         registry.define('NoFactoryISM', { manager: class { constructor() {} } });
         registry.define('NullResultISM', { manager: class { static instantiate() { return null; } } });
         registry.define('TextResultISM', { manager: class { static instantiate() { return document.createTextNode('x'); } } });
@@ -167,16 +195,13 @@
         await assignFromAsync(target, pattern, {
           from: {
             unregistered: { a: 1 },
-            list: [{ a: 1 }],
-            title: 'foo',
-            nothing: null,
             noFactory: { a: 1 },
             nullResult: { a: 1 },
             textResult: { a: 1 },
           }
         });
         assertEquals(target.childNodes.length, 0,
-          'skips unregistered, array, primitive, null, no instantiate, null result, non-element result');
+          'skips unregistered, no instantiate, null result, non-element result');
       }
 
       results.push('<h2>Ordering, naming, context</h2>');
@@ -211,6 +236,107 @@
         assertEquals(ctx?.from, vm, 'ctx.from is the VM');
         assertEquals(ctx?.registry, registry, 'ctx.registry is the registry used');
         assertEquals(ctx?.options?.from, vm, 'ctx.options is the assignFrom options');
+      }
+
+      results.push('<h2>map</h2>');
+
+      class MissionManager {
+        constructor(element, initVals) { this.element = element; Object.assign(this, initVals); }
+        static instantiate(mission) { return document.createElement('section'); }
+      }
+
+      // Test 12: map with classes — map order, auto-define, filler with undefined, VM keys ignored
+      {
+        const { target, registry } = scopedTarget('<details><summary>API Response</summary></details>');
+        let fillerValue = 'not called';
+        const Filler = class Filler {
+          static instantiate(value) { fillerValue = value; return document.createElement('br'); }
+        };
+        const mapPattern = {
+          '?. =>': {
+            do: 'builtIns.itemscopeTree',
+            map: { image: ImageHandler, filler: Filler, mission: MissionManager }
+          }
+        };
+        const from = { mission: { name: 'Apollo' }, image: vm.image, ignored: { a: 1 } };
+        await assignFromAsync(target, mapPattern, { from });
+
+        const created = [...target.children].slice(1);
+        assertEquals(created.map(el => el.localName).join(','), 'img,br,section', 'appended in map order, not VM order');
+        assertEquals(created.map(el => el.getAttribute('itemscope')).join(','), 'ImageHandler,Filler,MissionManager',
+          'itemscope is the class name');
+        assertEquals(created.map(el => el.getAttribute('itemprop')).join(','), 'image,filler,mission',
+          'itemprop always set to the key with map');
+        assertEquals(fillerValue, undefined, 'key missing from VM is instantiated with undefined');
+        assertEquals(registry.get('ImageHandler')?.manager, ImageHandler, 'class auto-defined under its name');
+        assert(created[2].ish instanceof MissionManager && created[2].ish.name === 'Apollo', 'ish manager instantiated with value');
+        assert(created[1].ish instanceof Filler, 'ish manager instantiated for undefined value');
+
+        // Second call: no duplicates, no "already registered" error for the same classes
+        await assignFromAsync(target, mapPattern, { from });
+        assertEquals(target.children.length, 4, 'second call with map does not duplicate');
+      }
+
+      // Test 13: static itemscope overrides class name; same class under two keys
+      {
+        const { target, registry } = scopedTarget('<div></div>');
+        class Pic extends ImageHandler {
+          static itemscope = 'StablePic';
+        }
+        await assignFromAsync(target, {
+          '?. =>': { do: 'builtIns.itemscopeTree', map: { hero: Pic, thumb: Pic } }
+        }, { from: { hero: vm.image, thumb: vm.image } });
+        assertEquals([...target.children].map(el => el.getAttribute('itemscope')).join(','), 'StablePic,StablePic',
+          'static itemscope used in place of class name');
+        assertEquals([...target.children].map(el => el.getAttribute('itemprop')).join(','), 'hero,thumb',
+          'same class under two keys creates both (identified by itemprop)');
+        assertEquals(registry.get('StablePic')?.manager, Pic, 'auto-defined under static itemscope');
+      }
+
+      // Test 14: string entries — registered name used, unregistered skipped, mixed with classes
+      {
+        const { target, registry } = scopedTarget('<div></div>');
+        registry.define('ImageManager', { manager: ImageHandler });
+        await assignFromAsync(target, {
+          '?. =>': {
+            do: 'builtIns.itemscopeTree',
+            map: { image: 'ImageManager', missing: 'NotRegistered', mission: MissionManager }
+          }
+        }, { from: { image: vm.image, missing: { a: 1 }, mission: {} } });
+        assertEquals([...target.children].map(el => el.getAttribute('itemscope')).join(','), 'ImageManager,MissionManager',
+          'string entry uses registered name; unregistered string skipped');
+        assert(target.firstElementChild?.ish instanceof ImageHandler, 'string entry instantiates registered manager');
+      }
+
+      // Test 15: errors
+      {
+        const { target, registry } = scopedTarget('<div></div>');
+        registry.define('ImageHandler', { manager: class ImageHandler { static instantiate() { return document.createElement('img'); } } });
+        let error;
+        try {
+          await assignFromAsync(target, {
+            '?. =>': { do: 'builtIns.itemscopeTree', map: { image: ImageHandler } }
+          }, { from: vm });
+        } catch (e) { error = e; }
+        assert(error?.message.includes('already registered to a different class'),
+          'throws when the name is registered to a different class');
+
+        const anon = (() => class { static instantiate() { return document.createElement('i'); } })();
+        error = undefined;
+        try {
+          await assignFromAsync(target, {
+            '?. =>': { do: 'builtIns.itemscopeTree', map: { x: anon } }
+          }, { from: {} });
+        } catch (e) { error = e; }
+        assert(error?.message.includes('has no class name'), 'throws for a class with no name');
+
+        error = undefined;
+        try {
+          await assignFromAsync(target, {
+            '?. =>': { do: 'builtIns.itemscopeTree', map: { x: 42 } }
+          }, { from: {} });
+        } catch (e) { error = e; }
+        assert(error?.message.includes('must be a class or a registered itemscope name'), 'throws for an invalid entry');
       }
 
       results.push('<h2>Registries and aliases</h2>');

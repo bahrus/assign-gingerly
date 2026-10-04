@@ -1,9 +1,9 @@
 /**
  * Handle the 'ish' property assignment for HTMLElements with itemscope attributes.
- * This function validates the element and value, then defines or updates the 'ish' property.
+ * This function validates the element, then defines or updates the 'ish' property.
  *
  * @param element - The HTMLElement to assign the 'ish' property to
- * @param value - The value to assign (must be an object)
+ * @param value - The value to assign (any type)
  * @param options - Optional assignGingerly options
  * @param assignGingerlyFn - Reference to the assignGingerly function for recursive calls
  */
@@ -12,10 +12,6 @@ export async function handleIshProperty(element, value, options, assignGingerlyF
     const itemscopeValue = element.getAttribute('itemscope');
     if (typeof itemscopeValue !== 'string' || itemscopeValue.length === 0) {
         throw new Error('Element must have itemscope attribute set to a non-empty string value');
-    }
-    // Validate value is an object
-    if (typeof value !== 'object' || value === null) {
-        throw new Error('ish property value must be an object');
     }
     // Get or create the 'ish' property on the element
     if (!('ish' in element)) {
@@ -79,7 +75,8 @@ export function defineIshCore(element, config, options, assignGingerlyFn) {
         },
         set(newValue) {
             // If setting the same instance, do nothing
-            if (newValue === managerInstance) {
+            // (guarded so a first value of null doesn't match the not-yet-created instance)
+            if (managerInstance !== null && newValue === managerInstance) {
                 return;
             }
             // Queue the value
@@ -96,6 +93,9 @@ export function defineIshCore(element, config, options, assignGingerlyFn) {
                 (async () => {
                     while (valueQueue.length > 0) {
                         const queuedValue = valueQueue.shift();
+                        // Nothing to merge (assignGingerly would throw on null / undefined)
+                        if (queuedValue == null)
+                            continue;
                         await assignGingerlyFn(managerInstance, queuedValue, options);
                     }
                 })();

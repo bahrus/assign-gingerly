@@ -3398,11 +3398,10 @@ Result:
 1. Iterates the top-level keys of `from`, in `Object.keys` order.
 2. Maps each key to a manager name: `image` → `ImageISM`, `heroImage` → `HeroImageISM`.
 3. Skips the key if:
-   - the value isn't a non-array object;
    - no manager with that name is registered (it doesn't wait for registration);
    - the manager has no static `instantiate`;
    - the target already has a **direct child** with that `itemscope`.
-4. Calls `instantiate(value, ctx)` **synchronously**, where `ctx` is `{ target, key, from, options, registry }`. It skips the key unless the result is an `HTMLElement`.
+4. Calls `instantiate(value, ctx)` **synchronously**, where `ctx` is `{ target, key, from, options, registry }` (`ItemscopeTreeContext`). The value is passed as-is, whatever its type. It skips the key unless the result is an `HTMLElement`.
 5. Sets `itemscope=<managerName>` on the element. If the target itself has `itemscope`, it also sets `itemprop=<key>`.
 6. Appends the element to the target (`appendChild`).
 7. Instantiates the element's `ish` manager synchronously with the value, so `img.ish` is an `ImageHandler` constructed with `(img, image)`.
@@ -3410,7 +3409,46 @@ Result:
 **Notes:**
 - Uses the target's scoped `customElementRegistry.itemscopeRegistry` when it has one, falling back to `customElements.itemscopeRegistry`.
 - Emoji alias: `🌳` (via `builtInEmoji`).
-- Phase I only creates elements; updating existing ones is planned.
+- It only creates elements; updating existing ones is planned.
+
+**Explicit mapping with `map`:**
+
+Pass `map` to choose the managers explicitly. A value can be a class or the name of an already registered manager:
+
+```JavaScript
+await assignFromAsync(document.getElementById('api-response'), {
+    '?. =>': {
+        do: 'builtIns.itemscopeTree',
+        map: {
+            image: ImageHandler,
+            filler: class Filler { static instantiate() { return document.createElement('br'); } },
+            mission: 'MissionManager'   // must already be registered
+        }
+    }
+}, { from: vm });
+```
+
+With `map`:
+
+- Only the map's keys are processed, **in map order**, and the VM's keys aren't iterated. A key the VM lacks (`filler`) is still instantiated, with `undefined`.
+- A **class** is defined in the registry automatically, under `Class.itemscope ?? Class.name`, unless it's already registered. That name becomes the element's `itemscope`.
+- A **string** must name a manager that is already registered; otherwise the key is skipped.
+- `itemprop=<key>` is **always** set. Existing direct children are detected by `itemprop`, so one class can serve several keys.
+- It throws when a class has no usable name, when the name is already registered to a *different* class, or when an entry is neither a class nor a string.
+
+> [!IMPORTANT]
+> Bundlers and minifiers can rename classes (`class e {}`, `ImageHandler$1`), and that changes `Class.name`. For an itemscope name that survives bundling, declare it explicitly:
+>
+> ```JavaScript
+> class ImageHandler {
+>     static itemscope = 'ImageHandler';
+>     static instantiate(image, ctx) { /* ... */ }
+> }
+> ```
+>
+> Alternatively, register the manager yourself and use the string form.
+
+Integer-like keys (`'1'`, `'2'`) always come first in `Object.keys` order, regardless of the order they were written in, so avoid them when order matters.
 
 ## Typed Path Authoring with `paths`, `sp`, and `md`
 
@@ -4233,13 +4271,9 @@ const div2 = document.createElement('div');
 div2.setAttribute('itemscope', '');
 div2.assignGingerly({ ish: { prop: 'value' } });
 // Throws asynchronously
-
-// Error: ish value must be an object
-const div3 = document.createElement('div');
-div3.setAttribute('itemscope', 'my-manager');
-div3.assignGingerly({ ish: 'string' });
-// Throws asynchronously
 ```
+
+The `ish` value itself may be any type. The first value is merged into the constructor's `initVals` via `Object.assign({}, value)`, so strings and arrays spread into indexed properties, and primitives or `null`/`undefined` give `{}`. Later values are merged into the instance with `assignGingerly`; `null`/`undefined` are skipped.
 
 **Note**: Errors are thrown asynchronously since the `ish` property setup happens in the background. They will appear in the console but won't be catchable with try/catch around the `assignGingerly` call.
 

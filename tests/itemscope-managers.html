@@ -136,21 +136,19 @@
       await new Promise(resolve => setTimeout(resolve, 50));
       // Error should have been thrown asynchronously
       
-      // Test 12: HTMLElement with itemscope but non-object ish value throws error (async)
+      // Test 12: HTMLElement with itemscope accepts a non-object ish value (no validation error)
       const div3 = document.createElement('div');
       div3.setAttribute('itemscope', 'test-manager');
       assignGingerly(div3, { ish: 'string' });
       await new Promise(resolve => setTimeout(resolve, 50));
-      // Error should have been thrown asynchronously
-      
-      // Test 13: HTMLElement with itemscope and null ish value throws error (async)
+
+      // Test 13: HTMLElement with itemscope accepts a null ish value (no validation error)
       const div4 = document.createElement('div');
       div4.setAttribute('itemscope', 'test-manager');
       assignGingerly(div4, { ish: null });
       await new Promise(resolve => setTimeout(resolve, 50));
-      // Error should have been thrown asynchronously
-      
-      // Note: Tests 10-13 verify errors are thrown but we can't easily catch async errors
+
+      // Note: Tests 10-11 verify errors are thrown but we can't easily catch async errors
       // in this test framework. The errors will appear in console.
 
       results.push('<h2>Manager Instantiation Tests</h2>');
