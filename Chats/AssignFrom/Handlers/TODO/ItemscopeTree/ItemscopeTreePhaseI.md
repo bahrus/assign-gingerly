@@ -11,7 +11,7 @@ The typical use case is a JSON object is retrieved from an API, and we want to
 1.  Map the JSON object to a DOM tree the first time
 2.  Update the DOM with a retrieval of new JSON
 
-This can be handled by a specific rendering technology like template literals.  That is not what this handler focuses on.  Instead, the assumption is that we will want each (or at least some) nodes to be managed by an itemscope manager class.  The class itself my very well use template literals.  
+This can be handled by a specific rendering technology like template literals.  That is not what this handler focuses on.  Instead, the assumption is that we will want each (or at least some) nodes to be managed by an itemscope manager class.  The class itself may very well use template literals.  
 
 From the point of view of this handler, we assume there is a registered itemscope manager, tied to the name of the property.
 
