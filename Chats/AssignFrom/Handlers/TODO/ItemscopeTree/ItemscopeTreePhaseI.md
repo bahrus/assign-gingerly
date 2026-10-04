@@ -1,4 +1,4 @@
-# DOM Element Isms Handler Part I - Initial Instantiation
+# DOM Element Isms Handler Phase I - Initial Instantiation
 
 ## Bruce
 
