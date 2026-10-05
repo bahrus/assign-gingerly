@@ -3393,62 +3393,16 @@ Result:
 </details>
 ```
 
-**How it works:**
+`img.ish` is now an `ImageHandler` instance, constructed with `(img, image)`.
 
-1. Iterates the top-level keys of `from`, in `Object.keys` order.
-2. Maps each key to a manager name: `image` → `ImageISM`, `heroImage` → `HeroImageISM`.
-3. Skips the key if:
-   - no manager with that name is registered (it doesn't wait for registration);
-   - the manager has no static `instantiate`;
-   - the target already has a **direct child** with that `itemscope`.
-4. Calls `instantiate(value, ctx)` **synchronously**, where `ctx` is `{ target, key, from, options, registry }` (`ItemscopeTreeContext`). The value is passed as-is, whatever its type. It skips the key unless the result is an `HTMLElement`.
-5. Sets `itemscope=<managerName>` on the element. If the target itself has `itemscope`, it also sets `itemprop=<key>`.
-6. Appends the element to the target (`appendChild`).
-7. Instantiates the element's `ish` manager synchronously with the value, so `img.ish` is an `ImageHandler` constructed with `(img, image)`.
+Key points:
 
-**Notes:**
-- Uses the target's scoped `customElementRegistry.itemscopeRegistry` when it has one, falling back to `customElements.itemscopeRegistry`.
-- Emoji alias: `🌳` (via `builtInEmoji`).
-- It only creates elements; updating existing ones is planned.
+- **Pairing keys with managers:** without configuration, each key maps to a manager named `<PascalCasedKey>ISM`. Alternatively, a `map` lists the keys and their managers explicitly, in order. A map entry is either a class, registered automatically under `static itemscope` or its class name, or the name of a registered manager.
+- **Synchronous:** `instantiate` is called synchronously with the value as-is, whatever its type. The manager is attached through `ish` immediately, and `static onAssigned` is honored.
+- **Idempotent:** a key is skipped when a direct child of the target already has its element. Updating existing elements is planned.
+- **Emoji alias:** `🌳`.
 
-**Explicit mapping with `map`:**
-
-Pass `map` to choose the managers explicitly. A value can be a class or the name of an already registered manager:
-
-```JavaScript
-await assignFromAsync(document.getElementById('api-response'), {
-    '?. =>': {
-        do: 'builtIns.itemscopeTree',
-        map: {
-            image: ImageHandler,
-            filler: class Filler { static instantiate() { return document.createElement('br'); } },
-            mission: 'MissionManager'   // must already be registered
-        }
-    }
-}, { from: vm });
-```
-
-With `map`:
-
-- Only the map's keys are processed, **in map order**, and the VM's keys aren't iterated. A key the VM lacks (`filler`) is still instantiated, with `undefined`.
-- A **class** is defined in the registry automatically, under `Class.itemscope ?? Class.name`, unless it's already registered. That name becomes the element's `itemscope`.
-- A **string** must name a manager that is already registered; otherwise the key is skipped.
-- `itemprop=<key>` is **always** set. Existing direct children are detected by `itemprop`, so one class can serve several keys.
-- It throws when a class has no usable name, when the name is already registered to a *different* class, or when an entry is neither a class nor a string.
-
-> [!IMPORTANT]
-> Bundlers and minifiers can rename classes (`class e {}`, `ImageHandler$1`), and that changes `Class.name`. For an itemscope name that survives bundling, declare it explicitly:
->
-> ```JavaScript
-> class ImageHandler {
->     static itemscope = 'ImageHandler';
->     static instantiate(image, ctx) { /* ... */ }
-> }
-> ```
->
-> Alternatively, register the manager yourself and use the string form.
-
-Integer-like keys (`'1'`, `'2'`) always come first in `Object.keys` order, regardless of the order they were written in, so avoid them when order matters.
+For the full reference (`map`, the `instantiate` contract, stable class names under bundlers, errors and types), see [docs/itemscope-tree.md](docs/itemscope-tree.md).
 
 ## Typed Path Authoring with `paths`, `sp`, and `md`
 
