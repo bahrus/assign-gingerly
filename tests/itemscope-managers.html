@@ -241,6 +241,118 @@
       assert(div7.ish.prop1 === 'val1', 'should merge first queued value');
       assert(div7.ish.prop2 === 'val2', 'should merge second queued value');
 
+      results.push('<h2>onAssigned and synchronous application</h2>');
+
+      const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+      // Define a manager globally and give an element its first ish value;
+      // resolves once the ish property exists.
+      async function makeIsh(name, manager, firstValue) {
+        customElements.itemscopeRegistry.define(name, { manager });
+        const el = document.createElement('div');
+        el.setAttribute('itemscope', name);
+        assignGingerly(el, { ish: firstValue });
+        for (let i = 0; i < 50 && !('ish' in el && el.ish); i++) await delay(0);
+        return el;
+      }
+
+      // Test 19: synchronous onAssigned — no initVals, every value (any type) passed, applied in the setter
+      {
+        class SyncManager {
+          constructor(element, initVals) { this.initVals = initVals; this.log = []; }
+          static onAssigned(instance, value, ctx) { instance.log.push([value, ctx.initial, ctx.element]); }
+        }
+        const el = await makeIsh('sync-on-assigned', SyncManager, 'hello');
+        const inst = el.ish;
+        assertEquals(inst.initVals, undefined, 'onAssigned: constructor gets no initVals');
+        assertEquals(inst.log[0]?.[0], 'hello', 'onAssigned: first value passed as-is (string not spread)');
+        assertEquals(inst.log[0]?.[1], true, 'onAssigned: first call has initial = true');
+        assertEquals(inst.log[0]?.[2], el, 'onAssigned: ctx.element is the element');
+        el.ish = 'second';
+        assertEquals(inst.log[1]?.[0], 'second', 'onAssigned: later set applied synchronously (no await)');
+        assertEquals(inst.log[1]?.[1], false, 'onAssigned: later call has initial = false');
+        el.ish = null;
+        assertEquals(inst.log.length, 3, 'onAssigned: null is passed through too');
+        assertEquals(el.ish, inst, 'onAssigned: instance kept across sets');
+      }
+
+      // Test 20: default merge — later sets now applied synchronously
+      {
+        class Plain { constructor(element, initVals) { Object.assign(this, initVals); } }
+        const el = await makeIsh('sync-default-merge', Plain, { a: 1 });
+        el.ish = { b: 2 };
+        assertEquals(el.ish.b, 2, 'default merge: later set applied synchronously (no await)');
+        assertEquals(el.ish.a, 1, 'default merge: earlier value kept');
+      }
+
+      // Test 21: async onAssigned — values never interleave, applied in assignment order
+      {
+        let inFlight = 0, maxInFlight = 0;
+        class AsyncManager {
+          constructor() { this.applied = []; }
+          static async onAssigned(instance, value) {
+            inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+            await delay(value === 'A' ? 30 : 0);
+            instance.applied.push(value);
+            inFlight--;
+          }
+        }
+        const el = await makeIsh('async-on-assigned', AsyncManager, 'first');
+        await delay(10);
+        el.ish = 'A';
+        el.ish = 'B';
+        el.ish = 'C';
+        await delay(80);
+        assertEquals(el.ish.applied.join(','), 'first,A,B,C', 'async onAssigned: applied in assignment order');
+        assertEquals(maxInFlight, 1, 'async onAssigned: never more than one call in flight');
+      }
+
+      // Test 22: plain method returning a Promise is treated as async (return-value detection)
+      {
+        let inFlight = 0, maxInFlight = 0;
+        class ThenManager {
+          constructor() { this.applied = []; }
+          static onAssigned(instance, value) {
+            inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+            return delay(value === 'A' ? 30 : 0).then(() => { instance.applied.push(value); inFlight--; });
+          }
+        }
+        const el = await makeIsh('then-on-assigned', ThenManager, 'first');
+        await delay(10);
+        el.ish = 'A';
+        el.ish = 'B';
+        await delay(80);
+        assertEquals(el.ish.applied.join(','), 'first,A,B', 'Promise-returning onAssigned: applied in order');
+        assertEquals(maxInFlight, 1, 'Promise-returning onAssigned: never more than one call in flight');
+      }
+
+      // Test 23: errors — sync throw propagates; async rejection doesn't stop the queue
+      {
+        class ErrManager {
+          constructor() { this.applied = []; }
+          static onAssigned(instance, value) {
+            if (value === 'sync-bad') throw new Error('sync failure');
+            if (value === 'async-bad') return Promise.reject(new Error('expected async failure (test)'));
+            if (value === 'slow') return delay(10).then(() => instance.applied.push(value));
+            instance.applied.push(value);
+          }
+        }
+        const el = await makeIsh('error-on-assigned', ErrManager, 'first');
+        let thrown;
+        try { el.ish = 'sync-bad'; } catch (e) { thrown = e; }
+        assertEquals(thrown?.message, 'sync failure', 'sync onAssigned error propagates out of the assignment');
+
+        // Swallow the asynchronous rethrow so it doesn't surface as a page error
+        const onError = e => { if (e.message?.includes('expected async failure')) e.preventDefault(); };
+        window.addEventListener('error', onError);
+        el.ish = 'slow';
+        el.ish = 'async-bad';
+        el.ish = 'after';
+        await delay(50);
+        window.removeEventListener('error', onError);
+        assertEquals(el.ish.applied.join(','), 'first,slow,after', 'async rejection is reported and the queue continues');
+      }
+
       // Display results
       document.getElementById('results').innerHTML = results.join('');
       

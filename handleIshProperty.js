@@ -50,11 +50,36 @@ async function defineIshProperty(element, managerName, options, assignGingerlyFn
             throw new Error(`Manager "${managerName}" not found after registration event`);
         }
     }
+    // Another assignment waiting on the same registration may have defined it already;
+    // redefining would discard that instance.
+    if ('ish' in element)
+        return;
     defineIshCore(element, config, options, assignGingerlyFn);
+}
+/**
+ * Report an error from an async `onAssigned` without stopping the queue:
+ * log it, and rethrow asynchronously so it stays visible.
+ */
+function reportAsync(err) {
+    console.error('Error in onAssigned:', err);
+    setTimeout(() => { throw err; }, 0);
+}
+function isThenable(value) {
+    return value != null && typeof value.then === 'function';
 }
 /**
  * Synchronously define the 'ish' property on an element, given an already-resolved
  * manager config. The manager is instantiated on the first set.
+ *
+ * Each set is applied synchronously, in the setter:
+ * - If the manager class has a static `onAssigned(instance, value, ctx)`, the first set
+ *   constructs `new Manager(element)` (no initVals) and every set, including the first,
+ *   calls `onAssigned`.
+ * - Otherwise the first set constructs `new Manager(element, Object.assign({}, value))`
+ *   and later sets merge via `assignGingerly` (`null` / `undefined` are skipped).
+ *
+ * If `onAssigned` returns a thenable, later values are queued and applied in order once
+ * it settles — so async handlers never interleave. No `await` happens otherwise.
  *
  * Used directly by builtIns.itemscopeTree, which already holds the config and must
  * stay synchronous.
@@ -65,9 +90,59 @@ async function defineIshProperty(element, managerName, options, assignGingerlyFn
  * @param assignGingerlyFn - Reference to the assignGingerly function for recursive calls
  */
 export function defineIshCore(element, config, options, assignGingerlyFn) {
-    // Create manager instance
+    const { manager } = config;
+    const { onAssigned } = manager;
     let managerInstance = null;
+    // Values that arrived while an async onAssigned was in flight
     const valueQueue = [];
+    let pending = false;
+    /**
+     * Apply one value synchronously. Returns onAssigned's result (possibly a thenable).
+     */
+    function apply(value) {
+        if (managerInstance === null) {
+            if (onAssigned) {
+                managerInstance = new manager(element);
+                return onAssigned.call(manager, managerInstance, value, { element, initial: true, options });
+            }
+            managerInstance = new manager(element, Object.assign({}, value));
+            return;
+        }
+        if (onAssigned) {
+            return onAssigned.call(manager, managerInstance, value, { element, initial: false, options });
+        }
+        // Nothing to merge (assignGingerly would throw on null / undefined)
+        if (value == null)
+            return;
+        assignGingerlyFn(managerInstance, value, options);
+    }
+    /**
+     * Single drain loop: wait for the in-flight onAssigned, then apply queued values in
+     * order, waiting again whenever one of them returns a thenable.
+     */
+    async function drain(inFlight) {
+        let current = inFlight;
+        while (current) {
+            try {
+                await current;
+            }
+            catch (err) {
+                reportAsync(err);
+            }
+            current = undefined;
+            while (!current && valueQueue.length > 0) {
+                try {
+                    const result = apply(valueQueue.shift());
+                    if (isThenable(result))
+                        current = result;
+                }
+                catch (err) {
+                    reportAsync(err);
+                }
+            }
+        }
+        pending = false;
+    }
     // Define the 'ish' property
     Object.defineProperty(element, 'ish', {
         get() {
@@ -79,26 +154,16 @@ export function defineIshCore(element, config, options, assignGingerlyFn) {
             if (managerInstance !== null && newValue === managerInstance) {
                 return;
             }
-            // Queue the value
-            valueQueue.push(newValue);
-            // If manager not yet instantiated, create it
-            if (!managerInstance) {
-                // Merge all queued values for initVals
-                const initVals = Object.assign({}, ...valueQueue);
-                managerInstance = new config.manager(element, initVals);
-                valueQueue.length = 0; // Clear queue
+            // An async onAssigned is in flight: preserve order
+            if (pending) {
+                valueQueue.push(newValue);
+                return;
             }
-            else {
-                // Process queue asynchronously
-                (async () => {
-                    while (valueQueue.length > 0) {
-                        const queuedValue = valueQueue.shift();
-                        // Nothing to merge (assignGingerly would throw on null / undefined)
-                        if (queuedValue == null)
-                            continue;
-                        await assignGingerlyFn(managerInstance, queuedValue, options);
-                    }
-                })();
+            // Synchronous fast path (errors propagate out of the assignment)
+            const result = apply(newValue);
+            if (isThenable(result)) {
+                pending = true;
+                drain(result);
             }
         },
         enumerable: true,

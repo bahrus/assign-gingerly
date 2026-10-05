@@ -4273,7 +4273,26 @@ div2.assignGingerly({ ish: { prop: 'value' } });
 // Throws asynchronously
 ```
 
-The `ish` value itself may be any type. The first value is merged into the constructor's `initVals` via `Object.assign({}, value)`, so strings and arrays spread into indexed properties, and primitives or `null`/`undefined` give `{}`. Later values are merged into the instance with `assignGingerly`; `null`/`undefined` are skipped.
+The `ish` value itself may be any type. Once the `ish` property exists, each `element.ish = value` is applied **synchronously**, inside the setter:
+
+- **Default:** the first value is merged into the constructor's `initVals` via `Object.assign({}, value)`, so strings and arrays spread into indexed properties, and primitives or `null`/`undefined` give `{}`. Later values are merged into the instance with `assignGingerly`; `null`/`undefined` are skipped.
+- **With `static onAssigned`:** the manager decides how values are applied. The instance is constructed with **no `initVals`**, and every value, including the first and including `null`/`undefined`, is passed as-is:
+
+```JavaScript
+class TitleManager {
+    constructor(element) { this.element = element; }
+    static onAssigned(instance, value, ctx) {
+        // ctx: { element, initial, options }   (IshAssignContext)
+        instance.element.textContent = String(value ?? '');
+    }
+}
+```
+
+If `onAssigned` returns a Promise (an `async` method, or a plain method returning one), values assigned while it's pending are queued and applied in order once it settles, so calls never interleave. A synchronous `onAssigned` involves no `await` at all.
+
+Errors:
+- A synchronous `onAssigned` that throws propagates out of the `element.ish = value` assignment.
+- A rejected Promise is logged and rethrown asynchronously, and queued values continue to be applied.
 
 **Note**: Errors are thrown asynchronously since the `ish` property setup happens in the background. They will appear in the console but won't be catchable with try/catch around the `assignGingerly` call.
 
