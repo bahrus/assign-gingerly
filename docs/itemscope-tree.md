@@ -2,6 +2,8 @@
 
 A handler that builds a tree of [itemscope-managed](../README.md#itemscope-managers-chrome-146) elements from a view model, for example a JSON API response. Each VM entry is paired with an itemscope manager class, which creates the entry's element through a static `instantiate` method and then manages it through the element's `ish` property.
 
+**Demo:** [demos/itemscope-tree-demo.html](../demos/itemscope-tree-demo.html) builds a launch summary from a complex JSON response. Run `npm run serve`, then open `/demos/itemscope-tree-demo.html`.
+
 This handler doesn't use templates or a rendering library. It decides *which* element exists for each piece of data, and where; each manager class decides *what* that element looks like (and may use template literals or anything else to do so).
 
 ## Import

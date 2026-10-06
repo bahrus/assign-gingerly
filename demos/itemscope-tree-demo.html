@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>itemscopeTree Demo — Launch API response</title>
+    <style>
+        :root {
+            --fg: #1d2330;
+            --muted: #5b6475;
+            --line: #d9dee7;
+            --card: #f7f9fc;
+            --accent: #2f6fd0;
+            --ok: #1f8a4c;
+            --bad: #c0392b;
+            --pending: #a86b00;
+        }
+        body {
+            font-family: system-ui, sans-serif;
+            color: var(--fg);
+            margin: 2rem auto;
+            max-width: 960px;
+            padding: 0 1rem;
+            line-height: 1.45;
+        }
+        h1 { margin-bottom: 0.25rem; }
+        .lede { color: var(--muted); margin-top: 0; }
+        code { background: #eef1f6; padding: 0 0.25em; border-radius: 3px; }
+
+        .controls { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
+        button {
+            padding: 0.45rem 0.9rem;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font: inherit;
+        }
+        button:hover { border-color: var(--accent); }
+
+        /* The target. Children are placed by their itemprop, which
+           builtIns.itemscopeTree always sets when `map` is used. */
+        #launch {
+            display: grid;
+            grid-template-columns: 112px minmax(0, 1fr) minmax(0, 1fr);
+            grid-template-areas:
+                "patch    name     name"
+                "patch    status   status"
+                "patch    date     date"
+                "details  details  details"
+                "links    links    links"
+                "rocket   rocket   crew"
+                "cores    cores    failures";
+            gap: 0.75rem 1.25rem;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 1.25rem;
+            min-height: 120px;
+        }
+        #launch > [itemprop="patch"]    { grid-area: patch; }
+        #launch > [itemprop="name"]     { grid-area: name; margin: 0; }
+        #launch > [itemprop="status"]   { grid-area: status; justify-self: start; }
+        #launch > [itemprop="date_utc"] { grid-area: date; color: var(--muted); }
+        #launch > [itemprop="details"]  { grid-area: details; margin: 0; }
+        #launch > [itemprop="links"]    { grid-area: links; }
+        #launch > [itemprop="rocket"]   { grid-area: rocket; }
+        #launch > [itemprop="crew"]     { grid-area: crew; }
+        #launch > [itemprop="cores"]    { grid-area: cores; }
+        #launch > [itemprop="failures"] { grid-area: failures; }
+        @media (max-width: 640px) {
+            #launch {
+                grid-template-columns: 80px minmax(0, 1fr);
+                grid-template-areas:
+                    "patch name" "patch status" "patch date"
+                    "details details" "links links"
+                    "rocket rocket" "crew crew" "cores cores" "failures failures";
+            }
+            .patch { width: 80px; height: 80px; }
+        }
+
+        .patch { width: 112px; height: 112px; }
+        .badge {
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 0.15rem 0.6rem;
+            border-radius: 999px;
+            color: white;
+        }
+        .badge.ok { background: var(--ok); }
+        .badge.bad { background: var(--bad); }
+        .badge.pending { background: var(--pending); }
+        .details.empty { color: var(--muted); font-style: italic; }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+        }
+        .card h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+        .card ul { margin: 0; padding-left: 1.1rem; }
+        .muted { color: var(--muted); }
+
+        .spec { display: flex; justify-content: space-between; gap: 1rem; border-top: 1px dashed var(--line); padding: 0.3rem 0; }
+        .spec .label { color: var(--muted); }
+
+        .links { display: flex; gap: 1rem; align-items: center; }
+        .links a { color: var(--accent); }
+        .links.verifying::after { content: "verifying…"; color: var(--pending); font-size: 0.85rem; }
+        .links.verified::after { content: "✓ verified"; color: var(--ok); font-size: 0.85rem; }
+
+        .panels { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; margin-top: 1.5rem; }
+        @media (max-width: 760px) { .panels { grid-template-columns: minmax(0, 1fr); } }
+        #log {
+            font-family: ui-monospace, monospace;
+            font-size: 0.8rem;
+            max-height: 360px;
+            overflow: auto;
+            margin: 0;
+            padding-left: 2.2rem;
+        }
+        #log li { margin: 0.1rem 0; }
+        #log .src { color: var(--accent); }
+        pre { font-size: 0.75rem; max-height: 360px; overflow: auto; background: var(--card); padding: 0.75rem; border-radius: 8px; }
+        .error { color: var(--bad); }
+    </style>
+</head>
+<body>
+    <h1>builtIns.itemscopeTree demo</h1>
+    <p class="lede">
+        Builds a launch summary from a JSON API response
+        (<a href="./data/launch.json">data/launch.json</a>, a fictional launch modeled on the SpaceX API v4 shape).
+        Each part of the response is paired with an itemscope manager class, whose static <code>instantiate</code> creates
+        the element and whose <code>ish</code> instance manages it.
+    </p>
+
+    <details>
+        <summary>What this demo exercises</summary>
+        <ul>
+            <li><strong><code>map</code></strong> controls which keys are used and in what order. The response's
+                <code>id</code>, <code>flight_number</code> and <code>upcoming</code> keys aren't in the map, so they're ignored.</li>
+            <li><strong>Class entries</strong> are registered automatically. <code>PatchImage</code> and <code>CrewList</code>
+                declare <code>static itemscope</code>, so their names survive bundling.</li>
+            <li><strong>A string entry</strong>: <code>MissionTitle</code> is registered up front and referenced by name.</li>
+            <li><strong>A key missing from the response</strong>: <code>status</code> is instantiated with <code>undefined</code>,
+                and derives its badge from <code>ctx.from</code>.</li>
+            <li><strong>Every value type</strong>: strings (<code>name</code>, <code>date_utc</code>), <code>null</code>-able
+                strings (<code>details</code>), objects, arrays (<code>crew</code>, <code>cores</code>), and an empty array
+                (<code>failures</code>). Non-object values are handled by <code>static onAssigned</code>.</li>
+            <li><strong>Nested trees</strong>: <code>RocketCard</code> runs a second itemscopeTree over the rocket object
+                using the <code>&lt;Key&gt;ISM</code> naming convention, which picks up <code>HeightISM</code>,
+                <code>MassISM</code> and <code>EnginesISM</code> and skips unregistered keys.</li>
+            <li><strong><code>itemprop</code></strong> is always set with <code>map</code>, and the CSS grid places every
+                child by it.</li>
+            <li><strong>Updates through <code>ish</code></strong>, synchronous by default, with an async
+                <code>onAssigned</code> (<code>LinksBar</code>) whose calls are applied strictly in order.</li>
+        </ul>
+    </details>
+
+    <div class="controls">
+        <button id="run-again">Run again (idempotent)</button>
+        <button id="update-details">Update details via ish</button>
+        <button id="null-details">Set details to null</button>
+        <button id="toggle-units">Toggle units</button>
+        <button id="links-twice">Change links twice quickly</button>
+        <button id="rebuild">Clear &amp; rebuild</button>
+    </div>
+
+    <article id="launch" aria-live="polite"></article>
+
+    <div class="panels">
+        <section>
+            <h2>Event log</h2>
+            <ol id="log"></ol>
+        </section>
+        <section>
+            <h2>API response</h2>
+            <pre id="raw">Loading…</pre>
+        </section>
+    </div>
+
+    <template id="spec-template">
+        <div class="spec">
+            <span class="label"></span>
+            <span class="value"></span>
+        </div>
+    </template>
+
+    <script type="module">
+        import { assignFromAsync } from '../index.js';
+
+        const registry = customElements.itemscopeRegistry;
+        const launchEl = document.getElementById('launch');
+        const logEl = document.getElementById('log');
+        const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+        function log(source, message) {
+            const li = document.createElement('li');
+            const src = document.createElement('span');
+            src.className = 'src';
+            src.textContent = source;
+            li.append(src, ' ', message);
+            logEl.append(li);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        /** Tiny element helper — data always goes through properties / textContent, never innerHTML. */
+        function h(tag, props = {}, ...children) {
+            const element = Object.assign(document.createElement(tag), props);
+            element.append(...children);
+            return element;
+        }
+
+        function spec(label) {
+            //return h('div', { className: 'spec' }, h('span', { className: 'label', textContent: label }), h('span', { className: 'value' }));
+            const template = document.getElementById('spec-template');
+            const clone = template.content.cloneNode(true);
+            clone.querySelector('.label').textContent = label;
+            return clone;
+        }
+
+        // ── Top-level managers (used through `map`) ─────────────────────────────
+
+        /** Object value; explicit stable name. */
+        class PatchImage {
+            static itemscope = 'PatchImage';
+            constructor(element, initVals) {
+                log('PatchImage', `constructed with initVals ${JSON.stringify(initVals)}`);
+            }
+            static instantiate(patch, ctx) {
+                log('PatchImage.instantiate', `key "${ctx.key}"`);
+                if (!patch?.small) return null; // no image → key skipped
+                return h('img', { className: 'patch', src: patch.small, alt: patch.alt ?? '', width: 112, height: 112 });
+            }
+        }
+
+        /** String value; registered by name and referenced as a string in `map`. */
+        class MissionTitle {
+            constructor(element) { this.element = element; }
+            static instantiate() { return h('h2'); }
+            static onAssigned(instance, name, ctx) {
+                instance.element.textContent = name;
+                log('MissionTitle.onAssigned', `"${name}" (initial: ${ctx.initial})`);
+            }
+        }
+        registry.define('MissionTitle', { manager: MissionTitle });
+
+        /** Key not present in the response: value is undefined, derived from ctx.from. */
+        class StatusBadge {
+            static instantiate(value, ctx) {
+                const { upcoming, success } = ctx.from;
+                const [text, cls] = upcoming ? ['Upcoming', 'pending']
+                    : success === true ? ['Success', 'ok']
+                    : success === false ? ['Failure', 'bad']
+                    : ['Unknown', 'pending'];
+                log('StatusBadge.instantiate', `value is ${value} ("status" isn't in the response), so it's derived from ctx.from: ${text}`);
+                return h('span', { className: `badge ${cls}`, textContent: text });
+            }
+        }
+
+        /** ISO string → <time>. */
+        class LaunchDate {
+            constructor(element) { this.element = element; }
+            static instantiate() { return h('time'); }
+            static onAssigned(instance, iso) {
+                instance.element.dateTime = iso;
+                instance.element.textContent = new Date(iso).toLocaleString(undefined, {
+                    dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC'
+                }) + ' UTC';
+                log('LaunchDate.onAssigned', iso);
+            }
+        }
+
+        /** String or null. */
+        class Details {
+            constructor(element) { this.element = element; }
+            static instantiate() { return h('p', { className: 'details' }); }
+            static onAssigned(instance, text, ctx) {
+                instance.element.textContent = text ?? 'No details provided.';
+                instance.element.classList.toggle('empty', text == null);
+                log('Details.onAssigned', `${JSON.stringify(text)} (initial: ${ctx.initial})`);
+            }
+        }
+
+        /** Object with an async onAssigned: later values queue until the previous call settles. */
+        class LinksBar {
+            constructor(element) { this.element = element; }
+            static instantiate() { return h('nav', { className: 'links', ariaLabel: 'Launch links' }); }
+            static async onAssigned(instance, links) {
+                const label = links.webcast?.split('/').pop() ?? '(none)';
+                log('LinksBar.onAssigned', `start: ${label}`);
+                const anchors = Object.entries(links)
+                    .filter(([, href]) => typeof href === 'string') // wikipedia: null → skipped
+                    .map(([name, href]) => h('a', { href, textContent: name, target: '_blank', rel: 'noopener' }));
+                instance.element.replaceChildren(...anchors);
+                instance.element.classList.remove('verified');
+                instance.element.classList.add('verifying');
+                // Simulated link check, deliberately slower for the first value
+                await delay(label.endsWith('-a') ? 900 : 200);
+                instance.element.classList.replace('verifying', 'verified');
+                log('LinksBar.onAssigned', `done: ${label}`);
+            }
+        }
+
+        /** Object → nested tree using the <Key>ISM naming convention. */
+        class RocketCard {
+            constructor(element) { this.element = element; }
+            static instantiate(rocket) {
+                return h('section', { className: 'card' },
+                    h('h3', { textContent: `Rocket: ${rocket.name}` }),
+                    h('div', { className: 'specs' }));
+            }
+            static onAssigned(instance, rocket, ctx) {
+                if (!ctx.initial) return;
+                log('RocketCard.onAssigned', 'running a nested itemscopeTree over the rocket object (naming convention)');
+                assignFromAsync(instance.element.querySelector('.specs'), {
+                    '?. =>': { do: 'builtIns.itemscopeTree' }
+                }, { from: rocket });
+            }
+        }
+
+        /** Array value; explicit stable name. */
+        class CrewList {
+            static itemscope = 'CrewList';
+            constructor(element) { this.element = element; }
+            static instantiate() {
+                return h('section', { className: 'card' }, h('h3', { textContent: 'Crew' }), h('ul'));
+            }
+            static onAssigned(instance, crew) {
+                const items = crew.map(({ name, role, agency }) =>
+                    h('li', {}, h('strong', { textContent: name }), ` — ${role}`, h('div', { className: 'muted', textContent: agency })));
+                instance.element.querySelector('ul').replaceChildren(...items);
+                log('CrewList.onAssigned', `${crew.length} crew members`);
+            }
+        }
+
+        /** Array of objects. */
+        class CoreList {
+            constructor(element) { this.element = element; }
+            static instantiate() {
+                return h('section', { className: 'card' }, h('h3', { textContent: 'First-stage cores' }), h('ul'));
+            }
+            static onAssigned(instance, cores) {
+                const items = cores.map(({ serial, flight, reused, landing_success, landing_type }) =>
+                    h('li', { textContent: `${serial}, flight ${flight}${reused ? ' (reused)' : ''}; landing: ${landing_success ? 'success' : 'not successful'} (${landing_type})` }));
+                instance.element.querySelector('ul').replaceChildren(...items);
+                log('CoreList.onAssigned', `${cores.length} core(s)`);
+            }
+        }
+
+        /** Possibly empty array. */
+        class FailureList {
+            constructor(element) { this.element = element; }
+            static instantiate() {
+                return h('section', { className: 'card' }, h('h3', { textContent: 'Failures' }), h('ul'));
+            }
+            static onAssigned(instance, failures) {
+                const ul = instance.element.querySelector('ul');
+                ul.replaceChildren(...(failures.length
+                    ? failures.map(f => h('li', { textContent: `T+${f.time}s: ${f.reason}` }))
+                    : [h('li', { className: 'muted', textContent: 'No failures recorded.' })]));
+                log('FailureList.onAssigned', failures.length ? `${failures.length} failure(s)` : 'empty array');
+            }
+        }
+
+        // ── Nested managers (picked up by the naming convention inside RocketCard) ──
+
+        /**
+         * Default merge path (no onAssigned): initVals are merged by the constructor,
+         * and later `ish = { units }` assignments go through assignGingerly, which
+         * calls the `units` setter synchronously.
+         */
+        class UnitSpec {
+            #units = 'metric';
+            constructor(element, initVals) {
+                this.element = element;
+                Object.assign(this, initVals);
+                this.render();
+            }
+            get units() { return this.#units; }
+            set units(value) {
+                this.#units = value;
+                this.render();
+            }
+        }
+
+        class HeightManager extends UnitSpec {
+            static instantiate() { return spec('Height'); }
+            render() {
+                this.element.querySelector('.value').textContent =
+                    this.units === 'metric' ? `${this.meters} m` : `${this.feet} ft`;
+            }
+        }
+
+        class MassManager extends UnitSpec {
+            static instantiate() { return spec('Mass'); }
+            render() {
+                const n = this.units === 'metric' ? this.kg : this.lb;
+                this.element.querySelector('.value').textContent =
+                    `${n.toLocaleString()} ${this.units === 'metric' ? 'kg' : 'lb'}`;
+            }
+        }
+
+        class EnginesManager {
+            constructor(element) { this.element = element; }
+            static instantiate() { return spec('Engines'); }
+            static onAssigned(instance, { number, type, version, propellant_1, propellant_2 }) {
+                instance.element.querySelector('.value').textContent =
+                    `${number} × ${type} ${version} (${propellant_1} / ${propellant_2})`;
+            }
+        }
+
+        registry.define('HeightISM', { manager: HeightManager });
+        registry.define('MassISM', { manager: MassManager });
+        registry.define('EnginesISM', { manager: EnginesManager });
+
+        // ── Wiring ───────────────────────────────────────────────────────────────
+
+        const pattern = {
+            '?. =>': {
+                do: 'builtIns.itemscopeTree',
+                map: {
+                    patch: PatchImage,
+                    name: 'MissionTitle',
+                    status: StatusBadge,
+                    date_utc: LaunchDate,
+                    details: Details,
+                    links: LinksBar,
+                    rocket: RocketCard,
+                    crew: CrewList,
+                    cores: CoreList,
+                    failures: FailureList,
+                }
+            }
+        };
+
+        let response;
+
+        async function build(label) {
+            const before = launchEl.children.length;
+            const start = performance.now();
+            await assignFromAsync(launchEl, pattern, { from: response });
+            const ms = (performance.now() - start).toFixed(1);
+            log(label, `${before} → ${launchEl.children.length} top-level elements (${ms} ms)`);
+        }
+
+        const child = prop => launchEl.querySelector(`:scope > [itemprop="${prop}"]`);
+        const specs = () => launchEl.querySelectorAll('[itemscope="HeightISM"], [itemscope="MassISM"]');
+
+        document.getElementById('run-again').addEventListener('click', () => build('Run again'));
+
+        document.getElementById('update-details').addEventListener('click', () => {
+            const el = child('details');
+            el.ish = `Details updated at ${new Date().toLocaleTimeString()}.`;
+            // Synchronous onAssigned: already applied on the next line
+            log('Update details', `textContent right after assignment: "${el.textContent}"`);
+        });
+
+        document.getElementById('null-details').addEventListener('click', () => {
+            child('details').ish = null;
+        });
+
+        let imperial = false;
+        document.getElementById('toggle-units').addEventListener('click', () => {
+            imperial = !imperial;
+            const units = imperial ? 'imperial' : 'metric';
+            for (const el of specs()) el.ish = { units };
+            log('Toggle units', `ish = { units: '${units}' } on ${specs().length} specs (default merge, synchronous)`);
+        });
+
+        document.getElementById('links-twice').addEventListener('click', () => {
+            const el = child('links');
+            log('Change links twice', 'assigning -a (slow) then -b (fast); -b waits for -a to settle');
+            el.ish = { webcast: 'https://example.com/webcast/demo-mission-7-a', article: 'https://example.com/articles/demo-mission-7-a' };
+            el.ish = { webcast: 'https://example.com/webcast/demo-mission-7-b', article: 'https://example.com/articles/demo-mission-7-b' };
+        });
+
+        document.getElementById('rebuild').addEventListener('click', async () => {
+            launchEl.replaceChildren();
+            logEl.replaceChildren();
+            imperial = false;
+            await build('Rebuild');
+        });
+
+        try {
+            const res = await fetch('./data/launch.json');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            response = await res.json();
+            document.getElementById('raw').textContent = JSON.stringify(response, null, 2);
+            await build('Initial build');
+        } catch (err) {
+            const message = `Couldn't load the API response (${err.message}). Serve the repo over HTTP, e.g. npm run serve, then open /demos/itemscope-tree-demo.html.`;
+            launchEl.replaceChildren(h('p', { className: 'error', textContent: message }));
+            document.getElementById('raw').textContent = '';
+            console.error(err);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Demo Mission 7 patch">
+  <circle cx="60" cy="60" r="56" fill="#0b1d3a" stroke="#c9d6ea" stroke-width="4"/>
+  <circle cx="60" cy="60" r="40" fill="none" stroke="#3a6fb0" stroke-width="2" stroke-dasharray="4 4"/>
+  <path d="M60 22 L68 62 L60 56 L52 62 Z" fill="#e8eef7"/>
+  <path d="M52 62 L46 74 L56 66 Z M68 62 L74 74 L64 66 Z" fill="#9fb6d6"/>
+  <path d="M56 66 L60 84 L64 66 Z" fill="#f5a623"/>
+  <text x="60" y="104" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="700" fill="#e8eef7">DM-7</text>
+</svg>
