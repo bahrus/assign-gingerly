@@ -212,7 +212,7 @@
         }
 
         function spec(label) {
-            //return h('div', { className: 'spec' }, h('span', { className: 'label', textContent: label }), h('span', { className: 'value' }));
+            return h('div', { className: 'spec' }, h('span', { className: 'label', textContent: label }), h('span', { className: 'value' }));
             const template = document.getElementById('spec-template');
             const clone = template.content.cloneNode(true);
             clone.querySelector('.label').textContent = label;
