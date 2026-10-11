@@ -392,3 +392,96 @@ There *was* a fairly complete section, but it's easy to miss: **README → "Sync
 - **Full suite: 120 passed, 0 failed** across all three browsers.
 
 The three questions from the formatting proposal above are still open.
+
+## Bruce's Response -- Temporal
+
+Focusing on the first use case, could something like this work?:
+
+```JS
+date_utc: ['time', { 
+    dateTime: '?.', 
+    'textContent =&': ['?.parseDate?.toLocaleString', ' UTC' ],
+...,
+{
+    protocols: {
+        globalThis: (key) => globalThis[key]
+    },
+    withMethods: ['toLocaleString'],
+    pipeMethods: {
+        parseDate: 'globalThis://Temporal.Instant?.from'
+    },
+}
+```
+
+pipeMethods means allow the method name (parseDate) to be specified on the RHS rather than the LHS, inspired by the |> TC39 proposal that hasn't gone anywhere.
+
+I think where we would still fall short with this is to be able to specify the second argument of toLocaleString:   {dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' } correct?  Or is there already a way around this?
+
+Is that already too close to "An expression language in strings"?
+
+## Claude's Response -- Pipes
+
+### Short answers
+
+1. **Can it work?** Yes. The mechanism is sound, and it needs no new grammar: a path segment whose name is registered as a pipe calls `fn(current)` instead of reading a property. Your sketch needs three small fixes, listed below.
+2. **The second argument of `toLocaleString`:** correct, there's no way to pass it today. A method call takes at most **one string** argument, taken from the next segment (`?.toLocaleString?.en-US` calls `toLocaleString('en-US')`). There's also a subtler problem: with no options, `Instant.prototype.toLocaleString()` formats in the **viewer's** time zone, so the appended `' UTC'` would be wrong for anyone not in UTC. But there's a clean way around it, shown below.
+3. **Is it an expression language?** No, as long as pipes stay **unary, named functions registered in JS**. The config only *names* them, exactly as it names `withMethods`, `aka` entries and protocols. The step that *would* cross the line is adding argument syntax to paths (objects, multiple args). The way around #2 doesn't need it.
+
+### Fixes to the sketch
+
+| Sketch | Issue | Fix |
+|---|---|---|
+| `'textContent =&': [ … ]` | ` =&` needs a config object naming an op | `'textContent =&': { join: [ … ] }` |
+| `'globalThis://Temporal.Instant?.from'` | A protocol key ends at the first `?.`, so this looks up `globalThis['Temporal.Instant']` (`undefined`) | `'globalThis://Temporal?.Instant?.from'`, or just pass the function (see below) |
+| `?.toLocaleString` (last segment) | Fine. A listed method in the last segment is called with no arguments. | n/a |
+
+There's also a portability caveat: Temporal isn't shipped everywhere yet (Node 24 doesn't have it, for example). `Date.parse` does the same job here and works everywhere.
+
+### The way around the second argument: curry it in JS
+
+The options object belongs in JS, where objects are natural. Configure the formatter once and pipe into its `format`:
+
+```js
+date_utc: ['time', {
+    dateTime: '?.',
+    'textContent =&': { join: ['?.parseDate?.longUtc', ' UTC'] },
+}],
+```
+
+```js
+{
+    pipeMethods: {
+        parseDate: Date.parse,
+        longUtc: new Intl.DateTimeFormat(undefined, { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).format,
+    },
+}
+```
+
+I checked the JS half in Node: a detached `format` (it's a bound getter, so detaching is safe) applied to `Date.parse('2026-03-14T15:09:26.000Z')` gives `"March 14, 2026 at 3:09 PM"`. `Intl.DateTimeFormat#format` also accepts Temporal objects where Temporal exists, so `parseDate: Temporal.Instant.from` would work there too.
+
+### Pipes cover all three gaps, so I'd drop the `syncOps` proposal
+
+Pipes compose wherever paths go: inside `join`, in ` ?=` conditions and results, in Tree patterns, in handler `get` / `resolve` maps. A ` =&` op can't sit inside a `join` or a ternary. Taking the three gaps one at a time:
+
+| Gap | With pipes |
+|---|---|
+| Date label | `join: ['?.parseDate?.longUtc', ' UTC']` (above) |
+| Conditional text from several fields (core summary) | A unary pipe over the **object**: `textContent: '?.coreSummary'`, with `coreSummary: ({ serial, flight, reused, … }) => …` |
+| Choice + formatting (units) | A ternary chooses, and pipes format: `'textContent ?=': ['$root?.ui?.metric', '?.metersLabel', '?.feetLabel']` (`height` is the current value) |
+
+So I'd **implement pipes instead of custom ` =&` ops**. ` =&` stays as it is: a closed set of built-in, multi-argument computations like `join`.
+
+### Proposed semantics
+
+- **Values are functions** (`Date.parse`, a bound `format`, an arrow function). I'd skip protocol-string values for now. They add a level of indirection, and since `protocols` are already functions, options aren't JSON either way. They're easy to add later if needed.
+- **Strictly unary:** `fn(current)`, with **no argument from the next segment**. This keeps the grammar unchanged and the slope un-slippery.
+- **Called with `this` undefined:** pass bound functions. Static functions like `Date.parse` and `Temporal.Instant.from`, and `Intl`'s bound `format`, are already fine.
+- **`null` short-circuits.** Path navigation already stops at `null` / `undefined`, so a pipe is never called with nullish. Use ` ?=`'s `'??'` chain for placeholders: `['?.details', '??', 'No details provided.']`.
+- **Collisions:** if a pipe's name matches a real property on the current value, I'd let the **pipe win**. It's registered per call, so that's the author's intent, and it should be documented. An explicit marker (e.g. `?.|>longUtc`) is an option if collisions turn out to bite, but it's new syntax, so I'd hold off.
+- **It travels with the other path options** (`withMethods`, `aka`), so Tree passes it through automatically. `manageTemplateList`'s per-item `withOptions` raises the same question as before.
+
+### Questions
+
+1. **Name:** `pipeMethods`, or `pipes`? They're functions, not methods of the value, so `pipes` reads more accurately to me.
+2. **Collision rule:** should the pipe win (as I recommend), or the property?
+3. **Implement now?** If so, I'd also fix the `assignFromAsync` ` =&` / ` ?=` bug first, since the date example uses ` =&` and the units example uses ` ?=`. Then I'd update the Tree demo to the raw response plus a few pipes, which should remove most of `toViewModel()`.
