@@ -24,13 +24,15 @@ import {IAssignGingerlyOptions} from './types/assign-gingerly/types.js';
 import assignGingerly from './assignGingerly.js';
 import type { PermissionProcessor, AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
 import {
-  expandSubstitutions, categorizeKeys, handleSpreads, isHandlerCommand, parseMultiInvokeCommand
+  assignFrom, expandSubstitutions, categorizeKeys, handleSpreads, isHandlerCommand, parseMultiInvokeCommand
 } from './assignFrom.js';
 
 export interface AssignFromOptions extends IAssignGingerlyOptions {
   from: any;
   /** Enclosing `from`s for `$root` / `$parent` references, outermost first */
   fromStack?: any[];
+  /** Named unary functions usable as RHS path segments */
+  pipes?: Record<string, (value: any) => any>;
   protocols?: Record<string, (key: string) => any | Promise<any>>;
   where_x_in?: string[];
   where_y_in?: string[];
@@ -63,7 +65,15 @@ export async function assignFromAsync(
   const expandedPattern = expandSubstitutions(pattern, options);
 
   // Categorize keys
-  const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, multiInvokeKeys } = categorizeKeys(expandedPattern);
+  const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, multiInvokeKeys, ternaryKeys, syncOpKeys } = categorizeKeys(expandedPattern);
+
+  // Process ?= ternary and =& sync-op keys: both are synchronous by contract, so
+  // delegate them to the sync assignFrom (same order as there: before normal keys).
+  if (ternaryKeys.length > 0 || syncOpKeys.length > 0) {
+    const syncPattern: Record<string, any> = {};
+    for (const key of [...ternaryKeys, ...syncOpKeys]) syncPattern[key] = expandedPattern[key];
+    assignFrom(target, syncPattern, options, permissionProcessor);
+  }
 
   // Process normal keys via resolveValues + assignGingerly
   if (Object.keys(normalPattern).length > 0) {
@@ -75,6 +85,7 @@ export async function assignFromAsync(
       protocols: options.protocols,
       root: target,
       fromStack: options.fromStack,
+      pipes: options.pipes,
       permissionProcessor
     });
 
@@ -87,7 +98,7 @@ export async function assignFromAsync(
   // Process =* multi-invoke keys: call a withMethods method sitting at the base
   // path once per argument-list on the RHS (see assignFrom for the sync form).
   if (multiInvokeKeys && multiInvokeKeys.length > 0) {
-    const { withMethods, aka, akaMethods, substitutions, protocols, from, fromStack } = options;
+    const { withMethods, aka, akaMethods, substitutions, protocols, from, fromStack, pipes } = options;
     for (const key of multiInvokeKeys) {
       const basePath = parseMultiInvokeCommand(key);
       if (basePath === null) continue;
@@ -99,7 +110,7 @@ export async function assignFromAsync(
         const argList = Array.isArray(rawArgs) ? rawArgs : [rawArgs];
         const resolved = await resolveValues({ __args: argList }, from, {
           withMethods, aka, akaMethods, substitutions, protocols,
-          root: target, fromStack, permissionProcessor
+          root: target, fromStack, pipes, permissionProcessor
         });
         assignGingerly(target, { [basePath]: resolved.__args }, options, permissionProcessor);
       }
@@ -110,7 +121,7 @@ export async function assignFromAsync(
   if (idRefNormalKeys.length > 0 && (options.pin || options.at)) {
     const ids = { ...options.pin, ...options.at };
     const { resolveIdVariable, parseIdRef } = await import('./resolve/resolveIdRef.js');
-    const { withMethods, aka, akaMethods, protocols, from, substitutions, fromStack } = options;
+    const { withMethods, aka, akaMethods, protocols, from, substitutions, fromStack, pipes } = options;
     for (const key of idRefNormalKeys) {
       const parsed = parseIdRef(key);
       if (!parsed) continue;
@@ -123,7 +134,7 @@ export async function assignFromAsync(
         // Resolve the RHS value
         const resolvedValue = await resolveValues(
           { __v: value }, from,
-          { withMethods, aka, akaMethods, substitutions, protocols, root: el, fromStack, permissionProcessor }
+          { withMethods, aka, akaMethods, substitutions, protocols, root: el, fromStack, pipes, permissionProcessor }
         );
         // Apply remaining path on the resolved element
         assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissionProcessor);
@@ -132,7 +143,7 @@ export async function assignFromAsync(
         const resolvedValue = await resolveValues(
           typeof value === 'object' && value !== null ? value : { __v: value },
           from,
-          { withMethods, aka, akaMethods, substitutions, protocols, root: el, fromStack, permissionProcessor }
+          { withMethods, aka, akaMethods, substitutions, protocols, root: el, fromStack, pipes, permissionProcessor }
         );
         if ('__v' in resolvedValue) {
           // Single value — can't assign to element root without a path

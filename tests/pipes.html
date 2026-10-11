@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pipes Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+    #results { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Pipes Tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <template id="core-item"><li></li></template>
+
+  <script type="module">
+    import { assignFrom, assignFromAsync, getValue, getValues } from '../index.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+
+    function assert(condition, message) {
+      if (condition) {
+        results.push(`<div class="pass">✓ ${message}</div>`);
+        passed++;
+      } else {
+        results.push(`<div class="fail">✗ ${message}</div>`);
+        failed++;
+        console.error('Failed:', message);
+      }
+    }
+
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) {
+        console.error(`Expected: ${expected}, Actual: ${actual}`);
+      }
+      assert(actual === expected, message);
+    }
+
+    const iso = '2026-03-14T15:09:26.000Z';
+    const pipes = {
+      parseDate: Date.parse,
+      longUtc: new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).format,
+      upper: s => s.toUpperCase(),
+      exclaim: s => `${s}!`,
+      metersLabel: ({ meters }) => `${meters} m`,
+      feetLabel: ({ feet }) => `${feet} ft`,
+      coreSummary: ({ serial, reused }) => `${serial}${reused ? ' (reused)' : ''}`,
+      wrap: s => `[${s}]`,
+    };
+
+    // Intl output varies slightly by engine (ICU), so compare against the engine's own output
+    const longDate = pipes.longUtc(Date.parse(iso));
+
+    async function runTests() {
+
+      // Test 1: basic, chained, and over an object
+      {
+        assertEquals(getValue('?.name?.upper', { name: 'falcon' }, { pipes }), 'FALCON', 'single pipe');
+        assertEquals(getValue('?.name?.upper?.exclaim', { name: 'falcon' }, { pipes }), 'FALCON!', 'chained pipes');
+        assertEquals(getValue('?.height?.metersLabel', { height: { meters: 70, feet: 229.6 } }, { pipes }), '70 m', 'pipe over an object');
+        assertEquals(getValue('?.upper', 'abc', { pipes }), 'ABC', 'pipe on the source itself');
+      }
+
+      // Test 2: the date example
+      {
+        assertEquals(getValue('?.parseDate?.longUtc', iso, { pipes }), longDate, 'Date.parse → Intl format');
+        const el = document.createElement('time');
+        assignFrom(el, {
+          dateTime: '?.',
+          'textContent =&': { join: ['?.parseDate?.longUtc', ' UTC'] },
+        }, { from: iso, pipes });
+        assertEquals(el.textContent, `${longDate} UTC`, 'pipes inside a join');
+        assertEquals(el.dateTime, iso, 'raw value alongside');
+      }
+
+      // Test 3: a pipe wins over a property of the same name
+      {
+        let received;
+        const shadow = { upper: v => { received = v; return 'piped'; } };
+        assertEquals(getValue('?.value?.upper', { value: { upper: 'property' } }, { pipes: shadow }), 'piped', 'pipe takes precedence');
+        assertEquals(received?.upper, 'property', 'pipe receives the current value');
+        assertEquals(getValue('?.value?.upper', { value: { upper: 'property' } }), 'property', 'without pipes, the property is read');
+      }
+
+      // Test 4: nullish short-circuits before the pipe
+      {
+        let calls = 0;
+        const counting = { count: v => { calls++; return v; } };
+        assertEquals(getValue('?.missing?.count', {}, { pipes: counting }), undefined, 'undefined stays undefined');
+        assertEquals(getValue('?.nil?.count', { nil: null }, { pipes: counting }), null, 'null stays null');
+        assertEquals(calls, 0, 'pipe never called with nullish');
+      }
+
+      // Test 5: called with this undefined
+      {
+        let self = 'unset';
+        const p = { who: function (v) { 'use strict'; self = this; return v; } };
+        getValue('?.who', 1, { pipes: p });
+        assertEquals(self, undefined, 'this is undefined');
+      }
+
+      // Test 6: pipes and withMethods
+      {
+        const options = { pipes, withMethods: ['toFixed'] };
+        assertEquals(getValue('?.n?.toFixed?.wrap', { n: 1.5 }, options), '[2]', 'a following pipe makes the method call zero-arg');
+        assertEquals(getValue('?.n?.toFixed?.2?.wrap', { n: 1.5 }, options), '[1.50]', 'method argument, then pipe');
+      }
+
+      // Test 7: literals, aka, $root
+      {
+        assertEquals(getValues({ v: 'upper' }, 'x', { pipes }).v, 'upper', 'a bare pipe name is a literal string');
+        assertEquals(getValue('?.n?.u', { n: 'a' }, { pipes, aka: { u: 'upper' } }), 'A', 'aka can alias to a pipe');
+        assertEquals(getValue('$root?.name?.upper', {}, { pipes, fromStack: [{ name: 'root' }] }), 'ROOT', 'pipes after $root');
+      }
+
+      // Test 8: ternaries
+      {
+        const target = {};
+        assignFrom(target, {
+          'length ?=': ['$root?.metric', '?.metersLabel', '?.feetLabel'],
+          'flag ?=': ['?.name?.upper', 'yes', 'no'],
+        }, { from: { name: 'x', meters: 70, feet: 229.6 }, fromStack: [{ metric: false }], pipes });
+        assertEquals(target.length, '229.6 ft', 'pipes in ternary results');
+        assertEquals(target.flag, 'yes', 'pipe in a ternary condition');
+      }
+
+      // Test 9: assignFromAsync — pipes, and the ?= / =& keys it used to drop
+      {
+        const target = {};
+        await assignFromAsync(target, {
+          plain: '?.name?.upper',
+          'joined =&': { join: ['?.name', ' ', '?.name?.upper'] },
+          'status ?=': ['?.ok', 'yes', 'no'],
+        }, { from: { name: 'ada', ok: true }, pipes });
+        assertEquals(target.plain, 'ADA', 'assignFromAsync plain key with a pipe');
+        assertEquals(target.joined, 'ada ADA', 'assignFromAsync applies =& keys');
+        assertEquals(target.status, 'yes', 'assignFromAsync applies ?= keys');
+      }
+
+      // Test 10: builtIns.tree and a nested manageTemplateList carry pipes
+      {
+        const el = document.createElement('div');
+        await assignFromAsync(el, {
+          '?. =>': {
+            do: 'builtIns.tree',
+            map: {
+              date_utc: ['time', { 'textContent =&': { join: ['?.parseDate?.longUtc', ' UTC'] } }],
+              cores: ['ul', {
+                '?. =>': {
+                  do: 'builtIns.manageTemplateList',
+                  resolve: { forEach: '?.', instantiate: 'globalThis://core-item' },
+                  fromEachItem: { toClone: { textContent: '?.coreSummary' }, resolve: { key: '?.serial' } },
+                },
+              }],
+            },
+          },
+        }, {
+          from: { date_utc: iso, cores: [{ serial: 'B9007', reused: true }, { serial: 'B9008', reused: false }] },
+          pipes,
+          protocols: { globalThis: k => globalThis[k] },
+        });
+        // The nested list runs fire-and-forget inside the tree
+        await new Promise(r => setTimeout(r, 50));
+        assertEquals(el.querySelector('time')?.textContent, `${longDate} UTC`, 'tree pattern uses pipes');
+        assertEquals([...el.querySelectorAll('li')].map(li => li.textContent).join(), 'B9007 (reused),B9008', 'list items use pipes');
+      }
+
+      const testComplete = document.getElementById('test-complete');
+      testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
+      testComplete.setAttribute('data-passed', passed);
+      testComplete.setAttribute('data-failed', failed);
+
+      results.push(`<h2>Summary: ${passed} passed, ${failed} failed</h2>`);
+      document.getElementById('results').innerHTML = results.join('');
+    }
+
+    runTests().catch(e => {
+      console.error('Test error:', e);
+      document.getElementById('results').innerHTML += `<div class="fail">Test suite error: ${e.message}</div>`;
+      document.getElementById('test-complete').setAttribute('data-status', 'error');
+    });
+  </script>
+</body>
+</html>

@@ -154,7 +154,8 @@ export async function processHandlerCommands(
                     substitutions: options.substitutions,
                     protocols: options.protocols,
                     root: target,
-                    fromStack: options.fromStack
+                    fromStack: options.fromStack,
+                    pipes: options.pipes
                 });
             }
             // Resolve 'resolve' map asynchronously (yields to microtask queue)
@@ -165,7 +166,8 @@ export async function processHandlerCommands(
                     substitutions: options.substitutions,
                     protocols: options.protocols,
                     root: target,
-                    fromStack: options.fromStack
+                    fromStack: options.fromStack,
+                    pipes: options.pipes
                 });
                 Object.assign(resolvedParams, asyncResolved);
             }

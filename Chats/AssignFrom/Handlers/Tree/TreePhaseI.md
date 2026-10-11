@@ -485,3 +485,79 @@ So I'd **implement pipes instead of custom ` =&` ops**. ` =&` stays as it is: a 
 1. **Name:** `pipeMethods`, or `pipes`? They're functions, not methods of the value, so `pipes` reads more accurately to me.
 2. **Collision rule:** should the pipe win (as I recommend), or the property?
 3. **Implement now?** If so, I'd also fix the `assignFromAsync` ` =&` / ` ?=` bug first, since the date example uses ` =&` and the units example uses ` ?=`. Then I'd update the Tree demo to the raw response plus a few pipes, which should remove most of `toViewModel()`.
+
+## Bruce's Response
+
+Let's go with:
+
+```js
+{
+    pipes: {
+        parseDate: Date.parse,
+        longUtc: new Intl.DateTimeFormat(undefined, { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).format,
+    },
+}
+```
+
+Basically, go with all your recommended answer to the questions.
+
+## Claude's Implementation Notes -- Pipes
+
+Implemented as agreed:
+- the option is named `pipes`;
+- pipes win over a property of the same name;
+- the `assignFromAsync` bug is fixed first;
+- the Tree demo is moved to the raw response.
+
+### 1. `assignFromAsync` now applies ` ?=` and ` =&` keys
+
+Both operators are synchronous by contract, so `assignFromAsync` now hands those keys to the sync `assignFrom`, applied before plain keys as in the sync path. Previously they were silently dropped. I removed the "known bug" row from `docs/sync-ops.md`.
+
+### 2. Pipes
+
+`pipes` lives in `resolve/getValues.ts`, in `navigatePath`. If a segment names a registered pipe, the current value becomes `pipe(current)`.
+
+| Rule | Detail |
+|---|---|
+| Unary | Never consumes the next segment, so there's no argument syntax in paths. |
+| Precedence | A pipe wins over a property of the same name (`Object.hasOwn` on the pipes map, so inherited names like `toString` never match). |
+| `this` | Called detached, so `this` is undefined. (My first version called `pipes[name](v)`, which made `this` the pipes map. A test caught it.) |
+| Nullish | Never called with `null` / `undefined`; navigation stops first. |
+| After a method | A pipe ends a method's argument: `'?.n?.toFixed?.wrap'` calls `toFixed()`, then `wrap`. |
+
+**Threaded through:** every place that builds resolver options explicitly. That covers ternaries, `#[x]` keys, ` =*`, handler `get` / `resolve` maps, all `assignFromAsync` paths, and `manageTemplateList`'s per-item and `fromHost` calls. Tree spreads its options, so it needed no change.
+
+**Types:** a `Pipes` type, plus `pipes?` on `AssignFromOptions` (both copies), `GetValuesOptions` and `ResolveValuesOptions`.
+
+### 3. Tree demo: raw response + pipes
+
+`toViewModel()` is gone. `currentVm()` only overlays **UI state** on the untouched response: the details override, the link suffix, and `ui.metric`. All formatting is now in the config, through pipes, `join`, and ternaries:
+
+| Was in the adapter | Now |
+|---|---|
+| Date label | `join: ['?.parseDate?.longUtc', ' UTC']`, with your `pipes` exactly |
+| Units | `['$root?.ui?.metric', '?.height?.metersLabel', '?.height?.feetLabel']` |
+| `Rocket: …`, engines string | `join` (needed no pipes) |
+| Core summary | `textContent: '?.coreSummary'` (a pipe over the item object) |
+| Failure lines | `join: ['T+', '?.time', 's: ', '?.reason']` |
+| Links object → list | `forEach: '?.linkList'` |
+| Details placeholder | `keepNullish: true` plus `['?.', '??', 'No details provided.']` |
+
+**One trade-off:** `keepNullish` applies to the whole config, so a response *without* a `patch` would now get an `<img>` with no `src`, where before the image was skipped. `launch.json` always has one. If per-key control matters, a per-tuple opt-in would be the follow-up.
+
+### Verified
+
+- **New `tests/pipes.html`:** 10 scenarios, 26 assertions. It covers the date example, precedence, nullish, `this`, `withMethods`, `aka`, `$root`, ternaries, `assignFromAsync` (including the ` ?=` / ` =&` fix), and Tree with a nested `manageTemplateList`. Expected date strings are computed in the page, because each engine's ICU words them slightly differently.
+- **Full suite: 123 passed, 0 failed** in Chromium, Firefox and WebKit. `tsc` is clean, in a scratch copy; no `.js` touched, and your watcher has rebuilt the modules.
+- **Demo,** in all three browsers against your dev server, with every button:
+  - the date reads "March 14, 2026 at 3:09 PM UTC";
+  - units toggle to `229.6 ft` / `1,207,920 lb`;
+  - the details placeholder works;
+  - core summaries and links (including `-b`) render;
+  - every rerun reuses 45 of 45 elements;
+  - no console errors, and no horizontal scroll at 390px.
+
+### Docs
+
+- New [docs/pipes.md](../../../../docs/pipes.md), linked from the README (feature 11) and `docs/tree.md`.
+- `docs/sync-ops.md` now points custom formatting to pipes instead of the dropped `syncOps` idea, and lists pipes among the things its config supports.

@@ -131,26 +131,30 @@
     <p class="lede">
         The same launch summary as the <a href="./itemscope-tree-demo.html">itemscopeTree demo</a>, built with
         <code>builtIns.tree</code> from the same response (<a href="./data/launch.json">data/launch.json</a>).
-        All formatting lives in one plain <code>toViewModel()</code> function, and the tree config itself is pure JSON
-        (shown below the log). There are no manager classes.
+        The API response is used as-is (only UI state is overlaid), formatting comes from a handful of named
+        <code>pipes</code>, and the tree config itself is pure JSON (shown below the log). There are no manager classes.
     </p>
 
     <details>
         <summary>What this demo exercises, and what's missing compared to itemscopeTree</summary>
         <ul>
             <li><strong>Element specifications</strong> as <code>[tag, pattern, children]</code> tuples; patterns resolve
-                against the key's value (<code>'?.label'</code> reads <code>vm.date_utc.label</code>).</li>
+                against the key's value (<code>'?.small'</code> reads <code>vm.patch.small</code>).</li>
+            <li><strong>Pipes</strong>: named functions used as path segments. The date is
+                <code>join: ['?.parseDate?.longUtc', ' UTC']</code> with <code>parseDate: Date.parse</code> and
+                <code>longUtc</code> a preconfigured <code>Intl.DateTimeFormat</code>'s <code>format</code>; units, mass and
+                core summaries are pipes too.</li>
             <li><strong>Static children</strong>: the rocket card's heading and its three spec rows, all resolving against
                 <code>vm.rocket</code>.</li>
             <li><strong>Rebinding in place</strong>: every button re-runs the same tree with a new view model. The log reports
                 how many of the previous elements were reused; only "Clear &amp; rebuild" creates new ones.</li>
-            <li><strong>Null values</strong>: a launch with no patch image simply has no <code>patch</code> key in the view model,
-                and Tree skips it.</li>
+            <li><strong>Null values</strong>: <code>keepNullish</code> keeps the details paragraph when <code>details</code> is
+                <code>null</code>, and a <code>'??'</code> ternary chain shows the placeholder.</li>
             <li><strong><code>$parent</code></strong>: the status badge hangs off the <code>success</code> key and reads its
                 sibling <code>upcoming</code> from the enclosing view model, via <code>' ?='</code> ternaries
                 (<code>['$parent?.upcoming', 'Upcoming', ['?.', 'Success', 'Failure']]</code>).</li>
-            <li><strong>An operator key</strong> in a pattern: the details paragraph's class uses <code>' ?='</code> (a ternary),
-                which takes the <code>assignFrom</code> path instead of the plain fast path.</li>
+            <li><strong><code>$root</code></strong>: the spec rows pick metric or imperial pipes with
+                <code>['$root?.ui?.metric', '?.height?.metersLabel', '?.height?.feetLabel']</code>.</li>
             <li><strong>Arrays, by composition</strong>: Tree doesn't do arrays yet, so the links, crew and core lists put a
                 <code>builtIns.manageTemplateList</code> handler key inside the <code>&lt;ul&gt;</code>'s pattern. That handler
                 runs fire-and-forget, so the lists fill in just after the tree.</li>
@@ -209,63 +213,54 @@
             logEl.scrollTop = logEl.scrollHeight;
         }
 
-        // ── View model: all formatting in one plain function ──────────────────
+        // ── UI state and pipes: no formatting adapter ─────────────────────────
 
-        const ui = { units: 'metric', details: undefined, linkSuffix: '' };
+        // UI state only: the API response is used as-is, with these overlaid.
+        const ui = { metric: true, details: undefined, linkSuffix: '' };
 
-        function toViewModel(response, { units, details, linkSuffix }) {
-            const { patch, name, upcoming, success, date_utc, links, rocket, crew, cores, failures } = response;
-            const metric = units === 'metric';
-            const text = details === undefined ? response.details : details;
-            const { height, mass, engines } = rocket;
-            return {
-                patch: patch?.small ? patch : undefined, // no image → key skipped
-                name,
-                // Passed through as-is: the badge reads its sibling `upcoming` via $parent
-                upcoming,
-                success,
-                date_utc: {
-                    iso: date_utc,
-                    label: new Date(date_utc).toLocaleString(undefined, { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC',
-                },
-                details: { text: text ?? 'No details provided.', empty: text == null },
-                links: Object.entries(links)
-                    .filter(([, href]) => typeof href === 'string') // wikipedia: null → skipped
-                    .map(([name, href]) => ({ name, href: href + linkSuffix })),
-                rocket: {
-                    title: `Rocket: ${rocket.name}`,
-                    height: metric ? `${height.meters} m` : `${height.feet} ft`,
-                    mass: metric ? `${mass.kg.toLocaleString()} kg` : `${mass.lb.toLocaleString()} lb`,
-                    engines: `${engines.number} × ${engines.type} ${engines.version} (${engines.propellant_1} / ${engines.propellant_2})`,
-                },
-                crew,
-                cores: cores.map(({ serial, flight, reused, landing_success, landing_type }) => ({
-                    serial,
-                    text: `${serial}, flight ${flight}${reused ? ' (reused)' : ''}; landing: ${landing_success ? 'success' : 'not successful'} (${landing_type})`,
-                })),
-                failures: failures.map(f => `T+${f.time}s: ${f.reason}`),
-            };
+        function currentVm() {
+            const { metric, details, linkSuffix } = ui;
+            const links = Object.fromEntries(Object.entries(response.links)
+                .map(([name, href]) => [name, href && href + linkSuffix]));
+            return { ...response, ...(details !== undefined && { details }), links, ui: { metric } };
         }
+
+        /** Named formatters, usable as path segments: '?.date_utc?.parseDate?.longUtc' */
+        const pipes = {
+            parseDate: Date.parse,
+            longUtc: new Intl.DateTimeFormat(undefined, { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).format,
+            metersLabel: ({ meters }) => `${meters} m`,
+            feetLabel: ({ feet }) => `${feet} ft`,
+            kgLabel: ({ kg }) => `${kg.toLocaleString()} kg`,
+            lbLabel: ({ lb }) => `${lb.toLocaleString()} lb`,
+            coreSummary: ({ serial, flight, reused, landing_success, landing_type }) =>
+                `${serial}, flight ${flight}${reused ? ' (reused)' : ''}; landing: ${landing_success ? 'success' : 'not successful'} (${landing_type})`,
+            linkList: links => Object.entries(links)
+                .filter(([, href]) => typeof href === 'string') // wikipedia: null → skipped
+                .map(([name, href]) => ({ name, href })),
+        };
 
         // ── The tree: pure JSON ───────────────────────────────────────────────
 
         /** A manageTemplateList handler key, used inside a <ul>'s pattern for array values. */
-        const list = (template, key, toClone) => ({
+        const list = (template, key, toClone, forEach = '?.') => ({
             '?. =>': {
                 do: 'builtIns.manageTemplateList',
-                resolve: { forEach: '?.', instantiate: `globalThis://${template}`, forget: true },
+                resolve: { forEach, instantiate: `globalThis://${template}`, forget: true },
                 fromEachItem: { toClone, withOptions: { withMethods: ['querySelector'] }, resolve: { key } },
             },
         });
 
-        const spec = (label, prop) => ['div', { className: 'spec' }, [
+        const spec = (label, valuePattern) => ['div', { className: 'spec' }, [
             ['span', { className: 'label', textContent: label }],
-            ['span', { textContent: `?.${prop}` }],
+            ['span', valuePattern],
         ]];
 
         const pattern = {
             '?. =>': {
                 do: 'builtIns.tree',
+                // details may be null: keep its <p> and show a placeholder instead
+                keepNullish: true,
                 map: {
                     patch: ['img', { className: 'patch', src: '?.small', alt: '?.alt', width: 112, height: 112 }],
                     name: ['h2', { className: 'name', textContent: '?.' }],
@@ -274,19 +269,29 @@
                         'textContent ?=': ['$parent?.upcoming', 'Upcoming', ['?.', 'Success', 'Failure']],
                         'className ?=': ['$parent?.upcoming', 'badge pending', ['?.', 'badge ok', 'badge bad']],
                     }],
-                    date_utc: ['time', { className: 'date', dateTime: '?.iso', textContent: '?.label' }],
-                    details: ['p', { textContent: '?.text', 'className ?=': ['?.empty', 'details empty', 'details'] }],
+                    date_utc: ['time', {
+                        className: 'date',
+                        dateTime: '?.',
+                        'textContent =&': { join: ['?.parseDate?.longUtc', ' UTC'] },
+                    }],
+                    details: ['p', {
+                        'textContent ?=': ['?.', '??', 'No details provided.'],
+                        'className ?=': ['?.', 'details', 'details empty'],
+                    }],
                     links: ['nav', { className: 'links', ariaLabel: 'Launch links' }, [
                         ['ul', list('link-item', '?.name', {
                             '?.querySelector?.a?.href': '?.href',
                             '?.querySelector?.a?.textContent': '?.name',
-                        })],
+                        }, '?.linkList')],
                     ]],
                     rocket: ['section', { className: 'card rocket' }, [
-                        ['h3', { textContent: '?.title' }],
-                        spec('Height', 'height'),
-                        spec('Mass', 'mass'),
-                        spec('Engines', 'engines'),
+                        ['h3', { 'textContent =&': { join: ['Rocket: ', '?.name'] } }],
+                        spec('Height', { 'textContent ?=': ['$root?.ui?.metric', '?.height?.metersLabel', '?.height?.feetLabel'] }),
+                        spec('Mass', { 'textContent ?=': ['$root?.ui?.metric', '?.mass?.kgLabel', '?.mass?.lbLabel'] }),
+                        spec('Engines', { 'textContent =&': { join: [
+                            '?.engines?.number', ' × ', '?.engines?.type', ' ', '?.engines?.version',
+                            ' (', '?.engines?.propellant_1', ' / ', '?.engines?.propellant_2', ')',
+                        ] } }),
                     ]],
                     crew: ['section', { className: 'card crew' }, [
                         ['h3', { textContent: 'Crew' }],
@@ -298,11 +303,11 @@
                     ]],
                     cores: ['section', { className: 'card cores' }, [
                         ['h3', { textContent: 'First-stage cores' }],
-                        ['ul', list('text-item', '?.serial', { textContent: '?.text' })],
+                        ['ul', list('text-item', '?.serial', { textContent: '?.coreSummary' })],
                     ]],
                     failures: ['section', { className: 'card failures' }, [
                         ['h3', { textContent: 'Failures' }],
-                        ['ul', list('text-item', '?.', { textContent: '?.' }), [
+                        ['ul', list('text-item', '?.time', { 'textContent =&': { join: ['T+', '?.time', 's: ', '?.reason'] } }), [
                             // Shown only for an empty array (hidden = length, so 0 → visible)
                             ['li', { className: 'muted', textContent: 'No failures recorded.', hidden: '?.length' }],
                         ]],
@@ -320,7 +325,8 @@
             const before = new Set(launchEl.querySelectorAll('*'));
             const start = performance.now();
             await assignFromAsync(launchEl, pattern, {
-                from: toViewModel(response, ui),
+                from: currentVm(),
+                pipes,
                 protocols: { globalThis: k => globalThis[k] },
             });
             const ms = (performance.now() - start).toFixed(1);
@@ -346,11 +352,12 @@
         });
 
         document.getElementById('toggle-units').addEventListener('click', async () => {
-            ui.units = ui.units === 'metric' ? 'imperial' : 'metric';
+            ui.metric = !ui.metric;
+            const units = ui.metric ? 'metric' : 'imperial';
             const rows = [...launchEl.querySelectorAll('.spec')];
-            await build(`Units → ${ui.units}`);
+            await build(`Units → ${units}`);
             const same = [...launchEl.querySelectorAll('.spec')].every((row, i) => row === rows[i]);
-            log(`Units → ${ui.units}`, `same spec rows: ${same}`);
+            log(`Units → ${units}`, `same spec rows: ${same}`);
         });
 
         document.getElementById('change-links').addEventListener('click', async () => {
@@ -363,7 +370,7 @@
         document.getElementById('rebuild').addEventListener('click', async () => {
             launchEl.replaceChildren();
             logEl.replaceChildren();
-            Object.assign(ui, { units: 'metric', details: undefined, linkSuffix: '' });
+            Object.assign(ui, { metric: true, details: undefined, linkSuffix: '' });
             await build('Rebuild');
         });
 

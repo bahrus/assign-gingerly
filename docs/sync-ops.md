@@ -29,6 +29,7 @@ assignFrom(oElement, {
    - [`$root` / `$parent`](./root-references.md);
    - `!` / `!!` negation and coercion;
    - `aka` aliases and `withMethods` calls (including zero-argument calls marked with `|`);
+   - [pipes](./pipes.md);
    - **synchronous** protocols.
 
    Strings that aren't references stay literals.
@@ -91,7 +92,7 @@ The [`sp` tagged template](./paths-dx.md) produces arrays in exactly the shape `
 |---|---|
 | `assignFrom` | Yes |
 | Patterns applied by handlers that use `assignFrom` (`builtIns.tree`, `builtIns.manageTemplateList` items, …) | Yes |
-| `assignFromAsync` | **Not currently.** ` =&` keys (and ` ?=` keys) are silently ignored there. That's a known bug; the ternary docs say ` ?=` works in `assignFromAsync`. |
+| `assignFromAsync` | Yes. Like ` ?=` keys, they're delegated to the sync `assignFrom` and applied before plain keys. |
 | `assignGingerly` | No, because it has no `from` to resolve against |
 
 ## ` =&` vs ` =>`
@@ -105,6 +106,11 @@ The [`sp` tagged template](./paths-dx.md) produces arrays in exactly the shape `
 | Result | Assigned to the LHS (unless `undefined`) | Opt-in: assigned only if `assign()` returns a value |
 | Use it for | Computing a value: joining, formatting | Side effects: loading, rendering lists, event wiring |
 
-## Custom Ops
+## Custom Formatting: Use Pipes
 
-There's no way yet to register your own ops. A per-call `syncOps` option, merged over the built-in registry the same way `options.handlers` works for ` =>`, is under discussion as the way to handle formatting such as dates, units and conditional text. See `Chats/AssignFrom/Handlers/Tree/TreePhaseI.md`.
+The op registry is deliberately closed. For custom formatting (dates, units, conditional text), register [pipes](./pipes.md) instead. Pipes are named unary functions used as path segments, so they compose *inside* `join`:
+
+```JavaScript
+'textContent =&': { join: ['?.parseDate?.longUtc', ' UTC'] }
+// with options.pipes = { parseDate: Date.parse, longUtc: new Intl.DateTimeFormat(…).format }
+```

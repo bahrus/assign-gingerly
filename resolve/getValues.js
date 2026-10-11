@@ -174,16 +174,31 @@ function parseCachedPath(path) {
     return parts;
 }
 /**
- * Navigate a path against a source object, optionally calling methods.
+ * Whether a path segment names a registered pipe.
+ */
+function isPipe(part, pipes) {
+    return !!pipes && Object.hasOwn(pipes, part);
+}
+/**
+ * Navigate a path against a source object, optionally calling methods and pipes.
  * Returns the resolved value at the end of the path.
  */
-function navigatePath(source, parts, withMethods, permissionProcessor) {
+function navigatePath(source, parts, withMethods, permissionProcessor, pipes) {
     let current = source;
     let i = 0;
     while (i < parts.length) {
         if (current == null)
             return current;
         const rawPart = parts[i];
+        // A registered pipe is called with the current value — it takes precedence
+        // over a property of the same name, and never consumes the next segment.
+        if (isPipe(rawPart, pipes)) {
+            // Detached call: `this` is undefined, not the pipes map
+            const pipe = pipes[rawPart];
+            current = pipe(current);
+            i++;
+            continue;
+        }
         // A trailing | forces a zero-argument method call: 'toLocaleString|' calls
         // toLocaleString() without consuming the next segment. Only applies to
         // names listed in withMethods; otherwise | is part of a literal key.
@@ -194,11 +209,13 @@ function navigatePath(source, parts, withMethods, permissionProcessor) {
             const method = current[part];
             if (typeof method === 'function') {
                 const nextPart = parts[i + 1];
-                // Consecutive methods (including a |-marked next segment) mean a
-                // zero-arg call; otherwise the next segment is the string argument.
+                // Consecutive methods (including a |-marked next segment) or a
+                // following pipe mean a zero-arg call; otherwise the next segment
+                // is the string argument.
                 const nextIsMethod = nextPart !== undefined
                     && (isAllowedMethod(nextPart, withMethods, permissionProcessor)
-                        || (nextPart.endsWith('|') && isAllowedMethod(nextPart.slice(0, -1), withMethods, permissionProcessor)));
+                        || (nextPart.endsWith('|') && isAllowedMethod(nextPart.slice(0, -1), withMethods, permissionProcessor))
+                        || isPipe(nextPart, pipes));
                 if (!isZeroArg && nextPart !== undefined && !nextIsMethod) {
                     current = method.call(current, nextPart);
                     i += 2;
@@ -298,7 +315,7 @@ function resolveReferenceString(value, source, aliasMap, withMethods, protocols,
         const substituted = applySubstitutions(value, substitutionMap);
         const aliased = applyAliases(substituted, aliasMap);
         const parts = parseCachedPath(aliased);
-        return parts.length === 0 ? source : navigatePath(source, parts, withMethods, permissionProcessor);
+        return parts.length === 0 ? source : navigatePath(source, parts, withMethods, permissionProcessor, options?.pipes);
     }
     if (isRootReference(value)) {
         const rootRef = resolveRootReference(value, source, options);
@@ -308,7 +325,7 @@ function resolveReferenceString(value, source, aliasMap, withMethods, protocols,
         const aliased = applyAliases(substitutedPath, aliasMap);
         const normalizedPath = aliased.startsWith('?.') ? aliased : (aliased ? `?.${aliased}` : '?.');
         const parts = parseCachedPath(normalizedPath);
-        return parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods, permissionProcessor);
+        return parts.length === 0 ? rootRef.source : navigatePath(rootRef.source, parts, withMethods, permissionProcessor, options?.pipes);
     }
     // protocol — looksLikeReference already ensured protocols is defined
     return getProtocolValue(value, protocols, options);
@@ -444,5 +461,5 @@ export function getValue(path, source, options) {
         return source;
     const { withMethods } = normalizeAliasOptions(options);
     const permissionProcessor = options?.permissionProcessor;
-    return navigatePath(source, parts, withMethods, permissionProcessor);
+    return navigatePath(source, parts, withMethods, permissionProcessor, options?.pipes);
 }

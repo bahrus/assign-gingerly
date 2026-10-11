@@ -66,6 +66,7 @@ type ElementSpecification =
 - **The whole VM** is available as `$parent` (and `$root`, for a top-level tree), at every depth: `'$parent?.upcoming'`. See [root-references.md](./root-references.md).
 - **`template` elements** receive their children in `.content`, not as light-DOM children.
 - **Patterns set properties** (via assignGingerly), not attributes.
+- **Formatting** (dates, units, conditional text) comes from [pipes](./pipes.md) passed in the options: `'?.date_utc?.parseDate?.longUtc'`.
 - **Don't combine `textContent` with children**: setting `textContent` replaces them. Tree puts them back on the next call, after the text.
 
 Class headers and `$:` itemscope manager headers are reserved for a later phase and throw for now.
