@@ -146,6 +146,9 @@
                 how many of the previous elements were reused; only "Clear &amp; rebuild" creates new ones.</li>
             <li><strong>Null values</strong>: a launch with no patch image simply has no <code>patch</code> key in the view model,
                 and Tree skips it.</li>
+            <li><strong><code>$parent</code></strong>: the status badge hangs off the <code>success</code> key and reads its
+                sibling <code>upcoming</code> from the enclosing view model, via <code>' ?='</code> ternaries
+                (<code>['$parent?.upcoming', 'Upcoming', ['?.', 'Success', 'Failure']]</code>).</li>
             <li><strong>An operator key</strong> in a pattern: the details paragraph's class uses <code>' ?='</code> (a ternary),
                 which takes the <code>assignFrom</code> path instead of the plain fast path.</li>
             <li><strong>Arrays, by composition</strong>: Tree doesn't do arrays yet, so the links, crew and core lists put a
@@ -214,15 +217,13 @@
             const { patch, name, upcoming, success, date_utc, links, rocket, crew, cores, failures } = response;
             const metric = units === 'metric';
             const text = details === undefined ? response.details : details;
-            const [statusText, statusClass] = upcoming ? ['Upcoming', 'pending']
-                : success === true ? ['Success', 'ok']
-                : success === false ? ['Failure', 'bad']
-                : ['Unknown', 'pending'];
             const { height, mass, engines } = rocket;
             return {
                 patch: patch?.small ? patch : undefined, // no image → key skipped
                 name,
-                status: { text: statusText, className: `badge ${statusClass}` },
+                // Passed through as-is: the badge reads its sibling `upcoming` via $parent
+                upcoming,
+                success,
                 date_utc: {
                     iso: date_utc,
                     label: new Date(date_utc).toLocaleString(undefined, { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC',
@@ -268,7 +269,11 @@
                 map: {
                     patch: ['img', { className: 'patch', src: '?.small', alt: '?.alt', width: 112, height: 112 }],
                     name: ['h2', { className: 'name', textContent: '?.' }],
-                    status: ['span', { className: '?.className', textContent: '?.text' }],
+                    // Hangs off `success`, and reads its sibling `upcoming` from the VM via $parent
+                    success: ['span', {
+                        'textContent ?=': ['$parent?.upcoming', 'Upcoming', ['?.', 'Success', 'Failure']],
+                        'className ?=': ['$parent?.upcoming', 'badge pending', ['?.', 'badge ok', 'badge bad']],
+                    }],
                     date_utc: ['time', { className: 'date', dateTime: '?.iso', textContent: '?.label' }],
                     details: ['p', { textContent: '?.text', 'className ?=': ['?.empty', 'details empty', 'details'] }],
                     links: ['nav', { className: 'links', ariaLabel: 'Launch links' }, [

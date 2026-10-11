@@ -74,6 +74,10 @@ export class ManageTemplateListHandler {
         // fromHost config — assigns from options.from (host/VM) to each clone
         const hostToClone = fromHostConfig ? (fromHostConfig.toClone ?? extractToClone(fromHostConfig)) : undefined;
         const hostWithOptions = fromHostConfig?.withOptions ?? {};
+        // Per-item patterns resolve one level down: the host `from` becomes the items' `$parent`.
+        // fromHost patterns stay at the host's level.
+        const itemStack = [...(options?.fromStack ?? []), options?.from];
+        const hostStack = options?.fromStack;
         // fromTarget config — assigns from the target element to each clone
         const targetToClone = fromTargetConfig ? (fromTargetConfig.toClone ?? extractToClone(fromTargetConfig)) : undefined;
         const targetWithOptions = fromTargetConfig?.withOptions ?? {};
@@ -143,7 +147,7 @@ export class ManageTemplateListHandler {
                     const len = Math.min(elements.length, configs.length);
                     for (let j = 0; j < len; j++) {
                         const cfg = configs[j];
-                        assignFrom(elements[j], cfg.toClone ?? {}, { from: item, ...cfg.withOptions }, permissionProcessor);
+                        assignFrom(elements[j], cfg.toClone ?? {}, { from: item, fromStack: itemStack, ...cfg.withOptions }, permissionProcessor);
                     }
                 }
                 else {
@@ -153,10 +157,10 @@ export class ManageTemplateListHandler {
                             processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                         }
                         else {
-                            assignFrom(rootEl, toClone, { from: item, ...withOptions }, permissionProcessor);
+                            assignFrom(rootEl, toClone, { from: item, fromStack: itemStack, ...withOptions }, permissionProcessor);
                         }
                         if (hostToClone && options?.from) {
-                            assignFrom(rootEl, hostToClone, { from: options.from, ...hostWithOptions }, permissionProcessor);
+                            assignFrom(rootEl, hostToClone, { from: options.from, fromStack: hostStack, ...hostWithOptions }, permissionProcessor);
                         }
                         if (targetToClone) {
                             assignFrom(rootEl, targetToClone, { from: lhsTarget, ...targetWithOptions }, permissionProcessor);
@@ -192,7 +196,7 @@ export class ManageTemplateListHandler {
                     const len = Math.min(elements.length, configs.length);
                     for (let j = 0; j < len; j++) {
                         const cfg = configs[j];
-                        assignFrom(elements[j], cfg.toClone ?? {}, { from: item, ...cfg.withOptions }, permissionProcessor);
+                        assignFrom(elements[j], cfg.toClone ?? {}, { from: item, fromStack: itemStack, ...cfg.withOptions }, permissionProcessor);
                     }
                 }
                 else {
@@ -204,10 +208,10 @@ export class ManageTemplateListHandler {
                             processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                         }
                         else {
-                            assignFrom(rootEl, toClone, { from: item, ...withOptions }, permissionProcessor);
+                            assignFrom(rootEl, toClone, { from: item, fromStack: itemStack, ...withOptions }, permissionProcessor);
                         }
                         if (hostToClone && options?.from) {
-                            assignFrom(rootEl, hostToClone, { from: options.from, ...hostWithOptions }, permissionProcessor);
+                            assignFrom(rootEl, hostToClone, { from: options.from, fromStack: hostStack, ...hostWithOptions }, permissionProcessor);
                         }
                         if (targetToClone) {
                             assignFrom(rootEl, targetToClone, { from: lhsTarget, ...targetWithOptions }, permissionProcessor);

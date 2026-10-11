@@ -184,7 +184,9 @@ export class TreeHandler {
         if (!map || typeof map !== 'object') {
             throw new Error('builtIns.tree: a "map" of VM keys to element specifications is required');
         }
-        const { from } = options;
+        const { from, fromStack } = options;
+        // Each key's pattern resolves against the key's value, one level down: the VM becomes `$parent`
+        const nestedOptions = { ...options, fromStack: [...(fromStack ?? []), from] };
         const [start, end] = findChildMarkers(lhsTarget, markerName) ?? createMarkers(lhsTarget, markerName);
         let nodes = treeStates.get(start);
         if (!nodes) {
@@ -203,7 +205,7 @@ export class TreeHandler {
             // Removed or moved by other code: rebuild
             if (node && node.element.parentNode !== lhsTarget)
                 node = undefined;
-            next.set(key, syncNode(node, spec, value, options, permissionProcessor));
+            next.set(key, syncNode(node, spec, value, nestedOptions, permissionProcessor));
         }
         for (const [key, node] of nodes) {
             if (next.get(key) !== node && node.element.parentNode === lhsTarget)

@@ -29,6 +29,8 @@ import {
 
 export interface AssignFromOptions extends IAssignGingerlyOptions {
   from: any;
+  /** Enclosing `from`s for `$root` / `$parent` references, outermost first */
+  fromStack?: any[];
   protocols?: Record<string, (key: string) => any | Promise<any>>;
   where_x_in?: string[];
   where_y_in?: string[];

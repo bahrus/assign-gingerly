@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>$root / $parent Reference Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+    #results { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>$root / $parent Reference Tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <template id="crew-item"><li></li></template>
+
+  <script type="module">
+    import { assignFrom, assignFromAsync, getValue, getValues, resolveValues } from '../index.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+
+    function assert(condition, message) {
+      if (condition) {
+        results.push(`<div class="pass">✓ ${message}</div>`);
+        passed++;
+      } else {
+        results.push(`<div class="fail">✗ ${message}</div>`);
+        failed++;
+        console.error('Failed:', message);
+      }
+    }
+
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) {
+        console.error(`Expected: ${expected}, Actual: ${actual}`);
+      }
+      assert(actual === expected, message);
+    }
+
+    const root = { title: 'Root', upcoming: false, rocket: { name: 'Falcon 9', height: { meters: 70 } } };
+    const middle = root.rocket;
+    const current = middle.height;
+    const fromStack = [root, middle];
+
+    async function runTests() {
+
+      // Test 1: $root
+      {
+        assertEquals(getValue('$root?.title', root), 'Root', '$root without a stack is from');
+        assertEquals(getValue('$root?.title', current, { fromStack }), 'Root', '$root is fromStack[0]');
+        assert(getValue('$root', current, { fromStack }) === root, 'bare $root returns the root object');
+      }
+
+      // Test 2: $parent
+      {
+        assertEquals(getValue('$parent?.name', current), undefined, '$parent without a stack is undefined');
+        assertEquals(getValue('$parent?.name', current, { fromStack }), 'Falcon 9', '$parent is fromStack.at(-1)');
+        assert(getValue('$parent', current, { fromStack }) === middle, 'bare $parent returns the parent object');
+        assertEquals(getValue('$parent?.title', middle, { fromStack: [root] }), 'Root', 'one-level stack: $parent is the root');
+      }
+
+      // Test 3: negation and coercion
+      {
+        assertEquals(getValue('!$root?.upcoming', current, { fromStack }), true, '!$root negates');
+        assertEquals(getValue('!!$parent?.name', current, { fromStack }), true, '!!$parent coerces to boolean');
+        assertEquals(getValue('!!$parent?.name', current), false, '!!$parent without a stack is false');
+      }
+
+      // Test 4: lookalike literals stay literal
+      {
+        assertEquals(getValue('$rootless', current, { fromStack }), '$rootless', '"$rootless" is a literal');
+        assertEquals(getValues({ v: '$parental' }, current, { fromStack }).v, '$parental', '"$parental" is a literal');
+      }
+
+      // Test 5: getValues — strings, arrays, nested objects, aka
+      {
+        const resolved = getValues({
+          a: '$root?.title',
+          b: ['$parent?.name', '?.meters'],
+          c: { d: '$parent?.n' },
+        }, current, { fromStack, aka: { n: 'name' } });
+        assertEquals(resolved.a, 'Root', 'string value');
+        assertEquals(resolved.b.join(), 'Falcon 9,70', 'array mixing $parent and ?.');
+        assertEquals(resolved.c.d, 'Falcon 9', 'nested object with aka after the token');
+      }
+
+      // Test 6: resolveValues (async)
+      {
+        const resolved = await resolveValues({ a: '$root?.title', b: '$parent?.name' }, current, { fromStack });
+        assertEquals(`${resolved.a}|${resolved.b}`, 'Root|Falcon 9', 'resolveValues supports both references');
+      }
+
+      // Test 7: assignFrom with an explicit fromStack
+      {
+        const target = {};
+        assignFrom(target, { label: '$root?.title', parent: '$parent?.name', own: '?.meters' }, { from: current, fromStack });
+        assertEquals(`${target.label}|${target.parent}|${target.own}`, 'Root|Falcon 9|70', 'assignFrom resolves all three levels');
+      }
+
+      // Test 7b: ?= ternaries accept $root / $parent, including nested ternaries
+      {
+        const target = {};
+        assignFrom(target, {
+          'v ?=': ['$parent?.name', ['$root?.upcoming', 'soon', 'flown'], 'none'],
+          'w ?=': [['$parent?.name', 'Falcon 9'], 'match', 'no match'],
+        }, { from: current, fromStack });
+        assertEquals(target.v, 'flown', 'truthiness condition and nested ternary');
+        assertEquals(target.w, 'match', 'comparison operand');
+      }
+
+      // Test 8: $0 still means the target
+      {
+        const target = { id: 't' };
+        assignFrom(target, { copy: '$0?.id', title: '$root?.title' }, { from: current, fromStack });
+        assertEquals(`${target.copy}|${target.title}`, 't|Root', '$0 and $root coexist');
+      }
+
+      // Test 9: substitution paths can't use stack references
+      {
+        const target = {};
+        assignFrom(target, { v: '?.sub' }, {
+          from: { key: 'k', k: 'x' },
+          fromStack: [{ key: 'rootKey' }],
+          substitutions: { sub: '$root?.key' },
+        });
+        assertEquals(target.v, 'x', 'substitution resolves $root against from, not the stack');
+      }
+
+      // Test 10: builtIns.tree pushes the VM for each key
+      {
+        const el = document.createElement('div');
+        const vm = { success: true, upcoming: false, rocket: { name: 'Falcon 9' } };
+        await assignFromAsync(el, {
+          '?. =>': {
+            do: 'builtIns.tree',
+            map: {
+              success: ['span', { 'textContent ?=': ['$parent?.upcoming', 'Upcoming', 'Done'] }],
+              rocket: ['section', {}, [['h3', { textContent: '?.name', title: '$parent?.success' }]]],
+            },
+          },
+        }, { from: vm });
+        assertEquals(el.querySelector('span')?.textContent, 'Done', 'a key pattern reads a sibling via $parent');
+        assertEquals(el.querySelector('h3')?.title, 'true', 'static children share their parent\'s stack');
+        assertEquals(el.querySelector('h3')?.textContent, 'Falcon 9', '?. still reads the key value');
+      }
+
+      // Test 11: a tree nested in a tree's pattern sees both levels
+      {
+        const el = document.createElement('div');
+        const vm = { title: 'Root', rocket: { name: 'Falcon 9', height: { meters: 70 } } };
+        await assignFromAsync(el, {
+          '?. =>': {
+            do: 'builtIns.tree',
+            map: {
+              rocket: ['section', {
+                '?. =>': {
+                  do: 'builtIns.tree',
+                  map: { height: ['p', { textContent: '?.meters', title: '$root?.title', lang: '$parent?.name' }] },
+                },
+              }],
+            },
+          },
+        }, { from: vm });
+        // The inner tree runs fire-and-forget inside the outer one
+        await new Promise(r => setTimeout(r, 50));
+        const p = el.querySelector('p');
+        assertEquals(p?.textContent, '70', 'inner tree reads its own value');
+        assertEquals(p?.title, 'Root', '$root reaches the outermost VM');
+        assertEquals(p?.lang, 'Falcon 9', '$parent reaches the enclosing value');
+      }
+
+      // Test 12: manageTemplateList per-item patterns see the host as $parent; fromHost stays at host level
+      {
+        const ul = document.createElement('ul');
+        const vm = { title: 'Crew of Demo 7', crew: [{ name: 'Avery' }, { name: 'Rowan' }] };
+        await assignFromAsync(ul, {
+          '?. =>': {
+            do: 'builtIns.manageTemplateList',
+            resolve: { forEach: '?.crew', instantiate: 'globalThis://crew-item' },
+            fromEachItem: { toClone: { textContent: '?.name', title: '$parent?.title' }, resolve: { key: '?.name' } },
+            fromHost: { toClone: { lang: '$root?.title', hostParent: '$parent?.title' } },
+          },
+        }, { from: vm, protocols: { globalThis: k => globalThis[k] } });
+        const items = [...ul.querySelectorAll('li')];
+        assertEquals(items.map(li => li.textContent).join(), 'Avery,Rowan', 'items rendered');
+        assertEquals(items[0]?.title, 'Crew of Demo 7', 'per-item $parent is the host from');
+        assertEquals(items[0]?.lang, 'Crew of Demo 7', 'fromHost $root (no stack) is the host from');
+        assertEquals(items[0]?.hostParent, undefined, 'fromHost $parent (no stack) is undefined');
+      }
+
+      // Test 13: handler get/resolve maps see the stack
+      {
+        const ul = document.createElement('ul');
+        await assignFromAsync(ul, {
+          '?. =>': {
+            do: 'builtIns.manageTemplateList',
+            resolve: { forEach: '$parent?.crew', instantiate: 'globalThis://crew-item' },
+            fromEachItem: { toClone: { textContent: '?.name' }, resolve: { key: '?.name' } },
+          },
+        }, { from: {}, fromStack: [{ crew: [{ name: 'Mika' }] }], protocols: { globalThis: k => globalThis[k] } });
+        assertEquals(ul.querySelector('li')?.textContent, 'Mika', 'resolve map reads $parent');
+      }
+
+      const testComplete = document.getElementById('test-complete');
+      testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
+      testComplete.setAttribute('data-passed', passed);
+      testComplete.setAttribute('data-failed', failed);
+
+      results.push(`<h2>Summary: ${passed} passed, ${failed} failed</h2>`);
+      document.getElementById('results').innerHTML = results.join('');
+    }
+
+    runTests().catch(e => {
+      console.error('Test error:', e);
+      document.getElementById('results').innerHTML += `<div class="fail">Test suite error: ${e.message}</div>`;
+      document.getElementById('test-complete').setAttribute('data-status', 'error');
+    });
+  </script>
+</body>
+</html>

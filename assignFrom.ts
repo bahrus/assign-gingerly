@@ -10,7 +10,7 @@
  * Sync-op commands (` =&`) are always fully synchronous — see SYNC_OPS.
  */
 
-import { getValues, getValue } from './resolve/getValues.js';
+import { getValues, getValue, isFromStackReference } from './resolve/getValues.js';
 import assignGingerly from './assignGingerly.js';
 import { resolveIdVariable, parseIdRef } from './resolve/resolveIdRef.js';
 import { processInferredAssignments } from './inferredAssignments.js';
@@ -111,17 +111,19 @@ function assertNoThenable(value: any, opName: string, key: string): void {
 }
 
 /**
- * Resolve a single value — if it's a `?.` path string, resolve against source.
- * If it's a protocol string, resolve via protocol. Otherwise pass through as literal.
+ * Resolve a single value — if it's a `?.` path string (or a `$root` / `$parent`
+ * reference), resolve against source. If it's a protocol string, resolve via
+ * protocol. Otherwise pass through as literal.
  */
 function resolveTernaryValue(value: any, source: any, options: AssignFromOptions | any): any {
-    if (typeof value === 'string' && value.startsWith('?.')) {
+    if (typeof value === 'string' && (value.startsWith('?.') || isFromStackReference(value))) {
         return getValue(value, source, {
             withMethods: options.withMethods,
             aka: options.aka,
             substitutions: options.substitutions,
             protocols: options.protocols,
-            root: options.root
+            root: options.root,
+            fromStack: options.fromStack
         });
     }
     if (typeof value === 'string' && value.includes('://') && options.protocols) {
@@ -144,13 +146,13 @@ function resolveTernaryValue(value: any, source: any, options: AssignFromOptions
 /**
  * Check if a value in a result position is a nested ternary expression.
  * Trigger: an array of length ≥ 2 whose first element is a `?.`-prefixed
- * string (truthiness mode) or an array (comparison mode). Other arrays
- * are treated as literal values.
+ * (or `$root` / `$parent`) string (truthiness mode) or an array (comparison
+ * mode). Other arrays are treated as literal values.
  */
 function isNestedTernary(value: any): boolean {
     if (!Array.isArray(value) || value.length < 2) return false;
     const first = value[0];
-    return Array.isArray(first) || (typeof first === 'string' && first.startsWith('?.'));
+    return Array.isArray(first) || (typeof first === 'string' && (first.startsWith('?.') || isFromStackReference(first)));
 }
 
 /**

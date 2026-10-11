@@ -113,13 +113,13 @@ function resolveSubstitutions(
 
     for (const [name, path] of Object.entries(substitutions)) {
         // Resolve the substitution path against the source, but do not apply
-        // substitutions to that path. Root references ($0) are also disabled
-        // for substitution paths so values are sourced from `from` only.
+        // substitutions to that path. Root references ($0, $root, $parent) are also
+        // disabled for substitution paths so values are sourced from `from` only.
         const resolved = getValue(
             path,
             source,
             options
-                ? { ...options, substitutions: undefined, root: undefined }
+                ? { ...options, substitutions: undefined, root: undefined, fromStack: undefined }
                 : undefined
         );
         if(resolved === null || typeof resolved === 'undefined') continue;
@@ -139,13 +139,54 @@ function resolveSubstitutions(
 }
 
 /**
- * Resolve a special root-reference token at the start of a string.
- * '$0' refers to the first argument passed to assignFrom / resolveValues.
+ * `from`-stack reference tokens:
+ * - '$root'   → the outermost `from` (`fromStack[0]`), or `from` itself when there's no stack.
+ * - '$parent' → the enclosing `from` (`fromStack.at(-1)`), or undefined when there's no stack.
  */
-function resolveRootReference(path: string, source: any, root: any): { source: any; path: string } | null {
-    if (path === '$0') return { source: root ?? source, path: '' };
-    if (path.startsWith('$0?.')) return { source: root ?? source, path: path.substring(4) };
-    return null;
+const ROOT_REF = '$root';
+const PARENT_REF = '$parent';
+
+/**
+ * Return the `from`-stack token a string starts with (the whole string, or followed by `?.`).
+ */
+function fromStackToken(path: string): typeof ROOT_REF | typeof PARENT_REF | undefined {
+    for (const token of [ROOT_REF, PARENT_REF] as const) {
+        if (path.startsWith(token) && (path.length === token.length || path.startsWith('?.', token.length))) {
+            return token;
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Whether a string is a `$root` / `$parent` reference (the whole string, or followed by `?.`).
+ */
+export function isFromStackReference(value: string): boolean {
+    return fromStackToken(value) !== undefined;
+}
+
+/**
+ * Whether a string is a root reference: `$0`, `$root` or `$parent`.
+ */
+function isRootReference(value: string): boolean {
+    return value.startsWith('$0') || fromStackToken(value) !== undefined;
+}
+
+/**
+ * Resolve a special root-reference token at the start of a string.
+ * '$0' refers to the first argument passed to assignFrom / resolveValues;
+ * '$root' / '$parent' refer to entries of `options.fromStack`.
+ */
+function resolveRootReference(path: string, source: any, options: GetValuesOptions | undefined): { source: any; path: string } | null {
+    if (path === '$0') return { source: options?.root ?? source, path: '' };
+    if (path.startsWith('$0?.')) return { source: options?.root ?? source, path: path.substring(4) };
+    const token = fromStackToken(path);
+    if (token === undefined) return null;
+    const fromStack = options?.fromStack;
+    const refSource = token === ROOT_REF
+        ? (fromStack?.length ? fromStack[0] : source)
+        : fromStack?.[fromStack.length - 1];
+    return { source: refSource, path: path.substring(token.length) };
 }
 
 /**
@@ -281,19 +322,19 @@ function parseNegationMarker(value: string): { count: number; rest: string } | n
 
 /**
  * Whether a string should be resolved as a value reference rather than kept as a
- * literal: a `?.` path, a `$0` root reference, or a recognized protocol.
+ * literal: a `?.` path, a root reference (`$0`, `$root`, `$parent`), or a recognized protocol.
  */
 function looksLikeReference(
     value: string,
     protocols: SyncProtocolHandlers | undefined
 ): boolean {
     return value.startsWith('?.')
-        || value.startsWith('$0')
+        || isRootReference(value)
         || (!!protocols && hasProtocol(value));
 }
 
 /**
- * Resolve a single reference string (`?.` path, `$0` root ref, or protocol) to
+ * Resolve a single reference string (`?.` path, root ref, or protocol) to
  * its value. Callers must confirm `looksLikeReference(value)` first.
  */
 function resolveReferenceString(
@@ -312,8 +353,8 @@ function resolveReferenceString(
         const parts = parseCachedPath(aliased);
         return parts.length === 0 ? source : navigatePath(source, parts, withMethods, permissionProcessor);
     }
-    if (value.startsWith('$0')) {
-        const rootRef = resolveRootReference(value, source, options?.root);
+    if (isRootReference(value)) {
+        const rootRef = resolveRootReference(value, source, options);
         if (rootRef === null) return source;
         const substitutedPath = applySubstitutions(rootRef.path, substitutionMap);
         const aliased = applyAliases(substitutedPath, aliasMap);
@@ -456,15 +497,15 @@ export function getValue(
     options?: GetValuesOptions
 ): any {
     // Leading `!` run: coerce/negate the resolved reference (`!` negate, `!!` boolean, …).
-    // Only honored in front of a `?.` path or `$0` root reference — otherwise literal.
+    // Only honored in front of a `?.` path or root reference — otherwise literal.
     const neg = parseNegationMarker(path);
-    if (neg !== null && (neg.rest.startsWith('?.') || neg.rest.startsWith('$0'))) {
+    if (neg !== null && (neg.rest.startsWith('?.') || isRootReference(neg.rest))) {
         let resolved = getValue(neg.rest, source, options);
         for (let i = 0; i < neg.count; i++) resolved = !resolved;
         return resolved;
     }
 
-    const rootRef = resolveRootReference(path, source, options?.root);
+    const rootRef = resolveRootReference(path, source, options);
     if (rootRef) {
         path = rootRef.path;
         source = rootRef.source;

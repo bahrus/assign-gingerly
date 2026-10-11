@@ -104,6 +104,7 @@ assignFrom adds support for:
 7.  Spread merging via the `"..."` key.
 8.  Boolean coercion / negation of a resolved value via a leading `!` marker: `'!!?.isOpen'` resolves `?.isOpen` then coerces to a real boolean, `'!?.isOpen'` negates it (`!!!` negates, and so on). Only honored in front of a `?.` path, `$0` reference, or protocol — a plain literal like `'!important'` is left untouched. Nullish coerces to `false`, which makes `!!` the safe way to feed an optional source value into a boolean sink (`hidden`, `disabled`, `classList.toggle`'s force argument, …).
 9.  Multiple invocations of one `withMethods` method via the ` =*` operator — see [docs/multi-invoke.md](docs/multi-invoke.md).
+10. Enclosing-`from` references via `$root` and `$parent`, for patterns applied to a nested value (by `builtIns.tree`, `builtIns.manageTemplateList`, or your own nested calls through the `fromStack` option) — see [docs/root-references.md](docs/root-references.md).
 
 Example:
 
