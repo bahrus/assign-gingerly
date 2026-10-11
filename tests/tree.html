@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>builtIns.tree Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+    #results { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>builtIns.tree Tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    import { assignFromAsync } from '../index.js';
+    import { builtInEmoji } from '../DX/emojis.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+
+    function assert(condition, message) {
+      if (condition) {
+        results.push(`<div class="pass">✓ ${message}</div>`);
+        passed++;
+      } else {
+        results.push(`<div class="fail">✗ ${message}</div>`);
+        failed++;
+        console.error('Failed:', message);
+      }
+    }
+
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) {
+        console.error(`Expected: ${expected}, Actual: ${actual}`);
+      }
+      assert(actual === expected, message);
+    }
+
+    function details() {
+      const host = document.createElement('div');
+      host.innerHTML = '<details><summary>API Response</summary></details>';
+      return host.firstElementChild;
+    }
+
+    /** Child elements of the target, excluding <summary> */
+    const treeElements = target => [...target.children].filter(el => el.localName !== 'summary');
+
+    const patchMap = { patch: ['img', { src: '?.small', alt: '?.alt' }] };
+    const pattern = { '?. =>': { do: 'builtIns.tree', map: patchMap } };
+    const vm = { patch: { small: './data/mission-patch.svg', alt: 'Demo Mission 7 patch' } };
+
+    async function runTests() {
+
+      // Test 1: bare-bones example
+      {
+        const target = details();
+        await assignFromAsync(target, pattern, { from: vm });
+        const img = target.querySelector('img');
+        assert(img !== null, 'creates the img');
+        assertEquals(img?.getAttribute('src'), './data/mission-patch.svg', 'src resolved against the key value');
+        assertEquals(img?.alt, 'Demo Mission 7 patch', 'alt resolved against the key value');
+        assertEquals(target.firstElementChild.localName, 'summary', 'summary stays first');
+        assertEquals(target.childNodes[1].nodeType, Node.COMMENT_NODE, 'start marker follows existing content');
+        assertEquals(target.childNodes[1].data, '?start name="tree"', 'default marker name is "tree"');
+        assertEquals(target.lastChild.data, '?end', 'end marker is last');
+      }
+
+      // Test 2: second call rebinds in place
+      {
+        const target = details();
+        await assignFromAsync(target, pattern, { from: vm });
+        const img = target.querySelector('img');
+        await assignFromAsync(target, pattern, { from: { patch: { small: './other.svg', alt: 'Other' } } });
+        assertEquals(target.querySelectorAll('img').length, 1, 'no duplicate on second call');
+        assert(target.querySelector('img') === img, 'same element is reused');
+        assertEquals(img.getAttribute('src'), './other.svg', 'src rebound');
+        assertEquals(img.alt, 'Other', 'alt rebound');
+      }
+
+      // Test 3: an inline config (new objects every call) still rebinds in place
+      {
+        const target = details();
+        const render = from => assignFromAsync(target, {
+          '?. =>': { do: 'builtIns.tree', map: { patch: ['img', { alt: '?.alt' }] } }
+        }, { from });
+        await render(vm);
+        const img = target.querySelector('img');
+        await render({ patch: { alt: 'Changed' } });
+        assert(target.querySelector('img') === img, 'structure compared structurally, not by reference');
+        assertEquals(img.alt, 'Changed', 'pattern from the new config applied');
+      }
+
+      // Test 4: static children resolve against the parent's value; template children go into .content
+      {
+        const target = details();
+        const map = {
+          rocket: ['section', { className: 'card' }, [
+            ['h3', { textContent: '?.name' }],
+            ['template', {}, [['span', { textContent: '?.type' }]]],
+          ]],
+        };
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.tree', map } },
+          { from: { rocket: { name: 'Falcon 9', type: 'rocket' } } });
+        const section = target.querySelector('section');
+        assertEquals(section?.className, 'card', 'parent pattern applied');
+        const h3 = section?.querySelector('h3');
+        assertEquals(h3?.textContent, 'Falcon 9', 'child resolves against the parent value');
+        const template = section?.querySelector('template');
+        assertEquals(template?.childNodes.length, 0, 'template has no light-DOM children');
+        assertEquals(template?.content.firstElementChild?.textContent, 'rocket', 'template child is in .content');
+
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.tree', map } },
+          { from: { rocket: { name: 'Falcon Heavy', type: 'rocket' } } });
+        assert(section.querySelector('h3') === h3, 'child element reused');
+        assertEquals(h3.textContent, 'Falcon Heavy', 'child rebound');
+      }
+
+      // Test 5: null/undefined values skip, disappear and reappear in map order
+      {
+        const target = details();
+        const map = { a: ['b', { textContent: '?.' }], b: ['i', { textContent: '?.' }], c: ['u', { textContent: '?.' }] };
+        const cfg = { '?. =>': { do: 'builtIns.tree', map } };
+        await assignFromAsync(target, cfg, { from: { a: 'A', b: null, c: 'C' } });
+        assertEquals(treeElements(target).map(e => e.localName).join(), 'b,u', 'null value skipped');
+        const bold = target.querySelector('b');
+        await assignFromAsync(target, cfg, { from: { a: undefined, b: 'B', c: 'C' } });
+        assertEquals(treeElements(target).map(e => e.localName).join(), 'i,u', 'disappeared key removed, appeared key created');
+        await assignFromAsync(target, cfg, { from: { a: 'A2', b: 'B', c: 'C' } });
+        assertEquals(treeElements(target).map(e => e.textContent).join(), 'A2,B,C', 'reappearing key placed in map order');
+        assert(target.querySelector('b') !== bold, 'removed element is recreated, not resurrected');
+      }
+
+      // Test 6: keepNullish creates elements for null values
+      {
+        const target = details();
+        await assignFromAsync(target, {
+          '?. =>': { do: 'builtIns.tree', keepNullish: true, map: { details: ['p', { textContent: '?.' }] } }
+        }, { from: { details: null } });
+        assert(target.querySelector('p') !== null, 'element created for null value');
+      }
+
+      // Test 7: a structural change rebuilds just that key
+      {
+        const target = details();
+        const from = { a: 'A', b: 'B' };
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.tree', map: { a: ['span', { textContent: '?.' }], b: ['em', { textContent: '?.' }] } } }, { from });
+        const em = target.querySelector('em');
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.tree', map: { a: ['strong', { textContent: '?.' }], b: ['em', { textContent: '?.' }] } } }, { from });
+        assertEquals(treeElements(target).map(e => e.localName).join(), 'strong,em', 'changed tag rebuilt in place');
+        assert(target.querySelector('em') === em, 'unchanged key untouched');
+        assertEquals(target.querySelector('span'), null, 'old element removed');
+      }
+
+      // Test 8: an element removed by other code is rebuilt
+      {
+        const target = details();
+        await assignFromAsync(target, pattern, { from: vm });
+        target.querySelector('img').remove();
+        await assignFromAsync(target, pattern, { from: vm });
+        assertEquals(target.querySelectorAll('img').length, 1, 'removed element rebuilt');
+        const nodes = [...target.childNodes];
+        const img = target.querySelector('img');
+        assert(nodes.indexOf(img) > nodes.findIndex(n => n.nodeType === Node.COMMENT_NODE), 'rebuilt element is inside the markers');
+      }
+
+      // Test 9: '*' default spec for unmapped keys, with a default textContent pattern
+      {
+        const target = details();
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: { name: ['h2', { textContent: '?.' }], '*': 'span' } } };
+        await assignFromAsync(target, cfg, { from: { id: 'demo-7', name: 'Demo Mission 7', flight: 7 } });
+        assertEquals(treeElements(target).map(e => `${e.localName}:${e.textContent}`).join(),
+          'h2:Demo Mission 7,span:demo-7,span:7', 'mapped keys first, then unmapped keys in VM order');
+        const span = target.querySelector('span');
+        await assignFromAsync(target, cfg, { from: { id: 'demo-8', name: 'Demo Mission 8', flight: 8 } });
+        assert(target.querySelector('span') === span, 'wildcard elements reused');
+        assertEquals(span.textContent, 'demo-8', 'wildcard element rebound');
+      }
+
+      // Test 10: two trees in one target, distinguished by markerName
+      {
+        const target = details();
+        const one = { '?. =>': { do: 'builtIns.tree', markerName: 'one', map: { a: ['b', { textContent: '?.' }] } } };
+        const two = { '?. =>': { do: 'builtIns.tree', markerName: 'two', map: { a: ['i', { textContent: '?.' }] } } };
+        await assignFromAsync(target, one, { from: { a: '1' } });
+        await assignFromAsync(target, two, { from: { a: '2' } });
+        await assignFromAsync(target, one, { from: { a: '1b' } });
+        assertEquals(treeElements(target).map(e => `${e.localName}:${e.textContent}`).join(), 'b:1b,i:2', 'trees kept separate');
+      }
+
+      // Test 11: patterns with operator keys go through assignFrom
+      {
+        const target = details();
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: { status: ['span', { 'textContent ?=': ['?.success', 'Success', 'Failure'] }] } } };
+        await assignFromAsync(target, cfg, { from: { status: { success: true } } });
+        assertEquals(target.querySelector('span')?.textContent, 'Success', 'ternary key applied');
+        await assignFromAsync(target, cfg, { from: { status: { success: false } } });
+        assertEquals(target.querySelector('span')?.textContent, 'Failure', 'ternary key rebound');
+      }
+
+      // Test 12: a map key missing from the VM warns once
+      {
+        const warnings = [];
+        const { warn } = console;
+        console.warn = msg => warnings.push(msg);
+        try {
+          const target = details();
+          const cfg = { '?. =>': { do: 'builtIns.tree', map: { pacth: ['img', {}] } } };
+          await assignFromAsync(target, cfg, { from: vm });
+          await assignFromAsync(target, cfg, { from: vm });
+        } finally {
+          console.warn = warn;
+        }
+        assertEquals(warnings.length, 1, 'warns on first render only');
+        assert(warnings[0]?.includes('"pacth"'), 'warning names the key');
+      }
+
+      // Test 13: unsupported headers throw
+      {
+        let error;
+        try {
+          await assignFromAsync(details(), { '?. =>': { do: 'builtIns.tree', map: { patch: [class {}, {}] } } }, { from: vm });
+        } catch (e) { error = e; }
+        assert(error?.message.includes('class headers'), 'class header throws');
+        error = undefined;
+        try {
+          await assignFromAsync(details(), { '?. =>': { do: 'builtIns.tree', map: { patch: '$:PatchISM' } } }, { from: vm });
+        } catch (e) { error = e; }
+        assert(error?.message.includes('itemscope manager headers'), '$: header throws');
+        error = undefined;
+        try {
+          await assignFromAsync(details(), { '?. =>': { do: 'builtIns.tree' } }, { from: vm });
+        } catch (e) { error = e; }
+        assert(error?.message.includes('"map"'), 'missing map throws');
+      }
+
+      // Test 14: stale markers without state (e.g. cloned markup) are cleared, not adopted
+      {
+        const source = details();
+        await assignFromAsync(source, pattern, { from: vm });
+        const clone = source.cloneNode(true);
+        await assignFromAsync(clone, pattern, { from: vm });
+        assertEquals(clone.querySelectorAll('img').length, 1, 'cloned content replaced');
+      }
+
+      // Test 15: 🌲 emoji alias
+      {
+        const target = details();
+        await assignFromAsync(target, { '?. =>': { do: '🌲', map: patchMap } }, { from: vm, handlers: builtInEmoji });
+        assert(target.querySelector('img') !== null, '🌲 alias resolves to builtIns.tree');
+      }
+
+      const testComplete = document.getElementById('test-complete');
+      testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
+      testComplete.setAttribute('data-passed', passed);
+      testComplete.setAttribute('data-failed', failed);
+
+      results.push(`<h2>Summary: ${passed} passed, ${failed} failed</h2>`);
+      document.getElementById('results').innerHTML = results.join('');
+    }
+
+    runTests().catch(e => {
+      console.error('Test error:', e);
+      document.getElementById('results').innerHTML += `<div class="fail">Test suite error: ${e.message}</div>`;
+      document.getElementById('test-complete').setAttribute('data-status', 'error');
+    });
+  </script>
+</body>
+</html>

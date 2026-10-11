@@ -19,7 +19,7 @@ const vm = {
         alt: "Demo Mission 7 patch"
     },
 };
-await assignFrom(document.getElementById('api-response'), {
+assignFrom(document.getElementById('api-response'), {
     '?. =>': {
         do: 'builtIns.Tree',
         map: {
@@ -134,3 +134,61 @@ The example still uses **`await assignFrom(...)`**. The sync `assignFrom` proces
 - **The "compiled" fast path pays off now.** Since the walk is "for each node: assignFrom(element, pattern, from)", the patterns could be pre-parsed once per spec (cached in a `WeakMap<spec, Parsed>`). Second calls then only resolve paths and assign values.
 - **A dev-mode `console.warn` when a spec key has no matching VM key** (on the first call only) would catch typos like `pacth`.
 - **`'*': TBD` from the previous round** fits this model nicely as a *default `ElementSpecification`* applied to unmapped keys, e.g. `'*': 'span'`, plus a default pattern of `{ textContent: '?.' }`. That gives an h-style "just show me the data" mode in one line.
+
+## Bruce's Response
+
+I started to correct the types. Feel free to update them, especially as we continue to progress down this path.  I think some of the types may become more relevant as we continue to implement features.
+
+Please proceed with all your recommendations, including the friendly extras.
+
+---
+
+## Claude's Implementation Notes
+
+### Files
+
+| File | Change |
+|---|---|
+| `handlers/tree.ts` | **New**: the `TreeHandler` |
+| `types/assign-gingerly/treeTypes.d.ts` | Your types, now `export`ed (they were global script declarations), plus `TreeConfig` |
+| `processHandlerCommands.ts` | Registers `builtIns.tree` |
+| `DX/emojis.ts` | `🌲` alias |
+| `tsconfig.json` | Includes `handlers/tree.ts` |
+| `tests/tree.html`, `tests/tree.spec.ts` | **New**: 15 scenarios, 42 assertions |
+| `docs/tree.md` | **New** |
+
+As CLAUDE.md asks, I **didn't touch any `.js`**. Your running `tsc --watch` has already regenerated `handlers/tree.js`, `processHandlerCommands.js` and `DX/emojis.js` from my `.ts` changes. To test, I compiled a scratch copy of the repo (`tsc` is clean under `strict`) and ran it on port 8017, because your server was on 8000:
+- **tree:** 42/42 in Chromium, Firefox and WebKit;
+- **itemscopeTree:** 49/49 in all three, as a regression check;
+- **full suite:** passes in Chromium.
+
+### One deviation to confirm: `builtIns.tree`, not `builtIns.Tree`
+
+Following #6 from the earlier discussion, I registered the camelCase name to match `builtIns.itemscopeTree`, `builtIns.microDataJoin` and the rest. Your examples above still say `builtIns.Tree`. If you'd rather keep the capital T, it's a one-line change in `BUILT_IN_MAP` plus the `do` type.
+
+### What was implemented
+
+- **In-place rebinding.** State lives in a module-level `WeakMap` keyed by the tree's **start marker** (not by config). Each call walks the spec and the created nodes in lockstep and re-applies patterns.
+- **Structure is compared structurally, not by reference.** This corrects my earlier suggestion. Reference equality would rebuild everything whenever the config is written inline, so a new object every call, and that's common. The tag and child count are compared during the walk, so the check costs nothing extra. Only the subtree that changed is rebuilt.
+- **Comment markers** (`<!--?start name="tree"-->` … `<!--?end-->`), found among the target's **direct children**. That way a nested tree's markers can't be mistaken for this one's. A `markerName` option lets several trees share a target.
+- **Missing values:** null/undefined values are skipped, or removed when a value disappears, and recreated in map order when it reappears. `keepNullish: true` opts out.
+- **External removal:** an element that was removed or moved by other code is rebuilt. Markers without state (cloned or server-rendered markup) are cleared and rebuilt, since Tree doesn't adopt existing markup.
+- **Children** resolve against the parent's value. `template` children go into `.content`.
+- **Friendly extras:**
+  - `'*'` default spec, with `{ textContent: '?.' }` when it has no pattern.
+  - A one-time `console.warn` for map keys missing from the VM (`pacth`).
+  - A "compiled" fast path. Whether a pattern is plain is cached per pattern object, and plain patterns skip `assignFrom`'s key categorization and go straight to `getValues` + `assignGingerly`. Patterns with operator keys (` ?=`, ` =>`, …), or calls using `pin`/`at`/`where_x_in`, fall back to `assignFrom`. One test covers a ` ?=` pattern.
+- **Phase TBD headers** (class and `$:`) throw a clear "not supported yet" error rather than being ignored silently.
+
+### Things you may trip over
+
+1. **The result now includes markers.** Your expected output above shows a bare `<img>`; the actual output wraps it in `<!--?start name="tree"-->` … `<!--?end-->`.
+2. **Patterns set properties, not attributes.** `{ 'data-test': 'hello' }` (from the TreeScope sketch) would set an expando property, not an attribute. `dataset` or a ` =*` call to `setAttribute` works today. If attribute support matters for Tree, it's a design question for both handlers.
+3. **`textContent` + children conflict.** Setting `textContent` wipes the children. Tree re-appends them, after the text, on every call. That's documented, but it's worth deciding whether it should throw instead.
+4. **`treeTypes.d.ts` isn't in `package.json` → `files`** (only `types.d.ts` is). That's fine while it's experimental; it should be added, or merged into `types.d.ts` (as AGENTS.md prefers), before publishing.
+
+### Suggested next steps
+
+- **Arrays** (`crew[]`): the open question from before. Repeating a child spec per item, keyed by index, would fit the lockstep model; delegating to `manageTemplateList` would get keyed reconciliation.
+- **Class headers:** construct `new Header(el, ctx)` once on creation, and call `onAssigned(value, ctx)` on every rebind. The lockstep walk already has the right hook point (`syncNode`).
+- A small **demo page** next to the itemscopeTree one, using the same `launch.json`, for a direct DX comparison.

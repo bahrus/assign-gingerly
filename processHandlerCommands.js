@@ -21,6 +21,7 @@ const BUILT_IN_MAP = {
     'builtIns.manageTemplateList': './handlers/manageTemplateList.js',
     'builtIns.rangeSelector': './handlers/rangeSelector.js',
     'builtIns.itemscopeTree': './handlers/itemscopeTree.js',
+    'builtIns.tree': './handlers/tree.js',
 };
 /**
  * Criteria for locating an assignFrom handler class: must expose an `assign` method

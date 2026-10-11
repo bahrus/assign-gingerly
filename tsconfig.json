@@ -16,6 +16,7 @@
 		"DX/IterableMixin.ts",
 		"DX/strictDefaultPermissions.ts",
 		"handlers/itemscopeTree.ts",
+		"handlers/tree.ts",
 	],
 	"exclude":[
 		"node_modules/*"

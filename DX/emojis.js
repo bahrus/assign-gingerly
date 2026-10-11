@@ -21,6 +21,7 @@
  * | 📋 | builtIns.manageTemplateList |
  * | 📊 | builtIns.rangeSelector |
  * | 🌳 | builtIns.itemscopeTree |
+ * | 🌲 | builtIns.tree |
  *
  * `join` is no longer a `do:` handler — it moved to the synchronous ` =&` operator
  * (see syncOps/join.ts) and isn't looked up through options.handlers, so it has no
@@ -33,6 +34,7 @@ export const builtInEmoji = {
     '📋': 'builtIns.manageTemplateList',
     '📊': 'builtIns.rangeSelector',
     '🌳': 'builtIns.itemscopeTree',
+    '🌲': 'builtIns.tree',
 };
 export const akaMethods = {
     '🔍': 'querySelector',
