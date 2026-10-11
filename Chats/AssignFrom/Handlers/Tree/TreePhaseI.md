@@ -349,3 +349,7 @@ With custom ops, the line between Tree and TreeScope no longer needs to be about
 3. **`manageTemplateList` `withOptions`:** per-item calls deliberately inherit nothing but the `fromStack`. Should `syncOps` also carry through? I'd say **yes**, for the same reason as `fromStack`: ops are pure functions, not capabilities like `withMethods`.
 
 If you agree, I'd implement it and update the Tree demo to use the raw response plus a handful of named ops in place of `toViewModel()`.
+
+## Bruce's Response -- Better Document =&
+
+I was trying to remember how =& works.  The README.md has a brief example of this operator, but unlike some of the other operators, doesn't really seem to discuss it in detail, nor is there a specialized document in docs that describes what that operator supports.  If I missed it, please point me to where it is discussed in details, otherwise, please add.  Either way, please add your actions below if any.
