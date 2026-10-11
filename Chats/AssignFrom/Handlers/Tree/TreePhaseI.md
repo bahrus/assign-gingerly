@@ -353,3 +353,42 @@ If you agree, I'd implement it and update the Tree demo to use the raw response 
 ## Bruce's Response -- Better Document =&
 
 I was trying to remember how =& works.  The README.md has a brief example of this operator, but unlike some of the other operators, doesn't really seem to discuss it in detail, nor is there a specialized document in docs that describes what that operator supports.  If I missed it, please point me to where it is discussed in details, otherwise, please add.  Either way, please add your actions below if any.
+
+## Claude's Response -- ` =&` Documentation
+
+### Where it was
+
+There *was* a fairly complete section, but it's easy to miss: **README → "Sync op: join (` =&`)"**, about 2,200 lines below the operator table, and the table row didn't link to it. Unlike ` ?=` and ` =*`, there was no `docs/` page.
+
+### Actions
+
+1. **New page: [docs/sync-ops.md](../../../../docs/sync-ops.md)**, written against the code rather than the README. It covers:
+   - syntax and how the op is selected;
+   - resolution of the whole config (`?.`, `$0`, `$root` / `$parent`, `!!`, `aka`, `withMethods`, sync protocols);
+   - thenable rejection, and `undefined` meaning "don't assign";
+   - the order of operator processing within one call;
+   - duplicate keys under `where_x_in`;
+   - `join` in full, plus formatting numbers with `toLocaleString|`;
+   - where ` =&` is available, a ` =&` vs ` =>` comparison, and a pointer to the custom-ops discussion.
+2. **README:** the operator table row and the "Sync op: join" section now link to the new page.
+
+### Bugs found while writing it
+
+1. **`assignFromAsync` silently ignores ` =&` *and* ` ?=` keys.** It only handles plain, `#[x]`, ` =*` and ` =>` keys. I verified it in Node against the current build:
+
+   ```
+   pattern: { 'name =&': { join: [...] }, 'status ?=': ['?.ok', 'yes', 'no'], plain: '?.first' }
+   sync : {"status":"yes","name":"Ada Lovelace","plain":"Ada"}
+   async: {"plain":"Ada"}
+   ```
+
+   `docs/ternary-assignment.md` says ` ?=` works in `assignFromAsync`, so this is a bug, not a design choice. The new doc lists it as a known bug. **I didn't fix it**, because it changes behavior (keys that are ignored today would start applying). The fix is small: hand those keys to the sync `assignFrom`, which already processes both synchronously. **Want me to fix it?** It also matters for the custom-ops proposal, because ops wouldn't work under `assignFromAsync` otherwise.
+2. **My `$root` / `$parent` work missed some call paths:** `assignFromAsync` (plain keys, ` =*`, and `#[x]` keys) and the sync `#[x]` paths built their resolver options without `fromStack`. **Fixed.** I added a test for `assignFromAsync` with `fromStack`.
+
+### Verified
+
+- `tsc` is clean, in a scratch copy of the repo; no `.js` touched.
+- Root reference tests: 33/33 in Chromium, Firefox and WebKit.
+- **Full suite: 120 passed, 0 failed** across all three browsers.
+
+The three questions from the formatting proposal above are still open.

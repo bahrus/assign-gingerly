@@ -460,7 +460,7 @@ function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, option
     const ids = getEffectiveIds(options);
     if (!ids)
         return;
-    const { withMethods, aka, akaMethods, protocols, from, substitutions } = options;
+    const { withMethods, aka, akaMethods, protocols, from, substitutions, fromStack } = options;
     for (const key of idRefNormalKeys) {
         const parsed = parseIdRef(key);
         if (!parsed)
@@ -470,11 +470,11 @@ function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, option
             continue;
         const value = expandedPattern[key];
         if (parsed.remainingPath) {
-            const resolvedValue = getValues({ __v: value }, from, { withMethods, aka, akaMethods, substitutions, protocols, root: target, permissionProcessor });
+            const resolvedValue = getValues({ __v: value }, from, { withMethods, aka, akaMethods, substitutions, protocols, root: target, fromStack, permissionProcessor });
             assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissionProcessor);
         }
         else {
-            const resolvedValue = getValues(typeof value === 'object' && value !== null ? value : { __v: value }, from, { withMethods, aka, akaMethods, substitutions, protocols, root: target, permissionProcessor });
+            const resolvedValue = getValues(typeof value === 'object' && value !== null ? value : { __v: value }, from, { withMethods, aka, akaMethods, substitutions, protocols, root: target, fromStack, permissionProcessor });
             if (!('__v' in resolvedValue)) {
                 assignGingerly(el, resolvedValue, options, permissionProcessor);
             }
@@ -587,6 +587,7 @@ export function assignFrom(target, pattern, options, permissionProcessor) {
                                     substitutions: options.substitutions,
                                     protocols: options.protocols,
                                     root: target,
+                                    fromStack: options.fromStack,
                                     permissionProcessor
                                 });
                             }

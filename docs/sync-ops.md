@@ -1,0 +1,110 @@
+# Sync Ops (` =&` operator)
+
+The ` =&` operator computes a value from the source and assigns it to a target path, **synchronously**. There's no dynamic import, no handler class and no `await`, ever. That's what distinguishes it from ` =>` handlers.
+
+```JavaScript
+assignFrom(oElement, {
+    '?.textContent =&': { join: ['?.lastName', ', ', '?.firstName'] }
+}, { from: { lastName: 'Targaryen', firstName: 'Helaena' } });
+
+// oElement.textContent === 'Targaryen, Helaena'
+```
+
+## Syntax
+
+```JavaScript
+'<lhsPath> =&': { <opName>: <args>, ...<extra> }
+```
+
+- **`lhsPath`**: where the result goes, written like any other LHS (`'?.textContent'`, `'?.style?.width'`, or plain `'title'`).
+- **`opName`**: the op to run. The value under it becomes the op's `args`.
+- **`extra`**: every other key in the config. The op receives them as its second argument (for example `join`'s `separator`).
+
+## How It Works
+
+1. **The config must be a plain object.** Anything else (a string, an array, `null`) throws: `requires a config object naming exactly one op`.
+2. **The op is the first config key that names a registered op**, in object key order. All other keys become `extra`. If no key names an op, it throws, and the error lists the known ops.
+3. **The whole config is resolved in one pass** by `getValues` against `from`. That includes `args`, `extra`, and anything nested inside arrays or objects. So everything an RHS value supports works here:
+   - `?.` paths, and `$0` (the target);
+   - [`$root` / `$parent`](./root-references.md);
+   - `!` / `!!` negation and coercion;
+   - `aka` aliases and `withMethods` calls (including zero-argument calls marked with `|`);
+   - **synchronous** protocols.
+
+   Strings that aren't references stay literals.
+4. **Async values are rejected.** If anything in the resolved config is a thenable (for example, a protocol returned a Promise), it throws rather than assigning `"[object Promise]"`. Use ` =>` with `resolve:` for async values.
+5. **The op is called** as `op(args, extra)`.
+6. **The result is assigned** to `lhsPath`, through the permission processor like any other assignment. A result of `undefined` means "don't assign"; built-in `join` always returns a string.
+
+### Order within one `assignFrom` call
+
+` ?=` ternaries run first, then ` =&` sync ops, then ` =*` multi-invokes, then plain keys, then `#[x]` keys. ` =>` handlers run last, fire-and-forget. So if a plain key and a ` =&` key target the same property, the plain key wins.
+
+### Looped substitution
+
+When `where_x_in` / `where_y_in` / `where_z_in` expansion produces duplicate ` =&` keys, the **last one wins**. (` =>` and ` =*` keys merge instead; see [multi-invoke.md](./multi-invoke.md).)
+
+## Built-in Ops
+
+The registry ([syncOps/registry.ts](../syncOps/registry.ts)) is closed: ops are imported statically, so ` =&` never needs to load anything. Today it holds one op.
+
+### `join`
+
+Joins the resolved `args` array into a string.
+
+| Config key | Meaning | Default |
+|---|---|---|
+| `join` | Array of `?.` paths and literals. A non-array value is treated as a one-item array. | (required) |
+| `separator` | String placed between items | `''` |
+
+**Nullish handling:**
+- **Top-level** `null` / `undefined` items are dropped.
+- **Nested sub-arrays are all-or-nothing.** If any item in a sub-array is `null` / `undefined`, the whole sub-array is dropped. Otherwise its items are flattened in. That's how you write optional segments:
+
+  ```JavaScript
+  // middleName undefined → [', ', undefined] dropped → 'Targaryen, Helaena'
+  // middleName 'D'       → 'Targaryen, D, Helaena'
+  '?.textContent =&': { join: ['?.lastName', [', ', '?.middleName'], ', ', '?.firstName'] }
+  ```
+
+**With `separator`:**
+
+```JavaScript
+'?.textContent =&': { join: ['?.firstName', '?.lastName'], separator: ' | ' }
+// → 'Helaena | Targaryen'
+```
+
+**Formatting numbers along the way**, with a zero-argument method call (`|`):
+
+```JavaScript
+assignFrom(el, {
+    '?.textContent =&': { join: ['?.mass?.kg?.toLocaleString|', ' kg'] }
+}, { from: rocket, withMethods: ['toLocaleString'] });
+// → '549,054 kg'
+```
+
+The [`sp` tagged template](./paths-dx.md) produces arrays in exactly the shape `join` expects.
+
+## Where ` =&` Is Available
+
+| Entry point | Supported |
+|---|---|
+| `assignFrom` | Yes |
+| Patterns applied by handlers that use `assignFrom` (`builtIns.tree`, `builtIns.manageTemplateList` items, …) | Yes |
+| `assignFromAsync` | **Not currently.** ` =&` keys (and ` ?=` keys) are silently ignored there. That's a known bug; the ternary docs say ` ?=` works in `assignFromAsync`. |
+| `assignGingerly` | No, because it has no `from` to resolve against |
+
+## ` =&` vs ` =>`
+
+| | ` =&` sync op | ` =>` handler |
+|---|---|---|
+| Runs | Synchronously, inline | Asynchronously (fire-and-forget in `assignFrom`, awaited in `assignFromAsync`) |
+| Loaded | Static registry | Dynamically imported built-ins, or `options.handlers` |
+| Config resolution | `getValues` (sync) over the whole config | `get` (sync) / `resolve` (async, awaits protocols) maps |
+| Async values | Rejected with an error | Supported via `resolve` |
+| Result | Assigned to the LHS (unless `undefined`) | Opt-in: assigned only if `assign()` returns a value |
+| Use it for | Computing a value: joining, formatting | Side effects: loading, rendering lists, event wiring |
+
+## Custom Ops
+
+There's no way yet to register your own ops. A per-call `syncOps` option, merged over the built-in registry the same way `options.handlers` works for ` =>`, is under discussion as the way to handle formatting such as dates, units and conditional text. See `Chats/AssignFrom/Handlers/Tree/TreePhaseI.md`.

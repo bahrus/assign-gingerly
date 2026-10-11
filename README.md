@@ -855,7 +855,7 @@ While we are in the business of passing values of object A into object B, we mig
 | ` Y=` | Merge | Recursively `assignGingerly` into a sub-object | `'style Y=': { width: '100px' }` |
 | ` ?=` | Ternary | Conditional assignment (assignFrom only) — [details](docs/ternary-assignment.md) | `'?.text ?=': ['?.cond', 'yes', 'no']` |
 | ` =>` | Handler | Invoke a handler plugin (assignFrom only) | `'?.el =>': { do: 'builtIns.lazyLoad', ... }` |
-| ` =&` | Sync op | Compute a value synchronously and assign it back (assignFrom only) — no dynamic import, no await, ever | `'?.text =&': { join: ['?.first', ' ', '?.last'] }` |
+| ` =&` | Sync op | Compute a value synchronously and assign it back (assignFrom only) — no dynamic import, no await, ever — [details](docs/sync-ops.md) | `'?.text =&': { join: ['?.first', ' ', '?.last'] }` |
 | ` =*` | Multi-invoke | Call a `withMethods` method once per argument-list (assignFrom only) — [details](docs/multi-invoke.md) | `` '?.classList?.toggle =*': [['a', '!!?.x'], ['b', '!!?.y']] `` |
 
 All operators use a space before the suffix to distinguish them from property names. They compose with `?.` nested paths and `withMethods`.
@@ -3088,7 +3088,7 @@ When a handler's `assign()` method returns a non-`undefined` value, `processHand
 
 ### Sync op: join (` =&`)
 
-` =&` is a separate operator from ` =>`, for computed values that have nothing to await — no dynamic import, no handler class, no microtask hop, ever. The RHS names exactly one op from a small built-in registry (`syncOps/registry.ts`); sibling keys are that op's own config. `join` is the first (and so far only) op in the registry.
+` =&` is a separate operator from ` =>`, for computed values that have nothing to await — no dynamic import, no handler class, no microtask hop, ever. The RHS names exactly one op from a small built-in registry (`syncOps/registry.ts`); sibling keys are that op's own config. `join` is the first (and so far only) op in the registry. Full semantics: [docs/sync-ops.md](docs/sync-ops.md).
 
 `join` resolves an array of `?.` paths and literals, then joins it into a single string. It supports nested sub-arrays with "all-or-nothing" semantics for optional segments.
 

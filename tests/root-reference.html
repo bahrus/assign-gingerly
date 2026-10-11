@@ -103,6 +103,13 @@
         assertEquals(`${target.label}|${target.parent}|${target.own}`, 'Root|Falcon 9|70', 'assignFrom resolves all three levels');
       }
 
+      // Test 7a: assignFromAsync passes fromStack too
+      {
+        const target = {};
+        await assignFromAsync(target, { label: '$root?.title', parent: '$parent?.name' }, { from: current, fromStack });
+        assertEquals(`${target.label}|${target.parent}`, 'Root|Falcon 9', 'assignFromAsync resolves $root and $parent');
+      }
+
       // Test 7b: ?= ternaries accept $root / $parent, including nested ternaries
       {
         const target = {};
