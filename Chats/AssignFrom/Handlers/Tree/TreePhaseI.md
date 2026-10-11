@@ -244,3 +244,108 @@ These are candidate next steps, most valuable first:
 3. **Children can't see the root VM.** The status badge needs `upcoming` and `success` from the root, so the adapter has to build a synthetic `status` key. That's fine with an adapter, but a root reference in patterns (for example a `$root` prefix) would make Tree usable without one.
 4. **No formatting hook.** Dates, units and string concatenation all need the adapter. That might be the right line between Tree and TreeScope ("Tree = structure, the adapter = logic"), but it's worth deciding on purpose.
 5. **`hidden: '?.length'`** for the "No failures recorded" placeholder works, but it's a trick. An "if" or "empty" affordance would read better once arrays are first-class.
+
+## Bruce's Response
+
+The next item I would like to understand is th8is identifies rough edge:
+
+> 4. **No formatting hook.** Dates, units and string concatenation all need the adapter. That might be the right line between Tree and TreeScope ("Tree = structure, the adapter = logic"), but it's worth deciding on purpose.
+
+Can you please explain where this shortcoming exists with the simplest possible example (derived from the demo would be great, but not required if a simpler example would be clearer).  Can you provide your recommendation for how to solve it?
+
+## Claude's Response -- Formatting
+
+### First, a correction
+
+I overstated the gap. **String concatenation already works** through the ` =&` `join` op, and number formatting works through a zero-argument method call. I ran this against the current build:
+
+```js
+assignFrom(t, {
+    'title =&':   { join: ['Rocket: ', '?.name'] },
+    'mass =&':    { join: ['?.mass?.kg?.toLocaleString|', ' kg'] },
+    'engines =&': { join: ['?.engines?.number', ' × ', '?.engines?.type', ' ', '?.engines?.version'] },
+}, { from: rocket, withMethods: ['toLocaleString'] });
+// → { title: 'Rocket: Falcon 9', mass: '549,054 kg', engines: '9 × merlin 1D+' }
+```
+
+So the demo's adapter does more than it has to. That said, three things in it can't be expressed in a pattern today.
+
+### The simplest example
+
+The launch date:
+
+```js
+const vm = { date_utc: '2026-03-14T15:09:26.000Z' };
+```
+
+```html
+<!-- wanted -->
+<time datetime="2026-03-14T15:09:26.000Z">March 14, 2026 at 3:09 PM UTC</time>
+```
+
+```js
+date_utc: ['time', {
+    dateTime: '?.',      // ✓ the raw string
+    textContent: ???     // ✗ no way to say new Date(value).toLocaleString(undefined, { dateStyle: 'long', … })
+}]
+```
+
+A path can navigate into a value and call one of its methods, but it can't **turn the value into a different type** (string → `Date`), and it can't **pass an options object** to a method. Hence the adapter.
+
+### The three real gaps (all from the demo)
+
+| Gap | Demo example | Why a pattern can't do it |
+|---|---|---|
+| **Type conversion / arbitrary function** | Date label | needs `new Date(…)` plus `toLocaleString` with an options object |
+| **Conditional pieces inside a string** | `"B9007, flight 4 (reused); landing: success (ASDS)"` | `join` can't branch on `reused` / `landing_success`, and a ` ?=` can't sit inside a `join` |
+| **Choice + formatting together** | `70 m` ↔ `229.6 ft` | ` ?=` can pick `?.meters` or `?.feet` (with `$root?.units`), but can't also append the unit |
+
+### Recommendation: let callers register their own ` =&` ops
+
+` =&` already has exactly the right shape. It's synchronous, it names **one op**, its config is resolved with `getValues` (so `?.`, `$root`, `$parent` and `!!` all work inside it), and the result is assigned to the LHS. The only limit is that ops come from a closed, built-in registry (`SYNC_OPS`, which just holds `join`).
+
+So: **add a per-call option, `syncOps`, that is merged over the built-in registry**, just as `handlers` works for ` =>`:
+
+```js
+date_utc: ['time', { dateTime: '?.', 'textContent =&': { longDate: '?.' } }],
+rocket: ['section', { className: 'card rocket' }, [
+    spec('Height', { 'textContent =&': { length: '?.height', units: '$root?.ui?.units' } }),
+    …
+]],
+cores: … { 'textContent =&': { coreSummary: '?.' } } …
+```
+
+```js
+await assignFromAsync(launchEl, pattern, {
+    from: { ...response, ui },
+    syncOps: {
+        longDate: iso => new Date(iso).toLocaleString(undefined, { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC',
+        length: ({ meters, feet }, { units }) => units === 'metric' ? `${meters} m` : `${feet} ft`,
+        coreSummary: ({ serial, flight, reused, landing_success, landing_type }) =>
+            `${serial}, flight ${flight}${reused ? ' (reused)' : ''}; landing: ${landing_success ? 'success' : 'not successful'} (${landing_type})`,
+    },
+});
+```
+
+**Why this approach:**
+- **No new syntax.** ` =&` already exists, is documented, and is synchronous by contract. That contract includes its thenable guard, which throws if an op returns a promise.
+- **The config stays pure JSON.** Patterns only *name* ops (`longDate`), and the functions live in the options next to `protocols` and `handlers`. That keeps Tree's "structure as data" property and keeps TreeScope's JSON goal within reach.
+- **The raw API response can be the VM.** The `toViewModel()` adapter shrinks to a set of small, named, reusable formatters (`longDate` is useful app-wide), each a pure function you can test on its own. With `$root` / `$parent` in their config, they can also read context.
+- **It's a small change:** look ops up in `{ ...SYNC_OPS, ...options.syncOps }` at the one call site ([assignFrom.ts:557](../../../../assignFrom.ts#L557)), and add the option type, docs and tests. It reaches nested calls automatically, because Tree and `manageTemplateList` spread the options through. (`manageTemplateList`'s per-item `withOptions` is the exception; see the questions below.)
+
+**Alternatives I'd avoid:**
+- **An expression language in strings** (`'${new Date(?.).toLocaleDateString()}'`). That needs `eval` or a parser, conflicts with CSP and the permission model (`assignPermissions/`), and is the opposite of "config is data".
+- **Stretching paths further** (constructor or options-object syntax in path segments). It's clever, but it gets unreadable fast, and every new edge case becomes grammar.
+- **Formatter hooks on Tree only.** Formatting isn't Tree-specific: `manageTemplateList` items, `addEventListener` and plain `assignFrom` calls all hit the same wall. ` =&` fixes it for all of them at once.
+
+### On "where to draw the line"
+
+With custom ops, the line between Tree and TreeScope no longer needs to be about formatting. Tree stays "structure as data, logic as named pure functions". TreeScope's distinguishing features can be the things a pure function can't give you: per-element instances, `ish`, async hooks, and microdata.
+
+### Questions before implementing
+
+1. **Name:** `syncOps` (matches the `syncOps/` folder) or something shorter like `ops`?
+2. **Shadowing:** should a per-call op be able to override a built-in (`join`)? `handlers` lets per-call entries win, so for consistency I'd allow it.
+3. **`manageTemplateList` `withOptions`:** per-item calls deliberately inherit nothing but the `fromStack`. Should `syncOps` also carry through? I'd say **yes**, for the same reason as `fromStack`: ops are pure functions, not capabilities like `withMethods`.
+
+If you agree, I'd implement it and update the Tree demo to use the raw response plus a handful of named ops in place of `toViewModel()`.
