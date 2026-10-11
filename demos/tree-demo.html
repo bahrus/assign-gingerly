@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tree Demo — Launch API response</title>
+    <style>
+        :root {
+            --fg: #1d2330;
+            --muted: #5b6475;
+            --line: #d9dee7;
+            --card: #f7f9fc;
+            --accent: #2f6fd0;
+            --ok: #1f8a4c;
+            --bad: #c0392b;
+            --pending: #a86b00;
+        }
+        body {
+            font-family: system-ui, sans-serif;
+            color: var(--fg);
+            margin: 2rem auto;
+            max-width: 960px;
+            padding: 0 1rem;
+            line-height: 1.45;
+        }
+        h1 { margin-bottom: 0.25rem; }
+        .lede { color: var(--muted); margin-top: 0; }
+        code { background: #eef1f6; padding: 0 0.25em; border-radius: 3px; }
+
+        .controls { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
+        button {
+            padding: 0.45rem 0.9rem;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font: inherit;
+        }
+        button:hover { border-color: var(--accent); }
+
+        /* The target. builtIns.tree adds no itemprop, so children are placed by
+           the class names their patterns set. */
+        #launch {
+            display: grid;
+            grid-template-columns: 112px minmax(0, 1fr) minmax(0, 1fr);
+            grid-template-areas:
+                "patch    name     name"
+                "patch    status   status"
+                "patch    date     date"
+                "details  details  details"
+                "links    links    links"
+                "rocket   rocket   crew"
+                "cores    cores    failures";
+            gap: 0.75rem 1.25rem;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 1.25rem;
+            min-height: 120px;
+        }
+        #launch > .patch    { grid-area: patch; }
+        #launch > .name     { grid-area: name; margin: 0; }
+        #launch > .badge    { grid-area: status; justify-self: start; }
+        #launch > .date     { grid-area: date; color: var(--muted); }
+        #launch > .details  { grid-area: details; margin: 0; }
+        #launch > .links    { grid-area: links; }
+        #launch > .rocket   { grid-area: rocket; }
+        #launch > .crew     { grid-area: crew; }
+        #launch > .cores    { grid-area: cores; }
+        #launch > .failures { grid-area: failures; }
+        @media (max-width: 640px) {
+            #launch {
+                grid-template-columns: 80px minmax(0, 1fr);
+                grid-template-areas:
+                    "patch name" "patch status" "patch date"
+                    "details details" "links links"
+                    "rocket rocket" "crew crew" "cores cores" "failures failures";
+            }
+            .patch { width: 80px; height: 80px; }
+        }
+
+        .patch { width: 112px; height: 112px; }
+        .badge {
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 0.15rem 0.6rem;
+            border-radius: 999px;
+            color: white;
+        }
+        .badge.ok { background: var(--ok); }
+        .badge.bad { background: var(--bad); }
+        .badge.pending { background: var(--pending); }
+        .details.empty { color: var(--muted); font-style: italic; }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+        }
+        .card h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+        .card ul { margin: 0; padding-left: 1.1rem; }
+        .muted { color: var(--muted); }
+        .card small { display: block; color: var(--muted); }
+
+        .spec { display: flex; justify-content: space-between; gap: 1rem; border-top: 1px dashed var(--line); padding: 0.3rem 0; }
+        .spec .label { color: var(--muted); }
+
+        .links { display: flex; gap: 1rem; align-items: center; }
+        .links ul { display: contents; }
+        .links li { list-style: none; }
+        .links a { color: var(--accent); }
+
+        .panels { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; margin-top: 1.5rem; }
+        @media (max-width: 760px) { .panels { grid-template-columns: minmax(0, 1fr); } }
+        #log {
+            font-family: ui-monospace, monospace;
+            font-size: 0.8rem;
+            max-height: 360px;
+            overflow: auto;
+            margin: 0;
+            padding-left: 2.2rem;
+        }
+        #log li { margin: 0.1rem 0; }
+        #log .src { color: var(--accent); }
+        pre { font-size: 0.75rem; max-height: 360px; overflow: auto; background: var(--card); padding: 0.75rem; border-radius: 8px; }
+        .error { color: var(--bad); }
+    </style>
+</head>
+<body>
+    <h1>builtIns.tree demo</h1>
+    <p class="lede">
+        The same launch summary as the <a href="./itemscope-tree-demo.html">itemscopeTree demo</a>, built with
+        <code>builtIns.tree</code> from the same response (<a href="./data/launch.json">data/launch.json</a>).
+        All formatting lives in one plain <code>toViewModel()</code> function, and the tree config itself is pure JSON
+        (shown below the log). There are no manager classes.
+    </p>
+
+    <details>
+        <summary>What this demo exercises, and what's missing compared to itemscopeTree</summary>
+        <ul>
+            <li><strong>Element specifications</strong> as <code>[tag, pattern, children]</code> tuples; patterns resolve
+                against the key's value (<code>'?.label'</code> reads <code>vm.date_utc.label</code>).</li>
+            <li><strong>Static children</strong>: the rocket card's heading and its three spec rows, all resolving against
+                <code>vm.rocket</code>.</li>
+            <li><strong>Rebinding in place</strong>: every button re-runs the same tree with a new view model. The log reports
+                how many of the previous elements were reused; only "Clear &amp; rebuild" creates new ones.</li>
+            <li><strong>Null values</strong>: a launch with no patch image simply has no <code>patch</code> key in the view model,
+                and Tree skips it.</li>
+            <li><strong>An operator key</strong> in a pattern: the details paragraph's class uses <code>' ?='</code> (a ternary),
+                which takes the <code>assignFrom</code> path instead of the plain fast path.</li>
+            <li><strong>Arrays, by composition</strong>: Tree doesn't do arrays yet, so the links, crew and core lists put a
+                <code>builtIns.manageTemplateList</code> handler key inside the <code>&lt;ul&gt;</code>'s pattern. That handler
+                runs fire-and-forget, so the lists fill in just after the tree.</li>
+        </ul>
+        <p><strong>Not covered</strong>, compared to the itemscopeTree demo:</p>
+        <ul>
+            <li>No per-element <code>ish</code> updates: everything goes through a rerun of the whole tree.</li>
+            <li>No async per-element hooks, so the links' "verifying…/verified" step is gone (class headers are Phase TBD).</li>
+            <li>No microdata (<code>itemscope</code>/<code>itemprop</code>), by design.</li>
+        </ul>
+    </details>
+
+    <div class="controls">
+        <button id="run-again">Run again (idempotent)</button>
+        <button id="update-details">Update details</button>
+        <button id="null-details">Set details to null</button>
+        <button id="toggle-units">Toggle units</button>
+        <button id="change-links">Change links</button>
+        <button id="rebuild">Clear &amp; rebuild</button>
+    </div>
+
+    <article id="launch" aria-live="polite"></article>
+
+    <div class="panels">
+        <section>
+            <h2>Event log</h2>
+            <ol id="log"></ol>
+        </section>
+        <section>
+            <h2>API response</h2>
+            <pre id="raw">Loading…</pre>
+        </section>
+    </div>
+    <section>
+        <h2>Tree config</h2>
+        <pre id="config"></pre>
+    </section>
+
+    <template id="link-item"><li><a target="_blank" rel="noopener"></a></li></template>
+    <template id="crew-item"><li><strong></strong> — <span></span><small></small></li></template>
+    <template id="text-item"><li></li></template>
+
+    <script type="module">
+        import { assignFromAsync } from '../index.js';
+
+        const launchEl = document.getElementById('launch');
+        const logEl = document.getElementById('log');
+
+        function log(source, message) {
+            const li = document.createElement('li');
+            const src = document.createElement('span');
+            src.className = 'src';
+            src.textContent = source;
+            li.append(src, ' ', message);
+            logEl.append(li);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // ── View model: all formatting in one plain function ──────────────────
+
+        const ui = { units: 'metric', details: undefined, linkSuffix: '' };
+
+        function toViewModel(response, { units, details, linkSuffix }) {
+            const { patch, name, upcoming, success, date_utc, links, rocket, crew, cores, failures } = response;
+            const metric = units === 'metric';
+            const text = details === undefined ? response.details : details;
+            const [statusText, statusClass] = upcoming ? ['Upcoming', 'pending']
+                : success === true ? ['Success', 'ok']
+                : success === false ? ['Failure', 'bad']
+                : ['Unknown', 'pending'];
+            const { height, mass, engines } = rocket;
+            return {
+                patch: patch?.small ? patch : undefined, // no image → key skipped
+                name,
+                status: { text: statusText, className: `badge ${statusClass}` },
+                date_utc: {
+                    iso: date_utc,
+                    label: new Date(date_utc).toLocaleString(undefined, { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC',
+                },
+                details: { text: text ?? 'No details provided.', empty: text == null },
+                links: Object.entries(links)
+                    .filter(([, href]) => typeof href === 'string') // wikipedia: null → skipped
+                    .map(([name, href]) => ({ name, href: href + linkSuffix })),
+                rocket: {
+                    title: `Rocket: ${rocket.name}`,
+                    height: metric ? `${height.meters} m` : `${height.feet} ft`,
+                    mass: metric ? `${mass.kg.toLocaleString()} kg` : `${mass.lb.toLocaleString()} lb`,
+                    engines: `${engines.number} × ${engines.type} ${engines.version} (${engines.propellant_1} / ${engines.propellant_2})`,
+                },
+                crew,
+                cores: cores.map(({ serial, flight, reused, landing_success, landing_type }) => ({
+                    serial,
+                    text: `${serial}, flight ${flight}${reused ? ' (reused)' : ''}; landing: ${landing_success ? 'success' : 'not successful'} (${landing_type})`,
+                })),
+                failures: failures.map(f => `T+${f.time}s: ${f.reason}`),
+            };
+        }
+
+        // ── The tree: pure JSON ───────────────────────────────────────────────
+
+        /** A manageTemplateList handler key, used inside a <ul>'s pattern for array values. */
+        const list = (template, key, toClone) => ({
+            '?. =>': {
+                do: 'builtIns.manageTemplateList',
+                resolve: { forEach: '?.', instantiate: `globalThis://${template}`, forget: true },
+                fromEachItem: { toClone, withOptions: { withMethods: ['querySelector'] }, resolve: { key } },
+            },
+        });
+
+        const spec = (label, prop) => ['div', { className: 'spec' }, [
+            ['span', { className: 'label', textContent: label }],
+            ['span', { textContent: `?.${prop}` }],
+        ]];
+
+        const pattern = {
+            '?. =>': {
+                do: 'builtIns.tree',
+                map: {
+                    patch: ['img', { className: 'patch', src: '?.small', alt: '?.alt', width: 112, height: 112 }],
+                    name: ['h2', { className: 'name', textContent: '?.' }],
+                    status: ['span', { className: '?.className', textContent: '?.text' }],
+                    date_utc: ['time', { className: 'date', dateTime: '?.iso', textContent: '?.label' }],
+                    details: ['p', { textContent: '?.text', 'className ?=': ['?.empty', 'details empty', 'details'] }],
+                    links: ['nav', { className: 'links', ariaLabel: 'Launch links' }, [
+                        ['ul', list('link-item', '?.name', {
+                            '?.querySelector?.a?.href': '?.href',
+                            '?.querySelector?.a?.textContent': '?.name',
+                        })],
+                    ]],
+                    rocket: ['section', { className: 'card rocket' }, [
+                        ['h3', { textContent: '?.title' }],
+                        spec('Height', 'height'),
+                        spec('Mass', 'mass'),
+                        spec('Engines', 'engines'),
+                    ]],
+                    crew: ['section', { className: 'card crew' }, [
+                        ['h3', { textContent: 'Crew' }],
+                        ['ul', list('crew-item', '?.name', {
+                            '?.querySelector?.strong?.textContent': '?.name',
+                            '?.querySelector?.span?.textContent': '?.role',
+                            '?.querySelector?.small?.textContent': '?.agency',
+                        })],
+                    ]],
+                    cores: ['section', { className: 'card cores' }, [
+                        ['h3', { textContent: 'First-stage cores' }],
+                        ['ul', list('text-item', '?.serial', { textContent: '?.text' })],
+                    ]],
+                    failures: ['section', { className: 'card failures' }, [
+                        ['h3', { textContent: 'Failures' }],
+                        ['ul', list('text-item', '?.', { textContent: '?.' }), [
+                            // Shown only for an empty array (hidden = length, so 0 → visible)
+                            ['li', { className: 'muted', textContent: 'No failures recorded.', hidden: '?.length' }],
+                        ]],
+                    ]],
+                },
+            },
+        };
+        document.getElementById('config').textContent = JSON.stringify(pattern, null, 2);
+
+        // ── Wiring ───────────────────────────────────────────────────────────
+
+        let response;
+
+        async function build(label) {
+            const before = new Set(launchEl.querySelectorAll('*'));
+            const start = performance.now();
+            await assignFromAsync(launchEl, pattern, {
+                from: toViewModel(response, ui),
+                protocols: { globalThis: k => globalThis[k] },
+            });
+            const ms = (performance.now() - start).toFixed(1);
+            const after = [...launchEl.querySelectorAll('*')];
+            const reused = after.filter(el => before.has(el)).length;
+            log(label, `${launchEl.children.length} top-level elements; ${reused} of ${before.size} previous elements reused (${ms} ms)`);
+        }
+
+        const child = cls => launchEl.querySelector(`:scope > .${cls}`);
+
+        document.getElementById('run-again').addEventListener('click', () => build('Run again'));
+
+        document.getElementById('update-details').addEventListener('click', async () => {
+            const p = child('details');
+            ui.details = `Details updated at ${new Date().toLocaleTimeString()}.`;
+            await build('Update details');
+            log('Update details', `same <p> element: ${child('details') === p}`);
+        });
+
+        document.getElementById('null-details').addEventListener('click', async () => {
+            ui.details = null;
+            await build('Set details to null');
+        });
+
+        document.getElementById('toggle-units').addEventListener('click', async () => {
+            ui.units = ui.units === 'metric' ? 'imperial' : 'metric';
+            const rows = [...launchEl.querySelectorAll('.spec')];
+            await build(`Units → ${ui.units}`);
+            const same = [...launchEl.querySelectorAll('.spec')].every((row, i) => row === rows[i]);
+            log(`Units → ${ui.units}`, `same spec rows: ${same}`);
+        });
+
+        document.getElementById('change-links').addEventListener('click', async () => {
+            ui.linkSuffix = ui.linkSuffix ? '' : '-b';
+            await build('Change links');
+            // The list is filled by manageTemplateList, which runs just after the tree
+            setTimeout(() => log('Change links', `webcast → ${child('links').querySelector('a')?.href.split('/').pop()}`), 50);
+        });
+
+        document.getElementById('rebuild').addEventListener('click', async () => {
+            launchEl.replaceChildren();
+            logEl.replaceChildren();
+            Object.assign(ui, { units: 'metric', details: undefined, linkSuffix: '' });
+            await build('Rebuild');
+        });
+
+        try {
+            const res = await fetch('./data/launch.json');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            response = await res.json();
+            document.getElementById('raw').textContent = JSON.stringify(response, null, 2);
+            await build('Initial build');
+        } catch (err) {
+            const message = `Couldn't load the API response (${err.message}). Serve the repo over HTTP, e.g. npm run serve, then open /demos/tree-demo.html.`;
+            const p = document.createElement('p');
+            p.className = 'error';
+            p.textContent = message;
+            launchEl.replaceChildren(p);
+            document.getElementById('raw').textContent = '';
+            console.error(err);
+        }
+    </script>
+</body>
+</html>

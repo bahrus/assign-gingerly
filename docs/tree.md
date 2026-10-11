@@ -4,6 +4,8 @@ A handler that builds a small tree of elements from a view model, and rebinds it
 
 Unlike [`builtIns.itemscopeTree`](./itemscope-tree.md), Tree adds no microdata and doesn't adopt existing (server-rendered) markup. It aims at simple scenarios.
 
+**Demo:** [demos/tree-demo.html](../demos/tree-demo.html) builds the same launch summary as the itemscopeTree demo. Run `npm run serve`, then open `/demos/tree-demo.html`.
+
 Design discussion: `Chats/AssignFrom/Handlers/TODO/TreeScope/Tree.md`.
 
 ## Basic Example

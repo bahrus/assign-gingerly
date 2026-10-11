@@ -192,3 +192,54 @@ Following #6 from the earlier discussion, I registered the camelCase name to mat
 - **Arrays** (`crew[]`): the open question from before. Repeating a child spec per item, keyed by index, would fit the lockstep model; delegating to `manageTemplateList` would get keyed reconciliation.
 - **Class headers:** construct `new Header(el, ctx)` once on creation, and call `onAssigned(value, ctx)` on every rebind. The lockstep walk already has the right hook point (`syncNode`).
 - A small **demo page** next to the itemscopeTree one, using the same `launch.json`, for a direct DX comparison.
+
+## Bruce's Response -- Too early for demo?
+
+Is it too early to create a side-by-side demo page that has the same functionality as [itemscope-tree-demo](../../../../../demos/itemscope-tree-demo.html)?  There will be more coming as we develop functionality for sure, but just wanted to see how things look so far if possible.
+
+## Claude's Response -- Demo
+
+Not too early. Building it was the fastest way to find where Tree is thin, and those findings are below.
+
+**[demos/tree-demo.html](../../../../../demos/tree-demo.html)** renders the same launch summary from the same `launch.json`, with the same layout and buttons. The two demos link to each other, and `docs/tree.md` links to it.
+
+### How it's built
+
+- **All formatting lives in one plain `toViewModel(response, ui)` function**: the status badge, the date label, units, the null-details placeholder, and the core summaries. There are no manager classes.
+- **The tree config is pure JSON.** The page prints it below the log.
+- **Every button reruns the whole tree with a new view model.** "Toggle units", for example, flips `ui.units` and calls `build()` again. The log reports how many of the previous elements were reused.
+- **Arrays are handled by composition.** The links, crew, cores and failures `<ul>`s carry a `builtIns.manageTemplateList` handler key in their Tree pattern. That's the delegation idea from earlier, and it works today with no changes to either handler.
+
+### Verified
+
+I drove it with Playwright in Chromium, Firefox and WebKit, against your dev server, clicked every button, and checked the DOM after each click:
+- everything renders correctly: badge, date, links, units (`70 m` ↔ `229.6 ft`), the null-details placeholder, and the lists;
+- **every rerun reuses 45 of 45 elements**, including the `manageTemplateList` items. Reruns take about 0.5–2 ms; the first build takes 25–60 ms, which includes loading the modules;
+- no console errors or warnings in any browser;
+- no horizontal scroll at 390px.
+
+### Size
+
+| | itemscopeTree demo | tree demo |
+|---|---|---|
+| Rendering code (managers + config, or adapter + config) | ~160 lines | ~90 lines |
+| Whole `<script>` | ~253 lines | ~160 lines |
+
+These are non-blank, non-comment lines, so treat them as rough. Part of the difference is just that formatting moved into the adapter, but having it all in one place is the DX gain.
+
+### What's missing compared to the itemscopeTree demo
+
+1. **Per-element updates.** There's no `el.ish = …`; every change is a whole-tree rerun. At about 1 ms that's fine here, but it is a different mental model.
+2. **Async per-element behavior.** The links' "verifying… / verified" step and the ordered async `onAssigned` demo are gone. They'd come back with class headers.
+3. **Microdata**, by design. Grid placement uses class names that the patterns set, instead of `[itemprop]`.
+4. **"Change links twice quickly"** became "Change links", since there's no async ordering to demonstrate.
+
+### Rough edges the demo exposed
+
+These are candidate next steps, most valuable first:
+
+1. **Arrays deserve first-class syntax.** Composing with `manageTemplateList` works, but each list needs a `<template id>`, a `globalThis://` protocol, `withMethods: ['querySelector']`, and `'?.querySelector?.strong?.textContent'`-style paths. The demo hides this behind a small `list()` helper. A Tree-native form could reuse the element-spec grammar, so no templates or `querySelector` paths would be needed. For example, `crew: ['ul', {}, [['li', ...]], { forEach: true, key: '?.name' }]`, or a dedicated wrapper.
+2. **Nested handlers run fire-and-forget.** Tree applies patterns with the sync `assignFrom`, so the lists fill in *after* `await assignFromAsync(...)` resolves. The demo's "Change links" log has to wait 50 ms before it reads the new link. If Tree collected the promises from nested handler keys and awaited them, `assignFromAsync` would mean "fully rendered".
+3. **Children can't see the root VM.** The status badge needs `upcoming` and `success` from the root, so the adapter has to build a synthetic `status` key. That's fine with an adapter, but a root reference in patterns (for example a `$root` prefix) would make Tree usable without one.
+4. **No formatting hook.** Dates, units and string concatenation all need the adapter. That might be the right line between Tree and TreeScope ("Tree = structure, the adapter = logic"), but it's worth deciding on purpose.
+5. **`hidden: '?.length'`** for the "No failures recorded" placeholder works, but it's a trick. An "if" or "empty" affordance would read better once arrays are first-class.
