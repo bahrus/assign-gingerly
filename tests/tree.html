@@ -255,6 +255,143 @@
         assert(target.querySelector('img') !== null, '🌲 alias resolves to builtIns.tree');
       }
 
+      // ── Itemscope managers in object headers ──────────────────────────────
+
+      const rocketVm = () => ({ rocket: { name: 'Falcon 9', height: { meters: 70, feet: 229.6 } } });
+
+      // Test 16: a class header attaches the manager; the subtree resolves against it
+      {
+        let constructed = 0;
+        class RocketView {
+          static is = 'tree-test-rocket-view';
+          metric = true;
+          constructor(el, initVals) { constructed++; Object.assign(this, initVals); }
+          get title() { return `Rocket: ${this.name}`; }
+          get heightLabel() { return this.metric ? `${this.height.meters} m` : `${this.height.feet} ft`; }
+        }
+        const target = details();
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: {
+          rocket: [{ tag: 'section', ish: RocketView }, { title: '?.title' }, [
+            ['h3', { textContent: '?.title' }],
+            ['span', { textContent: '?.heightLabel' }],
+          ]],
+        } } };
+        await assignFromAsync(target, cfg, { from: rocketVm() });
+        const section = target.querySelector('section');
+        assert(section?.ish instanceof RocketView, 'el.ish is the manager instance');
+        assertEquals(section?.hasAttribute('itemscope'), false, 'no itemscope attribute');
+        assertEquals(customElements.itemscopeRegistry.get('tree-test-rocket-view')?.manager, RocketView, 'class auto-registered under static is');
+        assertEquals(section?.title, 'Rocket: Falcon 9', 'own pattern resolves against the manager');
+        assertEquals(target.querySelector('h3')?.textContent, 'Rocket: Falcon 9', 'children resolve getters');
+        assertEquals(target.querySelector('span')?.textContent, '70 m', 'getter reads merged value');
+
+        const vm2 = rocketVm();
+        vm2.rocket.name = 'Falcon Heavy';
+        await assignFromAsync(target, cfg, { from: vm2 });
+        assertEquals(constructed, 1, 'manager constructed once across reruns');
+        assert(target.querySelector('section') === section, 'element reused');
+        assertEquals(target.querySelector('h3')?.textContent, 'Rocket: Falcon Heavy', 'rerun merges into the manager and rebinds');
+      }
+
+      // Test 17: ctx.rebind() from manager state; constructor receives ctx
+      {
+        class UnitsView {
+          static is = 'tree-test-units-view';
+          #metric = true;
+          #rebind;
+          constructor(el, initVals, ctx) { Object.assign(this, initVals); this.#rebind = ctx?.rebind; }
+          get metric() { return this.#metric; }
+          set metric(v) { this.#metric = v; this.#rebind?.(); }
+          get heightLabel() { return this.#metric ? `${this.height.meters} m` : `${this.height.feet} ft`; }
+        }
+        const target = details();
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.tree', map: {
+          rocket: [{ tag: 'section', ish: UnitsView }, {}, [['span', { textContent: '?.heightLabel' }]]],
+        } } }, { from: rocketVm() });
+        const span = target.querySelector('span');
+        target.querySelector('section').ish.metric = false;
+        assertEquals(span?.textContent, '229.6 ft', 'ctx.rebind() re-applies the subtree without a tree rerun');
+        assert(target.querySelector('span') === span, 'rebind keeps elements');
+      }
+
+      // Test 18: a registered name (JSON-friendly); unregistered names throw
+      {
+        class NamedView { constructor(el, initVals) { Object.assign(this, initVals); } get label() { return this.name.toUpperCase(); } }
+        customElements.itemscopeRegistry.define('tree-test-named-view', { manager: NamedView });
+        const target = details();
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.tree', map: {
+          rocket: [{ tag: 'p', ish: 'tree-test-named-view' }, { textContent: '?.label' }],
+        } } }, { from: rocketVm() });
+        assertEquals(target.querySelector('p')?.textContent, 'FALCON 9', 'string header resolves through the registry');
+
+        let error;
+        try {
+          await assignFromAsync(details(), { '?. =>': { do: 'builtIns.tree', map: {
+            rocket: [{ tag: 'p', ish: 'tree-test-not-registered' }, {}],
+          } } }, { from: rocketVm() });
+        } catch (e) { error = e; }
+        assert(error?.message.includes("isn't registered"), 'unregistered manager name throws');
+      }
+
+      // Test 19: async onAssigned — Tree binds immediately, then rebinds once it settles
+      {
+        let rebindInCtx;
+        class AsyncView {
+          static is = 'tree-test-async-view';
+          state = 'idle';
+          static async onAssigned(instance, value, ctx) {
+            rebindInCtx = typeof ctx.rebind;
+            instance.name = value.name;
+            instance.state = 'verifying';
+            await new Promise(r => setTimeout(r, 30));
+            instance.state = 'verified';
+          }
+        }
+        const target = details();
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.tree', map: {
+          rocket: [{ tag: 'p', ish: AsyncView }, { className: '?.state', textContent: '?.name' }],
+        } } }, { from: rocketVm() });
+        const p = target.querySelector('p');
+        assertEquals(p?.className, 'verifying', 'bound with the synchronous part of onAssigned');
+        assertEquals(rebindInCtx, 'function', 'onAssigned ctx carries rebind');
+        // Poll rather than sleep a fixed time, so a loaded machine doesn't make this flaky
+        for (let waited = 0; p?.className !== 'verified' && waited < 2000; waited += 20) {
+          await new Promise(r => setTimeout(r, 20));
+        }
+        assertEquals(p?.className, 'verified', 'rebound after the async onAssigned settled');
+      }
+
+      // Test 20: a different manager rebuilds the element; $parent is still the enclosing VM
+      {
+        class A { static is = 'tree-test-a'; constructor(el, v) { Object.assign(this, v); } }
+        class B { static is = 'tree-test-b'; constructor(el, v) { Object.assign(this, v); } }
+        const target = details();
+        const vm = { title: 'Root', rocket: { name: 'Falcon 9' } };
+        const run = M => assignFromAsync(target, { '?. =>': { do: 'builtIns.tree', map: {
+          rocket: [{ tag: 'section', ish: M }, { title: '$parent?.title' }, [['b', { textContent: '?.name' }]]],
+        } } }, { from: vm });
+        await run(A);
+        const first = target.querySelector('section');
+        assertEquals(first?.title, 'Root', '$parent inside a manager subtree is the enclosing VM');
+        await run(B);
+        const second = target.querySelector('section');
+        assert(second !== first && second?.ish instanceof B, 'changing the manager rebuilds the element');
+        assertEquals(target.querySelectorAll('section').length, 1, 'old element removed');
+      }
+
+      // Test 21: rebind() during Tree's own binding is a no-op (no duplicate children)
+      {
+        class EagerView {
+          static is = 'tree-test-eager-view';
+          constructor(el, initVals, ctx) { Object.assign(this, initVals); ctx.rebind(); }
+        }
+        const target = details();
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.tree', map: {
+          rocket: [{ tag: 'section', ish: EagerView }, {}, [['b', { textContent: '?.name' }]]],
+        } } }, { from: rocketVm() });
+        assertEquals(target.querySelectorAll('b').length, 1, 'no duplicate children');
+      }
+
       const testComplete = document.getElementById('test-complete');
       testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
       testComplete.setAttribute('data-passed', passed);

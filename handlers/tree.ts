@@ -19,7 +19,15 @@
  *
  * Fully synchronous inside `assign()`.
  *
- * Not yet supported (Phase TBD): class headers and `$:` itemscope manager headers.
+ * Itemscope managers: an object header `{ tag, ish }` attaches a manager (a registered
+ * name, or a class that's auto-registered) to the element, without an `itemscope`
+ * attribute. Each call assigns the key's value to `el.ish`, and the element's own
+ * pattern and its children's patterns resolve against the manager instance, so
+ * computed values are just getters. The manager receives `ctx.rebind()` (constructor
+ * third argument, and in onAssigned's ctx) to re-apply its subtree after changing its
+ * own state; Tree calls it itself once an async onAssigned settles.
+ *
+ * Not yet supported (Phase TBD): bare class headers and `$:` headers.
  *
  * This handler is auto-loaded by processHandlerCommands when
  * `do: 'builtIns.tree'` is encountered.
@@ -38,22 +46,42 @@
 import { assignFrom, categorizeKeys, handleSpreads, SUBSTITUTION_VARS } from '../assignFrom.js';
 import { assignGingerly } from '../assignGingerly.js';
 import { getValues } from '../resolve/getValues.js';
+import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
-import type { AssignFromHandler, AssignFromOptions, PermissionProcessor } from '../types/assign-gingerly/types.js';
-import type { ElementSpecification, Pattern, TreeConfig } from '../types/assign-gingerly/treeTypes.js';
+import type {
+    AssignFromHandler, AssignFromOptions, ItemscopeManager, ItemscopeManagerConfig, ItemscopeRegistry, PermissionProcessor,
+} from '../types/assign-gingerly/types.js';
+import type { ElementHeader, ElementSpecification, Pattern, TreeConfig } from '../types/assign-gingerly/treeTypes.js';
 
 const DEFAULT_MARKER_NAME = 'tree';
 const WILDCARD = '*';
 const DEFAULT_WILDCARD_PATTERN: Pattern = { textContent: '?.' };
 
-/** A created element, paired with the tag it was created from and its static children. */
+/** A manager reference from an object header: a registered name or a class. */
+type ManagerRef = string | ItemscopeManager;
+
+/** A created element, paired with the structure it was created from and its static children. */
 interface TreeNode {
     tag: string;
+    /** The header's manager, if any — part of the structure, like the tag */
+    ish: ManagerRef | undefined;
     element: Element;
     children: TreeNode[];
+    /** The latest spec and options, so a manager's rebind() re-applies what the last call applied */
+    spec: ElementSpecification;
+    options: AssignFromOptions;
+    permissionProcessor?: PermissionProcessor;
+    /** True while Tree itself binds this node, so a rebind() triggered meanwhile is a no-op */
+    binding: boolean;
 }
 
-type NormalizedSpec = [tag: string, pattern: Pattern | undefined, children: ElementSpecification[]];
+type NormalizedSpec = [
+    header: string | ElementHeader,
+    tag: string,
+    ish: ManagerRef | undefined,
+    pattern: Pattern | undefined,
+    children: ElementSpecification[],
+];
 
 /** Created nodes per tree, keyed by the tree's start marker. */
 const treeStates = new WeakMap<Comment, Map<string, TreeNode>>();
@@ -63,13 +91,19 @@ const plainPatterns = new WeakMap<Pattern, boolean>();
 
 function normalize(spec: ElementSpecification): NormalizedSpec {
     const [header, pattern, children = []] = Array.isArray(spec) ? spec : [spec];
-    if (typeof header !== 'string') {
-        throw new Error('builtIns.tree: class headers are not supported yet; use a tag name');
+    if (typeof header === 'string') {
+        if (header.startsWith('$:')) {
+            throw new Error(`builtIns.tree: itemscope manager headers ("${header}") are not supported yet; use { tag, ish: '${header.slice(2)}' }`);
+        }
+        return [header, header, undefined, pattern, children];
     }
-    if (header.startsWith('$:')) {
-        throw new Error(`builtIns.tree: itemscope manager headers ("${header}") are not supported yet; use a tag name`);
+    if (typeof header === 'function') {
+        throw new Error('builtIns.tree: class headers are not supported yet; use { tag, ish: Class }');
     }
-    return [header, pattern, children];
+    if (header && typeof header === 'object' && typeof header.tag === 'string') {
+        return [header, header.tag, header.ish, pattern, children];
+    }
+    throw new Error('builtIns.tree: an element header must be a tag name or { tag, ish? }');
 }
 
 /** Where an element's children go: a template's content, otherwise the element itself. */
@@ -78,19 +112,19 @@ function containerOf(element: Element): ParentNode {
 }
 
 /**
- * Apply a pattern to an element, resolving against the key's VM value.
- * Plain patterns (the common case) go straight to getValues + assignGingerly;
- * anything else goes through assignFrom.
+ * Apply a pattern to an element, resolving against `from` (the key's VM value, or the
+ * manager instance). Plain patterns (the common case) go straight to getValues +
+ * assignGingerly; anything else goes through assignFrom.
  */
 function applyPattern(
     element: Element,
     pattern: Pattern | undefined,
-    value: any,
+    from: any,
     options: AssignFromOptions,
     permissionProcessor?: PermissionProcessor
 ): void {
     if (!pattern) return;
-    const nodeOptions = { ...options, from: value };
+    const nodeOptions = { ...options, from };
     let plain = plainPatterns.get(pattern);
     if (plain === undefined) {
         const { normalPattern } = categorizeKeys(pattern);
@@ -99,11 +133,79 @@ function applyPattern(
     }
     const { pin, at } = options;
     if (plain && !pin && !at && !SUBSTITUTION_VARS.some(({ optionKey }) => (options as any)[optionKey]?.length)) {
-        const resolved = getValues(pattern, value, { ...nodeOptions, root: element, permissionProcessor } as any);
+        const resolved = getValues(pattern, from, { ...nodeOptions, root: element, permissionProcessor } as any);
         handleSpreads(resolved);
         assignGingerly(element, resolved, nodeOptions, permissionProcessor);
     } else {
         assignFrom(element, pattern, nodeOptions, permissionProcessor);
+    }
+}
+
+/**
+ * Resolve a header's manager to its registered config. A class is registered under
+ * `is ?? itemscope ?? name` if needed; a name must already be registered.
+ */
+function resolveManagerConfig(ish: ManagerRef, element: Element): ItemscopeManagerConfig {
+    const registry: ItemscopeRegistry | undefined = (element as any).customElementRegistry?.itemscopeRegistry
+        ?? (typeof customElements !== 'undefined' ? customElements.itemscopeRegistry : undefined);
+    if (!registry) throw new Error('builtIns.tree: no itemscope registry is available');
+    if (typeof ish === 'string') {
+        const config = registry.get(ish);
+        if (!config) throw new Error(`builtIns.tree: itemscope manager "${ish}" isn't registered`);
+        return config;
+    }
+    const name = ish.is ?? ish.itemscope ?? ish.name;
+    if (!name) throw new Error('builtIns.tree: a manager class needs a name; declare static is = \'...\'');
+    const existing = registry.get(name);
+    if (existing) {
+        if (existing.manager !== ish) {
+            throw new Error(`builtIns.tree: itemscope name "${name}" is already registered to a different class`);
+        }
+        return existing;
+    }
+    const config = { manager: ish };
+    registry.define(name, config);
+    return config;
+}
+
+/**
+ * Attach the header's manager to a new node's element and assign the first value.
+ * Returns the manager instance, which becomes `from` for the node's subtree.
+ */
+function attachManager(node: TreeNode, ish: ManagerRef, value: any): any {
+    const { element, options } = node;
+    const config = resolveManagerConfig(ish, element);
+    const rebind = () => rebindNode(node);
+    defineIshCore(element as HTMLElement, config, options, assignGingerly, { ctx: { rebind }, onSettled: rebind });
+    (element as any).ish = value;
+    return (element as any).ish;
+}
+
+/** Apply a node's own pattern and sync its children, all against `from`. */
+function bindContent(node: TreeNode, pattern: Pattern | undefined, childSpecs: ElementSpecification[], from: any): void {
+    const { element, children, options, permissionProcessor } = node;
+    applyPattern(element, pattern, from, options, permissionProcessor);
+    const container = containerOf(element);
+    let misplaced = false;
+    node.children = childSpecs.map((childSpec, i) => {
+        const child = syncNode(children[i], childSpec, from, options, permissionProcessor);
+        if (child !== children[i]) children[i].element.remove();
+        if (child.element.parentNode !== container) misplaced = true;
+        return child;
+    });
+    // A rebuilt child, or a pattern that replaced the element's content (e.g. textContent)
+    if (misplaced) container.append(...node.children.map(c => c.element));
+}
+
+/** A manager's ctx.rebind(): re-apply the node's subtree against the manager instance. */
+function rebindNode(node: TreeNode): void {
+    if (node.binding) return;
+    const [, , , pattern, childSpecs] = normalize(node.spec);
+    node.binding = true;
+    try {
+        bindContent(node, pattern, childSpecs, (node.element as any).ish);
+    } finally {
+        node.binding = false;
     }
 }
 
@@ -113,21 +215,27 @@ function createNode(
     options: AssignFromOptions,
     permissionProcessor?: PermissionProcessor
 ): TreeNode {
-    const [tag, pattern, childSpecs] = normalize(spec);
+    const [, tag, ish, pattern, childSpecs] = normalize(spec);
     const element = document.createElement(tag);
-    applyPattern(element, pattern, value, options, permissionProcessor);
-    const container = containerOf(element);
-    const children = childSpecs.map(childSpec => {
-        const child = createNode(childSpec, value, options, permissionProcessor);
-        container.appendChild(child.element);
-        return child;
-    });
-    return { tag, element, children };
+    const node: TreeNode = { tag, ish, element, children: [], spec, options, permissionProcessor, binding: true };
+    try {
+        const from = ish === undefined ? value : attachManager(node, ish, value);
+        applyPattern(element, pattern, from, options, permissionProcessor);
+        const container = containerOf(element);
+        node.children = childSpecs.map(childSpec => {
+            const child = createNode(childSpec, from, options, permissionProcessor);
+            container.appendChild(child.element);
+            return child;
+        });
+    } finally {
+        node.binding = false;
+    }
+    return node;
 }
 
 /**
  * Rebind an existing node in place, or create it when there's none or its
- * structure no longer matches the spec.
+ * structure (tag, manager, child count) no longer matches the spec.
  */
 function syncNode(
     node: TreeNode | undefined,
@@ -136,22 +244,23 @@ function syncNode(
     options: AssignFromOptions,
     permissionProcessor?: PermissionProcessor
 ): TreeNode {
-    const [tag, pattern, childSpecs] = normalize(spec);
-    if (!node || node.tag !== tag || node.children.length !== childSpecs.length) {
+    const [, tag, ish, pattern, childSpecs] = normalize(spec);
+    if (!node || node.tag !== tag || node.ish !== ish || node.children.length !== childSpecs.length) {
         return createNode(spec, value, options, permissionProcessor);
     }
-    const { element, children } = node;
-    applyPattern(element, pattern, value, options, permissionProcessor);
-    const container = containerOf(element);
-    let misplaced = false;
-    node.children = childSpecs.map((childSpec, i) => {
-        const child = syncNode(children[i], childSpec, value, options, permissionProcessor);
-        if (child !== children[i]) children[i].element.remove();
-        if (child.element.parentNode !== container) misplaced = true;
-        return child;
-    });
-    // A rebuilt child, or a pattern that replaced the element's content (e.g. textContent)
-    if (misplaced) container.append(...node.children.map(c => c.element));
+    Object.assign(node, { spec, options, permissionProcessor });
+    node.binding = true;
+    try {
+        let from = value;
+        if (ish !== undefined) {
+            const element = node.element as any;
+            element.ish = value;
+            from = element.ish;
+        }
+        bindContent(node, pattern, childSpecs, from);
+    } finally {
+        node.binding = false;
+    }
     return node;
 }
 
@@ -179,9 +288,9 @@ function getEntries(map: Record<string, ElementSpecification>, from: any): [stri
     }
     const wildcard = map[WILDCARD];
     if (wildcard === undefined || from === null || typeof from !== 'object') return entries;
-    const [tag, pattern = DEFAULT_WILDCARD_PATTERN, children] = normalize(wildcard);
+    const [header, , , pattern = DEFAULT_WILDCARD_PATTERN, children] = normalize(wildcard);
     for (const key of Object.keys(from)) {
-        if (!(key in map)) entries.push([key, [tag, pattern, children]]);
+        if (!(key in map)) entries.push([key, [header, pattern, children]]);
     }
     return entries;
 }

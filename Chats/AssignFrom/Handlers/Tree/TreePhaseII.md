@@ -164,6 +164,118 @@ Why I think this is stronger than "the manager generates its own children":
 
 It's viable, and close to what's already built. I'd attach the manager in the **header** (class or registered name), make the manager the **subtree's `from`** so computed properties are just getters, and decide question 1 (how a manager triggers a rebind) before writing code, because that's where the design either pays off or doesn't.
 
+## Bruce's Response I
+
+I really like the suggestion to make the Itemscope Manager not do the rendering, and to make the manager become the view model for the subtree.  I'm all on board with that.
+
+> **Who re-renders when the manager's own state changes?**
+
+I much prefer the first option (e.g. `ctx.rebind()`)
+
+> 2. **Async `onAssigned`.** Tree is synchronous. If a manager's `onAssigned` is async, children would read stale getters. I'd either require synchronous managers in Tree, or rebind the subtree when the queued value settles (which ties into question 1).
+
+I agree.  If it makes sense, maybe let's assume synchronous onAssigned at first.  I think we had a discussion with the itemscopeTree where we allowed for asynchronous.  I think it was detected if the onAssigned returned a promise.  
+
+I think we should document that if the onAssigned returns a promise, then we call the rebind.  If it makes sense to implement support for both synchronous and asynchronous, that would be great.
+
+>  3. **`$parent` / `$root`
+
+Sounds good.
+
+>  4. so attaching via `defineIshCore` wouldn't set `itemscope` by default
+
+I agree, until there's a compelling need for this, no need to add the attribute.  
+
+If that's enough to proceed with the implementation, please proceed, and add the implementation notes below.  Please apply to the demo page where it makes sense.  It would still be nice to showcase pipe's, especially for formatting dates.
+
+## Claude's Implementation Notes
+
+Implemented as agreed:
+- the manager is the **view model for its subtree**;
+- **`ctx.rebind()`** handles manager-driven updates;
+- an **async `onAssigned` triggers a rebind** automatically, and synchronous `onAssigned` works as before;
+- `$parent` / `$root` are unchanged;
+- **no `itemscope` attribute** is set.
+
+### Syntax
+
+The manager goes in the **object header**: the Phase TBD slot from `treeTypes.d.ts`, now live.
+
+```js
+rocket: [{ tag: 'section', ish: 'rocket-manager' }, { className: 'card rocket' }, [
+    ['h3', { textContent: '?.title' }],
+    spec('Height', { textContent: '?.heightLabel' }),
+]]
+```
+
+- **`ish`** is a registered name (Approach II, JSON) or a class (Approach I), auto-registered under `Class.is ?? Class.itemscope ?? Class.name`. A name registered to a *different* class throws, and so does an unregistered name. Throwing gives better DX than skipping silently, since Tree is synchronous and won't wait for a later registration.
+- **The manager is structure:** a different `ish` rebuilds the element, like a different tag.
+- **Bare class headers and `$:` headers still throw**, but their messages now point to `{ tag, ish }`.
+
+### How it works
+
+| Moment | What Tree does |
+|---|---|
+| Create | `defineIshCore(el, config, options, assignGingerly, { ctx: { rebind }, onSettled: rebind })`, then `el.ish = value`; the subtree binds against `el.ish` |
+| Every rerun | `el.ish = value` (the usual merge, or `onAssigned`), then re-applies the subtree against `el.ish` |
+| `ctx.rebind()` | Re-applies the element's own pattern plus its children, with the latest spec and options |
+| Async `onAssigned` | Tree binds immediately with whatever state the synchronous part set, then `onSettled` → `rebind()` once the promise (and anything queued behind it) settles |
+
+**Two details:**
+- **Re-entrancy guard.** `rebind()` is a no-op while Tree itself is binding that node. Without it, a manager that calls `rebind()` from its constructor (or from a setter that the merge triggers) would duplicate children during creation. There's a test for this.
+- **Children of a manager node** receive the manager instance as their `from`. A nested child with its own `ish` would get that instance as *its* value.
+
+### Changes to `defineIshCore` (backward compatible)
+
+It takes an optional fifth argument, `extension: IshExtension`:
+- **`ctx`** is passed as the constructor's **third argument** and **merged into `onAssigned`'s ctx**.
+- **`onSettled`** is called at the end of the async drain loop. Errors in it go to the same `reportAsync` as other async errors.
+
+itemscopeTree doesn't pass an extension, so nothing changes for it.
+
+### Types
+
+| File | Change |
+|---|---|
+| `types.d.ts` | `ItemscopeManager` gains `static is?` and an optional `ctx` constructor argument. `IshAssignContext` gains `rebind?`. New `IshManagerContext` and `IshExtension`. |
+| `treeTypes.d.ts` | New `ElementHeader { tag, ish? }` added to `ElementSpecificationHeader` |
+
+### Demo
+
+[tree-demo.html](../../../../demos/tree-demo.html) now shows all three mechanisms side by side:
+
+| Mechanism | Used for |
+|---|---|
+| **Pipes** (stateless) | The date (`join: ['?.parseDate?.longUtc', ' UTC']` with your `pipes`), core summaries |
+| **`RocketManager`** (registered name) | The rocket card's view model: `title`, `heightLabel`, `massLabel` and `enginesLabel` getters. "Toggle units" now sets `rocket.ish.metric`, whose setter calls `ctx.rebind()`. There's **no tree rerun**, and the setting **survives "Run again"** (it's manager state). |
+| **`LinksManager`** (async `onAssigned`) | Brings back the "verifying… → ✓ verified" step that the first Tree demo lost. Tree binds "verifying…" right away, then rebinds by itself when the simulated check settles. |
+
+The `$root?.ui?.metric` ternaries and the `metersLabel` / `feetLabel` / `kgLabel` / `lbLabel` / `linkList` pipes are gone; managers own that now. The config is still pure JSON, because the managers are referenced by name.
+
+### Verified
+
+- **`tests/tree.html`:** 6 new scenarios (21 in total, 62 assertions):
+  - class header + getters, with the manager constructed once across reruns;
+  - `ctx.rebind()` from a setter;
+  - registered-name header, and an unregistered name throwing;
+  - async `onAssigned`: immediate bind, then rebind on settle, with `rebind` in the ctx;
+  - changing the manager rebuilds the element, while `$parent` stays the enclosing VM;
+  - no duplicate children when the constructor calls `rebind()`.
+- **Full suite: 123 passed** in Chromium, Firefox and WebKit, across five runs. One earlier run had a single failure I couldn't reproduce. The likeliest cause was my async test's fixed 80 ms wait, so it now polls (up to 2 s) instead.
+- **Demo,** in all three browsers:
+  - every button works, with no console errors;
+  - the links go "verifying" → "verified";
+  - "Toggle units" switches the card to `229.6 ft` / `1,207,920 lb` with the same spec rows (no rebuild), and that sticks after "Run again";
+  - every tree rerun still reuses 45 of 45 elements.
+
+  **Note:** your `tsc --watch` and the dev server on :8000 weren't running this time, so I verified the demo against my compiled scratch copy (served on :8017). The repo's `.js` is untouched, as usual, and is **stale until you rebuild**.
+
+### Docs
+
+[docs/tree.md](../../../../docs/tree.md) has a new "Itemscope Managers as View Models" section, covering the header syntax, `ctx.rebind()` and async `onAssigned`, and the element-spec type now shows the object header.
+
+
+
 
 
 

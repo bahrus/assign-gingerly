@@ -109,6 +109,8 @@
         .links ul { display: contents; }
         .links li { list-style: none; }
         .links a { color: var(--accent); }
+        .links.verifying::after { content: "verifying…"; color: var(--pending); font-size: 0.85rem; }
+        .links.verified::after { content: "✓ verified"; color: var(--ok); font-size: 0.85rem; }
 
         .panels { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; margin-top: 1.5rem; }
         @media (max-width: 760px) { .panels { grid-template-columns: minmax(0, 1fr); } }
@@ -131,8 +133,9 @@
     <p class="lede">
         The same launch summary as the <a href="./itemscope-tree-demo.html">itemscopeTree demo</a>, built with
         <code>builtIns.tree</code> from the same response (<a href="./data/launch.json">data/launch.json</a>).
-        The API response is used as-is (only UI state is overlaid), formatting comes from a handful of named
-        <code>pipes</code>, and the tree config itself is pure JSON (shown below the log). There are no manager classes.
+        The API response is used as-is (only UI state is overlaid), stateless formatting comes from named
+        <code>pipes</code>, the rocket card and links bar each get an itemscope manager as their view model, and the
+        tree config itself is pure JSON (shown below the log).
     </p>
 
     <details>
@@ -142,10 +145,17 @@
                 against the key's value (<code>'?.small'</code> reads <code>vm.patch.small</code>).</li>
             <li><strong>Pipes</strong>: named functions used as path segments. The date is
                 <code>join: ['?.parseDate?.longUtc', ' UTC']</code> with <code>parseDate: Date.parse</code> and
-                <code>longUtc</code> a preconfigured <code>Intl.DateTimeFormat</code>'s <code>format</code>; units, mass and
-                core summaries are pipes too.</li>
+                <code>longUtc</code> a preconfigured <code>Intl.DateTimeFormat</code>'s <code>format</code>; core summaries are
+                a pipe too.</li>
+            <li><strong>Itemscope managers as view models</strong>: <code>{ tag: 'section', ish: 'rocket-manager' }</code>
+                attaches <code>RocketManager</code> to the rocket card (by registered name, so the config stays JSON; no
+                <code>itemscope</code> attribute). The card's patterns read its getters (<code>'?.heightLabel'</code>).
+                "Toggle units" sets <code>rocket.ish.metric</code>, whose setter calls <code>ctx.rebind()</code>: the card
+                updates without a tree rerun, and the setting survives "Run again".</li>
+            <li><strong>Async <code>onAssigned</code></strong>: <code>LinksManager</code> marks the links "verifying…", awaits a
+                simulated check, then "✓ verified". Tree binds right away and rebinds by itself when the promise settles.</li>
             <li><strong>Static children</strong>: the rocket card's heading and its three spec rows, all resolving against
-                <code>vm.rocket</code>.</li>
+                the card's manager.</li>
             <li><strong>Rebinding in place</strong>: every button re-runs the same tree with a new view model. The log reports
                 how many of the previous elements were reused; only "Clear &amp; rebuild" creates new ones.</li>
             <li><strong>Null values</strong>: <code>keepNullish</code> keeps the details paragraph when <code>details</code> is
@@ -153,16 +163,13 @@
             <li><strong><code>$parent</code></strong>: the status badge hangs off the <code>success</code> key and reads its
                 sibling <code>upcoming</code> from the enclosing view model, via <code>' ?='</code> ternaries
                 (<code>['$parent?.upcoming', 'Upcoming', ['?.', 'Success', 'Failure']]</code>).</li>
-            <li><strong><code>$root</code></strong>: the spec rows pick metric or imperial pipes with
-                <code>['$root?.ui?.metric', '?.height?.metersLabel', '?.height?.feetLabel']</code>.</li>
             <li><strong>Arrays, by composition</strong>: Tree doesn't do arrays yet, so the links, crew and core lists put a
                 <code>builtIns.manageTemplateList</code> handler key inside the <code>&lt;ul&gt;</code>'s pattern. That handler
                 runs fire-and-forget, so the lists fill in just after the tree.</li>
         </ul>
         <p><strong>Not covered</strong>, compared to the itemscopeTree demo:</p>
         <ul>
-            <li>No per-element <code>ish</code> updates: everything goes through a rerun of the whole tree.</li>
-            <li>No async per-element hooks, so the links' "verifying…/verified" step is gone (class headers are Phase TBD).</li>
+            <li>Managers don't render DOM: structure stays in the tree config.</li>
             <li>No microdata (<code>itemscope</code>/<code>itemprop</code>), by design.</li>
         </ul>
     </details>
@@ -213,32 +220,83 @@
             logEl.scrollTop = logEl.scrollHeight;
         }
 
-        // ── UI state and pipes: no formatting adapter ─────────────────────────
+        // ── UI state, pipes and itemscope managers ────────────────────────────
+
+        const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
         // UI state only: the API response is used as-is, with these overlaid.
-        const ui = { metric: true, details: undefined, linkSuffix: '' };
+        const ui = { details: undefined, linkSuffix: '' };
 
         function currentVm() {
-            const { metric, details, linkSuffix } = ui;
+            const { details, linkSuffix } = ui;
             const links = Object.fromEntries(Object.entries(response.links)
                 .map(([name, href]) => [name, href && href + linkSuffix]));
-            return { ...response, ...(details !== undefined && { details }), links, ui: { metric } };
+            return { ...response, ...(details !== undefined && { details }), links };
         }
 
-        /** Named formatters, usable as path segments: '?.date_utc?.parseDate?.longUtc' */
+        /** Stateless formatters, usable as path segments: '?.date_utc?.parseDate?.longUtc' */
         const pipes = {
             parseDate: Date.parse,
             longUtc: new Intl.DateTimeFormat(undefined, { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).format,
-            metersLabel: ({ meters }) => `${meters} m`,
-            feetLabel: ({ feet }) => `${feet} ft`,
-            kgLabel: ({ kg }) => `${kg.toLocaleString()} kg`,
-            lbLabel: ({ lb }) => `${lb.toLocaleString()} lb`,
             coreSummary: ({ serial, flight, reused, landing_success, landing_type }) =>
                 `${serial}, flight ${flight}${reused ? ' (reused)' : ''}; landing: ${landing_success ? 'success' : 'not successful'} (${landing_type})`,
-            linkList: links => Object.entries(links)
-                .filter(([, href]) => typeof href === 'string') // wikipedia: null → skipped
-                .map(([name, href]) => ({ name, href })),
         };
+
+        /**
+         * View model for the rocket card: the raw rocket object is merged in, and the card's
+         * patterns read these getters. `metric` is per-card state — setting it calls
+         * ctx.rebind(), which re-applies the card's subtree without a tree rerun.
+         */
+        class RocketManager {
+            static is = 'rocket-manager';
+            #metric = true;
+            #rebind;
+            constructor(element, initVals, { rebind }) {
+                Object.assign(this, initVals);
+                this.#rebind = rebind;
+            }
+            get metric() { return this.#metric; }
+            set metric(value) {
+                this.#metric = value;
+                this.#rebind();
+            }
+            get title() { return `Rocket: ${this.name}`; }
+            get heightLabel() { return this.#metric ? `${this.height.meters} m` : `${this.height.feet} ft`; }
+            get massLabel() {
+                return this.#metric ? `${this.mass.kg.toLocaleString()} kg` : `${this.mass.lb.toLocaleString()} lb`;
+            }
+            get enginesLabel() {
+                const { number, type, version, propellant_1, propellant_2 } = this.engines;
+                return `${number} × ${type} ${version} (${propellant_1} / ${propellant_2})`;
+            }
+        }
+
+        /**
+         * View model for the links bar, with an async onAssigned: Tree binds right away
+         * ("verifying…"), then rebinds by itself once the promise settles ("✓ verified").
+         */
+        class LinksManager {
+            static is = 'links-manager';
+            linkList = [];
+            state = 'verifying';
+            static async onAssigned(instance, links) {
+                instance.linkList = Object.entries(links)
+                    .filter(([, href]) => typeof href === 'string') // wikipedia: null → skipped
+                    .map(([name, href]) => ({ name, href }));
+                instance.state = 'verifying';
+                const label = links.webcast?.split('/').pop();
+                log('LinksManager.onAssigned', `verifying ${label}…`);
+                await delay(600); // simulated link check
+                instance.state = 'verified';
+                log('LinksManager.onAssigned', `${label} verified → Tree rebinds the links bar`);
+            }
+            get className() { return `links ${this.state}`; }
+        }
+
+        // Registered by name, so the tree config below stays pure JSON
+        const registry = customElements.itemscopeRegistry;
+        registry.define(RocketManager.is, { manager: RocketManager });
+        registry.define(LinksManager.is, { manager: LinksManager });
 
         // ── The tree: pure JSON ───────────────────────────────────────────────
 
@@ -278,20 +336,19 @@
                         'textContent ?=': ['?.', '??', 'No details provided.'],
                         'className ?=': ['?.', 'details', 'details empty'],
                     }],
-                    links: ['nav', { className: 'links', ariaLabel: 'Launch links' }, [
+                    // The links bar's patterns read the LinksManager instance (className, linkList)
+                    links: [{ tag: 'nav', ish: 'links-manager' }, { className: '?.className', ariaLabel: 'Launch links' }, [
                         ['ul', list('link-item', '?.name', {
                             '?.querySelector?.a?.href': '?.href',
                             '?.querySelector?.a?.textContent': '?.name',
                         }, '?.linkList')],
                     ]],
-                    rocket: ['section', { className: 'card rocket' }, [
-                        ['h3', { 'textContent =&': { join: ['Rocket: ', '?.name'] } }],
-                        spec('Height', { 'textContent ?=': ['$root?.ui?.metric', '?.height?.metersLabel', '?.height?.feetLabel'] }),
-                        spec('Mass', { 'textContent ?=': ['$root?.ui?.metric', '?.mass?.kgLabel', '?.mass?.lbLabel'] }),
-                        spec('Engines', { 'textContent =&': { join: [
-                            '?.engines?.number', ' × ', '?.engines?.type', ' ', '?.engines?.version',
-                            ' (', '?.engines?.propellant_1', ' / ', '?.engines?.propellant_2', ')',
-                        ] } }),
+                    // The rocket card's patterns read RocketManager getters
+                    rocket: [{ tag: 'section', ish: 'rocket-manager' }, { className: 'card rocket' }, [
+                        ['h3', { textContent: '?.title' }],
+                        spec('Height', { textContent: '?.heightLabel' }),
+                        spec('Mass', { textContent: '?.massLabel' }),
+                        spec('Engines', { textContent: '?.enginesLabel' }),
                     ]],
                     crew: ['section', { className: 'card crew' }, [
                         ['h3', { textContent: 'Crew' }],
@@ -351,13 +408,14 @@
             await build('Set details to null');
         });
 
-        document.getElementById('toggle-units').addEventListener('click', async () => {
-            ui.metric = !ui.metric;
-            const units = ui.metric ? 'metric' : 'imperial';
+        document.getElementById('toggle-units').addEventListener('click', () => {
+            // Per-card manager state: the setter calls ctx.rebind(), so there's no tree rerun
+            const rocketManager = child('rocket').ish;
             const rows = [...launchEl.querySelectorAll('.spec')];
-            await build(`Units → ${units}`);
+            rocketManager.metric = !rocketManager.metric;
+            const units = rocketManager.metric ? 'metric' : 'imperial';
             const same = [...launchEl.querySelectorAll('.spec')].every((row, i) => row === rows[i]);
-            log(`Units → ${units}`, `same spec rows: ${same}`);
+            log(`Units → ${units}`, `rocket.ish.metric = ${rocketManager.metric} → ctx.rebind(), no tree rerun; same spec rows: ${same}`);
         });
 
         document.getElementById('change-links').addEventListener('click', async () => {
@@ -370,7 +428,7 @@
         document.getElementById('rebuild').addEventListener('click', async () => {
             launchEl.replaceChildren();
             logEl.replaceChildren();
-            Object.assign(ui, { metric: true, details: undefined, linkSuffix: '' });
+            Object.assign(ui, { details: undefined, linkSuffix: '' });
             await build('Rebuild');
         });
 

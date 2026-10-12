@@ -1,4 +1,4 @@
-import type { IAssignGingerlyOptions, ItemscopeManagerConfig } from './types/assign-gingerly/types.js';
+import type { IAssignGingerlyOptions, IshExtension, ItemscopeManagerConfig } from './types/assign-gingerly/types.js';
 
 /**
  * Handle the 'ish' property assignment for HTMLElements with itemscope attributes.
@@ -104,22 +104,26 @@ function isThenable(value: any): value is PromiseLike<any> {
  * If `onAssigned` returns a thenable, later values are queued and applied in order once
  * it settles — so async handlers never interleave. No `await` happens otherwise.
  *
- * Used directly by builtIns.itemscopeTree, which already holds the config and must
- * stay synchronous.
+ * Used directly by builtIns.itemscopeTree and builtIns.tree, which already hold the
+ * config and must stay synchronous.
  *
  * @param element - The HTMLElement to define the 'ish' property on
  * @param config - The resolved manager configuration
  * @param options - Optional assignGingerly options
  * @param assignGingerlyFn - Reference to the assignGingerly function for recursive calls
+ * @param extension - Optional: a context passed to the constructor (third argument) and
+ *   merged into onAssigned's context, and a callback fired once async onAssigned work settles
  */
 export function defineIshCore(
   element: HTMLElement,
   config: ItemscopeManagerConfig,
   options: IAssignGingerlyOptions | undefined,
-  assignGingerlyFn: (target: any, source: any, options?: IAssignGingerlyOptions) => any
+  assignGingerlyFn: (target: any, source: any, options?: IAssignGingerlyOptions) => any,
+  extension?: IshExtension
 ): void {
   const { manager } = config;
   const { onAssigned } = manager;
+  const { ctx, onSettled } = extension ?? {};
   let managerInstance: any = null;
   // Values that arrived while an async onAssigned was in flight
   const valueQueue: any[] = [];
@@ -131,14 +135,14 @@ export function defineIshCore(
   function apply(value: any): any {
     if (managerInstance === null) {
       if (onAssigned) {
-        managerInstance = new manager(element);
-        return onAssigned.call(manager, managerInstance, value, { element, initial: true, options });
+        managerInstance = new manager(element, undefined, ctx);
+        return onAssigned.call(manager, managerInstance, value, { element, initial: true, options, ...ctx });
       }
-      managerInstance = new manager(element, Object.assign({}, value));
+      managerInstance = new manager(element, Object.assign({}, value), ctx);
       return;
     }
     if (onAssigned) {
-      return onAssigned.call(manager, managerInstance, value, { element, initial: false, options });
+      return onAssigned.call(manager, managerInstance, value, { element, initial: false, options, ...ctx });
     }
     // Nothing to merge (assignGingerly would throw on null / undefined)
     if (value == null) return;
@@ -168,6 +172,13 @@ export function defineIshCore(
       }
     }
     pending = false;
+    if (onSettled) {
+      try {
+        onSettled();
+      } catch (err) {
+        reportAsync(err);
+      }
+    }
   }
 
   // Define the 'ish' property

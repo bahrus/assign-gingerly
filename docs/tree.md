@@ -48,9 +48,11 @@ The `🌲` emoji alias works too, when `builtInEmoji` is passed as `handlers`.
 
 ```TypeScript
 type ElementSpecification =
-    | tagName
-    | [tagName, Pattern]
-    | [tagName, Pattern, ElementSpecification[]];
+    | Header
+    | [Header, Pattern]
+    | [Header, Pattern, ElementSpecification[]];
+
+type Header = tagName | { tag: tagName; ish?: string | ManagerClass };   // see Itemscope Managers below
 ```
 
 - **The pattern** is an [assignFrom](./assignFrom.md) pattern applied to the created element, with `from` set to **the key's VM value**. So `'?.small'` above reads `vm.patch.small`.
@@ -69,7 +71,51 @@ type ElementSpecification =
 - **Formatting** (dates, units, conditional text) comes from [pipes](./pipes.md) passed in the options: `'?.date_utc?.parseDate?.longUtc'`.
 - **Don't combine `textContent` with children**: setting `textContent` replaces them. Tree puts them back on the next call, after the text.
 
-Class headers and `$:` itemscope manager headers are reserved for a later phase and throw for now.
+Bare class headers and `$:` headers are reserved for a later phase and throw for now. Use `{ tag, ish }` instead.
+
+## Itemscope Managers as View Models
+
+An object header `{ tag, ish }` attaches an [itemscope manager](../README.md#itemscope-managers-chrome-146) to the element. The manager then acts as the **view model for that element's subtree**: the element's own pattern and its children's patterns resolve against the **manager instance** (`el.ish`) instead of the raw value. Computed values are just getters, and the structure stays in the config, so managers don't render DOM.
+
+```JavaScript
+class RocketManager {
+    static is = 'rocket-manager';
+    #metric = true;
+    #rebind;
+    constructor(element, initVals, { rebind }) {
+        Object.assign(this, initVals);   // the raw vm.rocket
+        this.#rebind = rebind;
+    }
+    get metric() { return this.#metric; }
+    set metric(value) { this.#metric = value; this.#rebind(); }
+    get heightLabel() { return this.#metric ? `${this.height.meters} m` : `${this.height.feet} ft`; }
+}
+customElements.itemscopeRegistry.define(RocketManager.is, { manager: RocketManager });
+
+map: {
+    rocket: [{ tag: 'section', ish: 'rocket-manager' }, { className: 'card' }, [
+        ['span', { textContent: '?.heightLabel' }],   // a getter on the manager
+    ]],
+}
+```
+
+- **`ish`** is a **registered name** (keeps the config JSON) or a **class**. A class is registered automatically under `Class.is ?? Class.itemscope ?? Class.name`; a name registered to a different class throws, and so does an unregistered name.
+- **No `itemscope` attribute** is set. The manager is attached directly, via the same `ish` machinery itemscopeTree uses.
+- **The manager is structure.** It's attached once, when the element is created. A different `ish` (like a different tag) rebuilds the element.
+- **Every call** assigns the key's value to `el.ish`, with the usual `ish` semantics: the first value constructs the manager, and later values merge into it (or go to a static `onAssigned`). The subtree is then re-applied against the instance.
+- **`$parent` / `$root`** inside the subtree still refer to the enclosing VM(s), not to the manager.
+
+### `ctx.rebind()`
+
+The manager receives a context with **`rebind()`**: as the constructor's third argument, and merged into `onAssigned`'s `ctx`. Calling it re-applies the element's own pattern and its children's patterns against the manager, without a tree rerun. Call it after changing the manager's own state, typically from a setter (above: `rocketEl.ish.metric = false`). State kept on the manager survives later tree reruns.
+
+Calls made while Tree itself is binding that element (for example from the constructor) are ignored, since Tree is about to bind it anyway.
+
+### Async `onAssigned`
+
+`onAssigned` may return a promise. Tree binds the subtree **immediately**, with whatever state the synchronous part of `onAssigned` set, and then **calls `rebind()` by itself once the promise settles** (after any values queued behind it). For example, a links bar can show "verifying…" right away and "✓ verified" when the check finishes.
+
+See [demos/tree-demo.html](../demos/tree-demo.html): the rocket card and the links bar each have a manager.
 
 ## Keys
 
