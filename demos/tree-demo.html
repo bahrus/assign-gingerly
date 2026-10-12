@@ -344,7 +344,7 @@
                         }, '?.linkList')],
                     ]],
                     // The rocket card's patterns read RocketManager getters
-                    rocket: [{ tag: 'section', ish: 'rocket-manager' }, { className: 'card rocket' }, [
+                    rocket: [{ tag: 'section', ish: RocketManager.is }, { className: 'card rocket' }, [
                         ['h3', { textContent: '?.title' }],
                         spec('Height', { textContent: '?.heightLabel' }),
                         spec('Mass', { textContent: '?.massLabel' }),
