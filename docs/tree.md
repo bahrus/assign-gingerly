@@ -49,14 +49,16 @@ The `🌲` emoji alias works too, when `builtInEmoji` is passed as `handlers`.
 ```TypeScript
 type ElementSpecification =
     | Header
-    | [Header, Pattern]
-    | [Header, Pattern, ElementSpecification[] | Repeat];   // static children, or a repeat (see Arrays below)
+    | [Header, Pattern | string]
+    | [Header, Pattern | string, ElementSpecification[] | Repeat];   // static children, or a repeat (see Arrays below)
 
 type Header = tagName | { tag: tagName; ish?: string | ManagerClass };   // see Itemscope Managers below
 type Repeat = { each: ElementSpecification; of?: string; key?: string; empty?: ElementSpecification };
 ```
 
 - **The pattern** is an [assignFrom](./assignFrom.md) pattern applied to the created element, with `from` set to **the key's VM value**. So `'?.small'` above reads `vm.patch.small`.
+- **A string in the pattern slot is `textContent`**: `['h3', 'Crew']` (literal) or `['b', '?.name']` (a path, reference or pipe, resolved like any RHS value). It's shorthand for `{ textContent: … }`.
+- **Shorter keys inside pattern objects:** give the tree config an `aka`, e.g. `aka: { _: 'textContent' }`, and write `{ className: 'name', _: '?.' }`, `'_ ?=': [...]` or `'_ =&': { join: [...] }`. It's merged over `options.aka` and applies to this tree's patterns only. Like any `aka`, it also rewrites RHS path segments, so pick an alias that isn't also a data key.
 - **Children** are static structure. Their patterns resolve against **the same value as their parent**:
 
   ```JavaScript
@@ -208,6 +210,7 @@ interface TreeConfig extends HandlerConfig {
     map: Record<string, ElementSpecification>;
     markerName?: string;    // default 'tree'
     keepNullish?: boolean;  // default false
+    aka?: Record<string, string>;  // aliases for this tree's patterns, merged over options.aka
 }
 ```
 

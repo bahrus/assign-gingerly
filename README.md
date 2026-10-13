@@ -535,6 +535,7 @@ assignGingerly(div, {
 - Matches complete tokens between `?.` delimiters (not substrings)
 - Works for both properties and methods
 - Single or multi-character aliases supported
+- In `assignFrom`, also applies to the LHS path of operator keys (` ?=`, ` =&`, ` =>`, ` =*`), e.g. `'_ =&'` with `aka: { _: 'textContent' }`
 
 **Reserved characters:**
 

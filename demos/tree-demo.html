@@ -144,6 +144,10 @@
         <ul>
             <li><strong>Element specifications</strong> as <code>[tag, pattern, children]</code> tuples; patterns resolve
                 against the key's value (<code>'?.small'</code> reads <code>vm.patch.small</code>).</li>
+            <li><strong>Text shorthand</strong>: a string in the pattern slot is <code>textContent</code>
+                (<code>['h3', 'Crew']</code>, <code>['strong', '?.name']</code>), and the tree config's
+                <code>aka: { _: 'textContent' }</code> covers mixed patterns (<code>{ className: 'name', _: '?.' }</code>,
+                <code>'_ ?='</code>, <code>'_ =&amp;'</code>).</li>
             <li><strong>Pipes</strong>: named functions used as path segments. The date is
                 <code>join: ['?.parseDate?.longUtc', ' UTC']</code> with <code>parseDate: Date.parse</code> and
                 <code>longUtc</code> a preconfigured <code>Intl.DateTimeFormat</code>'s <code>format</code>; core summaries are
@@ -301,9 +305,9 @@
 
         // ── The tree: pure JSON ───────────────────────────────────────────────
 
-        const spec = (label, valuePattern) => ['div', { className: 'spec' }, [
-            ['span', { className: 'label', textContent: label }],
-            ['span', valuePattern],
+        const spec = (label, value) => ['div', { className: 'spec' }, [
+            ['span', { className: 'label', _: label }],
+            ['span', value],
         ]];
 
         const pattern = {
@@ -311,21 +315,23 @@
                 do: 'builtIns.tree',
                 // details may be null: keep its <p> and show a placeholder instead
                 keepNullish: true,
+                // A string in the pattern slot is textContent; _ covers textContent inside pattern objects
+                aka: { _: 'textContent' },
                 map: {
                     patch: ['img', { className: 'patch', src: '?.small', alt: '?.alt', width: 112, height: 112 }],
-                    name: ['h2', { className: 'name', textContent: '?.' }],
+                    name: ['h2', { className: 'name', _: '?.' }],
                     // Hangs off `success`, and reads its sibling `upcoming` from the VM via $parent
                     success: ['span', {
-                        'textContent ?=': ['$parent?.upcoming', 'Upcoming', ['?.', 'Success', 'Failure']],
+                        '_ ?=': ['$parent?.upcoming', 'Upcoming', ['?.', 'Success', 'Failure']],
                         'className ?=': ['$parent?.upcoming', 'badge pending', ['?.', 'badge ok', 'badge bad']],
                     }],
                     date_utc: ['time', {
                         className: 'date',
                         dateTime: '?.',
-                        'textContent =&': { join: ['?.parseDate?.longUtc', ' UTC'] },
+                        '_ =&': { join: ['?.parseDate?.longUtc', ' UTC'] },
                     }],
                     details: ['p', {
-                        'textContent ?=': ['?.', '??', 'No details provided.'],
+                        '_ ?=': ['?.', '??', 'No details provided.'],
                         'className ?=': ['?.', 'details', 'details empty'],
                     }],
                     // The links bar's patterns read the LinksManager instance (className, linkList)
@@ -333,40 +339,40 @@
                         // Repeat over a getter on the links manager
                         ['ul', {}, {
                             of: '?.linkList',
-                            each: ['li', {}, [['a', { href: '?.href', textContent: '?.name', target: '_blank', rel: 'noopener' }]]],
+                            each: ['li', {}, [['a', { href: '?.href', _: '?.name', target: '_blank', rel: 'noopener' }]]],
                             key: '?.name',
                         }],
                     ]],
                     // The rocket card's patterns read RocketManager getters
                     rocket: [{ tag: 'section', ish: RocketManager.is }, { className: 'card rocket' }, [
-                        ['h3', { textContent: '?.title' }],
-                        spec('Height', { textContent: '?.heightLabel' }),
-                        spec('Mass', { textContent: '?.massLabel' }),
-                        spec('Engines', { textContent: '?.enginesLabel' }),
+                        ['h3', '?.title'],
+                        spec('Height', '?.heightLabel'),
+                        spec('Mass', '?.massLabel'),
+                        spec('Engines', '?.enginesLabel'),
                     ]],
                     crew: ['section', { className: 'card crew' }, [
-                        ['h3', { textContent: 'Crew' }],
+                        ['h3', 'Crew'],
                         // vm.crew is the node's value, so the default of: '?.' is the array itself
                         ['ul', {}, {
                             each: ['li', {}, [
-                                ['strong', { textContent: '?.name' }],
-                                ['span', { 'textContent =&': { join: [' — ', '?.role'] } }],
-                                ['small', { textContent: '?.agency' }],
+                                ['strong', '?.name'],
+                                ['span', { '_ =&': { join: [' — ', '?.role'] } }],
+                                ['small', '?.agency'],
                             ]],
                             key: '?.name',
                         }],
                     ]],
                     cores: ['section', { className: 'card cores' }, [
-                        ['h3', { textContent: 'First-stage cores' }],
-                        ['ul', {}, { each: ['li', { textContent: '?.coreSummary' }], key: '?.serial' }],
+                        ['h3', 'First-stage cores'],
+                        ['ul', {}, { each: ['li', '?.coreSummary'], key: '?.serial' }],
                     ]],
                     failures: ['section', { className: 'card failures' }, [
-                        ['h3', { textContent: 'Failures' }],
+                        ['h3', 'Failures'],
                         ['ul', {}, {
-                            each: ['li', { 'textContent =&': { join: ['T+', '?.time', 's: ', '?.reason'] } }],
+                            each: ['li', { '_ =&': { join: ['T+', '?.time', 's: ', '?.reason'] } }],
                             key: '?.time',
                             // Rendered instead of items when the array is empty
-                            empty: ['li', { className: 'muted', textContent: 'No failures recorded.' }],
+                            empty: ['li', { className: 'muted', _: 'No failures recorded.' }],
                         }],
                     ]],
                 },

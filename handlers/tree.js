@@ -59,8 +59,20 @@ const DEFAULT_WILDCARD_PATTERN = { textContent: '?.' };
 const treeStates = new WeakMap();
 /** Whether a pattern only has plain keys, so it can skip assignFrom's key categorization. */
 const plainPatterns = new WeakMap();
+/** `{ textContent: text }` patterns for string shorthand, one object per string (so pattern caches hit). */
+const textPatterns = new Map();
+/** A string in the pattern slot is shorthand for `{ textContent: string }`. */
+function textPattern(text) {
+    let pattern = textPatterns.get(text);
+    if (!pattern) {
+        pattern = { textContent: text };
+        textPatterns.set(text, pattern);
+    }
+    return pattern;
+}
 function normalize(spec) {
-    const [header, pattern, third] = Array.isArray(spec) ? spec : [spec];
+    const [header, patternOrText, third] = Array.isArray(spec) ? spec : [spec];
+    const pattern = typeof patternOrText === 'string' ? textPattern(patternOrText) : patternOrText;
     // The children slot: an array of static children, or a repeat object ({ each, … })
     let children = [];
     let repeat;
@@ -361,13 +373,18 @@ export class TreeHandler {
     assign(lhsTarget, _resolvedParams, options, permissionProcessor) {
         if (!(lhsTarget instanceof Element))
             return;
-        const { map, markerName = DEFAULT_MARKER_NAME, keepNullish } = this.config;
+        const { map, markerName = DEFAULT_MARKER_NAME, keepNullish, aka } = this.config;
         if (!map || typeof map !== 'object') {
             throw new Error('builtIns.tree: a "map" of VM keys to element specifications is required');
         }
         const { from, fromStack } = options;
-        // Each key's pattern resolves against the key's value, one level down: the VM becomes `$parent`
-        const nestedOptions = { ...options, fromStack: [...(fromStack ?? []), from] };
+        // Each key's pattern resolves against the key's value, one level down: the VM becomes `$parent`.
+        // The config's own aka applies to this tree's patterns only, over any aka in the options.
+        const nestedOptions = {
+            ...options,
+            fromStack: [...(fromStack ?? []), from],
+            ...(aka && { aka: { ...options.aka, ...aka } }),
+        };
         const [start, end] = findChildMarkers(lhsTarget, markerName) ?? createMarkers(lhsTarget, markerName);
         let nodes = treeStates.get(start);
         if (!nodes) {

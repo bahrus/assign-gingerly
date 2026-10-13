@@ -17,7 +17,7 @@
   <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
 
   <script type="module">
-    import { assignFromAsync } from '../index.js';
+    import { assignFrom, assignFromAsync } from '../index.js';
     import { builtInEmoji } from '../DX/emojis.js';
 
     const results = [];
@@ -546,6 +546,69 @@
           await assignFromAsync(details(), { '?. =>': { do: 'builtIns.tree', map: { x: ['ul', {}, { items: [] }] } } }, { from: { x: [] } });
         } catch (e) { error = e; }
         assert(error?.message.includes('repeat object'), 'object without each throws');
+      }
+
+      // ── Text shorthand and aka ────────────────────────────────────────────
+
+      // Test 31: a string in the pattern slot is textContent (literal or path)
+      {
+        const target = details();
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: {
+          crew: ['section', {}, [
+            ['h3', 'Crew'],
+            ['ul', {}, { each: ['li', {}, [['b', '?.name'], ['i', '$parent?.title']]], key: '?.name' }],
+          ]],
+        } } };
+        await assignFromAsync(target, { ...cfg }, { from: crewVm() });
+        assertEquals(target.querySelector('h3')?.textContent, 'Crew', 'literal string → textContent');
+        assertEquals(names(target), 'Avery,Rowan,Mika', 'path string → textContent');
+        assertEquals(target.querySelector('li > i')?.textContent, 'Demo 7', 'reference string → textContent');
+        const h3 = target.querySelector('h3');
+        const vm = crewVm(); vm.crew[0].name = 'Ava';
+        await assignFromAsync(target, cfg, { from: vm });
+        assert(target.querySelector('h3') === h3, 'string patterns rebind in place');
+        assertEquals(names(target), 'Ava,Rowan,Mika', 'rebound text');
+      }
+
+      // Test 32: aka on the tree config — plain, ?= and =& keys, scoped to the tree
+      {
+        const target = details();
+        const options = { from: { name: 'Demo 7', role: 'Commander', active: true }, aka: { x: 'title' } };
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.tree', aka: { _: 'textContent' }, map: {
+          name: ['h2', { _: '?.', x: '?.' }],
+          role: ['span', { '_ =&': { join: ['— ', '?.'] } }],
+          active: ['p', { '_ ?=': ['?.', 'Active', 'Retired'] }],
+        } } }, options);
+        const h2 = target.querySelector('h2');
+        assertEquals(h2?.textContent, 'Demo 7', 'config aka on a plain key');
+        assertEquals(h2?.title, 'Demo 7', 'options aka still applies (merged)');
+        assertEquals(target.querySelector('span')?.textContent, '— Commander', "config aka on a ' =&' key");
+        assertEquals(target.querySelector('p')?.textContent, 'Active', "config aka on a ' ?=' key");
+        assertEquals(options.aka._, undefined, "the caller's aka isn't modified");
+      }
+
+      // Test 33: resolveLhsPath honors aka / akaMethods for ' =&' and ' =>' (outside Tree too)
+      {
+        const t = { nested: {} };
+        assignFrom(t, { 't =&': { join: ['a', 'b'] }, '?.n?.v =&': { join: ['c'] } }, { from: {}, aka: { t: 'text', n: 'nested' } });
+        assertEquals(t.text, 'ab', "bare ' =&' LHS key is aliased");
+        assertEquals(t.t, undefined, 'no property named by the alias');
+        assertEquals(t.nested.v, 'c', "aliased segment in a ' =&' LHS path");
+
+        // Regression: an LHS ending in a method's argument targets the call's result
+        const plainHost = document.createElement('div');
+        plainHost.innerHTML = '<ul></ul>';
+        await assignFromAsync(plainHost, {
+          '?.querySelector?.ul =>': { do: 'builtIns.tree', map: { a: ['li', '?.'] } },
+        }, { from: { a: 'via querySelector' }, withMethods: ['querySelector'] });
+        assertEquals(plainHost.querySelector('ul > li')?.textContent, 'via querySelector', "' =>' LHS '?.querySelector?.ul' targets the <ul>");
+
+        const host = document.createElement('div');
+        host.innerHTML = '<ul></ul>';
+        await assignFromAsync(host, {
+          '?.🔍?.ul =>': { do: 'builtIns.tree', map: { a: ['li', '?.'] } },
+        }, { from: { a: 'via alias' }, akaMethods: { '🔍': 'querySelector' } });
+        assertEquals(host.querySelector('ul > li')?.textContent, 'via alias', "' =>' LHS path uses akaMethods");
       }
 
       const testComplete = document.getElementById('test-complete');

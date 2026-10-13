@@ -60,7 +60,7 @@ function isAllowedMethod(methodName, withMethods, permissionProcessor) {
  * Apply alias substitutions to a path string.
  * Replaces complete tokens between `?.` delimiters with their aliased values.
  */
-function applyAliases(path, aliasMap) {
+export function applyAliases(path, aliasMap) {
     if (aliasMap.size === 0)
         return path;
     const parts = path.split('?.');

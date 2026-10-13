@@ -78,7 +78,7 @@ function isAllowedMethod(
  * Apply alias substitutions to a path string.
  * Replaces complete tokens between `?.` delimiters with their aliased values.
  */
-function applyAliases(path: string, aliasMap: Map<string, string>): string {
+export function applyAliases(path: string, aliasMap: Map<string, string>): string {
     if (aliasMap.size === 0) return path;
     const parts = path.split('?.');
     const substituted = parts.map(part => aliasMap.get(part) ?? part);
