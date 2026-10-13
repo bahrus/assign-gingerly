@@ -104,8 +104,8 @@ function isThenable(value: any): value is PromiseLike<any> {
  * If `onAssigned` returns a thenable, later values are queued and applied in order once
  * it settles — so async handlers never interleave. No `await` happens otherwise.
  *
- * Used directly by builtIns.itemscopeTree and builtIns.tree, which already hold the
- * config and must stay synchronous.
+ * Used directly by builtIns.tree, which already holds the config and must stay
+ * synchronous.
  *
  * @param element - The HTMLElement to define the 'ish' property on
  * @param config - The resolved manager configuration

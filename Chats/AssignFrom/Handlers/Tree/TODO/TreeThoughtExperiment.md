@@ -93,5 +93,66 @@ compileTree(spec) → { html: '<section class="card rocket"><h3></h3>…', plan,
 5. **Server-side `<template>` adoption** (signature-checked).
 6. **Maybe later,** adopting a server-rendered first *instance*, probably as TreeScope.
 
+## Bruce's Response
+
+This sounds very promising.
+
+In the [TreePhaseI](../TreePhaseI.md) chat, you mentioned things like:
+
+>  The types have no notion of arrays yet (crew[]). That's fine for bare bones, but worth reserving a slot. For example, a tuple whose value is an array could repeat its spec per item, keyed by index, which would be a natural place to delegate to manageTemplateList later.
+
+Would it make more sense to resolve those hanging issues first, before embarking on this compiling capability, or are they independent of one another?
+
+## Claude's Response -- Sequencing
+
+**They aren't independent, and arrays should come first.** Arrays determine the *shape* of what compiling produces, while compiling barely constrains how arrays should work.
+
+### Why arrays first
+
+- **Arrays break compiling's core assumption.** The compile sketch relies on "every spec node is exactly one element, so a clone's elements in document order line up with the spec in preorder". An array node produces *N* elements, so a compiled plan needs an explicit notion of a **repeat boundary**: the list container is in the template, and each item has its **own** sub-template. If compiling ships first, its plan format would need reworking once arrays land.
+- **Arrays are where compiling pays off most.** "Thousands of instances" usually *are* list items: rows, cards, comments. An item template cloned per item is exactly the hot path that compiling speeds up. Designing arrays with a repeat boundary means compiling later gets per-item templates almost for free.
+- **Native arrays clear most of the other open items from Phase I:**
+
+  | Open item (TreePhaseI "rough edges") | Fixed by native arrays? |
+  |---|---|
+  | #1 Arrays need `<template id>`, `globalThis://`, `querySelector` paths | **Yes**: items reuse the element-spec grammar |
+  | #2 Nested handlers run fire-and-forget (lists fill in after the `await`) | **Mostly**: no nested handler for the common case |
+  | #3 Root references | Already done |
+  | #4 Formatting | Already done (pipes) |
+  | #5 `hidden: '?.length'` trick for empty lists | **Yes**, with an `empty` spec (see the strawman below) |
+
+### Independent pieces that can happen any time
+
+| Item | Notes |
+|---|---|
+| **`ShadowRoot` / `DocumentFragment` targets** | Small, useful on its own, and a prerequisite for compiling (web components render into shadow roots). It could even go first, since it's a warm-up. |
+| **Per-key `keepNullish`** | Fixes the demo's trade-off (an `<img>` with no `src` when there's no `patch`). It barely touches compiling. |
+| **Phase TBD headers (`$:`, bare class)** | `{ tag, ish }` now covers them. I'd remove them from `treeTypes.d.ts` (or redefine them) rather than carry dead slots. |
+
+### Suggested order
+
+1. **`ShadowRoot` / `DocumentFragment` targets.** Small, and unblocks web components.
+2. **Native arrays in Tree,** designed with the repeat boundary in mind. This includes an empty-state affordance and keyed reconciliation, and it resolves rough edges #1, #2 and #5.
+3. **Per-key `keepNullish`, and cleaning up the TBD headers.** Small; these can be folded into step 2.
+4. **Compiling:** per-key templates plus per-item templates at the repeat boundaries, then the benchmark, then server-side `<template>` adoption.
+
+### A strawman for arrays, to react to
+
+To be designed properly in its own document. One option that stays JSON and reuses the existing tuple: **an object in the children slot means "repeat"**, while an array in that slot still means static children.
+
+```js
+crew: ['ul', { className: 'crew' }, {
+    each:  ['li', {}, [['strong', { textContent: '?.name' }], ['span', { textContent: '?.role' }]]],
+    key:   '?.name',                                             // optional; by index by default
+    empty: ['li', { className: 'muted', textContent: 'No crew.' }],   // optional
+}],
+```
+
+- **Inside `each`, `from` is the item.** `$parent` is the array's enclosing value (the VM here), so items can still reach siblings.
+- **Reconciliation** would reuse `TreeNode`s per key. Created and removed items get the same lockstep rebind as everything else. Moved items need the same `placeInOrder` logic Tree already uses at the top level. `manageTemplateList`'s keyed algorithm is a good reference, but Tree wouldn't delegate to it, so no templates or `querySelector` paths are needed.
+- **`{ each, key, empty }` is the repeat boundary** that compiling would later turn into a per-item `<template>`.
+
+If this sequencing works for you, I'd start a `TreePhaseIII.md` (or similar) for the arrays design. Alternatively, I could do the small `ShadowRoot` target support first as a warm-up.
+
 
 

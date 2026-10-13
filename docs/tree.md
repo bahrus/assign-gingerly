@@ -2,9 +2,9 @@
 
 A handler that builds a small tree of elements from a view model, and rebinds it in place on later calls. Each `map` entry pairs a VM key with an **element specification**: a tag name, or a tuple of tag, assignFrom pattern, and static children.
 
-Unlike [`builtIns.itemscopeTree`](./itemscope-tree.md), Tree adds no microdata and doesn't adopt existing (server-rendered) markup. It aims at simple scenarios.
+Tree adds no microdata and doesn't adopt existing (server-rendered) markup. It aims at simple scenarios.
 
-**Demo:** [demos/tree-demo.html](../demos/tree-demo.html) builds the same launch summary as the itemscopeTree demo. Run `npm run serve`, then open `/demos/tree-demo.html`.
+**Demo:** [demos/tree-demo.html](../demos/tree-demo.html) builds a launch summary from a JSON API response. Run `npm run serve`, then open `/demos/tree-demo.html`.
 
 Design discussion: `Chats/AssignFrom/Handlers/TODO/TreeScope/Tree.md`.
 
@@ -99,8 +99,8 @@ map: {
 }
 ```
 
-- **`ish`** is a **registered name** (keeps the config JSON) or a **class**. A class is registered automatically under `Class.is ?? Class.itemscope ?? Class.name`; a name registered to a different class throws, and so does an unregistered name.
-- **No `itemscope` attribute** is set. The manager is attached directly, via the same `ish` machinery itemscopeTree uses.
+- **`ish`** is a **registered name** (keeps the config JSON) or a **class**. A class is registered automatically under `Class.is ?? Class.name`; a name registered to a different class throws, and so does an unregistered name.
+- **No `itemscope` attribute** is set. The manager is attached directly through the element's `ish` property.
 - **The manager is structure.** It's attached once, when the element is created. A different `ish` (like a different tag) rebuilds the element.
 - **Every call** assigns the key's value to `el.ish`, with the usual `ish` semantics: the first value constructs the manager, and later values merge into it (or go to a static `onAssigned`). The subtree is then re-applied against the instance.
 - **`$parent` / `$root`** inside the subtree still refer to the enclosing VM(s), not to the manager.

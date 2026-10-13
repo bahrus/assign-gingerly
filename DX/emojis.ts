@@ -21,7 +21,6 @@
  * | 🏷️ | builtIns.microDataJoin |
  * | 📋 | builtIns.manageTemplateList |
  * | 📊 | builtIns.rangeSelector |
- * | 🌳 | builtIns.itemscopeTree |
  * | 🌲 | builtIns.tree |
  *
  * `join` is no longer a `do:` handler — it moved to the synchronous ` =&` operator
@@ -34,7 +33,6 @@ export const builtInEmoji= {
     '🏷️': 'builtIns.microDataJoin',
     '📋': 'builtIns.manageTemplateList',
     '📊': 'builtIns.rangeSelector',
-    '🌳': 'builtIns.itemscopeTree',
     '🌲': 'builtIns.tree',
 };
 

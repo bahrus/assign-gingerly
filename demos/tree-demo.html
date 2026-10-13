@@ -131,15 +131,15 @@
 <body>
     <h1>builtIns.tree demo</h1>
     <p class="lede">
-        The same launch summary as the <a href="./itemscope-tree-demo.html">itemscopeTree demo</a>, built with
-        <code>builtIns.tree</code> from the same response (<a href="./data/launch.json">data/launch.json</a>).
+        A launch summary built with <code>builtIns.tree</code> from a JSON API response
+        (<a href="./data/launch.json">data/launch.json</a>, a fictional launch modeled on the SpaceX API v4 shape).
         The API response is used as-is (only UI state is overlaid), stateless formatting comes from named
         <code>pipes</code>, the rocket card and links bar each get an itemscope manager as their view model, and the
         tree config itself is pure JSON (shown below the log).
     </p>
 
     <details>
-        <summary>What this demo exercises, and what's missing compared to itemscopeTree</summary>
+        <summary>What this demo exercises</summary>
         <ul>
             <li><strong>Element specifications</strong> as <code>[tag, pattern, children]</code> tuples; patterns resolve
                 against the key's value (<code>'?.small'</code> reads <code>vm.patch.small</code>).</li>
@@ -167,7 +167,7 @@
                 <code>builtIns.manageTemplateList</code> handler key inside the <code>&lt;ul&gt;</code>'s pattern. That handler
                 runs fire-and-forget, so the lists fill in just after the tree.</li>
         </ul>
-        <p><strong>Not covered</strong>, compared to the itemscopeTree demo:</p>
+        <p><strong>By design:</strong></p>
         <ul>
             <li>Managers don't render DOM: structure stays in the tree config.</li>
             <li>No microdata (<code>itemscope</code>/<code>itemprop</code>), by design.</li>

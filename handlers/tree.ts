@@ -143,7 +143,7 @@ function applyPattern(
 
 /**
  * Resolve a header's manager to its registered config. A class is registered under
- * `is ?? itemscope ?? name` if needed; a name must already be registered.
+ * `is ?? name` if needed; a name must already be registered.
  */
 function resolveManagerConfig(ish: ManagerRef, element: Element): ItemscopeManagerConfig {
     const registry: ItemscopeRegistry | undefined = (element as any).customElementRegistry?.itemscopeRegistry
@@ -154,7 +154,7 @@ function resolveManagerConfig(ish: ManagerRef, element: Element): ItemscopeManag
         if (!config) throw new Error(`builtIns.tree: itemscope manager "${ish}" isn't registered`);
         return config;
     }
-    const name = ish.is ?? ish.itemscope ?? ish.name;
+    const name = ish.is ?? ish.name;
     if (!name) throw new Error('builtIns.tree: a manager class needs a name; declare static is = \'...\'');
     const existing = registry.get(name);
     if (existing) {

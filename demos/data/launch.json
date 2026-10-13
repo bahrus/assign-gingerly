@@ -5,7 +5,7 @@
     "date_utc": "2026-03-14T15:09:26.000Z",
     "upcoming": false,
     "success": true,
-    "details": "Sample payload: a fictional crewed resupply flight used to demonstrate builtIns.itemscopeTree. All names and values are illustrative.",
+    "details": "Sample payload: a fictional crewed resupply flight used to demonstrate builtIns.tree. All names and values are illustrative.",
     "patch": {
         "small": "./data/mission-patch.svg",
         "alt": "Demo Mission 7 patch"

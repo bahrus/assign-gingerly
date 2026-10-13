@@ -3355,56 +3355,29 @@ assignFrom(element, {
 - Fully JSON-serializable — no functions, no special types
 - Lazy-loaded on demand like all built-in handlers
 
-### Built-in handler: `builtIns.itemscopeTree`
+### Built-in handler: `builtIns.tree`
 
-Builds itemscope-managed elements from the top-level keys of a VM (for example, a JSON API response). For each key, it looks up an [itemscope manager](#itemscope-managers-chrome-146) named `<PascalCasedKey>ISM`, and calls that manager class's static `instantiate` method to create the element.
-
-```html
-<details id=api-response>
-    <summary>API Response</summary>
-</details>
-```
+Builds a tree of elements from a view model (for example, a JSON API response), and rebinds it in place on later calls. Each `map` entry pairs a VM key with an element specification: a tag name, or a tuple of tag, assignFrom pattern and static children.
 
 ```JavaScript
-class ImageHandler {
-    constructor(element, initVals) { /* regular itemscope manager */ }
-    static instantiate(image, ctx) {
-        const img = document.createElement('img');
-        const { url, description } = image;
-        img.src = url;
-        img.alt = description;
-        return img;
-    }
-}
-
-customElements.itemscopeRegistry.define('ImageISM', { manager: ImageHandler });
-
 await assignFromAsync(document.getElementById('api-response'), {
-    '?. =>': { do: 'builtIns.itemscopeTree' }
-}, {
-    from: { image: { url: 'https:...', description: 'Lunar Surface' } }
-});
+    '?. =>': {
+        do: 'builtIns.tree',
+        map: {
+            patch: ['img', { src: '?.small', alt: '?.alt' }],
+        }
+    }
+}, { from: { patch: { small: './mission-patch.svg', alt: 'Mission patch' } } });
 ```
-
-Result:
-
-```html
-<details id=api-response>
-    <summary>API Response</summary>
-    <img itemscope=ImageISM src="https:..." alt="Lunar Surface">
-</details>
-```
-
-`img.ish` is now an `ImageHandler` instance, constructed with `(img, image)`.
 
 Key points:
 
-- **Pairing keys with managers:** without configuration, each key maps to a manager named `<PascalCasedKey>ISM`. Alternatively, a `map` lists the keys and their managers explicitly, in order. A map entry is either a class, registered automatically under `static itemscope` or its class name, or the name of a registered manager.
-- **Synchronous:** `instantiate` is called synchronously with the value as-is, whatever its type. The manager is attached through `ish` immediately, and `static onAssigned` is honored.
-- **Idempotent:** a key is skipped when a direct child of the target already has its element. Updating existing elements is planned.
-- **Emoji alias:** `🌳`.
+- **Patterns resolve against the key's value**; children share their parent's value, and the whole VM is reachable as [`$parent` / `$root`](docs/root-references.md).
+- **Rebinding in place:** later calls re-apply patterns to the elements already created; only a changed structure is rebuilt.
+- **Formatting** via [pipes](docs/pipes.md), and **itemscope managers as view models** via `{ tag, ish }` headers.
+- **Emoji alias:** `🌲`.
 
-For the full reference (`map`, the `instantiate` contract, stable class names under bundlers, errors and types), see [docs/itemscope-tree.md](docs/itemscope-tree.md).
+For the full reference, see [docs/tree.md](docs/tree.md), and [demos/tree-demo.html](demos/tree-demo.html) for a complete example.
 
 ## Typed Path Authoring with `paths`, `sp`, and `md`
 

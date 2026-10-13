@@ -15,7 +15,6 @@
 		"DX/paths.ts",
 		"DX/IterableMixin.ts",
 		"DX/strictDefaultPermissions.ts",
-		"handlers/itemscopeTree.ts",
 		"handlers/tree.ts",
 	],
 	"exclude":[
