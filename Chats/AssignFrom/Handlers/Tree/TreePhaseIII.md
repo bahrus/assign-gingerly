@@ -123,4 +123,12 @@ The repeat object is the **repeat boundary** from the compiling thought experime
 
 If this direction works for you, I'd implement it next: types, Tree, tests, and making `tree-demo-with-array.html` work. After that, the working `tree-demo.html` could drop its `manageTemplateList` composition too, or keep it as the "composition" example.
 
+## Bruce's Response I
+
+Looks like a good suggestion.  Please implement with your recommendations to the open questions.  If you can think of scenarios where the support for arrays would fall short, and using manageTemplateList would be the better route, maybe hold on to tree-demo.html.  Maybe we should rename it tree-demo-with-managed-template-list.html if so.  
+
+If using the array route seems like a "no brainer" in all circumstances, feel free to get rid of the tree-demo-with-array.html after porting in the changes to tree-demo.html (or however it is easiest to get back to one demo).
+
+
+
 
