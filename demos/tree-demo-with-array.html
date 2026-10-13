@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tree Arrays (proposal)</title>
+    <style>
+        :root {
+            --fg: #1d2330;
+            --muted: #5b6475;
+            --line: #d9dee7;
+            --card: #f7f9fc;
+            --accent: #2f6fd0;
+            --ok: #1f8a4c;
+            --bad: #c0392b;
+            --pending: #a86b00;
+        }
+        body {
+            font-family: system-ui, sans-serif;
+            color: var(--fg);
+            margin: 2rem auto;
+            max-width: 960px;
+            padding: 0 1rem;
+            line-height: 1.45;
+        }
+        h1 { margin-bottom: 0.25rem; }
+        .lede { color: var(--muted); margin-top: 0; }
+        code { background: #eef1f6; padding: 0 0.25em; border-radius: 3px; }
+
+        .controls { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
+        button {
+            padding: 0.45rem 0.9rem;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font: inherit;
+        }
+        button:hover { border-color: var(--accent); }
+
+        /* The target. builtIns.tree adds no itemprop, so children are placed by
+           the class names their patterns set. */
+        #launch {
+            display: grid;
+            grid-template-columns: 112px minmax(0, 1fr) minmax(0, 1fr);
+            grid-template-areas:
+                "patch    name     name"
+                "patch    status   status"
+                "patch    date     date"
+                "details  details  details"
+                "links    links    links"
+                "rocket   rocket   crew"
+                "cores    cores    failures";
+            gap: 0.75rem 1.25rem;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 1.25rem;
+            min-height: 120px;
+        }
+        #launch > .patch    { grid-area: patch; }
+        #launch > .name     { grid-area: name; margin: 0; }
+        #launch > .badge    { grid-area: status; justify-self: start; }
+        #launch > .date     { grid-area: date; color: var(--muted); }
+        #launch > .details  { grid-area: details; margin: 0; }
+        #launch > .links    { grid-area: links; }
+        #launch > .rocket   { grid-area: rocket; }
+        #launch > .crew     { grid-area: crew; }
+        #launch > .cores    { grid-area: cores; }
+        #launch > .failures { grid-area: failures; }
+        @media (max-width: 640px) {
+            #launch {
+                grid-template-columns: 80px minmax(0, 1fr);
+                grid-template-areas:
+                    "patch name" "patch status" "patch date"
+                    "details details" "links links"
+                    "rocket rocket" "crew crew" "cores cores" "failures failures";
+            }
+            .patch { width: 80px; height: 80px; }
+        }
+
+        .patch { width: 112px; height: 112px; }
+        .badge {
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 0.15rem 0.6rem;
+            border-radius: 999px;
+            color: white;
+        }
+        .badge.ok { background: var(--ok); }
+        .badge.bad { background: var(--bad); }
+        .badge.pending { background: var(--pending); }
+        .details.empty { color: var(--muted); font-style: italic; }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+        }
+        .card h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+        .card ul { margin: 0; padding-left: 1.1rem; }
+        .muted { color: var(--muted); }
+        .card small { display: block; color: var(--muted); }
+
+        .spec { display: flex; justify-content: space-between; gap: 1rem; border-top: 1px dashed var(--line); padding: 0.3rem 0; }
+        .spec .label { color: var(--muted); }
+
+        .links { display: flex; gap: 1rem; align-items: center; }
+        .links ul { display: contents; }
+        .links li { list-style: none; }
+        .links a { color: var(--accent); }
+        .links.verifying::after { content: "verifying…"; color: var(--pending); font-size: 0.85rem; }
+        .links.verified::after { content: "✓ verified"; color: var(--ok); font-size: 0.85rem; }
+
+        .panels { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; margin-top: 1.5rem; }
+        @media (max-width: 760px) { .panels { grid-template-columns: minmax(0, 1fr); } }
+        #log {
+            font-family: ui-monospace, monospace;
+            font-size: 0.8rem;
+            max-height: 360px;
+            overflow: auto;
+            margin: 0;
+            padding-left: 2.2rem;
+        }
+        #log li { margin: 0.1rem 0; }
+        #log .src { color: var(--accent); }
+        pre { font-size: 0.75rem; max-height: 360px; overflow: auto; background: var(--card); padding: 0.75rem; border-radius: 8px; }
+        .error { color: var(--bad); }
+        .proposal {
+            border: 1px solid var(--pending);
+            background: #fff8ec;
+            border-radius: 8px;
+            padding: 0.6rem 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>builtIns.tree — native arrays (proposal)</h1>
+    <p class="proposal">
+        <strong>Proposal — doesn't work yet.</strong> This page shows how arrays could be declared natively in
+        <code>builtIns.tree</code>. Until that's implemented, the build stops with a "not implemented yet" notice; once it
+        is, this page should work unchanged. Compare with the working <a href="./tree-demo.html">tree demo</a>, which
+        delegates its lists to <code>builtIns.manageTemplateList</code>.
+    </p>
+    <p class="lede">
+        The same launch summary, from the same response (<a href="./data/launch.json">data/launch.json</a>). The links,
+        crew, cores and failures lists are declared with a <strong>repeat object</strong> in the children slot —
+        <code>{ each, key, empty, of }</code> — so no <code>&lt;template id&gt;</code>, no <code>globalThis://</code> protocol,
+        no <code>querySelector</code> paths, and no fire-and-forget handler.
+    </p>
+
+    <details>
+        <summary>The proposed array syntax</summary>
+        <ul>
+            <li><strong>An object in the children slot means "repeat"</strong>; an array there still means static children:
+                <code>['ul', pattern, { each, key, empty, of }]</code>.</li>
+            <li><strong><code>each</code></strong> is an ordinary element specification, stamped once per item. Inside it,
+                <code>?.</code> is the <strong>item</strong>, and <code>$parent</code> is the object that holds the array.</li>
+            <li><strong><code>key</code></strong> (optional) is a path into each item, used to reuse items' elements across
+                reruns; by default items are keyed by index.</li>
+            <li><strong><code>empty</code></strong> (optional) is a specification rendered instead when the array is empty
+                (or missing) — replacing the old <code>hidden: '?.length'</code> trick.</li>
+            <li><strong><code>of</code></strong> (optional, default <code>'?.'</code>) is the path to the array, relative to the
+                node's value: <code>of: '?.linkList'</code> repeats over the links manager's getter.</li>
+            <li>The repeat object is the <strong>repeat boundary</strong> that compiling would later turn into a per-item
+                <code>&lt;template&gt;</code>.</li>
+        </ul>
+    </details>
+
+    <div class="controls">
+        <button id="run-again">Run again (idempotent)</button>
+        <button id="update-details">Update details</button>
+        <button id="null-details">Set details to null</button>
+        <button id="toggle-units">Toggle units</button>
+        <button id="change-links">Change links</button>
+        <button id="rebuild">Clear &amp; rebuild</button>
+    </div>
+
+    <article id="launch" aria-live="polite"></article>
+
+    <div class="panels">
+        <section>
+            <h2>Event log</h2>
+            <ol id="log"></ol>
+        </section>
+        <section>
+            <h2>API response</h2>
+            <pre id="raw">Loading…</pre>
+        </section>
+    </div>
+    <section>
+        <h2>Tree config</h2>
+        <pre id="config"></pre>
+    </section>
+
+
+    <script type="module">
+        import { assignFromAsync } from '../index.js';
+
+        const launchEl = document.getElementById('launch');
+        const logEl = document.getElementById('log');
+
+        function log(source, message) {
+            const li = document.createElement('li');
+            const src = document.createElement('span');
+            src.className = 'src';
+            src.textContent = source;
+            li.append(src, ' ', message);
+            logEl.append(li);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // ── UI state, pipes and itemscope managers ────────────────────────────
+
+        const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+        // UI state only: the API response is used as-is, with these overlaid.
+        const ui = { details: undefined, linkSuffix: '' };
+
+        function currentVm() {
+            const { details, linkSuffix } = ui;
+            const links = Object.fromEntries(Object.entries(response.links)
+                .map(([name, href]) => [name, href && href + linkSuffix]));
+            return { ...response, ...(details !== undefined && { details }), links };
+        }
+
+        /** Stateless formatters, usable as path segments: '?.date_utc?.parseDate?.longUtc' */
+        const pipes = {
+            parseDate: Date.parse,
+            longUtc: new Intl.DateTimeFormat(undefined, { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).format,
+            coreSummary: ({ serial, flight, reused, landing_success, landing_type }) =>
+                `${serial}, flight ${flight}${reused ? ' (reused)' : ''}; landing: ${landing_success ? 'success' : 'not successful'} (${landing_type})`,
+        };
+
+        /**
+         * View model for the rocket card: the raw rocket object is merged in, and the card's
+         * patterns read these getters. `metric` is per-card state — setting it calls
+         * ctx.rebind(), which re-applies the card's subtree without a tree rerun.
+         */
+        class RocketManager {
+            static is = 'rocket-manager';
+            #metric = true;
+            #rebind;
+            constructor(element, initVals, { rebind }) {
+                Object.assign(this, initVals);
+                this.#rebind = rebind;
+            }
+            get metric() { return this.#metric; }
+            set metric(value) {
+                this.#metric = value;
+                this.#rebind();
+            }
+            get title() { return `Rocket: ${this.name}`; }
+            get heightLabel() { return this.#metric ? `${this.height.meters} m` : `${this.height.feet} ft`; }
+            get massLabel() {
+                return this.#metric ? `${this.mass.kg.toLocaleString()} kg` : `${this.mass.lb.toLocaleString()} lb`;
+            }
+            get enginesLabel() {
+                const { number, type, version, propellant_1, propellant_2 } = this.engines;
+                return `${number} × ${type} ${version} (${propellant_1} / ${propellant_2})`;
+            }
+        }
+
+        /**
+         * View model for the links bar, with an async onAssigned: Tree binds right away
+         * ("verifying…"), then rebinds by itself once the promise settles ("✓ verified").
+         */
+        class LinksManager {
+            static is = 'links-manager';
+            linkList = [];
+            state = 'verifying';
+            static async onAssigned(instance, links) {
+                instance.linkList = Object.entries(links)
+                    .filter(([, href]) => typeof href === 'string') // wikipedia: null → skipped
+                    .map(([name, href]) => ({ name, href }));
+                instance.state = 'verifying';
+                const label = links.webcast?.split('/').pop();
+                log('LinksManager.onAssigned', `verifying ${label}…`);
+                await delay(600); // simulated link check
+                instance.state = 'verified';
+                log('LinksManager.onAssigned', `${label} verified → Tree rebinds the links bar`);
+            }
+            get className() { return `links ${this.state}`; }
+        }
+
+        // Registered by name, so the tree config below stays pure JSON
+        const registry = customElements.itemscopeRegistry;
+        registry.define(RocketManager.is, { manager: RocketManager });
+        registry.define(LinksManager.is, { manager: LinksManager });
+
+        // ── The tree: pure JSON ───────────────────────────────────────────────
+
+        const spec = (label, valuePattern) => ['div', { className: 'spec' }, [
+            ['span', { className: 'label', textContent: label }],
+            ['span', valuePattern],
+        ]];
+
+        const pattern = {
+            '?. =>': {
+                do: 'builtIns.tree',
+                // details may be null: keep its <p> and show a placeholder instead
+                keepNullish: true,
+                map: {
+                    patch: ['img', { className: 'patch', src: '?.small', alt: '?.alt', width: 112, height: 112 }],
+                    name: ['h2', { className: 'name', textContent: '?.' }],
+                    // Hangs off `success`, and reads its sibling `upcoming` from the VM via $parent
+                    success: ['span', {
+                        'textContent ?=': ['$parent?.upcoming', 'Upcoming', ['?.', 'Success', 'Failure']],
+                        'className ?=': ['$parent?.upcoming', 'badge pending', ['?.', 'badge ok', 'badge bad']],
+                    }],
+                    date_utc: ['time', {
+                        className: 'date',
+                        dateTime: '?.',
+                        'textContent =&': { join: ['?.parseDate?.longUtc', ' UTC'] },
+                    }],
+                    details: ['p', {
+                        'textContent ?=': ['?.', '??', 'No details provided.'],
+                        'className ?=': ['?.', 'details', 'details empty'],
+                    }],
+                    // The links bar's patterns read the LinksManager instance (className, linkList)
+                    links: [{ tag: 'nav', ish: 'links-manager' }, { className: '?.className', ariaLabel: 'Launch links' }, [
+                        // Repeat over a getter on the links manager
+                        ['ul', {}, {
+                            of: '?.linkList',
+                            each: ['li', {}, [['a', { href: '?.href', textContent: '?.name', target: '_blank', rel: 'noopener' }]]],
+                            key: '?.name',
+                        }],
+                    ]],
+                    // The rocket card's patterns read RocketManager getters
+                    rocket: [{ tag: 'section', ish: RocketManager.is }, { className: 'card rocket' }, [
+                        ['h3', { textContent: '?.title' }],
+                        spec('Height', { textContent: '?.heightLabel' }),
+                        spec('Mass', { textContent: '?.massLabel' }),
+                        spec('Engines', { textContent: '?.enginesLabel' }),
+                    ]],
+                    crew: ['section', { className: 'card crew' }, [
+                        ['h3', { textContent: 'Crew' }],
+                        // vm.crew is the node's value, so the default of: '?.' is the array itself
+                        ['ul', {}, {
+                            each: ['li', {}, [
+                                ['strong', { textContent: '?.name' }],
+                                ['span', { 'textContent =&': { join: [' — ', '?.role'] } }],
+                                ['small', { textContent: '?.agency' }],
+                            ]],
+                            key: '?.name',
+                        }],
+                    ]],
+                    cores: ['section', { className: 'card cores' }, [
+                        ['h3', { textContent: 'First-stage cores' }],
+                        ['ul', {}, { each: ['li', { textContent: '?.coreSummary' }], key: '?.serial' }],
+                    ]],
+                    failures: ['section', { className: 'card failures' }, [
+                        ['h3', { textContent: 'Failures' }],
+                        ['ul', {}, {
+                            each: ['li', { 'textContent =&': { join: ['T+', '?.time', 's: ', '?.reason'] } }],
+                            key: '?.time',
+                            // Rendered instead of items when the array is empty
+                            empty: ['li', { className: 'muted', textContent: 'No failures recorded.' }],
+                        }],
+                    ]],
+                },
+            },
+        };
+        document.getElementById('config').textContent = JSON.stringify(pattern, null, 2);
+
+        // ── Wiring ───────────────────────────────────────────────────────────
+
+        let response;
+
+        function notImplemented(err) {
+            const p = document.createElement('p');
+            p.className = 'error';
+            p.textContent = `Native arrays aren't implemented in builtIns.tree yet, so this build stops here (${err.message}). `
+                + 'The tree config below shows the proposed syntax.';
+            launchEl.replaceChildren(p);
+            log('Not implemented yet', err.message);
+        }
+
+        async function build(label) {
+            try {
+                await buildTree(label);
+            } catch (err) {
+                notImplemented(err);
+            }
+        }
+
+        async function buildTree(label) {
+            const before = new Set(launchEl.querySelectorAll('*'));
+            const start = performance.now();
+            await assignFromAsync(launchEl, pattern, {
+                from: currentVm(),
+                pipes,
+            });
+            const ms = (performance.now() - start).toFixed(1);
+            const after = [...launchEl.querySelectorAll('*')];
+            const reused = after.filter(el => before.has(el)).length;
+            log(label, `${launchEl.children.length} top-level elements; ${reused} of ${before.size} previous elements reused (${ms} ms)`);
+        }
+
+        const child = cls => launchEl.querySelector(`:scope > .${cls}`);
+
+        document.getElementById('run-again').addEventListener('click', () => build('Run again'));
+
+        document.getElementById('update-details').addEventListener('click', async () => {
+            const p = child('details');
+            ui.details = `Details updated at ${new Date().toLocaleTimeString()}.`;
+            await build('Update details');
+            log('Update details', `same <p> element: ${child('details') === p}`);
+        });
+
+        document.getElementById('null-details').addEventListener('click', async () => {
+            ui.details = null;
+            await build('Set details to null');
+        });
+
+        document.getElementById('toggle-units').addEventListener('click', () => {
+            // Per-card manager state: the setter calls ctx.rebind(), so there's no tree rerun
+            const rocketManager = child('rocket').ish;
+            const rows = [...launchEl.querySelectorAll('.spec')];
+            rocketManager.metric = !rocketManager.metric;
+            const units = rocketManager.metric ? 'metric' : 'imperial';
+            const same = [...launchEl.querySelectorAll('.spec')].every((row, i) => row === rows[i]);
+            log(`Units → ${units}`, `rocket.ish.metric = ${rocketManager.metric} → ctx.rebind(), no tree rerun; same spec rows: ${same}`);
+        });
+
+        document.getElementById('change-links').addEventListener('click', async () => {
+            ui.linkSuffix = ui.linkSuffix ? '' : '-b';
+            await build('Change links');
+            // Native arrays are filled by the tree itself, synchronously — no waiting
+            log('Change links', `webcast → ${child('links').querySelector('a')?.href.split('/').pop()}`);
+        });
+
+        document.getElementById('rebuild').addEventListener('click', async () => {
+            launchEl.replaceChildren();
+            logEl.replaceChildren();
+            Object.assign(ui, { details: undefined, linkSuffix: '' });
+            await build('Rebuild');
+        });
+
+        try {
+            const res = await fetch('./data/launch.json');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            response = await res.json();
+            document.getElementById('raw').textContent = JSON.stringify(response, null, 2);
+            await build('Initial build');
+        } catch (err) {
+            const message = `Couldn't load the API response (${err.message}). Serve the repo over HTTP, e.g. npm run serve, then open /demos/tree-demo-with-array.html.`;
+            const p = document.createElement('p');
+            p.className = 'error';
+            p.textContent = message;
+            launchEl.replaceChildren(p);
+            document.getElementById('raw').textContent = '';
+            console.error(err);
+        }
+    </script>
+</body>
+</html>
