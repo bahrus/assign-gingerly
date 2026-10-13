@@ -50,9 +50,10 @@ The `🌲` emoji alias works too, when `builtInEmoji` is passed as `handlers`.
 type ElementSpecification =
     | Header
     | [Header, Pattern]
-    | [Header, Pattern, ElementSpecification[]];
+    | [Header, Pattern, ElementSpecification[] | Repeat];   // static children, or a repeat (see Arrays below)
 
 type Header = tagName | { tag: tagName; ish?: string | ManagerClass };   // see Itemscope Managers below
+type Repeat = { each: ElementSpecification; of?: string; key?: string; empty?: ElementSpecification };
 ```
 
 - **The pattern** is an [assignFrom](./assignFrom.md) pattern applied to the created element, with `from` set to **the key's VM value**. So `'?.small'` above reads `vm.patch.small`.
@@ -72,6 +73,51 @@ type Header = tagName | { tag: tagName; ish?: string | ManagerClass };   // see 
 - **Don't combine `textContent` with children**: setting `textContent` replaces them. Tree puts them back on the next call, after the text.
 
 Bare class headers and `$:` headers are reserved for a later phase and throw for now. Use `{ tag, ish }` instead.
+
+## Arrays
+
+Put a **repeat object** in the children slot, in place of the array of static children:
+
+```JavaScript
+crew: ['ul', { className: 'crew' }, {
+    each: ['li', {}, [
+        ['strong', { textContent: '?.name' }],
+        ['span',   { textContent: '?.role' }],
+    ]],
+    key: '?.name',
+}],
+
+failures: ['ul', {}, {
+    each:  ['li', { textContent: '?.reason' }],
+    empty: ['li', { className: 'muted', textContent: 'No failures recorded.' }],
+}],
+
+links: [{ tag: 'nav', ish: 'links-manager' }, {}, [
+    ['ul', {}, { of: '?.linkList', each: ['li', {}, [['a', { href: '?.href', textContent: '?.name' }]]], key: '?.name' }],
+]],
+```
+
+| Field | Meaning |
+|---|---|
+| `each` (required) | The specification stamped once per item. It can have children, a `{ tag, ish }` header (one manager per item, each with its own `ctx.rebind()`), and nested repeats. |
+| `of` | Path to the array (any iterable), relative to the element's value. Default `'?.'`: the value itself. Anything nullish or not iterable counts as empty. |
+| `key` | Path into each item that identifies it across calls (`'?.id'`, or `'?.'` for primitives). Default: the index. Duplicate keys log one warning and fall back to the index for the duplicates. |
+| `empty` | Rendered **instead of** the items when there are none. |
+
+- **Inside `each`:** `?.` is the **item**, and `$parent` is the **object holding the array**: the VM for a top-level key like `crew`, or the value `of` was resolved against (e.g. the links manager). `$root` is unchanged.
+- **The repeating element owns its content.** Its own pattern still applies (resolving against its value, e.g. `title: '?.length'`), but it can't also have static children.
+- **Reconciliation on later calls:** items whose key is still present are rebound in place (and moved if needed), new keys are created, missing keys are removed, and `empty` comes and goes as the array empties and fills.
+- **Synchronous**, like the rest of Tree, so the lists are rendered as soon as `assignFromAsync` resolves.
+
+### When `manageTemplateList` is still the better fit
+
+Native arrays are the default. Delegating a list to [`builtIns.manageTemplateList`](./manage-template-list.md) (as a ` =>` handler key in the list element's pattern) still makes sense when:
+- **the item markup lives in HTML:** a `<template>` in the page, possibly server-rendered, and possibly filled by `infer` (e.g. by `itemprop`);
+- **an item is several sibling elements**, such as `<dt>` / `<dd>` pairs (`configs`), whereas a Tree `each` is one element;
+- **a very long list needs time-slicing** (`yieldEvery`), or `waitForSettled`;
+- **removed items should be hidden rather than discarded** (`forget: false`).
+
+The trade-off is that the handler runs asynchronously. Inside Tree it's fire-and-forget, so the list fills in just after the tree. [demos/tree-demo-with-managed-template-list.html](../demos/tree-demo-with-managed-template-list.html) shows that approach.
 
 ## Itemscope Managers as View Models
 

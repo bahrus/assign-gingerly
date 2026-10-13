@@ -20,7 +20,6 @@ const BUILT_IN_MAP = {
     'builtIns.microDataJoin': './handlers/microDataJoin.js',
     'builtIns.manageTemplateList': './handlers/manageTemplateList.js',
     'builtIns.rangeSelector': './handlers/rangeSelector.js',
-    'builtIns.itemscopeTree': './handlers/itemscopeTree.js',
     'builtIns.tree': './handlers/tree.js',
 };
 /**

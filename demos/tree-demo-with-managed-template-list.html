@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>tree Arrays (proposal)</title>
+    <title>tree + manageTemplateList</title>
     <style>
         :root {
             --fg: #1d2330;
@@ -126,44 +126,61 @@
         #log .src { color: var(--accent); }
         pre { font-size: 0.75rem; max-height: 360px; overflow: auto; background: var(--card); padding: 0.75rem; border-radius: 8px; }
         .error { color: var(--bad); }
-        .proposal {
-            border: 1px solid var(--pending);
-            background: #fff8ec;
-            border-radius: 8px;
-            padding: 0.6rem 0.9rem;
-        }
     </style>
 </head>
 <body>
-    <h1>builtIns.tree — native arrays (proposal)</h1>
-    <p class="proposal">
-        <strong>Proposal — doesn't work yet.</strong> This page shows how arrays could be declared natively in
-        <code>builtIns.tree</code>. Until that's implemented, the build stops with a "not implemented yet" notice; once it
-        is, this page should work unchanged. Compare with the working <a href="./tree-demo.html">tree demo</a>, which
-        delegates its lists to <code>builtIns.manageTemplateList</code>.
+    <h1>Tree demo: lists via manageTemplateList</h1>
+    <p class="lede">
+        A launch summary built with <code>builtIns.tree</code> from a JSON API response
+        (<a href="./data/launch.json">data/launch.json</a>, a fictional launch modeled on the SpaceX API v4 shape).
+        The API response is used as-is (only UI state is overlaid), stateless formatting comes from named
+        <code>pipes</code>, the rocket card and links bar each get an itemscope manager as their view model, and the
+        tree config itself is pure JSON (shown below the log).
     </p>
     <p class="lede">
-        The same launch summary, from the same response (<a href="./data/launch.json">data/launch.json</a>). The links,
-        crew, cores and failures lists are declared with a <strong>repeat object</strong> in the children slot —
-        <code>{ each, key, empty, of }</code> — so no <code>&lt;template id&gt;</code>, no <code>globalThis://</code> protocol,
-        no <code>querySelector</code> paths, and no fire-and-forget handler.
+        <strong>This variant delegates its lists to <code>builtIns.manageTemplateList</code></strong>; the main
+        <a href="./tree-demo.html">tree demo</a> uses Tree's native arrays instead. Prefer native arrays by default;
+        reach for <code>manageTemplateList</code> when item markup lives in HTML (<code>&lt;template&gt;</code>s, possibly
+        server-rendered, filled by <code>infer</code>), when an item is several sibling elements (e.g.
+        <code>&lt;dt&gt;</code>/<code>&lt;dd&gt;</code> pairs, via <code>configs</code>), when a very long list needs
+        time-slicing (<code>yieldEvery</code>) or <code>waitForSettled</code>, or when removed items should be hidden rather
+        than discarded (<code>forget: false</code>).
     </p>
 
     <details>
-        <summary>The proposed array syntax</summary>
+        <summary>What this demo exercises</summary>
         <ul>
-            <li><strong>An object in the children slot means "repeat"</strong>; an array there still means static children:
-                <code>['ul', pattern, { each, key, empty, of }]</code>.</li>
-            <li><strong><code>each</code></strong> is an ordinary element specification, stamped once per item. Inside it,
-                <code>?.</code> is the <strong>item</strong>, and <code>$parent</code> is the object that holds the array.</li>
-            <li><strong><code>key</code></strong> (optional) is a path into each item, used to reuse items' elements across
-                reruns; by default items are keyed by index.</li>
-            <li><strong><code>empty</code></strong> (optional) is a specification rendered instead when the array is empty
-                (or missing) — replacing the old <code>hidden: '?.length'</code> trick.</li>
-            <li><strong><code>of</code></strong> (optional, default <code>'?.'</code>) is the path to the array, relative to the
-                node's value: <code>of: '?.linkList'</code> repeats over the links manager's getter.</li>
-            <li>The repeat object is the <strong>repeat boundary</strong> that compiling would later turn into a per-item
-                <code>&lt;template&gt;</code>.</li>
+            <li><strong>Element specifications</strong> as <code>[tag, pattern, children]</code> tuples; patterns resolve
+                against the key's value (<code>'?.small'</code> reads <code>vm.patch.small</code>).</li>
+            <li><strong>Pipes</strong>: named functions used as path segments. The date is
+                <code>join: ['?.parseDate?.longUtc', ' UTC']</code> with <code>parseDate: Date.parse</code> and
+                <code>longUtc</code> a preconfigured <code>Intl.DateTimeFormat</code>'s <code>format</code>; core summaries are
+                a pipe too.</li>
+            <li><strong>Itemscope managers as view models</strong>: <code>{ tag: 'section', ish: 'rocket-manager' }</code>
+                attaches <code>RocketManager</code> to the rocket card (by registered name, so the config stays JSON; no
+                <code>itemscope</code> attribute). The card's patterns read its getters (<code>'?.heightLabel'</code>).
+                "Toggle units" sets <code>rocket.ish.metric</code>, whose setter calls <code>ctx.rebind()</code>: the card
+                updates without a tree rerun, and the setting survives "Run again".</li>
+            <li><strong>Async <code>onAssigned</code></strong>: <code>LinksManager</code> marks the links "verifying…", awaits a
+                simulated check, then "✓ verified". Tree binds right away and rebinds by itself when the promise settles.</li>
+            <li><strong>Static children</strong>: the rocket card's heading and its three spec rows, all resolving against
+                the card's manager.</li>
+            <li><strong>Rebinding in place</strong>: every button re-runs the same tree with a new view model. The log reports
+                how many of the previous elements were reused; only "Clear &amp; rebuild" creates new ones.</li>
+            <li><strong>Null values</strong>: <code>keepNullish</code> keeps the details paragraph when <code>details</code> is
+                <code>null</code>, and a <code>'??'</code> ternary chain shows the placeholder.</li>
+            <li><strong><code>$parent</code></strong>: the status badge hangs off the <code>success</code> key and reads its
+                sibling <code>upcoming</code> from the enclosing view model, via <code>' ?='</code> ternaries
+                (<code>['$parent?.upcoming', 'Upcoming', ['?.', 'Success', 'Failure']]</code>).</li>
+            <li><strong>Arrays, by composition</strong>: the links, crew, cores and failures lists put a
+                <code>builtIns.manageTemplateList</code> handler key inside the <code>&lt;ul&gt;</code>'s pattern, cloning
+                <code>&lt;template&gt;</code>s from the page. That handler runs asynchronously (fire-and-forget inside the tree),
+                so the lists fill in just after the tree.</li>
+        </ul>
+        <p><strong>By design:</strong></p>
+        <ul>
+            <li>Managers don't render DOM: structure stays in the tree config.</li>
+            <li>No microdata (<code>itemscope</code>/<code>itemprop</code>), by design.</li>
         </ul>
     </details>
 
@@ -193,6 +210,9 @@
         <pre id="config"></pre>
     </section>
 
+    <template id="link-item"><li><a target="_blank" rel="noopener"></a></li></template>
+    <template id="crew-item"><li><strong></strong> — <span></span><small></small></li></template>
+    <template id="text-item"><li></li></template>
 
     <script type="module">
         import { assignFromAsync } from '../index.js';
@@ -290,6 +310,15 @@
 
         // ── The tree: pure JSON ───────────────────────────────────────────────
 
+        /** A manageTemplateList handler key, used inside a <ul>'s pattern for array values. */
+        const list = (template, key, toClone, forEach = '?.') => ({
+            '?. =>': {
+                do: 'builtIns.manageTemplateList',
+                resolve: { forEach, instantiate: `globalThis://${template}`, forget: true },
+                fromEachItem: { toClone, withOptions: { withMethods: ['querySelector'] }, resolve: { key } },
+            },
+        });
+
         const spec = (label, valuePattern) => ['div', { className: 'spec' }, [
             ['span', { className: 'label', textContent: label }],
             ['span', valuePattern],
@@ -319,12 +348,10 @@
                     }],
                     // The links bar's patterns read the LinksManager instance (className, linkList)
                     links: [{ tag: 'nav', ish: 'links-manager' }, { className: '?.className', ariaLabel: 'Launch links' }, [
-                        // Repeat over a getter on the links manager
-                        ['ul', {}, {
-                            of: '?.linkList',
-                            each: ['li', {}, [['a', { href: '?.href', textContent: '?.name', target: '_blank', rel: 'noopener' }]]],
-                            key: '?.name',
-                        }],
+                        ['ul', list('link-item', '?.name', {
+                            '?.querySelector?.a?.href': '?.href',
+                            '?.querySelector?.a?.textContent': '?.name',
+                        }, '?.linkList')],
                     ]],
                     // The rocket card's patterns read RocketManager getters
                     rocket: [{ tag: 'section', ish: RocketManager.is }, { className: 'card rocket' }, [
@@ -335,28 +362,22 @@
                     ]],
                     crew: ['section', { className: 'card crew' }, [
                         ['h3', { textContent: 'Crew' }],
-                        // vm.crew is the node's value, so the default of: '?.' is the array itself
-                        ['ul', {}, {
-                            each: ['li', {}, [
-                                ['strong', { textContent: '?.name' }],
-                                ['span', { 'textContent =&': { join: [' — ', '?.role'] } }],
-                                ['small', { textContent: '?.agency' }],
-                            ]],
-                            key: '?.name',
-                        }],
+                        ['ul', list('crew-item', '?.name', {
+                            '?.querySelector?.strong?.textContent': '?.name',
+                            '?.querySelector?.span?.textContent': '?.role',
+                            '?.querySelector?.small?.textContent': '?.agency',
+                        })],
                     ]],
                     cores: ['section', { className: 'card cores' }, [
                         ['h3', { textContent: 'First-stage cores' }],
-                        ['ul', {}, { each: ['li', { textContent: '?.coreSummary' }], key: '?.serial' }],
+                        ['ul', list('text-item', '?.serial', { textContent: '?.coreSummary' })],
                     ]],
                     failures: ['section', { className: 'card failures' }, [
                         ['h3', { textContent: 'Failures' }],
-                        ['ul', {}, {
-                            each: ['li', { 'textContent =&': { join: ['T+', '?.time', 's: ', '?.reason'] } }],
-                            key: '?.time',
-                            // Rendered instead of items when the array is empty
-                            empty: ['li', { className: 'muted', textContent: 'No failures recorded.' }],
-                        }],
+                        ['ul', list('text-item', '?.time', { 'textContent =&': { join: ['T+', '?.time', 's: ', '?.reason'] } }), [
+                            // Shown only for an empty array (hidden = length, so 0 → visible)
+                            ['li', { className: 'muted', textContent: 'No failures recorded.', hidden: '?.length' }],
+                        ]],
                     ]],
                 },
             },
@@ -367,29 +388,13 @@
 
         let response;
 
-        function notImplemented(err) {
-            const p = document.createElement('p');
-            p.className = 'error';
-            p.textContent = `Native arrays aren't implemented in builtIns.tree yet, so this build stops here (${err.message}). `
-                + 'The tree config below shows the proposed syntax.';
-            launchEl.replaceChildren(p);
-            log('Not implemented yet', err.message);
-        }
-
         async function build(label) {
-            try {
-                await buildTree(label);
-            } catch (err) {
-                notImplemented(err);
-            }
-        }
-
-        async function buildTree(label) {
             const before = new Set(launchEl.querySelectorAll('*'));
             const start = performance.now();
             await assignFromAsync(launchEl, pattern, {
                 from: currentVm(),
                 pipes,
+                protocols: { globalThis: k => globalThis[k] },
             });
             const ms = (performance.now() - start).toFixed(1);
             const after = [...launchEl.querySelectorAll('*')];
@@ -426,8 +431,8 @@
         document.getElementById('change-links').addEventListener('click', async () => {
             ui.linkSuffix = ui.linkSuffix ? '' : '-b';
             await build('Change links');
-            // Native arrays are filled by the tree itself, synchronously — no waiting
-            log('Change links', `webcast → ${child('links').querySelector('a')?.href.split('/').pop()}`);
+            // The list is filled by manageTemplateList, which runs just after the tree
+            setTimeout(() => log('Change links', `webcast → ${child('links').querySelector('a')?.href.split('/').pop()}`), 50);
         });
 
         document.getElementById('rebuild').addEventListener('click', async () => {
@@ -444,7 +449,7 @@
             document.getElementById('raw').textContent = JSON.stringify(response, null, 2);
             await build('Initial build');
         } catch (err) {
-            const message = `Couldn't load the API response (${err.message}). Serve the repo over HTTP, e.g. npm run serve, then open /demos/tree-demo-with-array.html.`;
+            const message = `Couldn't load the API response (${err.message}). Serve the repo over HTTP, e.g. npm run serve, then open /demos/tree-demo-with-managed-template-list.html.`;
             const p = document.createElement('p');
             p.className = 'error';
             p.textContent = message;

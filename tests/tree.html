@@ -392,6 +392,162 @@
         assertEquals(target.querySelectorAll('b').length, 1, 'no duplicate children');
       }
 
+      // ── Repeats: { each, of, key, empty } in the children slot ────────────
+
+      const crewVm = () => ({
+        title: 'Demo 7',
+        crew: [{ name: 'Avery', role: 'Commander' }, { name: 'Rowan', role: 'Pilot' }, { name: 'Mika', role: 'Specialist' }],
+      });
+      const crewCfg = {
+        '?. =>': { do: 'builtIns.tree', map: {
+          crew: ['ul', { title: '?.length' }, {
+            each: ['li', { title: '$parent?.title' }, [['b', { textContent: '?.name' }], ['i', { textContent: '?.role' }]]],
+            key: '?.name',
+          }],
+        } },
+      };
+      const names = target => [...target.querySelectorAll('li > b')].map(b => b.textContent).join();
+
+      // Test 22: basic repeat — items, item children, the element's own pattern, $parent
+      {
+        const target = details();
+        await assignFromAsync(target, crewCfg, { from: crewVm() });
+        assertEquals(names(target), 'Avery,Rowan,Mika', 'one item per array element, in order');
+        assertEquals(target.querySelector('li > i')?.textContent, 'Commander', 'item children resolve against the item');
+        assertEquals(target.querySelector('ul')?.title, '3', "the repeating element's own pattern resolves against the array");
+        assertEquals(target.querySelector('li')?.title, 'Demo 7', '$parent inside items is the object holding the array');
+      }
+
+      // Test 23: keyed reconciliation — reuse, reorder, remove, add
+      {
+        const target = details();
+        await assignFromAsync(target, crewCfg, { from: crewVm() });
+        const [avery, rowan, mika] = target.querySelectorAll('li');
+        const vm = crewVm();
+        vm.crew = [vm.crew[2], { name: 'Jo', role: 'Engineer' }, { ...vm.crew[0], role: 'Captain' }];
+        await assignFromAsync(target, crewCfg, { from: vm });
+        assertEquals(names(target), 'Mika,Jo,Avery', 'new order');
+        const lis = target.querySelectorAll('li');
+        assert(lis[0] === mika && lis[2] === avery, 'kept items are the same elements, moved');
+        assertEquals(avery.querySelector('i').textContent, 'Captain', 'kept items are rebound');
+        assert(!rowan.isConnected, 'removed item is gone');
+        assertEquals(lis.length, 3, 'new item added');
+      }
+
+      // Test 24: primitives, index keys by default, and synchronous rendering
+      {
+        const target = details();
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: { tags: ['ul', {}, { each: ['li', { textContent: '?.' }] }] } } };
+        await assignFromAsync(target, cfg, { from: { tags: ['a', 'b', 'c'] } });
+        // No extra wait: the items exist as soon as the await resolves
+        assertEquals([...target.querySelectorAll('li')].map(li => li.textContent).join(), 'a,b,c', 'rendered synchronously');
+        const first = target.querySelector('li');
+        await assignFromAsync(target, cfg, { from: { tags: ['z', 'b'] } });
+        assert(target.querySelector('li') === first, 'index keys reuse the element at the same position');
+        assertEquals([...target.querySelectorAll('li')].map(li => li.textContent).join(), 'z,b', 'rebound by index; extra removed');
+      }
+
+      // Test 25: empty — shown for [] and for a missing array, replaced when items appear
+      {
+        const target = details();
+        const cfg = { '?. =>': { do: 'builtIns.tree', keepNullish: true, map: { failures: ['ul', {}, {
+          each: ['li', { textContent: '?.reason' }],
+          empty: ['li', { className: 'empty', textContent: 'None' }],
+        }] } } };
+        await assignFromAsync(target, cfg, { from: { failures: [] } });
+        assertEquals(target.querySelector('li')?.className, 'empty', 'empty spec for an empty array');
+        await assignFromAsync(target, cfg, { from: { failures: null } });
+        assertEquals(target.querySelectorAll('li.empty').length, 1, 'empty spec for a missing array, not duplicated');
+        await assignFromAsync(target, cfg, { from: { failures: [{ reason: 'engine out' }] } });
+        assertEquals([...target.querySelectorAll('li')].map(li => li.textContent).join(), 'engine out', 'empty replaced by items');
+        await assignFromAsync(target, cfg, { from: { failures: [] } });
+        assertEquals(target.querySelector('li')?.textContent, 'None', 'empty again');
+      }
+
+      // Test 26: of — repeat over a path (a manager getter), $parent is the holder
+      {
+        class LinksView {
+          static is = 'tree-test-links-view';
+          constructor(el, initVals) { Object.assign(this, initVals); }
+          get list() { return Object.entries(this.urls).map(([name, href]) => ({ name, href })); }
+        }
+        const target = details();
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.tree', map: {
+          links: [{ tag: 'nav', ish: LinksView }, {}, [
+            ['ul', {}, { of: '?.list', each: ['a', { href: '?.href', textContent: '?.name', title: '$parent?.label' }], key: '?.name' }],
+          ]],
+        } } }, { from: { links: { label: 'Links', urls: { webcast: 'https://example.com/w', article: 'https://example.com/a' } } } });
+        const anchors = [...target.querySelectorAll('a')];
+        assertEquals(anchors.map(a => a.textContent).join(), 'webcast,article', 'repeats over a getter on the manager');
+        assertEquals(anchors[0]?.title, 'Links', '$parent is the object the of path was resolved against');
+      }
+
+      // Test 27: a manager per item, with its own rebind
+      {
+        let instances = 0;
+        class Member {
+          static is = 'tree-test-member';
+          #upper = false; #rebind;
+          constructor(el, initVals, ctx) { instances++; Object.assign(this, initVals); this.#rebind = ctx.rebind; }
+          set upper(v) { this.#upper = v; this.#rebind(); }
+          get label() { return this.#upper ? this.name.toUpperCase() : this.name; }
+        }
+        const target = details();
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: { crew: ['ul', {}, {
+          each: [{ tag: 'li', ish: Member }, { textContent: '?.label' }], key: '?.name',
+        }] } } };
+        await assignFromAsync(target, cfg, { from: crewVm() });
+        assertEquals(instances, 3, 'one manager per item');
+        const second = target.querySelectorAll('li')[1];
+        second.ish.upper = true;
+        assertEquals([...target.querySelectorAll('li')].map(li => li.textContent).join(), 'Avery,ROWAN,Mika', 'rebind updates just that item');
+        await assignFromAsync(target, cfg, { from: crewVm() });
+        assertEquals(instances, 3, 'managers survive reruns');
+      }
+
+      // Test 28: duplicate keys warn once and fall back to the index
+      {
+        const warnings = [];
+        const { warn } = console;
+        console.warn = msg => warnings.push(msg);
+        let target;
+        try {
+          target = details();
+          await assignFromAsync(target, { '?. =>': { do: 'builtIns.tree', map: { tags: ['ul', {}, {
+            each: ['li', { textContent: '?.' }], key: '?.',
+          }] } } }, { from: { tags: ['x', 'x', 'y', 'x'] } });
+        } finally {
+          console.warn = warn;
+        }
+        assertEquals([...target.querySelectorAll('li')].map(li => li.textContent).join(), 'x,x,y,x', 'all items rendered');
+        assertEquals(warnings.filter(w => w.includes('duplicate key')).length, 1, 'warned once');
+      }
+
+      // Test 29: nested repeats, and a repeat inside static children
+      {
+        const target = details();
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.tree', map: {
+          rocket: ['section', {}, [
+            ['h3', { textContent: '?.name' }],
+            ['ul', {}, { of: '?.stages', each: ['li', {}, [
+              ['b', { textContent: '?.label' }],
+              ['ol', {}, { of: '?.engines', each: ['li', { textContent: '?.' }] }],
+            ]] }],
+          ]],
+        } } }, { from: { rocket: { name: 'F9', stages: [{ label: 'S1', engines: ['M1', 'M2'] }, { label: 'S2', engines: ['MVac'] }] } } });
+        assertEquals(target.querySelector('h3')?.textContent, 'F9', 'static sibling of the repeat');
+        assertEquals([...target.querySelectorAll('ol')].map(ol => ol.children.length).join(), '2,1', 'nested repeats');
+      }
+
+      // Test 30: a malformed children slot throws
+      {
+        let error;
+        try {
+          await assignFromAsync(details(), { '?. =>': { do: 'builtIns.tree', map: { x: ['ul', {}, { items: [] }] } } }, { from: { x: [] } });
+        } catch (e) { error = e; }
+        assert(error?.message.includes('repeat object'), 'object without each throws');
+      }
+
       const testComplete = document.getElementById('test-complete');
       testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
       testComplete.setAttribute('data-passed', passed);

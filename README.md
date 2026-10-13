@@ -3374,6 +3374,7 @@ Key points:
 
 - **Patterns resolve against the key's value**; children share their parent's value, and the whole VM is reachable as [`$parent` / `$root`](docs/root-references.md).
 - **Rebinding in place:** later calls re-apply patterns to the elements already created; only a changed structure is rebuilt.
+- **Arrays:** `['ul', {}, { each: ['li', { textContent: '?.name' }], key: '?.id', empty: ['li', { textContent: 'None' }] }]` stamps `each` per item, with keyed reuse across calls.
 - **Formatting** via [pipes](docs/pipes.md), and **itemscope managers as view models** via `{ tag, ish }` headers.
 - **Emoji alias:** `🌲`.
 

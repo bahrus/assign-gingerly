@@ -129,6 +129,79 @@ Looks like a good suggestion.  Please implement with your recommendations to the
 
 If using the array route seems like a "no brainer" in all circumstances, feel free to get rid of the tree-demo-with-array.html after porting in the changes to tree-demo.html (or however it is easiest to get back to one demo).
 
+## Claude's Implementation Notes
+
+Native arrays are implemented as proposed. On the open questions, as recommended:
+- **no `$index`** for now;
+- **index keys by default**, with `key` as the fix when items move;
+- **a map key whose value is an array only repeats when its spec asks for it.**
+
+### Syntax (unchanged from the proposal)
+
+```js
+['ul', pattern, { each, of?, key?, empty? }]   // an object in the children slot = repeat
+```
+
+- **Inside `each`,** `?.` is the item and `$parent` is the object holding the array. With the default `of: '?.'`, nothing is pushed, because the stack's top is already the holder. With any other `of`, the node's value is pushed.
+- **Duplicate keys** log one warning, then fall back to the index for the duplicates.
+- **A nullish or non-iterable `of`** counts as empty.
+- **A children-slot object without `each`** throws.
+
+### Implementation (`handlers/tree.ts`)
+
+- **`normalize`** now returns the repeat as a sixth element: the children slot is either an array (static children) or a repeat object.
+- **`bindRepeat`:**
+  - resolves `of` with `getValue`, so pipes, `$root` / `$parent` and manager getters all work;
+  - keeps a `Map<key, TreeNode>` per repeating node;
+  - rebinds existing keys through `syncNode` (rebuilding an item only if its own structure changed);
+  - creates new keys, removes missing ones, and swaps `empty` in and out;
+  - fixes the order with `placeChildren`, which moves only what's out of place (the same idea as the top-level `placeInOrder`).
+- **Structural compare:** a node that switches between static children and a repeat is rebuilt.
+- **Fully synchronous**, so there's no handler hand-off and no fire-and-forget.
+- **Types:** `RepeatSpecification` in `treeTypes.d.ts`, and the third tuple slot is `ElementSpecification[] | RepeatSpecification`.
+
+### Demos: two, not one
+
+Native arrays should be the default, but they **aren't a no-brainer in every case**, so I kept the `manageTemplateList` version under the name you suggested:
+
+| File | |
+|---|---|
+| `demos/tree-demo.html` | **The main demo, now with native arrays** (the proposal page's lists, ported). No item `<template>`s, no `list()` helper, no `globalThis://` protocol. |
+| `demos/tree-demo-with-managed-template-list.html` | The previous demo, retitled, with a paragraph on when to prefer it. The two pages link to each other. |
+| `demos/tree-demo-with-array.html` | Deleted (merged into `tree-demo.html`) |
+
+**When `manageTemplateList` is still the better route** (also in `docs/tree.md`):
+- the item markup lives in **HTML** (a page `<template>`, possibly server-rendered or filled via `infer`);
+- **an item is several sibling elements** (`<dt>` / `<dd>`, via `configs`), whereas a Tree `each` is one element;
+- **time-slicing very long lists** (`yieldEvery`) or `waitForSettled`;
+- **hiding removed items** instead of discarding them (`forget: false`).
+
+**A concrete difference, seen while verifying:** clicking "Change links" updates the links **immediately** in the native demo. In the managed variant, they only change once `manageTemplateList`'s asynchronous pass catches up.
+
+### Verified
+
+- **`tests/tree.html`:** 9 new repeat scenarios (30 in total, **88 assertions**):
+  - basic items with `$parent`;
+  - keyed reorder / reuse / remove / add;
+  - primitives with index keys, rendered synchronously;
+  - `empty` for `[]` and `null`, swapping both ways;
+  - `of` over a manager getter;
+  - a manager per item, with its own `rebind`;
+  - duplicate keys (one warning);
+  - nested repeats next to static siblings;
+  - a malformed slot throwing.
+- **Full suite: 120 passed** in Chromium, Firefox and WebKit. `tsc` is clean, in a scratch copy; no `.js` touched.
+- **Both demos,** in all three browsers, with every button: correct content, 45 of 45 elements reused on reruns, the units toggle through `ctx.rebind()`, and no console errors. I fixed one issue found this way: the managed variant's new heading (`builtIns.tree + builtIns.manageTemplateList`) caused horizontal scroll at 390 px, so it's now shorter.
+
+### Docs
+
+- **`docs/tree.md`:** a new "Arrays" section (fields, data context, reconciliation, and when to prefer `manageTemplateList`), plus the updated type.
+- **README:** an arrays bullet in the `builtIns.tree` section.
+
+As usual, the repo's generated `.js` is stale until you rebuild.
+
+**Next, per the thought experiment:** the repeat object is now the boundary that compiling would turn into a per-item `<template>`, and `ShadowRoot` / `DocumentFragment` targets are still the prerequisite.
+
 
 
 

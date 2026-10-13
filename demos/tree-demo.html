@@ -135,7 +135,8 @@
         (<a href="./data/launch.json">data/launch.json</a>, a fictional launch modeled on the SpaceX API v4 shape).
         The API response is used as-is (only UI state is overlaid), stateless formatting comes from named
         <code>pipes</code>, the rocket card and links bar each get an itemscope manager as their view model, and the
-        tree config itself is pure JSON (shown below the log).
+        tree config itself is pure JSON (shown below the log). Lists use Tree's native arrays; see also the
+        <a href="./tree-demo-with-managed-template-list.html">variant that delegates lists to manageTemplateList</a>.
     </p>
 
     <details>
@@ -163,9 +164,12 @@
             <li><strong><code>$parent</code></strong>: the status badge hangs off the <code>success</code> key and reads its
                 sibling <code>upcoming</code> from the enclosing view model, via <code>' ?='</code> ternaries
                 (<code>['$parent?.upcoming', 'Upcoming', ['?.', 'Success', 'Failure']]</code>).</li>
-            <li><strong>Arrays, by composition</strong>: Tree doesn't do arrays yet, so the links, crew and core lists put a
-                <code>builtIns.manageTemplateList</code> handler key inside the <code>&lt;ul&gt;</code>'s pattern. That handler
-                runs fire-and-forget, so the lists fill in just after the tree.</li>
+            <li><strong>Native arrays</strong>: an object in the children slot repeats instead of listing static children —
+                <code>['ul', pattern, { each, key, empty, of }]</code>. <code>each</code> is stamped once per item (inside it,
+                <code>?.</code> is the item and <code>$parent</code> the array's holder), <code>key</code> reuses items' elements
+                across reruns, <code>empty</code> replaces the items when there are none (failures), and <code>of</code> points
+                at the array (<code>of: '?.linkList'</code> repeats over the links manager's getter). Lists are rendered
+                synchronously with the rest of the tree.</li>
         </ul>
         <p><strong>By design:</strong></p>
         <ul>
@@ -200,9 +204,6 @@
         <pre id="config"></pre>
     </section>
 
-    <template id="link-item"><li><a target="_blank" rel="noopener"></a></li></template>
-    <template id="crew-item"><li><strong></strong> — <span></span><small></small></li></template>
-    <template id="text-item"><li></li></template>
 
     <script type="module">
         import { assignFromAsync } from '../index.js';
@@ -300,15 +301,6 @@
 
         // ── The tree: pure JSON ───────────────────────────────────────────────
 
-        /** A manageTemplateList handler key, used inside a <ul>'s pattern for array values. */
-        const list = (template, key, toClone, forEach = '?.') => ({
-            '?. =>': {
-                do: 'builtIns.manageTemplateList',
-                resolve: { forEach, instantiate: `globalThis://${template}`, forget: true },
-                fromEachItem: { toClone, withOptions: { withMethods: ['querySelector'] }, resolve: { key } },
-            },
-        });
-
         const spec = (label, valuePattern) => ['div', { className: 'spec' }, [
             ['span', { className: 'label', textContent: label }],
             ['span', valuePattern],
@@ -338,10 +330,12 @@
                     }],
                     // The links bar's patterns read the LinksManager instance (className, linkList)
                     links: [{ tag: 'nav', ish: 'links-manager' }, { className: '?.className', ariaLabel: 'Launch links' }, [
-                        ['ul', list('link-item', '?.name', {
-                            '?.querySelector?.a?.href': '?.href',
-                            '?.querySelector?.a?.textContent': '?.name',
-                        }, '?.linkList')],
+                        // Repeat over a getter on the links manager
+                        ['ul', {}, {
+                            of: '?.linkList',
+                            each: ['li', {}, [['a', { href: '?.href', textContent: '?.name', target: '_blank', rel: 'noopener' }]]],
+                            key: '?.name',
+                        }],
                     ]],
                     // The rocket card's patterns read RocketManager getters
                     rocket: [{ tag: 'section', ish: RocketManager.is }, { className: 'card rocket' }, [
@@ -352,22 +346,28 @@
                     ]],
                     crew: ['section', { className: 'card crew' }, [
                         ['h3', { textContent: 'Crew' }],
-                        ['ul', list('crew-item', '?.name', {
-                            '?.querySelector?.strong?.textContent': '?.name',
-                            '?.querySelector?.span?.textContent': '?.role',
-                            '?.querySelector?.small?.textContent': '?.agency',
-                        })],
+                        // vm.crew is the node's value, so the default of: '?.' is the array itself
+                        ['ul', {}, {
+                            each: ['li', {}, [
+                                ['strong', { textContent: '?.name' }],
+                                ['span', { 'textContent =&': { join: [' — ', '?.role'] } }],
+                                ['small', { textContent: '?.agency' }],
+                            ]],
+                            key: '?.name',
+                        }],
                     ]],
                     cores: ['section', { className: 'card cores' }, [
                         ['h3', { textContent: 'First-stage cores' }],
-                        ['ul', list('text-item', '?.serial', { textContent: '?.coreSummary' })],
+                        ['ul', {}, { each: ['li', { textContent: '?.coreSummary' }], key: '?.serial' }],
                     ]],
                     failures: ['section', { className: 'card failures' }, [
                         ['h3', { textContent: 'Failures' }],
-                        ['ul', list('text-item', '?.time', { 'textContent =&': { join: ['T+', '?.time', 's: ', '?.reason'] } }), [
-                            // Shown only for an empty array (hidden = length, so 0 → visible)
-                            ['li', { className: 'muted', textContent: 'No failures recorded.', hidden: '?.length' }],
-                        ]],
+                        ['ul', {}, {
+                            each: ['li', { 'textContent =&': { join: ['T+', '?.time', 's: ', '?.reason'] } }],
+                            key: '?.time',
+                            // Rendered instead of items when the array is empty
+                            empty: ['li', { className: 'muted', textContent: 'No failures recorded.' }],
+                        }],
                     ]],
                 },
             },
@@ -384,7 +384,6 @@
             await assignFromAsync(launchEl, pattern, {
                 from: currentVm(),
                 pipes,
-                protocols: { globalThis: k => globalThis[k] },
             });
             const ms = (performance.now() - start).toFixed(1);
             const after = [...launchEl.querySelectorAll('*')];
@@ -421,8 +420,8 @@
         document.getElementById('change-links').addEventListener('click', async () => {
             ui.linkSuffix = ui.linkSuffix ? '' : '-b';
             await build('Change links');
-            // The list is filled by manageTemplateList, which runs just after the tree
-            setTimeout(() => log('Change links', `webcast → ${child('links').querySelector('a')?.href.split('/').pop()}`), 50);
+            // Native arrays render synchronously with the tree — no waiting
+            log('Change links', `webcast → ${child('links').querySelector('a')?.href.split('/').pop()}`);
         });
 
         document.getElementById('rebuild').addEventListener('click', async () => {

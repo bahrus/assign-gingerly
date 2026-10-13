@@ -7,6 +7,11 @@
  * created element with `from` set to the key's VM value; children are static
  * structure whose patterns resolve against that same value.
  *
+ * Arrays: a repeat object `{ each, of?, key?, empty? }` in place of the children
+ * stamps `each` once per item (where `?.` is the item and `$parent` the array's
+ * holder), reuses items' elements by `key` (default: index), and renders `empty`
+ * when there are no items. Synchronous, like everything else here.
+ *
  * No microdata is added, and existing (e.g. server-rendered) markup isn't adopted.
  * The tree's nodes sit between `<!--?start name="tree"-->` / `<!--?end-->` markers
  * appended to the target.
@@ -45,13 +50,15 @@
 
 import { assignFrom, categorizeKeys, handleSpreads, SUBSTITUTION_VARS } from '../assignFrom.js';
 import { assignGingerly } from '../assignGingerly.js';
-import { getValues } from '../resolve/getValues.js';
+import { getValue, getValues } from '../resolve/getValues.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 import type {
     AssignFromHandler, AssignFromOptions, ItemscopeManager, ItemscopeManagerConfig, ItemscopeRegistry, PermissionProcessor,
 } from '../types/assign-gingerly/types.js';
-import type { ElementHeader, ElementSpecification, Pattern, TreeConfig } from '../types/assign-gingerly/treeTypes.js';
+import type {
+    ElementHeader, ElementSpecification, Pattern, RepeatSpecification, TreeConfig,
+} from '../types/assign-gingerly/treeTypes.js';
 
 const DEFAULT_MARKER_NAME = 'tree';
 const WILDCARD = '*';
@@ -73,6 +80,16 @@ interface TreeNode {
     permissionProcessor?: PermissionProcessor;
     /** True while Tree itself binds this node, so a rebind() triggered meanwhile is a no-op */
     binding: boolean;
+    /** Present when the node repeats (`{ each, … }` in the children slot) instead of having static children */
+    repeat?: RepeatState;
+}
+
+/** A repeating node's items, by key, and its `empty` node while the array is empty. */
+interface RepeatState {
+    items: Map<unknown, TreeNode>;
+    empty: TreeNode | undefined;
+    /** Whether a duplicate-key warning has been logged for this node */
+    warned: boolean;
 }
 
 type NormalizedSpec = [
@@ -81,6 +98,7 @@ type NormalizedSpec = [
     ish: ManagerRef | undefined,
     pattern: Pattern | undefined,
     children: ElementSpecification[],
+    repeat: RepeatSpecification | undefined,
 ];
 
 /** Created nodes per tree, keyed by the tree's start marker. */
@@ -90,18 +108,29 @@ const treeStates = new WeakMap<Comment, Map<string, TreeNode>>();
 const plainPatterns = new WeakMap<Pattern, boolean>();
 
 function normalize(spec: ElementSpecification): NormalizedSpec {
-    const [header, pattern, children = []] = Array.isArray(spec) ? spec : [spec];
+    const [header, pattern, third] = Array.isArray(spec) ? spec : [spec];
+    // The children slot: an array of static children, or a repeat object ({ each, … })
+    let children: ElementSpecification[] = [];
+    let repeat: RepeatSpecification | undefined;
+    if (Array.isArray(third)) {
+        children = third;
+    } else if (third !== undefined) {
+        if (!third || typeof third !== 'object' || !('each' in third)) {
+            throw new Error('builtIns.tree: the children slot must be an array of specifications or a repeat object { each, … }');
+        }
+        repeat = third;
+    }
     if (typeof header === 'string') {
         if (header.startsWith('$:')) {
             throw new Error(`builtIns.tree: itemscope manager headers ("${header}") are not supported yet; use { tag, ish: '${header.slice(2)}' }`);
         }
-        return [header, header, undefined, pattern, children];
+        return [header, header, undefined, pattern, children, repeat];
     }
     if (typeof header === 'function') {
         throw new Error('builtIns.tree: class headers are not supported yet; use { tag, ish: Class }');
     }
     if (header && typeof header === 'object' && typeof header.tag === 'string') {
-        return [header, header.tag, header.ish, pattern, children];
+        return [header, header.tag, header.ish, pattern, children, repeat];
     }
     throw new Error('builtIns.tree: an element header must be a tag name or { tag, ish? }');
 }
@@ -181,10 +210,82 @@ function attachManager(node: TreeNode, ish: ManagerRef, value: any): any {
     return (element as any).ish;
 }
 
-/** Apply a node's own pattern and sync its children, all against `from`. */
-function bindContent(node: TreeNode, pattern: Pattern | undefined, childSpecs: ElementSpecification[], from: any): void {
+/** Place elements as the container's first children, in order, moving only the ones out of place. */
+function placeChildren(container: ParentNode, elements: Element[]): void {
+    let cursor = container.firstChild;
+    for (const element of elements) {
+        if (element === cursor) {
+            cursor = cursor.nextSibling;
+        } else {
+            container.insertBefore(element, cursor);
+        }
+    }
+}
+
+/**
+ * Stamp `each` once per item of the array at `of`, reusing items' nodes by `key`
+ * (default: index), or render `empty` when there are no items. Inside items, `?.` is
+ * the item and `$parent` is the object holding the array.
+ */
+function bindRepeat(node: TreeNode, repeat: RepeatSpecification, from: any): void {
+    const { element, options, permissionProcessor } = node;
+    const { each, of = '?.', key, empty } = repeat;
+    const resolveOptions = { ...options, from, root: element, permissionProcessor } as any;
+    const list = getValue(of, from, resolveOptions);
+    const items: any[] = list != null && typeof list[Symbol.iterator] === 'function' ? Array.from(list) : [];
+    // With the default `of`, the node's value is the array, and the stack's top is already its holder
+    const itemOptions = of === '?.' ? options : { ...options, fromStack: [...(options.fromStack ?? []), from] };
+
+    const container = containerOf(element);
+    const state = node.repeat ??= { items: new Map(), empty: undefined, warned: false };
+    const next = new Map<unknown, TreeNode>();
+    items.forEach((item, index) => {
+        let itemKey: unknown = key === undefined ? index : getValue(key, item, { ...itemOptions, from: item, root: element, permissionProcessor } as any);
+        if (next.has(itemKey)) {
+            if (!state.warned) {
+                console.warn(`builtIns.tree: duplicate key ${JSON.stringify(itemKey)} in a repeat; falling back to the index for duplicates`);
+                state.warned = true;
+            }
+            itemKey = Symbol.for(`builtIns.tree:index:${index}`);
+        }
+        let itemNode = state.items.get(itemKey);
+        // Removed or moved by other code: rebuild
+        if (itemNode && itemNode.element.parentNode !== container) itemNode = undefined;
+        next.set(itemKey, syncNode(itemNode, each, item, itemOptions, permissionProcessor));
+    });
+    for (const [itemKey, itemNode] of state.items) {
+        if (next.get(itemKey) !== itemNode && itemNode.element.parentNode === container) itemNode.element.remove();
+    }
+    state.items = next;
+
+    let elements = [...next.values()].map(n => n.element);
+    if (items.length === 0 && empty !== undefined) {
+        const current = state.empty?.element.parentNode === container ? state.empty : undefined;
+        state.empty = syncNode(current, empty, from, options, permissionProcessor);
+        elements = [state.empty.element];
+    } else if (state.empty) {
+        state.empty.element.remove();
+        state.empty = undefined;
+    }
+    placeChildren(container, elements);
+}
+
+/**
+ * Apply a node's own pattern, then sync its static children or its repeat, all against `from`.
+ */
+function bindContent(
+    node: TreeNode,
+    pattern: Pattern | undefined,
+    childSpecs: ElementSpecification[],
+    repeat: RepeatSpecification | undefined,
+    from: any
+): void {
     const { element, children, options, permissionProcessor } = node;
     applyPattern(element, pattern, from, options, permissionProcessor);
+    if (repeat) {
+        bindRepeat(node, repeat, from);
+        return;
+    }
     const container = containerOf(element);
     let misplaced = false;
     node.children = childSpecs.map((childSpec, i) => {
@@ -200,10 +301,10 @@ function bindContent(node: TreeNode, pattern: Pattern | undefined, childSpecs: E
 /** A manager's ctx.rebind(): re-apply the node's subtree against the manager instance. */
 function rebindNode(node: TreeNode): void {
     if (node.binding) return;
-    const [, , , pattern, childSpecs] = normalize(node.spec);
+    const [, , , pattern, childSpecs, repeat] = normalize(node.spec);
     node.binding = true;
     try {
-        bindContent(node, pattern, childSpecs, (node.element as any).ish);
+        bindContent(node, pattern, childSpecs, repeat, (node.element as any).ish);
     } finally {
         node.binding = false;
     }
@@ -215,11 +316,15 @@ function createNode(
     options: AssignFromOptions,
     permissionProcessor?: PermissionProcessor
 ): TreeNode {
-    const [, tag, ish, pattern, childSpecs] = normalize(spec);
+    const [, tag, ish, pattern, childSpecs, repeat] = normalize(spec);
     const element = document.createElement(tag);
     const node: TreeNode = { tag, ish, element, children: [], spec, options, permissionProcessor, binding: true };
     try {
         const from = ish === undefined ? value : attachManager(node, ish, value);
+        if (repeat) {
+            bindContent(node, pattern, childSpecs, repeat, from);
+            return node;
+        }
         applyPattern(element, pattern, from, options, permissionProcessor);
         const container = containerOf(element);
         node.children = childSpecs.map(childSpec => {
@@ -244,8 +349,9 @@ function syncNode(
     options: AssignFromOptions,
     permissionProcessor?: PermissionProcessor
 ): TreeNode {
-    const [, tag, ish, pattern, childSpecs] = normalize(spec);
-    if (!node || node.tag !== tag || node.ish !== ish || node.children.length !== childSpecs.length) {
+    const [, tag, ish, pattern, childSpecs, repeat] = normalize(spec);
+    if (!node || node.tag !== tag || node.ish !== ish || node.children.length !== childSpecs.length
+        || !!node.repeat !== !!repeat) {
         return createNode(spec, value, options, permissionProcessor);
     }
     Object.assign(node, { spec, options, permissionProcessor });
@@ -257,7 +363,7 @@ function syncNode(
             element.ish = value;
             from = element.ish;
         }
-        bindContent(node, pattern, childSpecs, from);
+        bindContent(node, pattern, childSpecs, repeat, from);
     } finally {
         node.binding = false;
     }
@@ -288,9 +394,9 @@ function getEntries(map: Record<string, ElementSpecification>, from: any): [stri
     }
     const wildcard = map[WILDCARD];
     if (wildcard === undefined || from === null || typeof from !== 'object') return entries;
-    const [header, , , pattern = DEFAULT_WILDCARD_PATTERN, children] = normalize(wildcard);
+    const [header, , , pattern = DEFAULT_WILDCARD_PATTERN, children, repeat] = normalize(wildcard);
     for (const key of Object.keys(from)) {
-        if (!(key in map)) entries.push([key, [header, pattern, children]]);
+        if (!(key in map)) entries.push([key, [header, pattern, repeat ?? children]]);
     }
     return entries;
 }
