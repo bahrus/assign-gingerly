@@ -154,5 +154,42 @@ crew: ['ul', { className: 'crew' }, {
 
 If this sequencing works for you, I'd start a `TreePhaseIII.md` (or similar) for the arrays design. Alternatively, I could do the small `ShadowRoot` target support first as a warm-up.
 
+## Bruce's Response
+
+Can you think of any other prerequisite features left before implementing this feature? 
+
+I think maybe what I would like to see first is if you can break down this entire "vision" into several steps as separate *.md, with the first step spelled out with more detail and any decisions that are needed, and the additional step files can start out more minimal, and adjust / fill out as we get there?
+
+One principle I would like to propose we adhere to that could complicate things:
+
+My timing experiments show it is a mistake to have nested templates.  It is more efficient to separate out the inner template so it is cloned as needed  separately.  Feel free to confirm and/or question this claim.  I'm not sure I was even that clear in expressing the principle.
+
+## Claude's Response -- Roadmap
+
+I broke the vision into step files in **[Compile/](./Compile/README.md)**:
+- [README](./Compile/README.md): overview, principles, and a prerequisites table;
+- [Step 1](./Compile/Step1-FragmentTargetsAndBaseline.md): detailed, with decisions needed;
+- Steps 2–6: deliberately minimal outlines, to fill in as we get there.
+
+**Other prerequisites:** two are left, and both go into Step 1.
+1. **`ShadowRoot` / `DocumentFragment` targets.** Tree still returns early unless the target is an `Element`. A component repeated thousands of times renders into shadow roots.
+2. **A Tree baseline benchmark.** `tests/benchmark.spec.ts` only covers `manageTemplateList`, so there's nothing to measure compiling against yet.
+
+Everything else compiling depends on is done (arrays with a repeat boundary, managers, text shorthand / `aka`, self-binding events, `$root` / `$parent`, pipes). Per-key `keepNullish` turns out not to be needed, because per-key templates make it independent. The README's table lists the details.
+
+**On nested templates:** I read the principle as *"a template should never contain another template that's only there to be cloned from; keep inner templates separate and clone them on demand"*. I agree.
+- **Why nesting costs:** cloning a `<template>` copies its `.content`, so a nested item template gets deep-copied on every outer clone, even though it's only ever used as a *source*.
+- **How flat avoids it:** each item is cloned from one shared, never-cloned template.
+- **Fit with the design:** this matches the per-key / per-repeat flat templates in the plan, so I've made it **Principle 1** in the README.
+- **The exception:** a `<template>` that the *spec itself* asks for (`['template', …]`) is output, not a compile artifact, so it's cloned like any other content.
+- **Still to confirm:** I haven't measured it myself, so Step 1 includes a nested-vs-flat micro-benchmark.
+
+**Step 1 decisions waiting on you** (details in the file):
+1. Accept any `DocumentFragment`, or only `ShadowRoot`? (I recommend any.)
+2. Leave event binding on a *shadow root itself* out for now? (I recommend yes.)
+3. Run the benchmarks in the default `npm test`? (I recommend Chromium only, informational.)
+4. Are a static-heavy card and a binding-heavy row the right shapes, or do you have a real component in mind?
+5. The go / no-go bar for compiling: I suggest ≥ 1.5× faster creation of 1,000 static-heavy instances, with no rebind regression.
+
 
 
