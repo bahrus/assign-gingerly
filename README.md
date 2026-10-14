@@ -106,6 +106,7 @@ assignFrom adds support for:
 9.  Multiple invocations of one `withMethods` method via the ` =*` operator — see [docs/multi-invoke.md](docs/multi-invoke.md).
 10. Enclosing-`from` references via `$root` and `$parent`, for patterns applied to a nested value (by `builtIns.tree`, `builtIns.manageTemplateList`, or your own nested calls through the `fromStack` option) — see [docs/root-references.md](docs/root-references.md).
 11. Pipes: named unary functions registered per call via the `pipes` option and used as RHS path segments, e.g. `'?.date?.parseDate?.longUtc'` — see [docs/pipes.md](docs/pipes.md).
+12. Attributes via the ` :=` operator (`'type :=': 'number'`, `'aria-describedby :=': ['?.hint', '?.error']`) — see [docs/attribute-operator.md](docs/attribute-operator.md).
 
 Example:
 
@@ -859,6 +860,7 @@ While we are in the business of passing values of object A into object B, we mig
 | ` =>` | Handler | Invoke a handler plugin (assignFrom only) | `'?.el =>': { do: 'builtIns.lazyLoad', ... }` |
 | ` =&` | Sync op | Compute a value synchronously and assign it back (assignFrom only) — no dynamic import, no await, ever — [details](docs/sync-ops.md) | `'?.text =&': { join: ['?.first', ' ', '?.last'] }` |
 | ` =*` | Multi-invoke | Call a `withMethods` method once per argument-list (assignFrom only) — [details](docs/multi-invoke.md) | `` '?.classList?.toggle =*': [['a', '!!?.x'], ['b', '!!?.y']] `` |
+| ` :=` | Attribute | Set (or, with `false` / `null`, remove) an attribute; arrays are space-joined; `on*` names are refused — [details](docs/attribute-operator.md) | `'aria-label :=': '?.label'` |
 
 All operators use a space before the suffix to distinguish them from property names. They compose with `?.` nested paths and `withMethods`.
 

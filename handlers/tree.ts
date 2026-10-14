@@ -49,7 +49,7 @@
  */
 
 import { assignFrom, categorizeKeys, handleSpreads, SUBSTITUTION_VARS } from '../assignFrom.js';
-import { assignGingerly, tryAssignTo } from '../assignGingerly.js';
+import { applyAttribute, assignGingerly, tryAssignTo } from '../assignGingerly.js';
 import { getValue, getValues, isEventBinding, isFromStackReference } from '../resolve/getValues.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
@@ -235,13 +235,22 @@ function applyPattern(
 // path for anything else.
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+/** A ` :=` key with a plain attribute name (no path): `'aria-label :='` → `aria-label`. */
+const ATTR_KEY = /^([A-Za-z_:][\w:.-]*) :=$/;
 
-/** One plain-key entry of a pattern: a literal, or a `?.` path (pre-split). */
-interface FastEntry {
-    key: string;
+/** A fast value: a literal, or a `?.` path (pre-split). */
+interface FastValue {
     literal: boolean;
     value: any;
     parts: string[];
+}
+
+/** One entry of a fast pattern: a plain property, or (`attr`) a ` :=` attribute. */
+interface FastEntry extends FastValue {
+    key: string;
+    attr: boolean;
+    /** For an attribute set from an array (space-joined tokens) */
+    items?: FastValue[];
 }
 
 /** Fast entries per pattern, or null when the pattern needs the general path. */
@@ -253,9 +262,20 @@ function isLiteralString(value: string): boolean {
         || value.startsWith('!') || value.includes('://'));
 }
 
+/** A primitive literal or a `?.` path → a fast value; anything else → null. */
+function compileFastValue(value: any): FastValue | null {
+    if (typeof value === 'string') {
+        if (value.startsWith('?.')) return { literal: false, value, parts: splitPath(value) };
+        return isLiteralString(value) ? { literal: true, value, parts: [] } : null;
+    }
+    if (value == null || typeof value === 'number' || typeof value === 'boolean') return { literal: true, value, parts: [] };
+    return null;
+}
+
 /**
- * Compile a pattern into fast entries: every key a plain identifier (not `ish`), every
- * value a primitive literal or a `?.` path. Anything else → null (general path).
+ * Compile a pattern into fast entries. Every key must be a plain identifier (not `ish`)
+ * or a ` :=` attribute key with a plain name. Every value must be a primitive literal or
+ * a `?.` path, and for attributes also an array of those. Anything else → null (general path).
  */
 function compileFastPattern(pattern: Pattern): FastEntry[] | null {
     let entries = fastPatterns.get(pattern);
@@ -263,16 +283,18 @@ function compileFastPattern(pattern: Pattern): FastEntry[] | null {
     entries = [];
     for (const key of Object.keys(pattern)) {
         const value = pattern[key];
-        if (!IDENTIFIER.test(key) || key === 'ish') { entries = null; break; }
-        if (typeof value === 'string') {
-            if (value.startsWith('?.')) {
-                entries.push({ key, literal: false, value, parts: value.split('?.').filter(p => p.length > 0) });
-            } else if (isLiteralString(value)) {
-                entries.push({ key, literal: true, value, parts: [] });
-            } else { entries = null; break; }
-        } else if (value == null || typeof value === 'number' || typeof value === 'boolean') {
-            entries.push({ key, literal: true, value, parts: [] });
-        } else { entries = null; break; }
+        const attrMatch = ATTR_KEY.exec(key);
+        if (!attrMatch && (!IDENTIFIER.test(key) || key === 'ish')) { entries = null; break; }
+        if (attrMatch && Array.isArray(value)) {
+            const items = value.map(compileFastValue);
+            if (items.some(item => item === null)) { entries = null; break; }
+            const fastItems = items as FastValue[];
+            entries.push({ key: attrMatch[1], attr: true, literal: fastItems.every(i => i.literal), value, parts: [], items: fastItems });
+            continue;
+        }
+        const fast = compileFastValue(value);
+        if (!fast) { entries = null; break; }
+        entries.push({ key: attrMatch ? attrMatch[1] : key, attr: !!attrMatch, ...fast });
     }
     fastPatterns.set(pattern, entries);
     return entries;
@@ -287,13 +309,6 @@ function fastPathAllowed(options: AssignFromOptions, permissionProcessor?: Permi
     return !SUBSTITUTION_VARS.some(({ optionKey }) => (options as any)[optionKey]?.length);
 }
 
-/**
- * Resolve and assign fast entries, mirroring getValues + assignGingerly for plain keys:
- * aliases apply to keys; a path segment that's aliased or names a pipe resolves through
- * getValue; plain-object values merge through assignGingerly; otherwise `tryAssignTo`
- * or a plain assignment. Returns false (before assigning anything) when an alias maps a
- * key to something that isn't a plain property.
- */
 /** Pre-split `?.` paths, cached by string. */
 const splitPaths = new Map<string, string[]>();
 
@@ -328,21 +343,36 @@ function resolvePath(
     return value;
 }
 
+/**
+ * Resolve and assign fast entries, mirroring getValues + assignGingerly:
+ * - aliases apply to keys (and attribute names);
+ * - a path segment that's aliased or names a pipe resolves through getValue;
+ * - attributes go through applyAttribute (the same function ` :=` uses);
+ * - plain-object property values merge through assignGingerly;
+ * - otherwise `tryAssignTo`, or a plain assignment.
+ * Returns false (before assigning anything) when an alias maps a property key to
+ * something that isn't a plain property.
+ */
 function applyFast(element: Element, entries: FastEntry[], from: any, options: AssignFromOptions, skipLiterals: boolean): boolean {
     const { aka } = options as any;
     if (aka) {
-        for (const { key } of entries) {
+        for (const { key, attr } of entries) {
             if (Object.hasOwn(aka, key)) {
                 const mapped = aka[key];
-                if (typeof mapped !== 'string' || !IDENTIFIER.test(mapped) || mapped === 'ish') return false;
+                if (typeof mapped !== 'string' || (!attr && (!IDENTIFIER.test(mapped) || mapped === 'ish'))) return false;
             }
         }
     }
     const target = element as any;
+    const resolve = (fast: FastValue) => fast.literal ? fast.value : resolvePath(fast.value, fast.parts, from, options, element, true);
     for (const entry of entries) {
         if (skipLiterals && entry.literal) continue;
         const key: string = aka && Object.hasOwn(aka, entry.key) ? aka[entry.key] : entry.key;
-        const value = entry.literal ? entry.value : resolvePath(entry.value, entry.parts, from, options, element, true);
+        if (entry.attr) {
+            applyAttribute(target, key, entry.items ? entry.items.map(resolve) : resolve(entry));
+            continue;
+        }
+        const value = resolve(entry);
         if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
             assignGingerly(target, { [key]: value }, { ...options, from, aka: undefined } as any);
         } else if (key === 'textContent') {

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>:= Attribute Operator Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+    #results { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>:= Attribute Operator Tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    import { assignGingerly, assignFrom, assignFromAsync } from '../index.js';
+    import { PermissionProcessor } from '../assignPermissions/PermissionProcessor.js';
+    import { strictDefaultPermissions } from '../DX/strictDefaultPermissions.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+
+    function assert(condition, message) {
+      if (condition) {
+        results.push(`<div class="pass">✓ ${message}</div>`);
+        passed++;
+      } else {
+        results.push(`<div class="fail">✗ ${message}</div>`);
+        failed++;
+        console.error('Failed:', message);
+      }
+    }
+
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) {
+        console.error(`Expected: ${expected}, Actual: ${actual}`);
+      }
+      assert(actual === expected, message);
+    }
+
+    /** Capture console.warn calls during fn */
+    function captureWarnings(fn) {
+      const warnings = [];
+      const { warn } = console;
+      console.warn = msg => warnings.push(String(msg));
+      try { fn(); } finally { console.warn = warn; }
+      return warnings;
+    }
+
+    const settle = () => new Promise(r => setTimeout(r, 30));
+
+    async function runTests() {
+      // Warm the on-demand modules used by the event-vector test
+      await import('../handlers/addEventListener.js');
+
+      // Test 1: value semantics
+      {
+        const el = document.createElement('input');
+        assignGingerly(el, { 'type :=': 'number', 'maxlength :=': 5, 'required :=': true, 'aria-hidden :=': false });
+        assertEquals(el.getAttribute('type'), 'number', 'string → setAttribute');
+        assertEquals(el.getAttribute('maxlength'), '5', 'number → String');
+        assertEquals(el.getAttribute('required'), '', 'true → empty attribute');
+        assertEquals(el.hasAttribute('aria-hidden'), false, 'false → not set');
+        assignGingerly(el, { 'required :=': false, 'type :=': null, 'maxlength :=': undefined });
+        assertEquals(el.hasAttribute('required') || el.hasAttribute('type') || el.hasAttribute('maxlength'), false, 'false / null / undefined → removeAttribute');
+      }
+
+      // Test 2: arrays — space-joined, nullish / false dropped, empty → removed
+      {
+        const el = document.createElement('div');
+        assignGingerly(el, { 'aria-describedby :=': ['hint', null, 'error', false, undefined] });
+        assertEquals(el.getAttribute('aria-describedby'), 'hint error', 'array → space-joined tokens');
+        assignGingerly(el, { 'aria-describedby :=': [null, false] });
+        assertEquals(el.hasAttribute('aria-describedby'), false, 'empty array (after filtering) → removed');
+      }
+
+      // Test 3: attributes with no property equivalent
+      {
+        const el = document.createElement('span');
+        assignGingerly(el, { 'itemprop :=': 'name', 'part :=': ['label', 'primary'] });
+        assertEquals(el.getAttribute('itemprop'), 'name', 'itemprop');
+        assertEquals(el.getAttribute('part'), 'label primary', 'part tokens');
+      }
+
+      // Test 4: paths — nested, method argument, @each
+      {
+        const host = document.createElement('div');
+        host.innerHTML = '<form><input><input></form>';
+        const holder = { field: host.querySelector('input') };
+        assignGingerly(holder, { '?.field?.placeholder :=': 'Name' });
+        assertEquals(holder.field.getAttribute('placeholder'), 'Name', 'nested property path');
+        assignGingerly(host, { '?.querySelector?.form?.novalidate :=': true }, { withMethods: ['querySelector'] });
+        assertEquals(host.querySelector('form').getAttribute('novalidate'), '', 'method-argument path');
+        assignGingerly({ inputs: [...host.querySelectorAll('input')] }, { '?.inputs?.@each?.autocomplete :=': 'off' });
+        assertEquals([...host.querySelectorAll('input')].map(i => i.getAttribute('autocomplete')).join(), 'off,off', '@each');
+      }
+
+      // Test 5: aka applies to the attribute name
+      {
+        const el = document.createElement('div');
+        assignGingerly(el, { 'lbl :=': 'Close' }, { aka: { lbl: 'aria-label' } });
+        assertEquals(el.getAttribute('aria-label'), 'Close', 'aliased attribute name');
+        assertEquals(el.hasAttribute('lbl'), false, 'alias itself not set');
+      }
+
+      // Test 6: on* attributes are always refused
+      {
+        for (const key of ['onclick :=', 'onClick :=', '?.child?.onload :=']) {
+          let error;
+          const target = key.startsWith('?.') ? { child: document.createElement('img') } : document.createElement('button');
+          try { assignGingerly(target, { [key]: 'alert(1)' }); } catch (e) { error = e; }
+          assert(error?.message.includes("refuses event-handler attribute"), `'${key}' throws`);
+        }
+      }
+
+      // Test 7: permissions — strict profile blocks unsafe URLs, allows same-domain
+      {
+        const pp = new PermissionProcessor(strictDefaultPermissions);
+        const a = document.createElement('a');
+        const warnings = captureWarnings(() => assignGingerly(a, { 'href :=': 'javascript:alert(1)' }, undefined, pp));
+        assertEquals(a.hasAttribute('href'), false, 'javascript: URL blocked');
+        assert(warnings.some(w => w.includes('href')), 'blocked with a warning');
+        assignGingerly(a, { 'href :=': '/page' }, undefined, pp);
+        assertEquals(a.getAttribute('href'), '/page', 'same-domain URL allowed');
+      }
+
+      // Test 8: non-elements and unsupported values warn, without throwing
+      {
+        const warnings = captureWarnings(() => {
+          assignGingerly({ plain: {} }, { '?.plain?.title :=': 'x' });
+          assignGingerly(document.createElement('div'), { 'title :=': { not: 'allowed' } });
+        });
+        assertEquals(warnings.length, 2, 'two warnings');
+      }
+
+      // Test 9: assignFrom / assignFromAsync resolve paths, including inside arrays
+      {
+        const el = document.createElement('div');
+        const vm = { label: 'Ready', hint: 'h1', error: null, on: true };
+        assignFrom(el, { 'aria-label :=': '?.label', 'aria-describedby :=': ['?.hint', '?.error'], 'aria-busy :=': '!?.on' }, { from: vm });
+        assertEquals(el.getAttribute('aria-label'), 'Ready', 'assignFrom: path value');
+        assertEquals(el.getAttribute('aria-describedby'), 'h1', 'assignFrom: paths inside an array, nullish dropped');
+        assertEquals(el.hasAttribute('aria-busy'), false, 'assignFrom: negated boolean → removed');
+        const el2 = document.createElement('div');
+        await assignFromAsync(el2, { 'data-id :=': '?.id' }, { from: { id: 7 } });
+        assertEquals(el2.getAttribute('data-id'), '7', 'assignFromAsync');
+      }
+
+      // Test 10: Tree — literal and bound attributes, rebind, removal, arrays (fast path)
+      {
+        const target = document.createElement('div');
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: {
+          field: ['input', { 'type :=': 'number', 'aria-label :=': '?.label', 'required :=': '?.required', 'aria-describedby :=': ['hint', '?.error'] }],
+        } } };
+        await assignFromAsync(target, cfg, { from: { field: { label: 'Qty', required: true, error: 'e1' } } });
+        const input = target.querySelector('input');
+        assertEquals(input.getAttribute('type'), 'number', 'Tree: literal attribute');
+        assertEquals(input.getAttribute('aria-label'), 'Qty', 'Tree: bound attribute');
+        assertEquals(input.getAttribute('required'), '', 'Tree: boolean attribute');
+        assertEquals(input.getAttribute('aria-describedby'), 'hint e1', 'Tree: array with literal and bound items');
+        await assignFromAsync(target, cfg, { from: { field: { label: 'Count', required: false, error: null } } });
+        assert(target.querySelector('input') === input, 'Tree: element reused');
+        assertEquals(input.getAttribute('aria-label'), 'Count', 'Tree: rebind updates the attribute');
+        assertEquals(input.hasAttribute('required'), false, 'Tree: false removes on rebind');
+        assertEquals(input.getAttribute('aria-describedby'), 'hint', 'Tree: array rebinds');
+      }
+
+      // Test 11: Tree slow path (withMethods present) gives the same result; tree aka applies to names
+      {
+        const target = document.createElement('div');
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.tree', aka: { lbl: 'aria-label' }, map: {
+          field: ['input', { 'lbl :=': '?.label', 'type :=': 'text' }],
+        } } }, { from: { field: { label: 'Slow' } }, withMethods: ['querySelector'] });
+        const input = target.querySelector('input');
+        assertEquals(input.getAttribute('aria-label'), 'Slow', 'Tree slow path + tree aka on the attribute name');
+        assertEquals(input.getAttribute('type'), 'text', 'Tree slow path literal');
+      }
+
+      // Test 12: event vector — toLHS sets an attribute on click
+      {
+        const button = document.createElement('button');
+        assignFrom(button, { ' +=': { on: 'click', toLHS: { 'aria-pressed :=': true } } }, { from: {} });
+        await settle();
+        button.click();
+        await settle();
+        assertEquals(button.getAttribute('aria-pressed'), '', 'event vector applies ' + "' :='");
+      }
+
+      const testComplete = document.getElementById('test-complete');
+      testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
+      testComplete.setAttribute('data-passed', passed);
+      testComplete.setAttribute('data-failed', failed);
+
+      results.push(`<h2>Summary: ${passed} passed, ${failed} failed</h2>`);
+      document.getElementById('results').innerHTML = results.join('');
+    }
+
+    runTests().catch(e => {
+      console.error('Test error:', e);
+      document.getElementById('results').innerHTML += `<div class="fail">Test suite error: ${e.message}</div>`;
+      document.getElementById('test-complete').setAttribute('data-status', 'error');
+    });
+  </script>
+</body>
+</html>

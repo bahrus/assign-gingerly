@@ -241,6 +241,66 @@ function isIncCommand(key) {
     return key.endsWith(' +=');
 }
 /**
+ * Helper function to check if a key is a ` :=` attribute command
+ */
+function isAttrCommand(key) {
+    return key.endsWith(' :=');
+}
+/**
+ * Helper function to parse a ` :=` command and extract the path (its last segment is the attribute name)
+ */
+function parseAttrCommand(key) {
+    if (!isAttrCommand(key)) {
+        return null;
+    }
+    return key.substring(0, key.length - 3); // Remove ' :=' suffix
+}
+/**
+ * Set or remove an attribute for a ` :=` command.
+ * - string / number / bigint → setAttribute(name, String(value))
+ * - true → setAttribute(name, '');  false / null / undefined → removeAttribute(name)
+ * - array → nullish / false items dropped, the rest space-joined; empty → removeAttribute(name)
+ * - anything else → not assigned (warning)
+ * Event-handler attributes (on*) are always refused; restricted attributes (permission
+ * processor) are skipped, for removal as well as for setting.
+ */
+export function applyAttribute(element, name, value, permissionProcessor) {
+    if (!(typeof Element !== 'undefined' && element instanceof Element)) {
+        console.warn(`assignGingerly: ' :=' target for attribute "${name}" is not an Element — skipped.`);
+        return;
+    }
+    if (/^on/i.test(name)) {
+        throw new Error(`assignGingerly: ' :=' refuses event-handler attribute "${name}"; use ' +=' with { on: '${name.slice(2).toLowerCase()}', … } instead`);
+    }
+    let text;
+    if (value === true) {
+        text = '';
+    }
+    else if (value === false || value == null) {
+        text = null;
+    }
+    else if (Array.isArray(value)) {
+        const tokens = value.filter(item => item != null && item !== false).map(String);
+        text = tokens.length > 0 ? tokens.join(' ') : null;
+    }
+    else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') {
+        text = String(value);
+    }
+    else {
+        console.warn(`assignGingerly: ' :=' value for attribute "${name}" must be a string, number, boolean, array or nullish (got ${typeof value}) — skipped.`);
+        return;
+    }
+    if (permissionProcessor?.checkRestrictedAttributeCall('setAttribute', [name, text ?? undefined]).blocked) {
+        return;
+    }
+    if (text === null) {
+        element.removeAttribute(name);
+    }
+    else {
+        element.setAttribute(name, text);
+    }
+}
+/**
  * Whether a ` +=` RHS is an event-binding config (an object with an `on` property).
  */
 function isEventConfig(value) {
@@ -694,6 +754,14 @@ function resolveValueToNegate(rhsPath, target) {
  * Handles withMethods and the evaluatePathWithMethods semantics.
  */
 function getIterableAtPath(target, pathParts, value, withMethods, permissionProcessor) {
+    const current = getValueAtPath(target, pathParts, value, withMethods, permissionProcessor);
+    return isIterable(current) ? current : undefined;
+}
+/**
+ * Navigate a path and return the value at its end (whatever its type).
+ * Handles withMethods and the evaluatePathWithMethods semantics; stops at null / undefined.
+ */
+function getValueAtPath(target, pathParts, value, withMethods, permissionProcessor) {
     let current = target;
     if (pathParts.length > 0) {
         if (withMethods && withMethods.size > 0) {
@@ -720,11 +788,13 @@ function getIterableAtPath(target, pathParts, value, withMethods, permissionProc
         }
         else {
             for (const part of pathParts) {
+                if (current == null)
+                    break;
                 current = current[part];
             }
         }
     }
-    return isIterable(current) ? current : undefined;
+    return current;
 }
 /**
  * Apply an operator command (+=, =!, -=, Y=) to each item in an iterable.
@@ -847,6 +917,27 @@ export function assignGingerly(target, source, options, permissionProcessor) {
     // First pass: handle all non-symbol keys and sync operations
     for (const key of Object.keys(processedSource)) {
         const value = processedSource[key];
+        // Handle := commands (attributes)
+        if (isAttrCommand(key)) {
+            const path = parseAttrCommand(key);
+            const pathParts = isNestedPath(path) ? parsePath(path) : path ? [path] : [];
+            if (pathParts.some(part => isForEachSymbol(part, aliasMap))) {
+                applyCommandToEach(target, pathParts, ' :=', value, withMethodsSet, aliasMap, options, permissionProcessor);
+                continue;
+            }
+            if (pathParts.length === 0) {
+                console.warn(`assignGingerly: ' :=' needs an attribute name (key "${key}") — skipped.`);
+                continue;
+            }
+            // The whole key was aliased before parsing, so its last segment still carried the suffix: alias the name now
+            const rawName = pathParts[pathParts.length - 1];
+            const name = aliasMap.get(rawName) ?? rawName;
+            const element = pathParts.length > 1
+                ? getValueAtPath(target, pathParts.slice(0, -1), value, withMethodsSet, permissionProcessor)
+                : target;
+            applyAttribute(element, name, value, permissionProcessor);
+            continue;
+        }
         // Handle += commands
         if (isIncCommand(key)) {
             const path = parseIncCommand(key);

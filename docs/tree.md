@@ -81,7 +81,7 @@ type Repeat = { each: ElementSpecification; of?: string; key?: string; empty?: E
 
 - **The whole VM** is available as `$parent` (and `$root`, for a top-level tree), at every depth: `'$parent?.upcoming'`. See [root-references.md](./root-references.md).
 - **`template` elements** receive their children in `.content`, not as light-DOM children.
-- **Patterns set properties** (via assignGingerly), not attributes.
+- **Patterns set properties** (via assignGingerly). For attributes, use the [` :=` operator](./attribute-operator.md): `{ 'class :=': 'card', 'aria-label :=': '?.label' }`. Literal ` :=` values are what a future compile step can bake into a template, so prefer them for statics.
 - **Formatting** (dates, units, conditional text) comes from [pipes](./pipes.md) passed in the options: `'?.date_utc?.parseDate?.longUtc'`.
 - **Don't combine `textContent` with children**: setting `textContent` replaces them. Tree puts them back on the next call, after the text.
 

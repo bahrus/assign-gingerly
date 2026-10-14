@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compile Benchmark</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 900px; padding: 0 1rem; color: #1d2330; }
+        .lede { color: #5b6475; }
+        table { border-collapse: collapse; width: 100%; font-size: 0.85rem; margin: 0.5rem 0 1.5rem; }
+        th, td { border-bottom: 1px solid #d9dee7; padding: 0.3rem 0.5rem; text-align: left; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        #stage { height: 100px; overflow: hidden; border: 1px dashed #d9dee7; }
+    </style>
+</head>
+<body>
+    <h1>Compile benchmark</h1>
+    <p class="lede">
+        Questions for the compile roadmap, Step 2 (no library involved; raw DOM only), using the static-heavy card from
+        <code>tree-benchmark.html</code> (16 elements, 3 bound values):
+        <strong>B3</strong> — static values baked into the template (as attributes / text) vs. applied after cloning
+        (as properties, or as attributes); <strong>B4</strong> — how to locate the bound nodes in a clone.
+        Median of several runs after a warmup; "build" excludes layout, "build + layout" forces one layout at the end.
+    </p>
+    <p id="status">Running…</p>
+    <div id="results"></div>
+    <div id="stage"></div>
+
+    <script type="module">
+        const stage = document.getElementById('stage');
+        const status = t => { document.getElementById('status').textContent = t; };
+        const median = xs => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+        const pause = () => new Promise(r => setTimeout(r, 0));
+        const data = n => Array.from({ length: n }, (_, i) => ({ name: `Rocket ${i}`, height: `${70 + (i % 10)} m`, mass: `${549054 + i} kg` }));
+        const tpl = html => Object.assign(document.createElement('template'), { innerHTML: html });
+
+        // ── The card, three ways ──────────────────────────────────────────────
+
+        // Everything static baked in: classes, ARIA, role, and literal text
+        const BAKED = tpl('<article class="card" aria-label="Item card">'
+            + '<header class="card-head"><h3 class="title"></h3><span class="badge" role="status">Active</span></header>'
+            + '<dl class="specs">'
+            + '<div class="row"><dt class="label">Height</dt><dd class="value"></dd></div>'
+            + '<div class="row"><dt class="label">Mass</dt><dd class="value"></dd></div>'
+            + '<div class="row"><dt class="label">Stages</dt><dd class="value">2</dd></div>'
+            + '</dl>'
+            + '<footer class="card-foot"><small class="muted">Data is illustrative</small></footer>'
+            + '</article>');
+
+        // Structure only: every static value applied after cloning
+        const BARE = tpl('<article><header><h3></h3><span></span></header>'
+            + '<dl><div><dt></dt><dd></dd></div><div><dt></dt><dd></dd></div><div><dt></dt><dd></dd></div></dl>'
+            + '<footer><small></small></footer></article>');
+
+        // Baked, plus a marker attribute on each bound node (for the querySelector strategy)
+        const MARKED = tpl(BAKED.innerHTML
+            .replace('<h3 class="title">', '<h3 class="title" data-b="0">')
+            .replace('<dt class="label">Height</dt><dd class="value">', '<dt class="label">Height</dt><dd class="value" data-b="1">')
+            .replace('<dt class="label">Mass</dt><dd class="value">', '<dt class="label">Mass</dt><dd class="value" data-b="2">'));
+
+        // Child-element index paths from the card root, in preorder
+        const PATHS = { title: [0, 0], height: [1, 0, 1], mass: [1, 1, 1] };
+        // Static values: [path, property, value] (and the attribute equivalent)
+        const STATICS = [
+            [[], 'className', 'card'], [[], 'ariaLabel', 'Item card'],
+            [[0], 'className', 'card-head'], [[0, 0], 'className', 'title'],
+            [[0, 1], 'className', 'badge'], [[0, 1], 'role', 'status'], [[0, 1], 'textContent', 'Active'],
+            [[1], 'className', 'specs'],
+            [[1, 0], 'className', 'row'], [[1, 0, 0], 'className', 'label'], [[1, 0, 0], 'textContent', 'Height'], [[1, 0, 1], 'className', 'value'],
+            [[1, 1], 'className', 'row'], [[1, 1, 0], 'className', 'label'], [[1, 1, 0], 'textContent', 'Mass'], [[1, 1, 1], 'className', 'value'],
+            [[1, 2], 'className', 'row'], [[1, 2, 0], 'className', 'label'], [[1, 2, 0], 'textContent', 'Stages'],
+            [[1, 2, 1], 'className', 'value'], [[1, 2, 1], 'textContent', '2'],
+            [[2], 'className', 'card-foot'], [[2, 0], 'className', 'muted'], [[2, 0], 'textContent', 'Data is illustrative'],
+        ];
+        const ATTR = { className: 'class', ariaLabel: 'aria-label', role: 'role' };
+
+        // ── Locating nodes ────────────────────────────────────────────────────
+
+        /** Index path via the `children` collection. */
+        const byChildren = (root, path) => {
+            let el = root;
+            for (const i of path) el = el.children[i];
+            return el;
+        };
+        /** Index path by stepping firstElementChild / nextElementSibling. */
+        const byStepping = (root, path) => {
+            let el = root;
+            for (let i of path) {
+                el = el.firstElementChild;
+                while (i-- > 0) el = el.nextElementSibling;
+            }
+            return el;
+        };
+        /** Preorder positions of the bound nodes (title, height, mass) among all 16 elements. */
+        const PREORDER = [2, 7, 10];
+        /** Walk every element in preorder (recursive), collecting the bound positions. */
+        const byPreorderWalk = root => {
+            const found = [];
+            let index = 0;
+            let next = 0;
+            (function visit(el) {
+                if (index++ === PREORDER[next]) found[next++] = el;
+                for (let c = el.firstElementChild; c; c = c.nextElementSibling) visit(c);
+            })(root);
+            return found;
+        };
+        /** Walk with a TreeWalker over elements. */
+        const byTreeWalker = root => {
+            const found = [];
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+            let index = 0;
+            let next = 0;
+            for (let el = root; el && next < PREORDER.length; el = walker.nextNode(), index++) {
+                if (index === PREORDER[next]) found[next++] = el;
+            }
+            return found;
+        };
+
+        const setText = (el, v) => { el.textContent = v; };
+
+        // ── Variants ──────────────────────────────────────────────────────────
+
+        const B3 = {
+            'baked (attributes / text in template)': item => {
+                const card = BAKED.content.firstElementChild.cloneNode(true);
+                setText(byChildren(card, PATHS.title), item.name);
+                setText(byChildren(card, PATHS.height), item.height);
+                setText(byChildren(card, PATHS.mass), item.mass);
+                return card;
+            },
+            'statics as properties after clone': item => {
+                const card = BARE.content.firstElementChild.cloneNode(true);
+                for (const [path, prop, value] of STATICS) byChildren(card, path)[prop] = value;
+                setText(byChildren(card, PATHS.title), item.name);
+                setText(byChildren(card, PATHS.height), item.height);
+                setText(byChildren(card, PATHS.mass), item.mass);
+                return card;
+            },
+            'statics as setAttribute after clone': item => {
+                const card = BARE.content.firstElementChild.cloneNode(true);
+                for (const [path, prop, value] of STATICS) {
+                    const el = byChildren(card, path);
+                    if (prop === 'textContent') el.textContent = value;
+                    else el.setAttribute(ATTR[prop], value);
+                }
+                setText(byChildren(card, PATHS.title), item.name);
+                setText(byChildren(card, PATHS.height), item.height);
+                setText(byChildren(card, PATHS.mass), item.mass);
+                return card;
+            },
+        };
+
+        const B4 = {
+            'index paths: children[i]': item => {
+                const card = BAKED.content.firstElementChild.cloneNode(true);
+                setText(byChildren(card, PATHS.title), item.name);
+                setText(byChildren(card, PATHS.height), item.height);
+                setText(byChildren(card, PATHS.mass), item.mass);
+                return card;
+            },
+            'index paths: element stepping': item => {
+                const card = BAKED.content.firstElementChild.cloneNode(true);
+                setText(byStepping(card, PATHS.title), item.name);
+                setText(byStepping(card, PATHS.height), item.height);
+                setText(byStepping(card, PATHS.mass), item.mass);
+                return card;
+            },
+            'preorder walk (recursive)': item => {
+                const card = BAKED.content.firstElementChild.cloneNode(true);
+                const [title, height, mass] = byPreorderWalk(card);
+                setText(title, item.name); setText(height, item.height); setText(mass, item.mass);
+                return card;
+            },
+            'preorder walk (TreeWalker)': item => {
+                const card = BAKED.content.firstElementChild.cloneNode(true);
+                const [title, height, mass] = byTreeWalker(card);
+                setText(title, item.name); setText(height, item.height); setText(mass, item.mass);
+                return card;
+            },
+            'marker attributes + querySelectorAll': item => {
+                const card = MARKED.content.firstElementChild.cloneNode(true);
+                const [title, height, mass] = card.querySelectorAll('[data-b]');
+                setText(title, item.name); setText(height, item.height); setText(mass, item.mass);
+                return card;
+            },
+        };
+
+        // ── Sanity: every variant produces the same DOM (marker attributes aside) ──
+
+        function check(variants) {
+            const item = data(1)[0];
+            const html = el => el.outerHTML.replace(/ data-b="\d"/g, '').replace(/ aria-label="Item card"/, ' aria-label="Item card"');
+            const reference = html(Object.values(variants)[0](item));
+            for (const [name, build] of Object.entries(variants)) {
+                const got = html(build(item));
+                // Attribute order can differ between baked and assigned variants; compare normalized
+                const normalize = s => s.replace(/<(\w+)([^>]*)>/g, (_, tag, attrs) => `<${tag}${attrs.trim().split(/\s+(?=[\w-]+=)/).filter(Boolean).sort().map(a => ' ' + a).join('')}>`);
+                if (normalize(got) !== normalize(reference)) throw new Error(`"${name}" builds different DOM:\n${got}\nvs\n${reference}`);
+            }
+        }
+
+        // ── Timing ────────────────────────────────────────────────────────────
+
+        async function measure(build, n, layout, runs = 7, warmup = 2) {
+            const items = data(n);
+            const samples = [];
+            for (let r = 0; r < warmup + runs; r++) {
+                stage.replaceChildren();
+                await pause();
+                const start = performance.now();
+                const fragment = document.createDocumentFragment();
+                for (const item of items) fragment.append(build(item));
+                stage.append(fragment);
+                if (layout) void stage.offsetHeight;
+                const elapsed = performance.now() - start;
+                if (r >= warmup) samples.push(elapsed);
+            }
+            stage.replaceChildren();
+            return median(samples);
+        }
+
+        const results = [];
+        async function runGroup(group, variants) {
+            check(variants);
+            for (const n of [1000, 10000]) {
+                for (const layout of [false, true]) {
+                    for (const [name, build] of Object.entries(variants)) {
+                        status(`${group}: ${name}, ${n.toLocaleString()}${layout ? ' + layout' : ''}…`);
+                        results.push({ group, variant: name, n, layout, ms: await measure(build, n, layout, n > 1000 ? 5 : 7) });
+                    }
+                }
+            }
+        }
+
+        function report() {
+            const container = document.getElementById('results');
+            for (const group of ['B3', 'B4']) {
+                const rows = results.filter(r => r.group === group);
+                const variants = [...new Set(rows.map(r => r.variant))];
+                const cols = [[1000, false], [1000, true], [10000, false], [10000, true]];
+                const table = document.createElement('table');
+                const head = table.createTHead().insertRow();
+                for (const t of ['Variant', ...cols.map(([n, l]) => `${n.toLocaleString()}${l ? ' + layout' : ' build'}`)]) {
+                    head.appendChild(Object.assign(document.createElement('th'), { textContent: t }));
+                }
+                const body = table.createTBody();
+                for (const v of variants) {
+                    const tr = body.insertRow();
+                    tr.insertCell().textContent = v;
+                    for (const [n, l] of cols) {
+                        const r = rows.find(x => x.variant === v && x.n === n && x.layout === l);
+                        const base = rows.find(x => x.variant === variants[0] && x.n === n && x.layout === l);
+                        Object.assign(tr.insertCell(), { className: 'num', textContent: `${r.ms.toFixed(1)} (${(r.ms / base.ms).toFixed(2)}×)` });
+                    }
+                }
+                container.append(Object.assign(document.createElement('h2'), {
+                    textContent: group === 'B3' ? 'B3 — baked statics vs. applied after cloning (ms, × baked)' : 'B4 — locating bound nodes in a clone (ms, × children[i])',
+                }), table);
+            }
+        }
+
+        try {
+            await runGroup('B3', B3);
+            await runGroup('B4', B4);
+            report();
+            window.__compileBench = results;
+            status('Done.');
+        } catch (err) {
+            console.error(err);
+            status(`Error: ${err.message}`);
+            window.__compileBenchError = err.message;
+        }
+    </script>
+</body>
+</html>
