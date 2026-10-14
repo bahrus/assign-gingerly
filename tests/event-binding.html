@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>+= Event Binding Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+    #results { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>+= Event Binding Tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    import { assignFrom, assignFromAsync, assignGingerly } from '../index.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+
+    function assert(condition, message) {
+      if (condition) {
+        results.push(`<div class="pass">✓ ${message}</div>`);
+        passed++;
+      } else {
+        results.push(`<div class="fail">✗ ${message}</div>`);
+        failed++;
+        console.error('Failed:', message);
+      }
+    }
+
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) {
+        console.error(`Expected: ${expected}, Actual: ${actual}`);
+      }
+      assert(actual === expected, message);
+    }
+
+    // Listeners attach after a dynamic import (fire-and-forget), so give them a moment
+    const settle = () => new Promise(r => setTimeout(r, 30));
+
+    function makeRoot() {
+      const root = document.createElement('div');
+      root.innerHTML = '<button data-diff="5">+5</button>';
+      return root;
+    }
+
+    async function runTests() {
+      // Warm the on-demand modules so the short settle() waits aren't racing a first-time fetch
+      await import('../handlers/addEventListener.js');
+      await import('../assignFrom.js');
+
+      // Test 1: the documented example — querySelector LHS, static vector, fromLHS at event time
+      {
+        const root = makeRoot();
+        const host = { age: 10, isHappy: false };
+        assignFrom(root, {
+          '?.querySelector?.button +=': {
+            on: 'click',
+            '?.isHappy =!': '.',
+            fromLHS: { '?.age +=': '?.dataset?.diff' },
+          },
+        }, { from: host, withMethods: ['querySelector'] });
+        await settle();
+        root.querySelector('button').click();
+        await settle();
+        assertEquals(host.isHappy, true, "'?.querySelector?.button +=' attaches the listener (static vector ran)");
+        assertEquals(host.age, 15, 'fromLHS resolved against the button at event time (10 += "5")');
+      }
+
+      // Test 2: same through assignFromAsync
+      {
+        const root = makeRoot();
+        const host = { count: 0 };
+        await assignFromAsync(root, {
+          '?.querySelector?.button +=': { on: 'click', fromLHS: { '?.lastDiff': '?.dataset?.diff' }, '?.count +=': 1 },
+        }, { from: host, withMethods: ['querySelector'] });
+        await settle();
+        root.querySelector('button').click();
+        await settle();
+        assertEquals(host.lastDiff, '5', 'assignFromAsync: fromLHS resolved at event time');
+        assertEquals(host.count, 1, 'assignFromAsync: static vector ran');
+      }
+
+      // Test 3: get is still resolved at bind time (abortController from the host)
+      {
+        const root = makeRoot();
+        const controller = new AbortController();
+        const host = { count: 0, controller };
+        assignFrom(root, {
+          '?.querySelector?.button +=': { on: 'click', get: { abortController: '?.controller' }, '?.count +=': 1 },
+        }, { from: host, withMethods: ['querySelector'] });
+        await settle();
+        root.querySelector('button').click();
+        controller.abort();
+        root.querySelector('button').click();
+        await settle();
+        assertEquals(host.count, 1, 'get.abortController resolved from the host; abort removes the listener');
+      }
+
+      // Test 4: binding on the target itself (' +=' and '?. +=')
+      {
+        for (const key of [' +=', '?. +=']) {
+          const button = document.createElement('button');
+          const host = { clicks: 0 };
+          assignFrom(button, { [key]: { on: 'click', '?.clicks +=': 1 } }, { from: host });
+          await settle();
+          button.click();
+          await settle();
+          assertEquals(host.clicks, 1, `'${key}' binds on the target itself`);
+        }
+      }
+
+      // Test 5: call shorthand — host method with the event, before the vectors
+      {
+        const root = makeRoot();
+        const order = [];
+        const host = {
+          count: 0,
+          increase(event) { order.push(`call:${event.type}`); this.count++; },
+        };
+        assignFrom(root, {
+          '?.querySelector?.button +=': { on: 'click', call: 'increase', fromHost: { '?.seen': '?.count' } },
+        }, { from: host, withMethods: ['querySelector'] });
+        await settle();
+        root.querySelector('button').click();
+        await settle();
+        assertEquals(order.join(), 'call:click', 'call invokes the host method with the event');
+        assertEquals(host.count, 1, 'method ran once');
+        assertEquals(host.seen, 1, 'vectors run after the call');
+      }
+
+      // Test 6: ' Y=' through a method-argument path merges into the call's result
+      {
+        const root = makeRoot();
+        assignGingerly(root, { '?.querySelector?.button Y=': { title: 'merged' } }, { withMethods: ['querySelector'] });
+        assertEquals(root.querySelector('button').title, 'merged', "' Y=' with a '?.querySelector?.button' LHS");
+      }
+
+      const testComplete = document.getElementById('test-complete');
+      testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
+      testComplete.setAttribute('data-passed', passed);
+      testComplete.setAttribute('data-failed', failed);
+
+      results.push(`<h2>Summary: ${passed} passed, ${failed} failed</h2>`);
+      document.getElementById('results').innerHTML = results.join('');
+    }
+
+    runTests().catch(e => {
+      console.error('Test error:', e);
+      document.getElementById('results').innerHTML += `<div class="fail">Test suite error: ${e.message}</div>`;
+      document.getElementById('test-complete').setAttribute('data-status', 'error');
+    });
+  </script>
+</body>
+</html>

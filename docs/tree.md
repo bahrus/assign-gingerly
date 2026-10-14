@@ -165,6 +165,23 @@ Calls made while Tree itself is binding that element (for example from the const
 
 See [demos/tree-demo.html](../demos/tree-demo.html): the rocket card and the links bar each have a manager.
 
+## Events
+
+An element's own pattern can bind its events with an empty ` +=` LHS. The listener's **host is the element's `from`** — inside a manager subtree, the manager instance — so a button can call a manager method directly:
+
+```JavaScript
+rocket: [{ tag: 'section', ish: 'rocket-manager' }, {}, [
+    ['span', '?.heightLabel'],
+    ['button', { _: 'Increase by one', ' +=': { on: 'click', call: 'increaseHeightByOne' } }],
+]]
+```
+
+- No `itemscope` attribute or DOM host lookup is involved; the host comes from the data context.
+- **Reruns don't stack listeners:** Tree gives each `' +='` binding without a `get.key` a default dedup key, so re-applying the pattern replaces the listener (and its host is always the current `from` — which matters outside manager subtrees, where the VM value changes between calls).
+- The manager method typically updates its own state and calls `ctx.rebind()`.
+
+See [event-binding.md](./event-binding.md) for the full ` +=` event syntax.
+
 ## Keys
 
 | Situation | Behavior |

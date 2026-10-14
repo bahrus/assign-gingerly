@@ -49,7 +49,7 @@
  */
 import { assignFrom, categorizeKeys, handleSpreads, SUBSTITUTION_VARS } from '../assignFrom.js';
 import { assignGingerly } from '../assignGingerly.js';
-import { getValue, getValues } from '../resolve/getValues.js';
+import { getValue, getValues, isEventBinding } from '../resolve/getValues.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 const DEFAULT_MARKER_NAME = 'tree';
@@ -59,6 +59,29 @@ const DEFAULT_WILDCARD_PATTERN = { textContent: '?.' };
 const treeStates = new WeakMap();
 /** Whether a pattern only has plain keys, so it can skip assignFrom's key categorization. */
 const plainPatterns = new WeakMap();
+/** Patterns whose ` +=` event bindings got a default dedup key (identity when there were none). */
+const eventKeyedPatterns = new WeakMap();
+/**
+ * Give each ` +=` event binding without a `get.key` a default one, so re-applying the
+ * pattern on a rerun replaces the element's listener instead of adding another (and the
+ * listener's host is always the current `from`).
+ */
+function withEventKeys(pattern) {
+    let keyed = eventKeyedPatterns.get(pattern);
+    if (keyed)
+        return keyed;
+    keyed = pattern;
+    for (const key of Object.keys(pattern)) {
+        const value = pattern[key];
+        if (isEventBinding(key, value) && value.get?.key === undefined) {
+            if (keyed === pattern)
+                keyed = { ...pattern };
+            keyed[key] = { ...value, get: { ...value.get, key: `builtIns.tree:${key}` } };
+        }
+    }
+    eventKeyedPatterns.set(pattern, keyed);
+    return keyed;
+}
 /** `{ textContent: text }` patterns for string shorthand, one object per string (so pattern caches hit). */
 const textPatterns = new Map();
 /** A string in the pattern slot is shorthand for `{ textContent: string }`. */
@@ -111,6 +134,7 @@ function containerOf(element) {
 function applyPattern(element, pattern, from, options, permissionProcessor) {
     if (!pattern)
         return;
+    pattern = withEventKeys(pattern);
     const nodeOptions = { ...options, from };
     let plain = plainPatterns.get(pattern);
     if (plain === undefined) {

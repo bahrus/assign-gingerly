@@ -241,6 +241,21 @@ function isIncCommand(key) {
     return key.endsWith(' +=');
 }
 /**
+ * Whether a ` +=` RHS is an event-binding config (an object with an `on` property).
+ */
+function isEventConfig(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value) && 'on' in value;
+}
+/**
+ * Attach an event listener for a ` +=` event-binding config (handler module loaded on demand).
+ * The host is `options.from` (the view model), falling back to the target.
+ */
+function bindEvent(lhs, config, target, options, permissionProcessor) {
+    import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
+        attachEventListener(lhs, config, target, options?.from ?? target, options ?? {}, permissionProcessor);
+    });
+}
+/**
  * Helper function to parse an += command and extract the path
  */
 function parseIncCommand(key) {
@@ -835,6 +850,13 @@ export function assignGingerly(target, source, options, permissionProcessor) {
         // Handle += commands
         if (isIncCommand(key)) {
             const path = parseIncCommand(key);
+            // Empty LHS (' +=' or '?. +='): the target itself — only meaningful for event binding
+            if (path === '' || path === '?.') {
+                if (target instanceof Element && isEventConfig(value)) {
+                    bindEvent(target, value, target, options, permissionProcessor);
+                }
+                continue;
+            }
             if (path) {
                 if (isNestedPath(path)) {
                     const pathParts = parsePath(path);
@@ -849,6 +871,14 @@ export function assignGingerly(target, source, options, permissionProcessor) {
                     let lhsKey;
                     if (withMethodsSet) {
                         const result = evaluatePathWithMethods(target, pathParts, value, withMethodsSet, permissionProcessor);
+                        if (result.lastSegmentConsumed) {
+                            // The last segment was a method's argument ('?.querySelector?.button'): the call's
+                            // result is the LHS, and there's no parent/key to add a value to — event binding only
+                            if (result.target instanceof Element && isEventConfig(value)) {
+                                bindEvent(result.target, value, target, options, permissionProcessor);
+                            }
+                            continue;
+                        }
                         lhsParent = result.target;
                         lhsKey = result.lastKey;
                         lhsValue = lhsParent[lhsKey];
@@ -863,14 +893,8 @@ export function assignGingerly(target, source, options, permissionProcessor) {
                         continue;
                     }
                     // Event handler: Element LHS + object RHS with 'on' property
-                    if (lhsValue instanceof Element && value && typeof value === 'object' && !Array.isArray(value) && 'on' in value) {
-                        const capturedLhs = lhsValue;
-                        const capturedValue = value;
-                        const capturedTarget = target;
-                        const capturedOptions = options;
-                        import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
-                            attachEventListener(capturedLhs, capturedValue, capturedTarget, capturedOptions?.from ?? capturedTarget, capturedOptions ?? {}, permissionProcessor);
-                        });
+                    if (lhsValue instanceof Element && isEventConfig(value)) {
+                        bindEvent(lhsValue, value, target, options, permissionProcessor);
                         continue;
                     }
                     if (!(lhsKey in lhsParent)) {
@@ -886,14 +910,8 @@ export function assignGingerly(target, source, options, permissionProcessor) {
                         continue;
                     }
                     // Event handler: Element LHS + object RHS with 'on' property
-                    if (target[path] instanceof Element && value && typeof value === 'object' && !Array.isArray(value) && 'on' in value) {
-                        const capturedLhs = target[path];
-                        const capturedValue = value;
-                        const capturedTarget = target;
-                        const capturedOptions = options;
-                        import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
-                            attachEventListener(capturedLhs, capturedValue, capturedTarget, capturedOptions?.from ?? capturedTarget, capturedOptions ?? {}, permissionProcessor);
-                        });
+                    if (target[path] instanceof Element && isEventConfig(value)) {
+                        bindEvent(target[path], value, target, options, permissionProcessor);
                         continue;
                     }
                     if (!(path in target)) {
@@ -1025,7 +1043,8 @@ export function assignGingerly(target, source, options, permissionProcessor) {
                 if (isNestedPath(path)) {
                     if (withMethodsSet) {
                         const result = evaluatePathWithMethods(target, parsePath(path), value, withMethodsSet, permissionProcessor);
-                        mergeTarget = result.target[result.lastKey];
+                        // A last segment consumed as a method's argument means the call's result is the target
+                        mergeTarget = result.lastSegmentConsumed ? result.target : result.target[result.lastKey];
                     }
                     else {
                         const pathParts = parsePath(path);

@@ -16,12 +16,31 @@ assignFrom(this.shadowRoot, {
 }, { from: this, withMethods: ['querySelector'] });
 ```
 
+### Binding on the target itself
+
+An empty LHS — `' +='` or `'?. +='` — binds the listener on the target (the first argument) itself. That's how an element's own pattern binds its events, e.g. in [`builtIns.tree`](./tree.md):
+
+```JavaScript
+['button', { textContent: 'Increase by one', ' +=': { on: 'click', call: 'increaseHeightByOne' } }]
+```
+
+## Calling a Host Method: `call`
+
+`call` names a method on the host (`options.from`), invoked with the event before any assignment vectors run:
+
+```JavaScript
+'?.querySelector?.button +=': { on: 'click', call: 'increase' }
+// on click: host.increase(event)
+```
+
+No `withMethods` entry is needed. A restricted method (per the permission processor) is skipped; a name that isn't a method on the host throws inside the listener.
+
 ## Concepts
 
 | Term | Meaning |
 |------|---------|
 | **Target** | First argument to `assignFrom` (often `shadowRoot`) |
-| **Host** | `options.from` — the source/view model (often the custom element `this`) |
+| **Host** | `options.from` — the source/view model (often the custom element `this`). Inside a `builtIns.tree` manager subtree, that's the manager instance. |
 | **LHS** | The element resolved by the left-hand-side path — receives the event listener |
 
 ## Assignment Vectors
@@ -128,6 +147,10 @@ fromLHS: {
     withOptions: { withMethods: ['querySelector'] }  // override for this vector only
 }
 ```
+
+### When paths are resolved
+
+The `get` block is resolved when the listener is **attached** (e.g. `abortController: '?.myController'` from the host). Everything else — static keys and the `fromLHS` / `fromHost` / `fromTarget` / `fromEvent` vectors — is resolved when the event **fires**, against that vector's source (`assignFrom` and `assignFromAsync` leave event configs unresolved for this reason).
 
 ## How It Works
 

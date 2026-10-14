@@ -15,7 +15,7 @@ const keyMap = new WeakMap();
  * Reserved keys that are not shorthand assign patterns.
  */
 const RESERVED_KEYS = new Set([
-    'on', 'get', 'fromLHS', 'fromHost', 'fromEvent', 'fromTarget',
+    'on', 'call', 'get', 'fromLHS', 'fromHost', 'fromEvent', 'fromTarget',
     'toTarget', 'toHost', 'toLHS', 'withOptions', 'toTargetOptions',
     'toHostOptions', 'toLHSOptions', 'dispatch', 'nudge'
 ]);
@@ -50,7 +50,7 @@ function processVector(vector, source, target, host, lhs, inheritedOptions, useA
         if (useAssignFrom && source != null) {
             // Dynamic import assignFrom on demand (fire-and-forget context, already async)
             import('../assignFrom.js').then(({ assignFrom }) => {
-                assignFrom(dest, pattern, { from: source, ...inheritedOptions, ...vector.withOptions }, permissionProcessor);
+                assignFrom(dest, pattern, { ...inheritedOptions, ...vector.withOptions, from: source }, permissionProcessor);
             });
         }
         else {
@@ -62,7 +62,7 @@ function processVector(vector, source, target, host, lhs, inheritedOptions, useA
     if (shorthand) {
         if (useAssignFrom && source != null) {
             import('../assignFrom.js').then(({ assignFrom }) => {
-                assignFrom(host, shorthand, { from: source, ...inheritedOptions, ...vector.withOptions }, permissionProcessor);
+                assignFrom(host, shorthand, { ...inheritedOptions, ...vector.withOptions, from: source }, permissionProcessor);
             });
         }
         else {
@@ -80,7 +80,7 @@ function processVector(vector, source, target, host, lhs, inheritedOptions, useA
  * @param inheritedOptions - Parent assignFrom options (withMethods, aka, etc.)
  */
 export function attachEventListener(lhs, config, target, host, inheritedOptions, permissionProcessor) {
-    const { on: eventName, get: getConfig, fromLHS, fromHost, fromTarget, fromEvent, dispatch } = config;
+    const { on: eventName, call, get: getConfig, fromLHS, fromHost, fromTarget, fromEvent, dispatch } = config;
     // Resolve get config values
     const { abortController, key, nudge, options: listenerOptions, stopPropagation, preventDefault, dispatch: getDispatch } = getConfig ?? {};
     // Handle dedup via key
@@ -111,6 +111,14 @@ export function attachEventListener(lhs, config, target, host, inheritedOptions,
             event.stopPropagation();
         if (preventDefault)
             event.preventDefault();
+        // call: invoke a host method with the event (respecting restricted methods)
+        if (call && !permissionProcessor?.checkRestrictedMethod(call)) {
+            const method = host?.[call];
+            if (typeof method !== 'function') {
+                throw new Error(`addEventListener: call "${call}" is not a method on the host`);
+            }
+            method.call(host, event);
+        }
         // Static assignments (no from) — top-level toTarget/toHost/toLHS + shorthand
         processVector(config, null, target, host, lhs, inheritedOptions, false, permissionProcessor);
         // fromLHS assignments

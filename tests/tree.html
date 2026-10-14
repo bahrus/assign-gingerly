@@ -611,6 +611,59 @@
         assertEquals(host.querySelector('ul > li')?.textContent, 'via alias', "' =>' LHS path uses akaMethods");
       }
 
+      // ── Events ────────────────────────────────────────────────────────────
+
+      const settle = () => new Promise(r => setTimeout(r, 30));
+      // Warm the on-demand listener module so settle() isn't racing a first-time fetch
+      await import('../handlers/addEventListener.js');
+
+      // Test 34: a button bound to a manager method — host is the manager, no listener build-up on reruns
+      {
+        class Counter {
+          static is = 'tree-test-counter';
+          #extra = 0; #rebind; calls = 0;
+          constructor(el, initVals, { rebind }) { Object.assign(this, initVals); this.#rebind = rebind; }
+          increase() { this.calls++; this.#extra++; this.#rebind(); }
+          get label() { return `${this.meters + this.#extra} m`; }
+        }
+        const target = details();
+        const cfg = { '?. =>': { do: 'builtIns.tree', aka: { _: 'textContent' }, map: {
+          height: [{ tag: 'div', ish: Counter }, {}, [
+            ['span', '?.label'],
+            ['button', { _: 'Increase by one', ' +=': { on: 'click', call: 'increase' } }],
+          ]],
+        } } };
+        await assignFromAsync(target, cfg, { from: { height: { meters: 70 } } });
+        await settle();
+        const button = target.querySelector('button');
+        button.click();
+        assertEquals(target.querySelector('span')?.textContent, '71 m', 'click calls the manager method; ctx.rebind() updates the label');
+        await assignFromAsync(target, cfg, { from: { height: { meters: 70 } } });
+        await assignFromAsync(target, cfg, { from: { height: { meters: 70 } } });
+        await settle();
+        const manager = target.querySelector('div').ish;
+        const before = manager.calls;
+        button.click();
+        assertEquals(manager.calls - before, 1, 'one call per click after reruns (default dedup key)');
+        assertEquals(target.querySelector('span')?.textContent, '72 m', 'manager state survives reruns');
+      }
+
+      // Test 35: without a manager, the listener's host follows the current VM value across reruns
+      {
+        const target = details();
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: {
+          item: ['button', { ' +=': { on: 'click', '?.clicked': true } }],
+        } } };
+        const first = { item: { id: 1 } };
+        const second = { item: { id: 2 } };
+        await assignFromAsync(target, cfg, { from: first });
+        await assignFromAsync(target, cfg, { from: second });
+        await settle();
+        target.querySelector('button').click();
+        assertEquals(second.item.clicked, true, 'host is the latest value');
+        assertEquals(first.item.clicked, undefined, 'the stale value is not touched');
+      }
+
       const testComplete = document.getElementById('test-complete');
       testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
       testComplete.setAttribute('data-passed', passed);

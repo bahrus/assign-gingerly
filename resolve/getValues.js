@@ -280,6 +280,14 @@ export function isPlainObject(value) {
     return proto === Object.prototype || proto === null;
 }
 /**
+ * Whether a pattern entry is a ` +=` event-binding config (`'<lhs> +=': { on, … }`).
+ * Its assignment vectors (`fromLHS`, `fromHost`, `fromEvent`, static keys) are resolved
+ * when the event fires, not now — only its `get` block is resolved at bind time.
+ */
+export function isEventBinding(key, value) {
+    return key.endsWith(' +=') && isPlainObject(value) && 'on' in value;
+}
+/**
  * Detect a leading run of `!` characters used as a boolean coercion / negation
  * marker (`!` = negate, `!!` = coerce to boolean, `!!!` = negate, …). Returns the
  * count and the remaining string, or null when the value does not start with `!`.
@@ -412,6 +420,11 @@ export function getValues(pattern, source, options) {
         }
         else if (Array.isArray(value)) {
             result[key] = getArray(value, source, aliasMap, withMethods, protocols, options, substitutionMap);
+        }
+        else if (isEventBinding(key, value)) {
+            // Event-time vectors stay unresolved; only the bind-time `get` block resolves now
+            const { get } = value;
+            result[key] = isPlainObject(get) ? { ...value, get: getValues(get, source, options) } : value;
         }
         else if (typeof value === 'object' && value !== null) {
             result[key] = isPlainObject(value) ? getValues(value, source, options) : value;

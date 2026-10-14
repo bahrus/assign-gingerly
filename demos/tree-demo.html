@@ -104,6 +104,7 @@
 
         .spec { display: flex; justify-content: space-between; gap: 1rem; border-top: 1px dashed var(--line); padding: 0.3rem 0; }
         .spec .label { color: var(--muted); }
+        .spec .inc { font-size: 0.75rem; padding: 0.1rem 0.5rem; margin-right: auto; }
 
         .links { display: flex; gap: 1rem; align-items: center; }
         .links ul { display: contents; }
@@ -157,6 +158,11 @@
                 <code>itemscope</code> attribute). The card's patterns read its getters (<code>'?.heightLabel'</code>).
                 "Toggle units" sets <code>rocket.ish.metric</code>, whose setter calls <code>ctx.rebind()</code>: the card
                 updates without a tree rerun, and the setting survives "Run again".</li>
+            <li><strong>Events</strong>: the "Increase by one" button binds its own click with
+                <code>' +=': { on: 'click', call: 'increaseHeightByOne' }</code>. Its host is the subtree's
+                <code>from</code> — the card's <code>RocketManager</code> — so no host lookup or attribute is needed; the method
+                calls <code>ctx.rebind()</code>. Tree gives the binding a default dedup key, so reruns replace the listener
+                rather than adding another.</li>
             <li><strong>Async <code>onAssigned</code></strong>: <code>LinksManager</code> marks the links "verifying…", awaits a
                 simulated check, then "✓ verified". Tree binds right away and rebinds by itself when the promise settles.</li>
             <li><strong>Static children</strong>: the rocket card's heading and its three spec rows, all resolving against
@@ -255,6 +261,7 @@
         class RocketManager {
             static is = 'rocket-manager';
             #metric = true;
+            #extraMeters = 0;
             #rebind;
             constructor(element, initVals, { rebind }) {
                 Object.assign(this, initVals);
@@ -265,8 +272,18 @@
                 this.#metric = value;
                 this.#rebind();
             }
+            /** Called by the "Increase by one" button: { on: 'click', call: 'increaseHeightByOne' } */
+            increaseHeightByOne() {
+                this.#extraMeters++;
+                log('RocketManager.increaseHeightByOne', `+${this.#extraMeters} m → ctx.rebind()`);
+                this.#rebind();
+            }
             get title() { return `Rocket: ${this.name}`; }
-            get heightLabel() { return this.#metric ? `${this.height.meters} m` : `${this.height.feet} ft`; }
+            get heightLabel() {
+                const { meters, feet } = this.height;
+                const extra = this.#extraMeters;
+                return this.#metric ? `${meters + extra} m` : `${+(feet + extra * 3.28084).toFixed(1)} ft`;
+            }
             get massLabel() {
                 return this.#metric ? `${this.mass.kg.toLocaleString()} kg` : `${this.mass.lb.toLocaleString()} lb`;
             }
@@ -305,8 +322,10 @@
 
         // ── The tree: pure JSON ───────────────────────────────────────────────
 
-        const spec = (label, value) => ['div', { className: 'spec' }, [
+        /** A label/value row; `action` is an optional element placed right after the label. */
+        const spec = (label, value, action) => ['div', { className: 'spec' }, [
             ['span', { className: 'label', _: label }],
+            ...(action ? [action] : []),
             ['span', value],
         ]];
 
@@ -346,7 +365,13 @@
                     // The rocket card's patterns read RocketManager getters
                     rocket: [{ tag: 'section', ish: RocketManager.is }, { className: 'card rocket' }, [
                         ['h3', '?.title'],
-                        spec('Height', '?.heightLabel'),
+                        // The button binds its own click (' +='); its host is the card's RocketManager
+                        spec('Height', '?.heightLabel', ['button', {
+                            type: 'button',
+                            className: 'inc',
+                            _: 'Increase by one',
+                            ' +=': { on: 'click', call: 'increaseHeightByOne' },
+                        }]),
                         spec('Mass', '?.massLabel'),
                         spec('Engines', '?.enginesLabel'),
                     ]],

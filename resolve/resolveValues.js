@@ -9,7 +9,7 @@
  *
  * Re-exports ResolveValuesOptions for backward compatibility.
  */
-import { getValue, getValues, hasProtocol, isPlainObject, parseProtocolRef } from './getValues.js';
+import { getValue, getValues, hasProtocol, isEventBinding, isPlainObject, parseProtocolRef } from './getValues.js';
 // Re-export getValue as resolveValue for backward compatibility
 export { getValue as resolveValue };
 // Re-export the shared outer-grammar primitives (defined in getValues.js)
@@ -84,6 +84,13 @@ export async function resolveValues(pattern, source, options) {
         }
         else if (Array.isArray(value)) {
             result[key] = await resolveArray(value, source, protocols, options);
+        }
+        else if (isEventBinding(key, value)) {
+            // Event-time vectors stay unresolved; only the bind-time `get` block resolves now
+            const { get } = value;
+            result[key] = isPlainObject(get)
+                ? { ...value, get: options?.protocols ? await resolveValues(get, source, options) : getValues(get, source, options) }
+                : value;
         }
         else if (typeof value === 'object' && value !== null) {
             if (isPlainObject(value)) {
