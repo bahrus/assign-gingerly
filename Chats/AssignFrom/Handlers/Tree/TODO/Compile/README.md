@@ -10,7 +10,7 @@ The work is split into steps, one file each. **Step 1 is spelled out in detail**
 
 | Step | File | Status |
 |---|---|---|
-| 1 | [Fragment targets + baseline benchmarks](./Step1-FragmentTargetsAndBaseline.md) | **Detailed; decisions needed** |
+| 1 | [Fragment targets + baseline benchmarks](./Step1-FragmentTargetsAndBaseline.md) | ✅ Done. Results and two new decisions inside. |
 | 2 | [`compileTree(spec)`: a pure compiler](./Step2-CompileTree.md) | Outline |
 | 3 | [Clone-and-bind instantiation (`compile` option)](./Step3-CloneAndBind.md) | Outline |
 | 4 | [Benchmark and go / no-go](./Step4-BenchmarkAndDecide.md) | Outline |
@@ -44,8 +44,8 @@ I haven't measured it myself yet, so Step 1 includes a nested-vs-flat micro-benc
 | Text shorthand (string pattern) and tree-level `aka` | ✅ Done. The compiler must apply `aka` when classifying keys (`_` → `textContent`). |
 | Event binding on the element itself (`' +='`, `call`, default dedup key) | ✅ Done. Per instance: plan entries, never baked in. |
 | `$root` / `$parent`, pipes | ✅ Done. Always dynamic. |
-| **`ShadowRoot` / `DocumentFragment` targets** | ❌ **Needed.** A component repeated thousands of times renders into shadow roots. → Step 1 |
-| **A Tree baseline benchmark** | ❌ **Needed.** There's nothing to compare compiling against yet; `tests/benchmark.spec.ts` only covers `manageTemplateList`. → Step 1 |
+| `ShadowRoot` / `DocumentFragment` targets | ✅ Done (Step 1). Managers resolve through the target's, possibly scoped, registry. |
+| A Tree baseline benchmark | ✅ Done (Step 1): `demos/tree-benchmark.html`. **Tree creation is ~1.3–1.5× vanilla template clone, so the headroom for compiling is limited.** See Step 1's conclusions. |
 | Per-key `keepNullish` | ⚪ Not needed for compiling. Per-key templates make it independent. |
 | Removing the Phase TBD headers (`$:`, bare class) from `treeTypes.d.ts` | ⚪ Cleanup, can be done any time. Not a blocker. |
 

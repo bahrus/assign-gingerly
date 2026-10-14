@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tree Benchmark</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 1000px; padding: 0 1rem; color: #1d2330; }
+        h1 { margin-bottom: 0.25rem; }
+        .lede { color: #5b6475; margin-top: 0; }
+        table.results { border-collapse: collapse; width: 100%; font-size: 0.85rem; margin: 1rem 0 2rem; }
+        table.results th, table.results td { border-bottom: 1px solid #d9dee7; padding: 0.3rem 0.5rem; text-align: left; }
+        table.results td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        #status { font-family: ui-monospace, monospace; font-size: 0.85rem; color: #5b6475; }
+        /* The work areas are rendered (so layout is real) but kept small */
+        .stage { height: 120px; overflow: hidden; border: 1px dashed #d9dee7; margin-bottom: 1rem; }
+        .card { display: block; }
+    </style>
+</head>
+<body>
+    <h1>builtIns.tree benchmark</h1>
+    <p class="lede">
+        Baseline for the compile roadmap (Chats/AssignFrom/Handlers/Tree/TODO/Compile, Step 1). Runs automatically:
+        median of several runs after a warmup; each timing includes a forced layout. <strong>B1</strong> compares today's
+        Tree with vanilla <code>createElement</code>, vanilla template cloning (≈ the lower bound compiling could reach),
+        and <code>manageTemplateList</code> (rows only). <strong>B2</strong> compares nested vs. flat templates.
+    </p>
+    <p id="status">Starting…</p>
+    <div id="results"></div>
+    <div id="done" data-status=""></div>
+
+    <div class="stage" id="stage"></div>
+
+    <template id="mtl-row"><tr><td data-f="id"></td><td><a data-f="label"></a></td><td><span data-f="qty"></span></td><td data-f="price"></td></tr></template>
+
+    <script type="module">
+        import { assignFromAsync } from '../index.js';
+
+        const stage = document.getElementById('stage');
+        const statusEl = document.getElementById('status');
+        const status = text => { statusEl.textContent = text; };
+        const nextFrame = () => new Promise(r => setTimeout(r, 0));
+        const median = xs => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+
+        // ── Data ──────────────────────────────────────────────────────────────
+
+        const cardData = (n, v = 1) => Array.from({ length: n }, (_, i) => ({
+            id: i, name: `Rocket ${i} v${v}`, height: `${70 + (i % 10) + v} m`, mass: `${(549054 + i * v).toLocaleString()} kg`,
+        }));
+        const rowData = (n, v = 1) => Array.from({ length: n }, (_, i) => ({
+            id: i, label: `Item ${i} v${v}`, qty: (i * 7 + v) % 100, price: `$${((i * 13 + v) % 1000) / 10}`,
+        }));
+
+        // ── Shapes ────────────────────────────────────────────────────────────
+
+        // Static-heavy card: 17 elements, 3 bound values
+        const CARD_HTML = '<article class="card" aria-label="Item card">'
+            + '<header class="card-head"><h3 class="title"></h3><span class="badge" role="status">Active</span></header>'
+            + '<dl class="specs">'
+            + '<div class="row"><dt class="label">Height</dt><dd class="value"></dd></div>'
+            + '<div class="row"><dt class="label">Mass</dt><dd class="value"></dd></div>'
+            + '<div class="row"><dt class="label">Stages</dt><dd class="value">2</dd></div>'
+            + '</dl>'
+            + '<footer class="card-foot"><small class="muted">Data is illustrative</small></footer>'
+            + '</article>';
+
+        const specRow = (label, value) => ['div', { className: 'row' }, [
+            ['dt', { className: 'label', _: label }],
+            ['dd', { className: 'value', _: value }],
+        ]];
+        const cardSpec = ['article', { className: 'card', ariaLabel: 'Item card' }, [
+            ['header', { className: 'card-head' }, [
+                ['h3', { className: 'title', _: '?.name' }],
+                ['span', { className: 'badge', role: 'status', _: 'Active' }],
+            ]],
+            ['dl', { className: 'specs' }, [specRow('Height', '?.height'), specRow('Mass', '?.mass'), specRow('Stages', '2')]],
+            ['footer', { className: 'card-foot' }, [['small', { className: 'muted', _: 'Data is illustrative' }]]],
+        ]];
+
+        // Binding-heavy row: 7 elements, 4 bound values
+        const ROW_HTML = '<tr><td class="id"></td><td><a class="lbl"></a></td><td><span class="qty"></span></td><td class="price"></td></tr>';
+        const rowSpec = ['tr', {}, [
+            ['td', { className: 'id', _: '?.id' }],
+            ['td', {}, [['a', { className: 'lbl', _: '?.label' }]]],
+            ['td', {}, [['span', { className: 'qty', _: '?.qty' }]]],
+            ['td', { className: 'price', _: '?.price' }],
+        ]];
+
+        // ── Vanilla keyed list (same reconciliation semantics as Tree's repeat) ─
+
+        function keyedList(container, make) {
+            let map = new Map();
+            return {
+                render(data) {
+                    const next = new Map();
+                    if (map.size === 0) {
+                        const fragment = document.createDocumentFragment();
+                        for (const item of data) {
+                            const entry = make();
+                            entry.update(item);
+                            fragment.append(entry.node);
+                            next.set(item.id, entry);
+                        }
+                        container.append(fragment);
+                    } else {
+                        for (const item of data) {
+                            const entry = map.get(item.id) ?? make();
+                            entry.update(item);
+                            next.set(item.id, entry);
+                        }
+                        for (const [id, entry] of map) if (!next.has(id)) entry.node.remove();
+                        let cursor = container.firstChild;
+                        for (const { node } of next.values()) {
+                            if (node === cursor) cursor = cursor.nextSibling;
+                            else container.insertBefore(node, cursor);
+                        }
+                    }
+                    map = next;
+                },
+            };
+        }
+
+        const h = (tag, props, ...kids) => {
+            const el = document.createElement(tag);
+            if (props) Object.assign(el, props);
+            el.append(...kids);
+            return el;
+        };
+
+        function makeCardCreateElement() {
+            const title = h('h3', { className: 'title' });
+            const badge = h('span', { className: 'badge', textContent: 'Active' });
+            badge.setAttribute('role', 'status');
+            const height = h('dd', { className: 'value' });
+            const mass = h('dd', { className: 'value' });
+            const row = (label, dd) => h('div', { className: 'row' }, h('dt', { className: 'label', textContent: label }), dd);
+            const node = h('article', { className: 'card' },
+                h('header', { className: 'card-head' }, title, badge),
+                h('dl', { className: 'specs' }, row('Height', height), row('Mass', mass), row('Stages', h('dd', { className: 'value', textContent: '2' }))),
+                h('footer', { className: 'card-foot' }, h('small', { className: 'muted', textContent: 'Data is illustrative' })));
+            node.setAttribute('aria-label', 'Item card');
+            return { node, update(item) { title.textContent = item.name; height.textContent = item.height; mass.textContent = item.mass; } };
+        }
+
+        const cardTemplate = Object.assign(document.createElement('template'), { innerHTML: CARD_HTML });
+        function makeCardTemplate() {
+            const node = cardTemplate.content.firstElementChild.cloneNode(true);
+            const title = node.firstElementChild.firstElementChild;
+            const dl = node.children[1];
+            const height = dl.children[0].children[1];
+            const mass = dl.children[1].children[1];
+            return { node, update(item) { title.textContent = item.name; height.textContent = item.height; mass.textContent = item.mass; } };
+        }
+
+        function makeRowCreateElement() {
+            const id = h('td', { className: 'id' });
+            const label = h('a', { className: 'lbl' });
+            const qty = h('span', { className: 'qty' });
+            const price = h('td', { className: 'price' });
+            const node = h('tr', null, id, h('td', null, label), h('td', null, qty), price);
+            return { node, update(item) { id.textContent = item.id; label.textContent = item.label; qty.textContent = item.qty; price.textContent = item.price; } };
+        }
+
+        const rowTemplate = Object.assign(document.createElement('template'), { innerHTML: `<table><tbody>${ROW_HTML}</tbody></table>` });
+        const rowTemplateTr = rowTemplate.content.querySelector('tr');
+        function makeRowTemplate() {
+            const node = rowTemplateTr.cloneNode(true);
+            const [idTd, labelTd, qtyTd, price] = node.children;
+            const label = labelTd.firstElementChild;
+            const qty = qtyTd.firstElementChild;
+            return { node, update(item) { idTd.textContent = item.id; label.textContent = item.label; qty.textContent = item.qty; price.textContent = item.price; } };
+        }
+
+        // ── Approaches: each returns { render(data) } bound to a fresh container ─
+
+        function treeApproach(wrapperTag, wrapperClass, each) {
+            return host => {
+                const cfg = { '?. =>': { do: 'builtIns.tree', aka: { _: 'textContent' }, map: {
+                    items: [wrapperTag, { className: wrapperClass }, { each, key: '?.id' }],
+                } } };
+                return { render: data => assignFromAsync(host, cfg, { from: { items: data } }) };
+            };
+        }
+
+        const shapes = {
+            card: {
+                data: cardData,
+                container: () => document.createElement('div'),
+                approaches: {
+                    'Tree': treeApproach('div', 'cards', cardSpec),
+                    'createElement': host => {
+                        const list = keyedList(host.appendChild(h('div', { className: 'cards' })), makeCardCreateElement);
+                        return { render: data => list.render(data) };
+                    },
+                    'template clone': host => {
+                        const list = keyedList(host.appendChild(h('div', { className: 'cards' })), makeCardTemplate);
+                        return { render: data => list.render(data) };
+                    },
+                },
+            },
+            row: {
+                data: rowData,
+                container: () => document.createElement('table'),
+                approaches: {
+                    'Tree': treeApproach('tbody', 'rows', rowSpec),
+                    'createElement': host => {
+                        const list = keyedList(host.appendChild(h('tbody')), makeRowCreateElement);
+                        return { render: data => list.render(data) };
+                    },
+                    'template clone': host => {
+                        const list = keyedList(host.appendChild(h('tbody')), makeRowTemplate);
+                        return { render: data => list.render(data) };
+                    },
+                    'manageTemplateList': host => {
+                        const tbody = host.appendChild(h('tbody'));
+                        const cfg = { '?. =>': {
+                            do: 'builtIns.manageTemplateList',
+                            resolve: { forEach: '?.items', instantiate: 'globalThis://mtl-row', forget: true },
+                            fromEachItem: {
+                                toClone: {
+                                    '?.querySelector?.[data-f=id]?.textContent': '?.id',
+                                    '?.querySelector?.[data-f=label]?.textContent': '?.label',
+                                    '?.querySelector?.[data-f=qty]?.textContent': '?.qty',
+                                    '?.querySelector?.[data-f=price]?.textContent': '?.price',
+                                },
+                                withOptions: { withMethods: ['querySelector'] },
+                                resolve: { key: '?.id' },
+                            },
+                        } };
+                        const protocols = { globalThis: k => globalThis[k] };
+                        return { render: data => assignFromAsync(tbody, cfg, { from: { items: data }, protocols }) };
+                    },
+                },
+            },
+        };
+
+        // ── Timing ────────────────────────────────────────────────────────────
+
+        /** Time one operation, including a forced layout of the stage. */
+        async function time(fn) {
+            const start = performance.now();
+            await fn();
+            void stage.offsetHeight;
+            return performance.now() - start;
+        }
+
+        /**
+         * Run `op` on a fresh container `runs` times (after `warmup` runs), returning the median.
+         * `prepare` (untimed) gets the approach to the op's starting state.
+         */
+        async function measure(shape, approachName, prepare, op, { runs = 5, warmup = 2 } = {}) {
+            const samples = [];
+            for (let i = 0; i < warmup + runs; i++) {
+                stage.replaceChildren();
+                const host = stage.appendChild(shape.container());
+                const approach = shape.approaches[approachName](host);
+                await prepare(approach);
+                await nextFrame();
+                const elapsed = await time(() => op(approach));
+                if (i >= warmup) samples.push(elapsed);
+                await nextFrame();
+            }
+            stage.replaceChildren();
+            return median(samples);
+        }
+
+        const results = [];
+
+        async function runB1() {
+            for (const [shapeName, shape] of Object.entries(shapes)) {
+                const ops = [
+                    ['create 1,000', async () => {}, a => a.render(shape.data(1000)), {}],
+                    ['rebind 1,000', a => a.render(shape.data(1000)), a => a.render(shape.data(1000, 2)), {}],
+                    ['reverse 1,000', a => a.render(shape.data(1000)), a => a.render(shape.data(1000).reverse()), {}],
+                    ['clear 1,000', a => a.render(shape.data(1000)), a => a.render([]), {}],
+                    ['create 10,000', async () => {}, a => a.render(shape.data(10000)), { runs: 3, warmup: 1 }],
+                ];
+                for (const [opName, prepare, op, runOptions] of ops) {
+                    for (const approachName of Object.keys(shape.approaches)) {
+                        status(`B1 ${shapeName} — ${opName} — ${approachName}…`);
+                        const ms = await measure(shape, approachName, prepare, op, runOptions);
+                        results.push({ group: 'B1', shape: shapeName, op: opName, approach: approachName, ms });
+                    }
+                }
+            }
+        }
+
+        // ── B2: nested vs flat templates ──────────────────────────────────────
+
+        const ITEM_HTML = '<li class="item"><span class="k"></span><span class="v"></span><small class="note">note</small></li>';
+        const OUTER_HTML = '<article class="card"><h3 class="title"></h3><p class="desc">Static description text</p><ul class="items"></ul></article>';
+        const nestedCard = Object.assign(document.createElement('template'), {
+            innerHTML: OUTER_HTML.replace('</article>', `<template class="item-tpl">${ITEM_HTML}</template></article>`),
+        });
+        const flatCard = Object.assign(document.createElement('template'), { innerHTML: OUTER_HTML });
+        const flatItem = Object.assign(document.createElement('template'), { innerHTML: ITEM_HTML });
+
+        function fillItems(ul, source, k) {
+            for (let j = 0; j < k; j++) {
+                const li = source.firstElementChild.cloneNode(true);
+                li.firstElementChild.textContent = `key ${j}`;
+                li.children[1].textContent = `value ${j}`;
+                ul.append(li);
+            }
+        }
+
+        function buildCards(host, n, k, nested) {
+            const fragment = document.createDocumentFragment();
+            for (let i = 0; i < n; i++) {
+                const card = (nested ? nestedCard : flatCard).content.firstElementChild.cloneNode(true);
+                card.firstElementChild.textContent = `Card ${i}`;
+                const ul = card.children[2];
+                // Nested: items come from the card's own (deep-copied) inner template
+                const source = nested ? card.lastElementChild.content : flatItem.content;
+                fillItems(ul, source, k);
+                fragment.append(card);
+            }
+            host.append(fragment);
+        }
+
+        async function runB2() {
+            const n = 1000;
+            for (const k of [0, 3, 20]) {
+                for (const nested of [true, false]) {
+                    const label = nested ? 'nested' : 'flat';
+                    status(`B2 — ${n} cards × ${k} items — ${label}…`);
+                    const samples = [];
+                    for (let i = 0; i < 7; i++) {
+                        stage.replaceChildren();
+                        const host = stage.appendChild(document.createElement('div'));
+                        await nextFrame();
+                        const elapsed = await time(() => buildCards(host, n, k, nested));
+                        if (i >= 2) samples.push(elapsed);
+                    }
+                    stage.replaceChildren();
+                    results.push({ group: 'B2', shape: `${n} cards × ${k} items`, op: 'create', approach: label, ms: median(samples) });
+                }
+            }
+        }
+
+        // ── Report ────────────────────────────────────────────────────────────
+
+        function report() {
+            const container = document.getElementById('results');
+            const groups = [['B1', 'template clone'], ['B2', 'flat']];
+            for (const [group, baseline] of groups) {
+                const rows = results.filter(r => r.group === group);
+                const table = document.createElement('table');
+                table.className = 'results';
+                const head = table.createTHead().insertRow();
+                for (const text of ['Shape', 'Operation', 'Approach', 'Median ms', `× ${baseline}`]) {
+                    head.appendChild(Object.assign(document.createElement('th'), { textContent: text }));
+                }
+                const body = table.createTBody();
+                for (const r of rows) {
+                    const base = rows.find(b => b.shape === r.shape && b.op === r.op && b.approach === baseline)?.ms;
+                    const tr = body.insertRow();
+                    tr.insertCell().textContent = r.shape;
+                    tr.insertCell().textContent = r.op;
+                    tr.insertCell().textContent = r.approach;
+                    Object.assign(tr.insertCell(), { className: 'num', textContent: r.ms.toFixed(1) });
+                    Object.assign(tr.insertCell(), { className: 'num', textContent: base ? (r.ms / base).toFixed(2) : '' });
+                }
+                container.append(Object.assign(document.createElement('h2'), { textContent: group === 'B1' ? 'B1 — Tree vs. vanilla' : 'B2 — nested vs. flat templates' }), table);
+            }
+        }
+
+        const done = document.getElementById('done');
+        try {
+            await runB1();
+            await runB2();
+            report();
+            window.__treeBenchmark = results;
+            status('Done.');
+            done.dataset.status = 'success';
+        } catch (err) {
+            console.error(err);
+            status(`Error: ${err.message}`);
+            done.dataset.status = 'error';
+        }
+    </script>
+</body>
+</html>

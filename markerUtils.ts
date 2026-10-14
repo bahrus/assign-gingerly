@@ -81,7 +81,7 @@ export function findMarkersXPath(target: Element | Node, name: string): [Comment
  * @param method - 'appendChild' (default) or 'prepend'
  * @returns [startMarker, endMarker]
  */
-export function createMarkers(target: Element, name: string, method: string = 'appendChild'): [Comment, Comment] {
+export function createMarkers(target: Element | DocumentFragment, name: string, method: string = 'appendChild'): [Comment, Comment] {
     const startMarker = document.createComment(`${MARKER_START_PREFIX}${name}"`);
     const endMarker = document.createComment(MARKER_END);
 

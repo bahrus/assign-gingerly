@@ -664,6 +664,73 @@
         assertEquals(first.item.clicked, undefined, 'the stale value is not touched');
       }
 
+      // ── ShadowRoot / DocumentFragment targets ─────────────────────────────
+
+      // Test 36: render into a shadow root, rerun in place; arrays and managers inside
+      {
+        class ShadowView {
+          static is = 'tree-test-shadow-view';
+          constructor(el, initVals) { Object.assign(this, initVals); }
+          get label() { return this.name.toUpperCase(); }
+        }
+        const host = document.createElement('div');
+        document.body.append(host);
+        const shadow = host.attachShadow({ mode: 'open' });
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: {
+          title: ['h2', '?.'],
+          rocket: [{ tag: 'p', ish: ShadowView }, '?.label'],
+          crew: ['ul', {}, { each: ['li', '?.name'], key: '?.name' }],
+        } } };
+        await assignFromAsync(shadow, cfg, { from: { ...crewVm(), title: 'Shadow', rocket: { name: 'f9' } } });
+        assertEquals(shadow.querySelector('h2')?.textContent, 'Shadow', 'renders into a shadow root');
+        assertEquals(shadow.querySelector('p')?.textContent, 'F9', 'manager subtree inside a shadow root');
+        assertEquals(shadow.querySelectorAll('li').length, 3, 'repeat inside a shadow root');
+        const h2 = shadow.querySelector('h2');
+        await assignFromAsync(shadow, cfg, { from: { ...crewVm(), title: 'Again', rocket: { name: 'fh' } } });
+        assert(shadow.querySelector('h2') === h2, 'rerun reuses elements');
+        assertEquals(h2.textContent, 'Again', 'rerun rebinds');
+        assertEquals(shadow.querySelectorAll('h2').length, 1, 'no duplicates');
+        host.remove();
+      }
+
+      // Test 37: a plain DocumentFragment target
+      {
+        const fragment = document.createDocumentFragment();
+        await assignFromAsync(fragment, { '?. =>': { do: 'builtIns.tree', map: { a: ['b', '?.'] } } }, { from: { a: 'frag' } });
+        assertEquals(fragment.querySelector('b')?.textContent, 'frag', 'renders into a DocumentFragment');
+        const holder = document.createElement('div');
+        holder.append(fragment);
+        assertEquals(holder.querySelector('b')?.textContent, 'frag', 'content (with markers) moves with the fragment');
+        await assignFromAsync(holder, { '?. =>': { do: 'builtIns.tree', map: { a: ['b', '?.'] } } }, { from: { a: 'moved' } });
+        assertEquals(holder.querySelectorAll('b').length, 1, 'rerunning on the new parent reuses the moved tree');
+        assertEquals(holder.querySelector('b')?.textContent, 'moved', 'rebound in the new parent');
+      }
+
+      // Test 38: managers resolve through a shadow root's scoped registry (where supported)
+      {
+        let scoped;
+        try {
+          const registry = new CustomElementRegistry();
+          const probe = document.createElement('div').attachShadow({ mode: 'open', customElementRegistry: registry });
+          if (probe.customElementRegistry === registry && registry.itemscopeRegistry) scoped = registry;
+        } catch { /* not supported */ }
+        if (!scoped) {
+          assert(true, 'scoped custom element registries not supported here — skipped');
+        } else {
+          class ScopedView { constructor(el, v) { Object.assign(this, v); } get label() { return `scoped:${this.name}`; } }
+          scoped.itemscopeRegistry.define('tree-test-scoped-view', { manager: ScopedView });
+          const host = document.createElement('div');
+          document.body.append(host);
+          const shadow = host.attachShadow({ mode: 'open', customElementRegistry: scoped });
+          await assignFromAsync(shadow, { '?. =>': { do: 'builtIns.tree', map: {
+            rocket: [{ tag: 'p', ish: 'tree-test-scoped-view' }, '?.label'],
+          } } }, { from: { rocket: { name: 'f9' } } });
+          assertEquals(shadow.querySelector('p')?.textContent, 'scoped:f9', 'name resolved in the scoped registry');
+          assertEquals(customElements.itemscopeRegistry.get('tree-test-scoped-view'), undefined, 'not in the global registry');
+          host.remove();
+        }
+      }
+
       const testComplete = document.getElementById('test-complete');
       testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
       testComplete.setAttribute('data-passed', passed);

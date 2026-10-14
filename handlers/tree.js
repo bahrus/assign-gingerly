@@ -55,6 +55,11 @@ import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END 
 const DEFAULT_MARKER_NAME = 'tree';
 const WILDCARD = '*';
 const DEFAULT_WILDCARD_PATTERN = { textContent: '?.' };
+/**
+ * Options key carrying the tree's target (an Element, ShadowRoot or other DocumentFragment)
+ * down to every node, so managers resolve through the target's — possibly scoped — registry.
+ */
+const TREE_TARGET = Symbol('builtIns.tree target');
 /** Created nodes per tree, keyed by the tree's start marker. */
 const treeStates = new WeakMap();
 /** Whether a pattern only has plain keys, so it can skip assignFrom's key categorization. */
@@ -156,8 +161,11 @@ function applyPattern(element, pattern, from, options, permissionProcessor) {
  * Resolve a header's manager to its registered config. A class is registered under
  * `is ?? name` if needed; a name must already be registered.
  */
-function resolveManagerConfig(ish, element) {
-    const registry = element.customElementRegistry?.itemscopeRegistry
+function resolveManagerConfig(ish, element, options) {
+    // The tree's target first (a shadow root may carry a scoped registry), then the element, then the global one
+    const treeTarget = options[TREE_TARGET];
+    const registry = treeTarget?.customElementRegistry?.itemscopeRegistry
+        ?? element.customElementRegistry?.itemscopeRegistry
         ?? (typeof customElements !== 'undefined' ? customElements.itemscopeRegistry : undefined);
     if (!registry)
         throw new Error('builtIns.tree: no itemscope registry is available');
@@ -187,7 +195,7 @@ function resolveManagerConfig(ish, element) {
  */
 function attachManager(node, ish, value) {
     const { element, options } = node;
-    const config = resolveManagerConfig(ish, element);
+    const config = resolveManagerConfig(ish, element, options);
     const rebind = () => rebindNode(node);
     defineIshCore(element, config, options, assignGingerly, { ctx: { rebind }, onSettled: rebind });
     element.ish = value;
@@ -395,7 +403,8 @@ export class TreeHandler {
         this.config = config;
     }
     assign(lhsTarget, _resolvedParams, options, permissionProcessor) {
-        if (!(lhsTarget instanceof Element))
+        // Elements, shadow roots and other document fragments
+        if (!(lhsTarget instanceof Element || lhsTarget instanceof DocumentFragment))
             return;
         const { map, markerName = DEFAULT_MARKER_NAME, keepNullish, aka } = this.config;
         if (!map || typeof map !== 'object') {
@@ -408,6 +417,7 @@ export class TreeHandler {
             ...options,
             fromStack: [...(fromStack ?? []), from],
             ...(aka && { aka: { ...options.aka, ...aka } }),
+            [TREE_TARGET]: lhsTarget,
         };
         const [start, end] = findChildMarkers(lhsTarget, markerName) ?? createMarkers(lhsTarget, markerName);
         let nodes = treeStates.get(start);

@@ -44,6 +44,17 @@ Use `assignFromAsync` when you need the tree to exist after the `await`. The syn
 
 The `🌲` emoji alias works too, when `builtInEmoji` is passed as `handlers`.
 
+## Targets
+
+The target can be an **element**, a **`ShadowRoot`**, or any other **`DocumentFragment`**, so a web component can render straight into its shadow root:
+
+```JavaScript
+await assignFromAsync(this.shadowRoot, { '?. =>': { do: 'builtIns.tree', map: { … } } }, { from: this });
+```
+
+- **Managers resolve through the target's registry:** `{ tag, ish }` headers look the name up in the target's `customElementRegistry` (so a shadow root with a **scoped** registry uses its own managers), then fall back to the global one.
+- **Plain fragments move:** when a plain `DocumentFragment` is appended somewhere, its content, including Tree's markers, moves with it. Later calls should target the new parent, where Tree finds its markers and rebinds in place. Calling Tree on the emptied fragment starts a new tree.
+
 ## Element Specifications
 
 ```TypeScript

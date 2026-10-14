@@ -64,6 +64,15 @@ const DEFAULT_MARKER_NAME = 'tree';
 const WILDCARD = '*';
 const DEFAULT_WILDCARD_PATTERN: Pattern = { textContent: '?.' };
 
+/**
+ * Options key carrying the tree's target (an Element, ShadowRoot or other DocumentFragment)
+ * down to every node, so managers resolve through the target's — possibly scoped — registry.
+ */
+const TREE_TARGET = Symbol('builtIns.tree target');
+
+/** What a tree can render into. */
+type TreeTarget = Element | DocumentFragment;
+
 /** A manager reference from an object header: a registered name or a class. */
 type ManagerRef = string | ItemscopeManager;
 
@@ -212,8 +221,11 @@ function applyPattern(
  * Resolve a header's manager to its registered config. A class is registered under
  * `is ?? name` if needed; a name must already be registered.
  */
-function resolveManagerConfig(ish: ManagerRef, element: Element): ItemscopeManagerConfig {
-    const registry: ItemscopeRegistry | undefined = (element as any).customElementRegistry?.itemscopeRegistry
+function resolveManagerConfig(ish: ManagerRef, element: Element, options: AssignFromOptions): ItemscopeManagerConfig {
+    // The tree's target first (a shadow root may carry a scoped registry), then the element, then the global one
+    const treeTarget = (options as any)[TREE_TARGET];
+    const registry: ItemscopeRegistry | undefined = treeTarget?.customElementRegistry?.itemscopeRegistry
+        ?? (element as any).customElementRegistry?.itemscopeRegistry
         ?? (typeof customElements !== 'undefined' ? customElements.itemscopeRegistry : undefined);
     if (!registry) throw new Error('builtIns.tree: no itemscope registry is available');
     if (typeof ish === 'string') {
@@ -241,7 +253,7 @@ function resolveManagerConfig(ish: ManagerRef, element: Element): ItemscopeManag
  */
 function attachManager(node: TreeNode, ish: ManagerRef, value: any): any {
     const { element, options } = node;
-    const config = resolveManagerConfig(ish, element);
+    const config = resolveManagerConfig(ish, element, options);
     const rebind = () => rebindNode(node);
     defineIshCore(element as HTMLElement, config, options, assignGingerly, { ctx: { rebind }, onSettled: rebind });
     (element as any).ish = value;
@@ -409,7 +421,7 @@ function syncNode(
 }
 
 /** Find the tree's markers among the target's direct children. */
-function findChildMarkers(target: Element, name: string): [Comment, Comment] | undefined {
+function findChildMarkers(target: TreeTarget, name: string): [Comment, Comment] | undefined {
     const startText = `${MARKER_START_PREFIX}${name}"`;
     let start: Comment | undefined;
     for (const node of target.childNodes) {
@@ -440,7 +452,7 @@ function getEntries(map: Record<string, ElementSpecification>, from: any): [stri
 }
 
 /** Place elements in order right after `start`, moving only the ones that are out of place. */
-function placeInOrder(parent: Element, elements: Element[], start: Comment): void {
+function placeInOrder(parent: TreeTarget, elements: Element[], start: Comment): void {
     let cursor = start.nextSibling;
     for (const element of elements) {
         if (element === cursor) {
@@ -462,7 +474,8 @@ export class TreeHandler implements AssignFromHandler {
     }
 
     assign(lhsTarget: any, _resolvedParams: Record<string, any>, options: AssignFromOptions, permissionProcessor?: PermissionProcessor): void {
-        if (!(lhsTarget instanceof Element)) return;
+        // Elements, shadow roots and other document fragments
+        if (!(lhsTarget instanceof Element || lhsTarget instanceof DocumentFragment)) return;
         const { map, markerName = DEFAULT_MARKER_NAME, keepNullish, aka } = this.config;
         if (!map || typeof map !== 'object') {
             throw new Error('builtIns.tree: a "map" of VM keys to element specifications is required');
@@ -474,7 +487,8 @@ export class TreeHandler implements AssignFromHandler {
             ...options,
             fromStack: [...(fromStack ?? []), from],
             ...(aka && { aka: { ...options.aka, ...aka } }),
-        };
+            [TREE_TARGET]: lhsTarget,
+        } as AssignFromOptions;
 
         const [start, end] = findChildMarkers(lhsTarget, markerName) ?? createMarkers(lhsTarget, markerName);
         let nodes = treeStates.get(start);

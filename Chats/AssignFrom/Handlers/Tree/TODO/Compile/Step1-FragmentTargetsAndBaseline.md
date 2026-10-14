@@ -101,3 +101,100 @@ Measured over N cards × K items, with N ∈ {1,000} and K ∈ {0, 3, 20}, timin
 - [ ] `demos/tree-benchmark.html` + `tests/tree-benchmark.spec.ts` (B1 + B2)
 - [ ] A results table appended to this file (Chromium, Firefox, WebKit if practical), with conclusions on (a) the headroom for compiling and (b) nested vs. flat
 - [ ] The README's prerequisites table updated
+
+## Bruce's Feedback
+
+I agree with all the recommendations for the decisions.
+
+---
+
+## Claude's Implementation Notes
+
+**Both parts are done.** Decisions applied as recommended:
+- any `DocumentFragment` target;
+- no event binding on a shadow root itself;
+- benchmarks run in Chromium only, informational;
+- the two component shapes as proposed;
+- a 1.5× go / no-go bar. **But see the results: the bar needs revisiting.**
+
+### A. Fragment targets ✅
+
+| File | Change |
+|---|---|
+| `handlers/tree.ts` | Accepts `Element \| DocumentFragment`; `findChildMarkers` / `placeInOrder` widened to `TreeTarget` |
+| `markerUtils.ts` | `createMarkers(target: Element \| DocumentFragment, …)` |
+| `handlers/tree.ts` (managers) | **Resolve through the tree's target registry.** The target travels with the options under a private symbol (spread preserves it). `resolveManagerConfig` tries the target's `customElementRegistry` first (so a shadow root with a scoped registry uses its own managers), then the created element's, then the global one. |
+| `tests/tree.html` | 3 new scenarios (38 in total): see below |
+| `docs/tree.md` | A new "Targets" section, including the plain-fragment caveat |
+
+**The new tests:**
+1. **Shadow root:** with a manager and a repeat; a rerun reuses elements.
+2. **Plain `DocumentFragment`:** after appending, a rerun on the new parent reuses the moved tree.
+3. **Scoped registry:** a manager name resolved in a shadow root's scoped registry, not the global one. This **runs for real in Chromium**, which supports scoped registries, and is skipped elsewhere.
+
+**Tree tests:** 120 / 120 in Chromium, 119 / 119 in Firefox and WebKit.
+
+### B. Benchmarks ✅
+
+[`demos/tree-benchmark.html`](../../../../../../demos/tree-benchmark.html) + `tests/tree-benchmark.spec.ts`. The page runs everything automatically on load: medians of 5 runs (3 for 10,000) after a warmup, each timing including a forced layout. The spec runs in Chromium only (skipped in Firefox and WebKit) and prints the tables.
+
+**Results:** Chromium, 3 runs. Ratios are relative to vanilla template clone (the realistic lower bound for compiling). I give ranges because single runs are noisy: some cells moved 2–3× between runs (e.g. "card reverse" 37 → 167 ms across *all* approaches at once), which points to the machine rather than the code. **The ratios are steadier than the absolute times.**
+
+| Shape / operation | Tree | `createElement` | template clone | `manageTemplateList` |
+|---|---|---|---|---|
+| **card** create 1,000 | **1.44–1.52×** | 1.10–1.19× | 1.00 | |
+| card create 10,000 | 1.32–1.53× | 1.04–1.19× | 1.00 | |
+| card rebind 1,000 | ≈ 2× `createElement` (48–50 ms vs 18–20 ms)\* | | | |
+| card reverse 1,000 | 1.59–1.61× | 0.99–1.05× | 1.00 | |
+| card clear 1,000 | ≈ 1.0–1.2× | ≈ 1.0–1.1× | 1.00 | |
+| **row** create 1,000 | 1.34–1.40× | 1.06–1.11× | 1.00 | 1.17–3.38× |
+| row create 10,000 | 1.25–1.41× | 1.07× | 1.00 | 1.20× |
+| row rebind 1,000 | 1.53–1.79× | ≈ 1.0× | 1.00 | 1.13–1.20× |
+| row reverse 1,000 | 1.39–1.48× | ≈ 1.0× | 1.00 | 0.88–0.97× |
+| row clear 1,000 | ≈ 1.0–1.1× | ≈ 1.0× | 1.00 | ≈ 1.0–1.1× |
+
+\* In the card's rebind, the vanilla template-clone cell was itself erratic (21–55 ms) even though it runs the same update code as `createElement`, so I compare that row against `createElement`.
+
+**B2: nested vs. flat templates** (1,000 cards, × K items):
+
+| K | Nested ÷ flat |
+|---|---|
+| 0 | **1.11–1.17** (consistent) |
+| 3 | 0.73–1.11 (noise) |
+| 20 | 0.98–1.13 (noise) |
+
+### Conclusions
+
+**(a) The headroom for compiling is smaller than hoped.**
+- **Vanilla template clone is only ~10–20% faster than vanilla `createElement`.** Cloning itself buys little at these sizes.
+- **Tree's creation overhead is ~1.3–1.5× template clone.** That's the *most* that clone-and-bind compiling could recover on creation, and it's right at the agreed **1.5× bar**. So compiling would very likely *not* clear it.
+- **Tree's bigger relative cost is in rebind and reverse** (1.4–1.8×, about 2× in the card's rebind), which compiling, as designed, doesn't touch.
+
+**Recommendation:** before Step 2, **profile Tree's own overhead.** There are cheap candidates that help creation *and* rebinding, with no new code path:
+- `normalize()` allocates a new tuple for every node on every call, and could be cached per spec object;
+- pattern objects are spread per node (`{ ...options, from }`);
+- static literal keys (e.g. `className: 'card'`, `_: 'Active'`) are re-applied on every rebind, although they never change.
+
+Those may close much of the 1.3–1.8× gap on their own. Compiling would then be judged mainly on **server-rendered templates** (Step 5), where its value isn't raw speed.
+
+**(b) Nested vs. flat: the principle holds, but the effect is modest at these sizes.**
+- **Measured:** the "copied for nothing" overhead is clearly measurable when the outer clone dominates (K = 0: +11–17%). Once item work dominates (K ≥ 3), it disappears into the noise.
+- **Not measured:** the overhead grows with the *inner* template's size; mine was small (3 elements). Larger inner templates, or deeper nesting, would make it bigger, which fits your timing experiments.
+- **Flat was never meaningfully slower.** So Principle 1 stands: there's no downside, and a real cost avoided.
+
+### Verification
+
+- **Full suite:** 124 passed, 2 skipped (the benchmark in Firefox and WebKit) on 4 consecutive runs. One earlier run had a single failure I couldn't capture or reproduce afterwards. I note it rather than hide it; if it recurs, the benchmark running in parallel with timing-sensitive tests is the first suspect.
+- `tsc` is clean, in a scratch copy; no `.js` touched.
+
+### Deliverables
+
+- [x] Tree accepts `DocumentFragment` / `ShadowRoot` targets (types, code, tests, one doc section)
+- [x] `demos/tree-benchmark.html` + `tests/tree-benchmark.spec.ts` (B1 + B2)
+- [x] Results table and conclusions (above). Chromium only, per decision 3.
+- [x] The README's prerequisites table updated
+
+### Decisions for you before Step 2
+
+1. **Insert a "Step 1b: profile and trim Tree's overhead"** (normalize caching, fewer option spreads, skipping static keys on rebind), and re-measure against this baseline before deciding on compiling? **I recommend yes.**
+2. **Revisit the Step 4 bar?** Given the ~1.3–1.5× ceiling, compiling would need to be justified by server-rendered templates (Step 5) rather than by runtime speed alone.
