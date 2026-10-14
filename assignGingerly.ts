@@ -489,7 +489,7 @@ export function isReadonlyProperty(obj: any, propName: string | symbol): boolean
  * 
  * @returns true if assignTo was found and called, false otherwise
  */
-function tryAssignTo(currentValue: any, value: any, parent: any, key: string | symbol): boolean {
+export function tryAssignTo(currentValue: any, value: any, parent: any, key: string | symbol): boolean {
   if (currentValue != null && typeof currentValue === 'object') {
     const { constructor } = currentValue;
     if (constructor && Object.hasOwn(constructor, 'assignTo') && typeof constructor.assignTo === 'function') {

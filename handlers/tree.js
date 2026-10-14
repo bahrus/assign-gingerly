@@ -48,8 +48,8 @@
  * }, { from: vm });
  */
 import { assignFrom, categorizeKeys, handleSpreads, SUBSTITUTION_VARS } from '../assignFrom.js';
-import { assignGingerly } from '../assignGingerly.js';
-import { getValue, getValues, isEventBinding } from '../resolve/getValues.js';
+import { assignGingerly, tryAssignTo } from '../assignGingerly.js';
+import { getValue, getValues, isEventBinding, isFromStackReference } from '../resolve/getValues.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 const DEFAULT_MARKER_NAME = 'tree';
@@ -136,10 +136,13 @@ function containerOf(element) {
  * manager instance). Plain patterns (the common case) go straight to getValues +
  * assignGingerly; anything else goes through assignFrom.
  */
-function applyPattern(element, pattern, from, options, permissionProcessor) {
+function applyPattern(element, pattern, from, options, permissionProcessor, skipLiterals = false) {
     if (!pattern)
         return;
     pattern = withEventKeys(pattern);
+    const fast = compileFastPattern(pattern);
+    if (fast && fastPathAllowed(options, permissionProcessor) && applyFast(element, fast, from, options, skipLiterals))
+        return;
     const nodeOptions = { ...options, from };
     let plain = plainPatterns.get(pattern);
     if (plain === undefined) {
@@ -156,6 +159,132 @@ function applyPattern(element, pattern, from, options, permissionProcessor) {
     else {
         assignFrom(element, pattern, nodeOptions, permissionProcessor);
     }
+}
+// ── Fast path for plain patterns ─────────────────────────────────────────────
+//
+// Most Tree patterns are a few plain properties set to literals or `?.` paths
+// (`{ className: 'card', textContent: '?.name' }`). Going through getValues +
+// assignGingerly for those costs more than the assignments themselves (alias/method
+// maps rebuilt per call, key copying, option spreads). The fast path resolves and
+// assigns them directly, with the same semantics, and falls back to the general
+// path for anything else.
+const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+/** Fast entries per pattern, or null when the pattern needs the general path. */
+const fastPatterns = new WeakMap();
+/** Whether a string RHS is a plain literal (not a reference, negation or protocol). */
+function isLiteralString(value) {
+    return !(value.startsWith('?.') || value.startsWith('$0') || isFromStackReference(value)
+        || value.startsWith('!') || value.includes('://'));
+}
+/**
+ * Compile a pattern into fast entries: every key a plain identifier (not `ish`), every
+ * value a primitive literal or a `?.` path. Anything else → null (general path).
+ */
+function compileFastPattern(pattern) {
+    let entries = fastPatterns.get(pattern);
+    if (entries !== undefined)
+        return entries;
+    entries = [];
+    for (const key of Object.keys(pattern)) {
+        const value = pattern[key];
+        if (!IDENTIFIER.test(key) || key === 'ish') {
+            entries = null;
+            break;
+        }
+        if (typeof value === 'string') {
+            if (value.startsWith('?.')) {
+                entries.push({ key, literal: false, value, parts: value.split('?.').filter(p => p.length > 0) });
+            }
+            else if (isLiteralString(value)) {
+                entries.push({ key, literal: true, value, parts: [] });
+            }
+            else {
+                entries = null;
+                break;
+            }
+        }
+        else if (value == null || typeof value === 'number' || typeof value === 'boolean') {
+            entries.push({ key, literal: true, value, parts: [] });
+        }
+        else {
+            entries = null;
+            break;
+        }
+    }
+    fastPatterns.set(pattern, entries);
+    return entries;
+}
+/** Options that change how plain keys resolve or assign rule out the fast path. */
+function fastPathAllowed(options, permissionProcessor) {
+    if (permissionProcessor)
+        return false;
+    const { pin, at, substitutions, akaMethods, withAsyncMethods, withMethods } = options;
+    if (pin || at || substitutions || akaMethods || withAsyncMethods)
+        return false;
+    if (withMethods && (withMethods.size ?? withMethods.length))
+        return false;
+    return !SUBSTITUTION_VARS.some(({ optionKey }) => options[optionKey]?.length);
+}
+/**
+ * Resolve and assign fast entries, mirroring getValues + assignGingerly for plain keys:
+ * aliases apply to keys; a path segment that's aliased or names a pipe resolves through
+ * getValue; plain-object values merge through assignGingerly; otherwise `tryAssignTo`
+ * or a plain assignment. Returns false (before assigning anything) when an alias maps a
+ * key to something that isn't a plain property.
+ */
+function applyFast(element, entries, from, options, skipLiterals) {
+    const { aka, pipes } = options;
+    if (aka) {
+        for (const { key } of entries) {
+            if (Object.hasOwn(aka, key)) {
+                const mapped = aka[key];
+                if (typeof mapped !== 'string' || !IDENTIFIER.test(mapped) || mapped === 'ish')
+                    return false;
+            }
+        }
+    }
+    const target = element;
+    for (const entry of entries) {
+        if (skipLiterals && entry.literal)
+            continue;
+        const key = aka && Object.hasOwn(aka, entry.key) ? aka[entry.key] : entry.key;
+        let value;
+        if (entry.literal) {
+            value = entry.value;
+        }
+        else if ((aka || pipes) && entry.parts.some(p => (aka && Object.hasOwn(aka, p)) || (pipes && Object.hasOwn(pipes, p)))) {
+            value = getValue(entry.value, from, { ...options, from, root: element });
+        }
+        else {
+            value = from;
+            for (const part of entry.parts) {
+                if (value == null)
+                    break;
+                value = value[part];
+            }
+        }
+        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+            assignGingerly(target, { [key]: value }, { ...options, from, aka: undefined });
+        }
+        else if (!(key in target && tryAssignTo(target[key], value, target, key))) {
+            target[key] = value;
+        }
+    }
+    return true;
+}
+/** Shallow equality for aka maps (Tree merges config aka into a new object per call). */
+function sameAka(a, b) {
+    if (a === b)
+        return true;
+    if (!a || !b)
+        return false;
+    const keys = Object.keys(a);
+    if (keys.length !== Object.keys(b).length)
+        return false;
+    for (const key of keys)
+        if (a[key] !== b[key])
+            return false;
+    return true;
 }
 /**
  * Resolve a header's manager to its registered config. A class is registered under
@@ -226,7 +355,7 @@ function bindRepeat(node, repeat, from) {
     const items = list != null && typeof list[Symbol.iterator] === 'function' ? Array.from(list) : [];
     // With the default `of`, the node's value is the array, and the stack's top is already its holder
     const itemOptions = of === '?.' ? options : { ...options, fromStack: [...(options.fromStack ?? []), from] };
-    const container = containerOf(element);
+    const { container } = node;
     const state = node.repeat ??= { items: new Map(), empty: undefined, warned: false };
     const next = new Map();
     items.forEach((item, index) => {
@@ -266,12 +395,18 @@ function bindRepeat(node, repeat, from) {
  */
 function bindContent(node, pattern, childSpecs, repeat, from) {
     const { element, children, options, permissionProcessor } = node;
-    applyPattern(element, pattern, from, options, permissionProcessor);
+    // Literal keys can't have changed if this exact pattern object (and aka) was applied last time.
+    // (An inline config creates new pattern objects per call, so its literals are always re-applied.)
+    const { aka } = options;
+    const skipLiterals = node.appliedPattern === pattern && sameAka(node.appliedAka, aka);
+    applyPattern(element, pattern, from, options, permissionProcessor, skipLiterals);
+    node.appliedPattern = pattern;
+    node.appliedAka = aka;
     if (repeat) {
         bindRepeat(node, repeat, from);
         return;
     }
-    const container = containerOf(element);
+    const { container } = node;
     let misplaced = false;
     node.children = childSpecs.map((childSpec, i) => {
         const child = syncNode(children[i], childSpec, from, options, permissionProcessor);
@@ -301,7 +436,9 @@ function rebindNode(node) {
 function createNode(spec, value, options, permissionProcessor) {
     const [, tag, ish, pattern, childSpecs, repeat] = normalize(spec);
     const element = document.createElement(tag);
-    const node = { tag, ish, element, children: [], spec, options, permissionProcessor, binding: true };
+    const node = {
+        tag, ish, element, children: [], spec, options, permissionProcessor, binding: true, container: containerOf(element),
+    };
     try {
         const from = ish === undefined ? value : attachManager(node, ish, value);
         if (repeat) {
@@ -309,7 +446,9 @@ function createNode(spec, value, options, permissionProcessor) {
             return node;
         }
         applyPattern(element, pattern, from, options, permissionProcessor);
-        const container = containerOf(element);
+        node.appliedPattern = pattern;
+        node.appliedAka = options.aka;
+        const { container } = node;
         node.children = childSpecs.map(childSpec => {
             const child = createNode(childSpec, from, options, permissionProcessor);
             container.appendChild(child.element);
