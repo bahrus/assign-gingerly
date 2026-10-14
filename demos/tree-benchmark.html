@@ -37,6 +37,18 @@
         import { assignFromAsync } from '../index.js';
 
         const stage = document.getElementById('stage');
+
+        // URL options: ?cv → content-visibility on cards; ?layout=0 → no forced layout; ?only=card|row → one shape
+        const params = new URLSearchParams(location.search);
+        const FORCE_LAYOUT = params.get('layout') !== '0';
+        const ONLY = params.get('only');
+        if (params.has('cv')) {
+            // Note: content-visibility has no effect on table rows (containment doesn't apply to table-internal boxes)
+            document.head.append(Object.assign(document.createElement('style'), {
+                textContent: '.card { content-visibility: auto; contain-intrinsic-size: 500px; }',
+            }));
+        }
+        const MODE = [params.has('cv') ? 'content-visibility' : 'no content-visibility', FORCE_LAYOUT ? 'forced layout' : 'no forced layout'].join(', ');
         const statusEl = document.getElementById('status');
         const status = text => { statusEl.textContent = text; };
         const nextFrame = () => new Promise(r => setTimeout(r, 0));
@@ -144,7 +156,8 @@
 
         const cardTemplate = Object.assign(document.createElement('template'), { innerHTML: CARD_HTML });
         function makeCardTemplate() {
-            const node = cardTemplate.content.firstElementChild.cloneNode(true);
+            //const node = cardTemplate.content.firstElementChild.cloneNode(true);
+            const node = cardTemplate.content.cloneNode(true).firstElementChild;
             const title = node.firstElementChild.firstElementChild;
             const dl = node.children[1];
             const height = dl.children[0].children[1];
@@ -236,11 +249,11 @@
 
         // ── Timing ────────────────────────────────────────────────────────────
 
-        /** Time one operation, including a forced layout of the stage. */
+        /** Time one operation, including (unless ?layout=0) one forced layout of the stage at the end. */
         async function time(fn) {
             const start = performance.now();
             await fn();
-            void stage.offsetHeight;
+            if (FORCE_LAYOUT) void stage.offsetHeight;
             return performance.now() - start;
         }
 
@@ -268,6 +281,7 @@
 
         async function runB1() {
             for (const [shapeName, shape] of Object.entries(shapes)) {
+                if (ONLY && ONLY !== shapeName) continue;
                 const ops = [
                     ['create 1,000', async () => {}, a => a.render(shape.data(1000)), {}],
                     ['rebind 1,000', a => a.render(shape.data(1000)), a => a.render(shape.data(1000, 2)), {}],
@@ -368,10 +382,11 @@
         const done = document.getElementById('done');
         try {
             await runB1();
-            await runB2();
+            if (!ONLY) await runB2();
             report();
             window.__treeBenchmark = results;
-            status('Done.');
+            window.__treeBenchmarkMode = MODE;
+            status(`Done (${MODE}).`);
             done.dataset.status = 'success';
         } catch (err) {
             console.error(err);

@@ -198,3 +198,52 @@ Those may close much of the 1.3–1.8× gap on their own. Compiling would then b
 
 1. **Insert a "Step 1b: profile and trim Tree's overhead"** (normalize caching, fewer option spreads, skipping static keys on rebind), and re-measure against this baseline before deciding on compiling? **I recommend yes.**
 2. **Revisit the Step 4 bar?** Given the ~1.3–1.5× ceiling, compiling would need to be justified by server-rendered templates (Step 5) rather than by runtime speed alone.
+
+---
+
+## Addendum: `content-visibility` and construction-only timings
+
+Two follow-ups prompted by the simple [template vs. `h()` page](../../../../../../demos/template-vs-h-benchmark.html), which showed cloning to be **2.7–4.3× faster** than `h()` for a large static structure. That's far more than the 10–20% above.
+
+**How often is layout forced?** Once per timed operation. The whole batch (1,000 or 10,000 items) is inserted, then `stage.offsetHeight` is read once. It isn't once per item.
+
+**New URL options on `demos/tree-benchmark.html`:**
+
+| Option | Effect |
+|---|---|
+| `?cv` | Adds `.card { content-visibility: auto; contain-intrinsic-size: 500px; }` |
+| `?layout=0` | Skips the forced layout (construction only) |
+| `?only=card` / `?only=row` | Runs one shape |
+
+Note that `content-visibility` doesn't apply to table rows (containment doesn't apply to table-internal boxes), so only the card shape is affected.
+
+**Card shape, median ms:** baseline / `cv` / no forced layout.
+
+| Operation / approach | Chromium (2 runs) | Firefox | WebKit |
+|---|---|---|---|
+| create 1,000: Tree | 50–55 / 28–30 / 26 | 80 / 61 / 50 | 94 / 56 / 30 |
+| create 1,000: `createElement` | 36–41 / 15–16 / 13–14 | 54 / 29 / 19 | 83 / 41 / 14 |
+| create 1,000: template clone | 38 / 13 / 11–12 | 45 / 18 / 11 | 77 / 34 / 8 |
+| create 10,000: Tree | 560–570 / 273–274 / 252–261 | 772 / 516 / 428 | 1133 / 586 / 337 |
+| create 10,000: `createElement` | 420–442 / 162–165 / 142 | 535 / 313 / 210 | 962 / 425 / 144 |
+| create 10,000: template clone | 394–400 / 126–144 / 114–116 | 437 / 209 / 102 | 893 / 365 / 81 |
+| rebind 1,000: Tree | 48–50 / 24–25 / 27–28 | 77 / 45 / 40 | 88 / 38 / 39 |
+| rebind 1,000: template clone | 18–20 / 7–8 / 9 | 20 / 17 / 4 | 31 / 8 / 7 |
+
+### What this shows
+
+1. **Yes, `content-visibility: auto` dilutes the forced layout a lot.**
+   - **Chromium:** it brings timings close to the "no layout at all" numbers (create 1,000 template clone: 38 → 13 ms; Tree: 50 → 28 ms). Skipped subtrees are laid out at their intrinsic size, so the one forced layout becomes cheap.
+   - **Firefox and WebKit:** the effect is real but smaller, about half way to "no layout".
+2. **With layout out of the way, the gaps widen considerably:**
+
+   | Ratio (cv / no layout) | Chromium | Firefox | WebKit |
+   |---|---|---|---|
+   | Tree ÷ template clone, create | ~2.0–2.3× | ~2.5–4.5× | ~1.6–4.2× |
+   | `createElement` ÷ template clone, create | ~1.1–1.3× | ~1.5–2× | ~1.2–1.8× |
+   | Tree ÷ template clone, rebind | ~3× | ~3–10× | ~4–5× |
+
+3. **This revises my Step 1 conclusion.** The 1.3–1.5× "ceiling" was mostly an artifact of a full layout of every card dominating each measurement. When rendering is cheap (`content-visibility`, off-screen work, or a layout paid once later anyway), **compiling has 2–4× of headroom on creation**, which clears the 1.5× bar comfortably. That holds especially in Firefox and WebKit, where cloning beats `createElement` by more.
+4. **Rebind is the bigger gap, and compiling doesn't address it.** Tree's rebind is ~3–5× vanilla once layout is diluted. That strengthens the case for **Step 1b** (normalize caching, fewer option spreads, skipping static keys on rebind). It helps rebind directly, and it helps creation too.
+
+**Revised recommendation:** keep the 1.5× bar, but **measure Step 4 with `?cv` and with `?layout=0` as well as the baseline**. Do Step 1b first, because rebind is where Tree is furthest behind.

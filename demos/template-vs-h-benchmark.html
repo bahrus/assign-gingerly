@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Template vs h()</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 800px; padding: 0 1rem; color: #1d2330; }
+        .lede { color: #5b6475; }
+        table { border-collapse: collapse; margin: 1rem 0; }
+        th, td { border-bottom: 1px solid #d9dee7; padding: 0.3rem 0.8rem; text-align: left; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        button { font: inherit; padding: 0.4rem 0.9rem; }
+        /* Appended copies are rendered, but kept out of the way */
+        #stage { height: 80px; overflow: hidden; border: 1px dashed #d9dee7; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <h1>Template clone vs <code>h()</code></h1>
+    <p class="lede">
+        One large, fully static structure (no dynamic content), created and appended <strong>COPIES</strong> times per run.
+        "template" clones a <code>&lt;template&gt;</code>; "h()" builds the same structure with
+        <code>document.createElement</code> calls. Median of several runs after a warmup; times cover build + append
+        (layout excluded).
+    </p>
+    <p><button id="run">Run again</button> <span id="status"></span></p>
+    <table>
+        <thead><tr><th>Approach</th><th>Median ms</th><th>Per copy</th><th>× template</th></tr></thead>
+        <tbody id="results"></tbody>
+    </table>
+    <div id="stage"></div>
+
+    <script type="module">
+        const COPIES = 200;   // copies appended per run
+        const ROWS = 40;      // table rows in the structure
+        const RUNS = 7;
+        const WARMUP = 2;
+
+        /** Tiny element helper: h(tag, props, ...children) */
+        function h(tag, props, ...children) {
+            const el = document.createElement(tag);
+            if (props) Object.assign(el, props);
+            el.append(...children);
+            return el;
+        }
+
+        /** The large static structure, built with h(). */
+        function buildWithH() {
+            const rows = [];
+            for (let r = 0; r < ROWS; r++) {
+                rows.push(h('tr', null,
+                    h('td', { className: 'id', textContent: `#${r}` }),
+                    h('td', null, h('a', { href: '#', textContent: `Item ${r}` })),
+                    h('td', null, h('span', { className: 'qty', textContent: '12' })),
+                    h('td', { className: 'price', textContent: '$9.99' })));
+            }
+            return h('section', { className: 'panel' },
+                h('header', null, h('h2', { textContent: 'Inventory' }), h('p', { textContent: 'A static report.' })),
+                h('table', null,
+                    h('thead', null, h('tr', null, ...['Id', 'Name', 'Qty', 'Price'].map(t => h('th', { textContent: t })))),
+                    h('tbody', null, ...rows)),
+                h('footer', null, h('small', { textContent: 'Generated content' })));
+        }
+
+        // The template holds exactly the same markup
+        const template = document.createElement('template');
+        template.innerHTML = buildWithH().outerHTML;
+        const elementCount = template.content.querySelectorAll('*').length;
+
+        const approaches = {
+            'template': () => template.content.cloneNode(true),
+            'h()': () => buildWithH(),
+        };
+
+        const stage = document.getElementById('stage');
+        const median = xs => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+        const pause = () => new Promise(r => setTimeout(r, 0));
+
+        async function measure(create) {
+            const samples = [];
+            for (let i = 0; i < WARMUP + RUNS; i++) {
+                stage.replaceChildren();
+                await pause();
+                const start = performance.now();
+                for (let c = 0; c < COPIES; c++) stage.append(create());
+                const elapsed = performance.now() - start;
+                if (i >= WARMUP) samples.push(elapsed);
+            }
+            stage.replaceChildren();
+            return median(samples);
+        }
+
+        async function run() {
+            const button = document.getElementById('run');
+            const status = document.getElementById('status');
+            button.disabled = true;
+            status.textContent = `Running… (${elementCount} elements × ${COPIES} copies)`;
+            const results = {};
+            for (const [name, create] of Object.entries(approaches)) {
+                results[name] = await measure(create);
+            }
+            const tbody = document.getElementById('results');
+            tbody.replaceChildren(...Object.entries(results).map(([name, ms]) => h('tr', null,
+                h('td', { textContent: name }),
+                h('td', { className: 'num', textContent: ms.toFixed(1) }),
+                h('td', { className: 'num', textContent: `${(ms / COPIES * 1000).toFixed(0)} µs` }),
+                h('td', { className: 'num', textContent: (ms / results.template).toFixed(2) }))));
+            status.textContent = `${elementCount} elements per copy × ${COPIES} copies, median of ${RUNS} runs.`;
+            button.disabled = false;
+            window.__templateVsH = results;
+        }
+
+        document.getElementById('run').addEventListener('click', run);
+        run();
+    </script>
+</body>
+</html>
