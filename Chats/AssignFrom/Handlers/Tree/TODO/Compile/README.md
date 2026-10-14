@@ -11,7 +11,7 @@ The work is split into steps, one file each. **Step 1 is spelled out in detail**
 | Step | File | Status |
 |---|---|---|
 | 1 | [Fragment targets + baseline benchmarks](./Step1-FragmentTargetsAndBaseline.md) | ✅ Done. Results and two new decisions inside. |
-| 1b | [Optimize Tree's own overhead (rebind and create)](./Step1b-OptimizeRebind.md) | ✅ Done. Rebind ~2.5–3× faster, create ~1.5–1.7×. |
+| 1b | [Optimize Tree's own overhead (rebind and create)](./Step1b-OptimizeRebind.md) | ✅ Done. Rebind ~3–3.7× faster, create ~1.7–1.8×. |
 | 2 | [`compileTree(spec)`: a pure compiler](./Step2-CompileTree.md) | Outline |
 | 3 | [Clone-and-bind instantiation (`compile` option)](./Step3-CloneAndBind.md) | Outline |
 | 4 | [Benchmark and go / no-go](./Step4-BenchmarkAndDecide.md) | Outline |

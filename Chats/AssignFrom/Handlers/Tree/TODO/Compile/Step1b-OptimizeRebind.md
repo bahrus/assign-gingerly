@@ -115,3 +115,41 @@ The *Tree-overhead* part of the gap is now mostly gone. What's left, ~1.5× in C
 2. **The small remaining items** (`containerOf` via `localName`, `of: '?.'` without `getValue`): fold them in now, or leave them for a later pass?
 3. **The `find-class-prototype-in-path` race:** OK to apply the one-line fix to that spec?
 
+## Bruce's Response
+
+Please apply all three fixes now, thanks for checking.
+
+## Claude's Notes: The Three Follow-ups
+
+All three are applied.
+
+1. **Dirty check, for `textContent` only.** I went with the conservative of the options I'd listed. On the fast path, `textContent` is only assigned when the text differs (`null` / `undefined` compare as `''`, matching the setter). That's where the win is, since a same-string assignment replaces the text node and fires `MutationObserver`s, and a native `textContent` setter has no side effects to preserve. **Other properties are still always assigned**, so setters (including custom-element ones) behave exactly as before. Documented in `docs/tree.md` → Performance Notes. If you'd like it broader (opt-in for all properties), that's a small follow-up.
+2. **The small tweaks:**
+   - **`containerOf`** checks `localName === 'template'` instead of `instanceof HTMLTemplateElement`.
+   - **A new `resolvePath` helper** (with split paths cached by string) resolves simple `?.` paths directly, falling back to `getValue` under the same conditions as the fast path. It's now used by the fast path **and** by repeats. The repeat's `of`, and especially its **`key`, which previously cost an options spread plus `getValue` for every item**, now resolve directly.
+3. **The flaky spec.** `tests/find-class-prototype-in-path.spec.ts` now waits for `data-total !== '0'` instead of for the attribute to exist (the page's markup starts with `data-total="0"`).
+
+### Results
+
+Scratch harness, 1,000 cards, no layout, median ms (before these follow-ups → after):
+
+| | create | rebind | rebind, unchanged data |
+|---|---|---|---|
+| Chromium | 11–13 → **9.3–10.4** | 5.4 → **4.4–5.2** | 5.1–5.8 → **3.4–4.0** |
+| Firefox | 22–26 → **22–24** | 13 → **11** | 12–13 → **9–10** |
+| WebKit | 17–18 → **16** | 7 → **6–7** | 7 → **5** |
+
+**For all of Step 1b**, from the original baseline:
+
+| | create | rebind |
+|---|---|---|
+| Chromium | 18 → ~10 ms (**~1.8×**) | 17.5 → ~4.7 ms (**~3.7×**) |
+| Firefox | 40 → ~23 ms (**~1.7×**) | 34 → ~11 ms (**~3.1×**) |
+| WebKit | 27 → ~16 ms (**~1.7×**) | 23 → ~6.5 ms (**~3.5×**) |
+
+### Verification
+
+- **Full suite, twice: 124 passed, 2 skipped** (the benchmark in Firefox and WebKit), **0 failed**. The previously flaky spec passed both times while running alongside the benchmark.
+- Tree tests: 120 / 120 in Chromium, 119 / 119 in Firefox and WebKit.
+- `tsc` is clean, in a scratch copy; no `.js` touched (the repo's `.js` is stale until you rebuild).
+

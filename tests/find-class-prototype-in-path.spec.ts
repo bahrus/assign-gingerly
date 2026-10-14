@@ -6,7 +6,8 @@ test.describe('findClassPrototypeInPath', () => {
 
     await page.waitForFunction(() => {
       const el = document.getElementById('test-complete');
-      return el && el.hasAttribute('data-total');
+      // The page's markup starts with data-total="0", so wait for the real count
+      return el && el.getAttribute('data-total') !== '0';
     }, { timeout: 10000 });
 
     const results = await page.evaluate(() => {

@@ -188,7 +188,7 @@ function normalize(spec: ElementSpecification): NormalizedSpec {
 
 /** Where an element's children go: a template's content, otherwise the element itself. */
 function containerOf(element: Element): ParentNode {
-    return element instanceof HTMLTemplateElement ? element.content : element;
+    return element.localName === 'template' ? (element as HTMLTemplateElement).content : element;
 }
 
 /**
@@ -294,8 +294,42 @@ function fastPathAllowed(options: AssignFromOptions, permissionProcessor?: Permi
  * or a plain assignment. Returns false (before assigning anything) when an alias maps a
  * key to something that isn't a plain property.
  */
-function applyFast(element: Element, entries: FastEntry[], from: any, options: AssignFromOptions, skipLiterals: boolean): boolean {
+/** Pre-split `?.` paths, cached by string. */
+const splitPaths = new Map<string, string[]>();
+
+function splitPath(path: string): string[] {
+    let parts = splitPaths.get(path);
+    if (!parts) splitPaths.set(path, parts = path.split('?.').filter(p => p.length > 0));
+    return parts;
+}
+
+/**
+ * Resolve a `?.` path directly when nothing can change its meaning (fast-path options,
+ * and no segment that's aliased or names a pipe); otherwise through getValue.
+ */
+function resolvePath(
+    path: string,
+    parts: string[],
+    from: any,
+    options: AssignFromOptions,
+    element: Element,
+    fastAllowed: boolean,
+    permissionProcessor?: PermissionProcessor
+): any {
     const { aka, pipes } = options as any;
+    if (!fastAllowed || ((aka || pipes) && parts.some(p => (aka && Object.hasOwn(aka, p)) || (pipes && Object.hasOwn(pipes, p))))) {
+        return getValue(path, from, { ...options, from, root: element, permissionProcessor } as any);
+    }
+    let value = from;
+    for (const part of parts) {
+        if (value == null) break;
+        value = value[part];
+    }
+    return value;
+}
+
+function applyFast(element: Element, entries: FastEntry[], from: any, options: AssignFromOptions, skipLiterals: boolean): boolean {
+    const { aka } = options as any;
     if (aka) {
         for (const { key } of entries) {
             if (Object.hasOwn(aka, key)) {
@@ -308,20 +342,13 @@ function applyFast(element: Element, entries: FastEntry[], from: any, options: A
     for (const entry of entries) {
         if (skipLiterals && entry.literal) continue;
         const key: string = aka && Object.hasOwn(aka, entry.key) ? aka[entry.key] : entry.key;
-        let value: any;
-        if (entry.literal) {
-            value = entry.value;
-        } else if ((aka || pipes) && entry.parts.some(p => (aka && Object.hasOwn(aka, p)) || (pipes && Object.hasOwn(pipes, p)))) {
-            value = getValue(entry.value, from, { ...options, from, root: element } as any);
-        } else {
-            value = from;
-            for (const part of entry.parts) {
-                if (value == null) break;
-                value = value[part];
-            }
-        }
+        const value = entry.literal ? entry.value : resolvePath(entry.value, entry.parts, from, options, element, true);
         if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
             assignGingerly(target, { [key]: value }, { ...options, from, aka: undefined } as any);
+        } else if (key === 'textContent') {
+            // Unchanged text is skipped: re-assigning would replace the text node for nothing
+            const text = value == null ? '' : String(value);
+            if (target.textContent !== text) target.textContent = text;
         } else if (!(key in target && tryAssignTo(target[key], value, target, key))) {
             target[key] = value;
         }
@@ -402,17 +429,23 @@ function placeChildren(container: ParentNode, elements: Element[]): void {
 function bindRepeat(node: TreeNode, repeat: RepeatSpecification, from: any): void {
     const { element, options, permissionProcessor } = node;
     const { each, of = '?.', key, empty } = repeat;
-    const resolveOptions = { ...options, from, root: element, permissionProcessor } as any;
-    const list = getValue(of, from, resolveOptions);
+    const fastAllowed = fastPathAllowed(options, permissionProcessor);
+    const list = of.startsWith('?.')
+        ? resolvePath(of, splitPath(of), from, options, element, fastAllowed, permissionProcessor)
+        : getValue(of, from, { ...options, from, root: element, permissionProcessor } as any);
     const items: any[] = list != null && typeof list[Symbol.iterator] === 'function' ? Array.from(list) : [];
     // With the default `of`, the node's value is the array, and the stack's top is already its holder
     const itemOptions = of === '?.' ? options : { ...options, fromStack: [...(options.fromStack ?? []), from] };
 
+    const keyParts = key !== undefined && key.startsWith('?.') ? splitPath(key) : undefined;
+    const keyFast = itemOptions === options ? fastAllowed : fastPathAllowed(itemOptions, permissionProcessor);
     const { container } = node;
     const state = node.repeat ??= { items: new Map(), empty: undefined, warned: false };
     const next = new Map<unknown, TreeNode>();
     items.forEach((item, index) => {
-        let itemKey: unknown = key === undefined ? index : getValue(key, item, { ...itemOptions, from: item, root: element, permissionProcessor } as any);
+        let itemKey: unknown = key === undefined ? index
+            : keyParts ? resolvePath(key, keyParts, item, itemOptions, element, keyFast, permissionProcessor)
+            : getValue(key, item, { ...itemOptions, from: item, root: element, permissionProcessor } as any);
         if (next.has(itemKey)) {
             if (!state.warned) {
                 console.warn(`builtIns.tree: duplicate key ${JSON.stringify(itemKey)} in a repeat; falling back to the index for duplicates`);

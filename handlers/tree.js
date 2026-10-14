@@ -129,7 +129,7 @@ function normalize(spec) {
 }
 /** Where an element's children go: a template's content, otherwise the element itself. */
 function containerOf(element) {
-    return element instanceof HTMLTemplateElement ? element.content : element;
+    return element.localName === 'template' ? element.content : element;
 }
 /**
  * Apply a pattern to an element, resolving against `from` (the key's VM value, or the
@@ -232,8 +232,33 @@ function fastPathAllowed(options, permissionProcessor) {
  * or a plain assignment. Returns false (before assigning anything) when an alias maps a
  * key to something that isn't a plain property.
  */
-function applyFast(element, entries, from, options, skipLiterals) {
+/** Pre-split `?.` paths, cached by string. */
+const splitPaths = new Map();
+function splitPath(path) {
+    let parts = splitPaths.get(path);
+    if (!parts)
+        splitPaths.set(path, parts = path.split('?.').filter(p => p.length > 0));
+    return parts;
+}
+/**
+ * Resolve a `?.` path directly when nothing can change its meaning (fast-path options,
+ * and no segment that's aliased or names a pipe); otherwise through getValue.
+ */
+function resolvePath(path, parts, from, options, element, fastAllowed, permissionProcessor) {
     const { aka, pipes } = options;
+    if (!fastAllowed || ((aka || pipes) && parts.some(p => (aka && Object.hasOwn(aka, p)) || (pipes && Object.hasOwn(pipes, p))))) {
+        return getValue(path, from, { ...options, from, root: element, permissionProcessor });
+    }
+    let value = from;
+    for (const part of parts) {
+        if (value == null)
+            break;
+        value = value[part];
+    }
+    return value;
+}
+function applyFast(element, entries, from, options, skipLiterals) {
+    const { aka } = options;
     if (aka) {
         for (const { key } of entries) {
             if (Object.hasOwn(aka, key)) {
@@ -248,23 +273,15 @@ function applyFast(element, entries, from, options, skipLiterals) {
         if (skipLiterals && entry.literal)
             continue;
         const key = aka && Object.hasOwn(aka, entry.key) ? aka[entry.key] : entry.key;
-        let value;
-        if (entry.literal) {
-            value = entry.value;
-        }
-        else if ((aka || pipes) && entry.parts.some(p => (aka && Object.hasOwn(aka, p)) || (pipes && Object.hasOwn(pipes, p)))) {
-            value = getValue(entry.value, from, { ...options, from, root: element });
-        }
-        else {
-            value = from;
-            for (const part of entry.parts) {
-                if (value == null)
-                    break;
-                value = value[part];
-            }
-        }
+        const value = entry.literal ? entry.value : resolvePath(entry.value, entry.parts, from, options, element, true);
         if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
             assignGingerly(target, { [key]: value }, { ...options, from, aka: undefined });
+        }
+        else if (key === 'textContent') {
+            // Unchanged text is skipped: re-assigning would replace the text node for nothing
+            const text = value == null ? '' : String(value);
+            if (target.textContent !== text)
+                target.textContent = text;
         }
         else if (!(key in target && tryAssignTo(target[key], value, target, key))) {
             target[key] = value;
@@ -350,16 +367,22 @@ function placeChildren(container, elements) {
 function bindRepeat(node, repeat, from) {
     const { element, options, permissionProcessor } = node;
     const { each, of = '?.', key, empty } = repeat;
-    const resolveOptions = { ...options, from, root: element, permissionProcessor };
-    const list = getValue(of, from, resolveOptions);
+    const fastAllowed = fastPathAllowed(options, permissionProcessor);
+    const list = of.startsWith('?.')
+        ? resolvePath(of, splitPath(of), from, options, element, fastAllowed, permissionProcessor)
+        : getValue(of, from, { ...options, from, root: element, permissionProcessor });
     const items = list != null && typeof list[Symbol.iterator] === 'function' ? Array.from(list) : [];
     // With the default `of`, the node's value is the array, and the stack's top is already its holder
     const itemOptions = of === '?.' ? options : { ...options, fromStack: [...(options.fromStack ?? []), from] };
+    const keyParts = key !== undefined && key.startsWith('?.') ? splitPath(key) : undefined;
+    const keyFast = itemOptions === options ? fastAllowed : fastPathAllowed(itemOptions, permissionProcessor);
     const { container } = node;
     const state = node.repeat ??= { items: new Map(), empty: undefined, warned: false };
     const next = new Map();
     items.forEach((item, index) => {
-        let itemKey = key === undefined ? index : getValue(key, item, { ...itemOptions, from: item, root: element, permissionProcessor });
+        let itemKey = key === undefined ? index
+            : keyParts ? resolvePath(key, keyParts, item, itemOptions, element, keyFast, permissionProcessor)
+                : getValue(key, item, { ...itemOptions, from: item, root: element, permissionProcessor });
         if (next.has(itemKey)) {
             if (!state.warned) {
                 console.warn(`builtIns.tree: duplicate key ${JSON.stringify(itemKey)} in a repeat; falling back to the index for duplicates`);
