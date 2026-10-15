@@ -307,3 +307,90 @@ At runtime, ` :=` goes through `permissionProcessor.redirectRestrictedProp`. Bak
 ### To proceed
 
 If you're fine with the four recommendations, I'll start on Step 2 as described, beginning with the `microJoin` text-merge fix.
+
+## Bruce's Response IV
+
+**Decision 1**
+
+a. sounds right, especially with a recommendation below
+
+**Decision 2**
+
+I need to read through this more carefully.  You mentioned some previous discussion which I guess I should review.  I may ask for a dumbed-down explanation of it.  I'm likely to defer to your recommendations.
+
+## Decision 3##
+
+This is the one I've been thinking about the most.  Tying this to Decision 1, I wonder if we can insist that we only compile the template after we have a sample vm with actual data.  If the vm indicates what type of data is there (say with the first element of any applicable array), then we compile the built baked in static text nodes and the empty span / data / time tags for dynamic data.  If any of the object is missing a property, don't bake it in.
+
+Another thought is to put a template placeholder where the span / data / time tag will go in the template.
+
+Let me know if any of those ideas would help, or if we should just not bother and leave all such slots empty (basically the alt)
+
+**Decision 4**
+
+The recommended approach sounds promising.  Can you illustrate that with a simple example, or point me to whee you already did?
+
+## Claude's Response IV
+
+### Decision 1
+
+Noted: (a).
+
+### Decision 2, in plain terms
+
+Today, Tree keeps a small JavaScript record (a `TreeNode`) **for every element it created**. On a rebind, it walks those records alongside the spec and updates each element. That walk is how it finds elements without querying the DOM.
+
+The question is what a **cloned** instance should get:
+
+- **Full (rec.):** after cloning, walk the clone once and make a `TreeNode` for every element, exactly as `createNode` would have.
+  - Everything that happens afterwards (rebinding, managers, `ctx.rebind()`, structure checks) is today's code, unchanged.
+  - The walk is cheap. B4 showed that visiting all 16 elements of a card costs about the same as jumping to just the 3 that have data.
+- **Sparse:** make `TreeNode`s only for elements that have per-instance work (the 3 of 16), and skip the purely static ones.
+  - That would save a little memory and some rebind time.
+  - But rebinding would need a second implementation that understands "gaps", and that duplicates the most delicate part of Tree.
+
+"The previous discussion" was just Decision 3 in my *Benchmarks and Binding Design* response above, where I first floated the sparse idea. **Recommendation:** full now, and sparse only if Step 4's numbers say compiling is marginal.
+
+### Decision 3: your ideas
+
+**A sample VM: yes, and it fits naturally.** Step 3 already compiles lazily, on first use, so the first instance's data is right there. The server (Step 5) renders with data too. So:
+
+- `compileTree(spec, { sample })` stays pure. The sample is just one more input.
+- For each `microJoin`, the compiler resolves its references against the sample and bakes a shell of the matching type, plus the static text:
+  - number → `<data>`
+  - `Date` → `<time>`
+  - otherwise → `<span>`
+- **If anything in it resolves to null or undefined** (including a missing optional group), **that `microJoin` isn't baked.** The element stays empty in the template and renders per instance, exactly as you suggest.
+- **Repeats:** the first item of the array is the sample for the `each` template. With an empty array there's no sample, so nothing in that template's `microJoin`s is baked.
+- **Safety:** if a later instance's types differ from the sample's, `microJoin`'s structure check re-renders that one element, so the output is always correct. The sample only decides how often baking pays off.
+- **What isn't resolved at compile time:** a `microJoin` whose references use protocols or `$root` / `$parent` isn't baked. Pipes need the same `pipes` option as at runtime, which Step 3 has.
+
+**A placeholder where each tag goes:** I'd skip it. Each instance would have to *replace* the placeholder with the real element, which costs as much as creating the element. It also adds a node to every clone, and `microJoin` would see a structure it doesn't recognize. The sample idea gets the real tag in without a placeholder.
+
+**Summary:** sample-based baking, with "don't bake" as the fallback, so the alt is only the fallback. I'd still make the small `microJoin` fix (merging adjacent literal strings into one text node), because baked text gets merged by the template.
+
+### Decision 4: an example
+
+```js
+// A pattern with three literal attributes
+['a', { 'class :=': 'link', 'href :=': 'javascript:alert(1)', 'aria-label :=': '?.label' }]
+```
+
+- `class :=` is a literal, and the permission check allows it → **baked**: `<a class="link">` is in the template.
+- `href :=` is a literal, but the strict profile refuses `javascript:` URLs → **not baked**. It stays a per-instance key, where the normal runtime check refuses it with the usual warning. The result is identical to today: no `href`.
+- `aria-label :=` is dynamic → per instance, as always.
+
+In code, it's roughly:
+
+```js
+compileTree(spec, {
+    sample,
+    canBake: (name, value) => !permissionProcessor || permissionProcessor.allows(element, name, value),
+});
+```
+
+`allows` here stands in for whatever check `redirectRestrictedProp` makes (Step 3 will expose it as a side-effect-free check). Without a permission processor, every literal ` :=` is baked. I haven't illustrated this anywhere else before; this is the first concrete example.
+
+### Status
+
+With your answers, the only item still open is **Decision 2**. Unless you say otherwise, I'll proceed with "full". Ready to start when you are.
