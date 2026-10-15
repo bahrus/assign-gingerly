@@ -21,7 +21,6 @@ import type { AssignFromOptions, AssignFromHandlerConstructor } from './assignFr
 const BUILT_IN_MAP: Record<string, string> = {
     'builtIns.lazyLoad': './handlers/lazyLoad.js',
     'builtIns.lazyLoadSwitch': './handlers/lazyLoadSwitch.js',
-    'builtIns.microDataJoin': './handlers/microDataJoin.js',
     'builtIns.manageTemplateList': './handlers/manageTemplateList.js',
     'builtIns.rangeSelector': './handlers/rangeSelector.js',
     'builtIns.tree': './handlers/tree.js',

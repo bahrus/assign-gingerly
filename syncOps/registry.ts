@@ -1,19 +1,25 @@
 /**
  * registry.ts — Registry of ` =&` sync ops.
  *
- * Every op is a plain, synchronous, side-effect-free function: (args, extra) => value.
+ * Every op is a plain, synchronous function: (args, extra, ctx) => value.
  * `args` is the resolved value of the key matching the op's own name (e.g. `join:`),
- * `extra` carries any sibling config keys (e.g. `separator:`). All statically
- * imported — no dynamic loading, unlike the ` =>` built-in handler map — because
- * the entire point of ` =&` is to never introduce an await.
+ * `extra` carries any sibling config keys (e.g. `separator:`), and `ctx.lhsTarget` is
+ * what the key's left-hand path resolves to. An op either returns a value, which is
+ * assigned to the LHS path (`join`), or renders into `ctx.lhsTarget` and returns
+ * undefined (`microJoin`). All statically imported — no dynamic loading, unlike the
+ * ` =>` built-in handler map — because the entire point of ` =&` is to never
+ * introduce an await.
  *
  * Add new sync ops here as they're written.
  */
 
 import { join } from './join.js';
+import { microJoin } from './microJoin.js';
+import type { SyncOpContext } from '../types/assign-gingerly/types.js';
 
-export type SyncOp = (args: any, extra: Record<string, any>) => any;
+export type SyncOp = (args: any, extra: Record<string, any>, ctx: SyncOpContext) => any;
 
 export const SYNC_OPS: Record<string, SyncOp> = {
     join,
+    microJoin,
 };

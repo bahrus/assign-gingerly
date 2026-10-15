@@ -224,7 +224,7 @@ I created the three docs, with your answers recorded as settled decisions. They'
 
 | Step | Doc | Contents |
 |---|---|---|
-| 1c | [AttributeOperator.md](../../../../TODO/AttributeOperator.md) | Full spec, with your five decisions; entry points (`assignGingerly`, `assignFrom`, `@each`, Tree's fast path, compiled baking); docs; tests; three small open questions |
+| 1c | [AttributeOperator.md](../../../../AttributeOperator.md) | Full spec, with your five decisions; entry points (`assignGingerly`, `assignFrom`, `@each`, Tree's fast path, compiled baking); docs; tests; three small open questions |
 | 1d | [JoinTextBaking.md](./JoinTextBaking.md) | A B5 benchmark (today's `textContent` vs. baked static text nodes), with a ≥ 1.2× create / no-rebind-regression bar for building it; otherwise discard |
 | 1e | [MicroJoin.md](../../../../TODO/MicroJoin.md) | A sync ` =&` op reusing `microDataJoin`'s type → element mapping; a B6 benchmark (`join` vs. runtime `microJoin` vs. baked `microJoin`); open question on how the op applies its result (fragment vs. writing into the element) |
 

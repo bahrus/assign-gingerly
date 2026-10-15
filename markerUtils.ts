@@ -1,7 +1,7 @@
 /**
  * markerUtils.ts — Shared utilities for comment marker management.
  * 
- * Used by lazyLoad, microDataJoin, and future template loop handlers.
+ * Used by lazyLoad, manageTemplateList, builtIns.tree, and future template loop handlers.
  * Provides finding, creating, and traversing comment marker pairs.
  * 
  * Markers are HTML comment nodes with specific content:

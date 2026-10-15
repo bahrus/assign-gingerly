@@ -17,7 +17,6 @@
  * |-------|---------|
  * | 📦 | builtIns.lazyLoad |
  * | 🎚️ | builtIns.lazyLoadSwitch |
- * | 🏷️ | builtIns.microDataJoin |
  * | 📋 | builtIns.manageTemplateList |
  * | 📊 | builtIns.rangeSelector |
  * | 🌲 | builtIns.tree |
@@ -29,7 +28,6 @@
 export const builtInEmoji = {
     '📦': 'builtIns.lazyLoad',
     '🎚️': 'builtIns.lazyLoadSwitch',
-    '🏷️': 'builtIns.microDataJoin',
     '📋': 'builtIns.manageTemplateList',
     '📊': 'builtIns.rangeSelector',
     '🌲': 'builtIns.tree',

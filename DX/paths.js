@@ -384,12 +384,12 @@ function extractPropName(pathStr) {
 }
 /**
  * Tagged template literal that produces an array of {prop, val} objects + literal strings.
- * Designed for `builtIns.microDataJoin` — provides both the property name (for itemprop)
+ * Designed for the `microJoin` sync op (` =&`) — provides both the property name (for itemprop)
  * and the path string (for resolution).
  *
  * Path proxy objects are auto-detected and converted to `{prop, val}` objects.
  * Plain objects passed as interpolations are preserved as-is (allows developer overrides
- * with custom prop, val, format, etc.).
+ * with custom prop, val, text (a display-text override), etc.).
  * Arrays are preserved as nested arrays (for optional segments).
  *
  * @example
@@ -399,9 +399,9 @@ function extractPropName(pathStr) {
  * md`${$.firstName} ${$.lastName}`
  * // [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'lastName', val: '?.lastName' }]
  *
- * // With developer override (custom prop name, format):
- * md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, format: 'long' }}`
- * // [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'birthDate', val: '?.birthDT', format: 'long' }]
+ * // With developer override (custom prop name, display text formatted through a pipe):
+ * md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, text: '?.birthDT?.longDate' }}`
+ * // [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'birthDate', val: '?.birthDT', text: '?.birthDT?.longDate' }]
  *
  * // With optional segment:
  * md`${$.firstName}${[' ', $.middleName]} ${$.lastName}`

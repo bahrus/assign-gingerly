@@ -12,10 +12,10 @@ The work is split into steps, one file each. **Step 1 is spelled out in detail**
 |---|---|---|
 | 1 | [Fragment targets + baseline benchmarks](./Step1-FragmentTargetsAndBaseline.md) | ✅ Done. Results and two new decisions inside. |
 | 1b | [Optimize Tree's own overhead (rebind and create)](./Step1b-OptimizeRebind.md) | ✅ Done. Rebind ~3–3.7× faster, create ~1.7–1.8×. |
-| 1c | [Attribute operator ` :=`](../../../../TODO/AttributeOperator.md) (core feature) | ✅ Done. |
-| 1d | [`join` text baking: benchmark, then build or discard](./JoinTextBaking.md) | **Next** |
-| 1e | [`microJoin` sync op: implement + benchmark](../../../../TODO/MicroJoin.md) (core feature) | Planned |
-| 2 | [`compileTree(spec)`: a pure compiler](./Step2-CompileTree.md) | Design in progress; resumes after 1c–1e |
+| 1c | [Attribute operator ` :=`](../../../../AttributeOperator.md) (core feature) | ✅ Done. |
+| 1d | [`join` text baking: benchmark, then build or discard](./JoinTextBaking.md) | ✅ Benchmarked; **discarded** (slower to create) |
+| 1e | [`microJoin` sync op: implement + benchmark](../../../../TODO/MicroJoin.md) (core feature) | ✅ Done; microDataJoin removed |
+| 2 | [`compileTree(spec)`: a pure compiler](./Step2-CompileTree.md) | **Next:** design in progress |
 | 3 | [Clone-and-bind instantiation (`compile` option)](./Step3-CloneAndBind.md) | Outline |
 | 4 | [Benchmark and go / no-go](./Step4-BenchmarkAndDecide.md) | Outline |
 | 5 | [Server-rendered templates](./Step5-ServerTemplates.md) | Outline |

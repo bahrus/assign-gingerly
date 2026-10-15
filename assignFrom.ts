@@ -564,10 +564,11 @@ export function assignFrom(
       assertNoThenable(resolvedConfig, opName, key);
 
       const { [opName]: args, ...extra } = resolvedConfig;
-      const result = SYNC_OPS[opName](args, extra);
+      // Resolve the LHS first: rendering ops (microJoin) write into it; value ops (join) assign back to it
+      const { lhsTarget, lhsParent, lhsKey } = resolveLhsPath(target, lhsPath, options);
+      const result = SYNC_OPS[opName](args, extra, { lhsTarget });
       if (result === undefined) continue;
 
-      const { lhsParent, lhsKey } = resolveLhsPath(target, lhsPath, options);
       if (lhsParent != null && lhsKey != null
           && !permissionProcessor?.redirectRestrictedProp(lhsParent, lhsKey, result)) {
         lhsParent[lhsKey] = result;

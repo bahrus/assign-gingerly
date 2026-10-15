@@ -191,7 +191,7 @@ sp`${$.lastName}${[', ', $.middleName]}, ${$.firstName}`
 
 ---
 
-## `md` — Microdata Template (for `builtIns.microDataJoin`)
+## `md` — Microdata Template (for the `microJoin` sync op)
 
 Tagged template literal that produces `{prop, val}` objects for semantic DOM rendering.
 
@@ -203,7 +203,7 @@ const template = md`${$.firstName} ${$.lastName} is ${$.age} years old`;
 Custom property names or per-segment config via explicit objects:
 
 ```ts
-md`${{ prop: 'birthDate', val: $.birthDT, format: 'long' }}`
+md`${{ prop: 'birthDate', val: $.birthDT, text: '?.birthDT?.longDate' }}`
 ```
 
 ---

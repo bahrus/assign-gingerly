@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>microJoin Benchmark</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 900px; padding: 0 1rem; color: #1d2330; }
+        .lede { color: #5b6475; }
+        table { border-collapse: collapse; width: 100%; font-size: 0.85rem; margin: 0.5rem 0 1.5rem; }
+        th, td { border-bottom: 1px solid #d9dee7; padding: 0.3rem 0.5rem; text-align: left; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        #stage { height: 100px; overflow: hidden; border: 1px dashed #d9dee7; }
+    </style>
+</head>
+<body>
+    <h1><code>microJoin</code> cost (B6)</h1>
+    <p class="lede">
+        What does semantic output cost compared with a plain string? One line —
+        <code>'Core ', {serial}, ', flight ', {flight: number}, '; landing: ', {landing}</code> — rendered for every row.
+        <strong>Runtime</strong>: through <code>assignFrom</code>, <code>join</code> into <code>textContent</code> vs.
+        <code>microJoin</code>. <strong>Raw DOM / compiled</strong>: one <code>textContent</code> string vs. a baked
+        <code>microJoin</code> template (static text and element shells cloned; only values set). Create and rebind;
+        median of several runs; ratios vs. the <code>join</code> / text baseline.
+    </p>
+    <p id="status">Running…</p>
+    <div id="results"></div>
+    <div id="stage"></div>
+
+    <script type="module">
+        import { assignFrom } from '../index.js';
+
+        const stage = document.getElementById('stage');
+        const status = t => { document.getElementById('status').textContent = t; };
+        const median = xs => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+        const pause = () => new Promise(r => setTimeout(r, 0));
+        const row = (i, v) => ({ serial: `B${9000 + i}-v${v}`, flight: i + v, landing: v % 2 ? 'ASDS' : 'RTLS' });
+
+        // ── Runtime (through assignFrom) ──────────────────────────────────────
+        const joinPattern = { '?.textContent =&': { join: ['Core ', '?.serial', ', flight ', '?.flight', '; landing: ', '?.landing'] } };
+        const microPattern = { '?. =&': { microJoin: ['Core ', { prop: 'serial', val: '?.serial' }, ', flight ', { prop: 'flight', val: '?.flight' }, '; landing: ', { prop: 'landing', val: '?.landing' }] } };
+
+        // ── Raw DOM / compiled ────────────────────────────────────────────────
+        const bareLi = Object.assign(document.createElement('template'), { innerHTML: '<li></li>' });
+        const bakedLi = Object.assign(document.createElement('template'), {
+            innerHTML: '<li itemscope>Core <span itemprop="serial"></span>, flight <data itemprop="flight"></data>; landing: <span itemprop="landing"></span></li>',
+        });
+
+        const variants = {
+            runtime: {
+                'join (assignFrom)': {
+                    create(item) { const li = document.createElement('li'); assignFrom(li, joinPattern, { from: item }); return { node: li, update(x) { assignFrom(li, joinPattern, { from: x }); } }; },
+                },
+                'microJoin (assignFrom)': {
+                    create(item) { const li = document.createElement('li'); assignFrom(li, microPattern, { from: item }); return { node: li, update(x) { assignFrom(li, microPattern, { from: x }); } }; },
+                },
+            },
+            compiled: {
+                'text (one string)': {
+                    create(item) {
+                        const li = bareLi.content.firstElementChild.cloneNode(true);
+                        const text = x => `Core ${x.serial}, flight ${x.flight.toLocaleString()}; landing: ${x.landing}`;
+                        li.textContent = text(item);
+                        return { node: li, update(x) { li.textContent = text(x); } };
+                    },
+                },
+                'microJoin baked': {
+                    create(item) {
+                        const li = bakedLi.content.firstElementChild.cloneNode(true);
+                        const serial = li.firstElementChild;
+                        const flight = serial.nextElementSibling;
+                        const landing = flight.nextElementSibling;
+                        const set = x => {
+                            serial.textContent = x.serial;
+                            flight.setAttribute('value', String(x.flight));
+                            flight.textContent = x.flight.toLocaleString();
+                            landing.textContent = x.landing;
+                        };
+                        set(item);
+                        return { node: li, update: set };
+                    },
+                },
+            },
+        };
+
+        async function measure(variant, op, n, layout) {
+            const samples = [];
+            for (let r = 0; r < 9; r++) {
+                stage.replaceChildren();
+                const ul = document.createElement('ul');
+                stage.append(ul);
+                let items;
+                if (op === 'rebind') {
+                    items = [];
+                    for (let i = 0; i < n; i++) { const it = variant.create(row(i, 1)); items.push(it); ul.append(it.node); }
+                    void stage.offsetHeight;
+                }
+                const data = Array.from({ length: n }, (_, i) => row(i, op === 'rebind' ? 2 : 1));
+                await pause();
+                const t = performance.now();
+                if (op === 'create') {
+                    const fragment = document.createDocumentFragment();
+                    for (let i = 0; i < n; i++) fragment.append(variant.create(data[i]).node);
+                    ul.append(fragment);
+                } else {
+                    for (let i = 0; i < n; i++) items[i].update(data[i]);
+                }
+                if (layout) void stage.offsetHeight;
+                if (r >= 2) samples.push(performance.now() - t);
+            }
+            stage.replaceChildren();
+            return median(samples);
+        }
+
+        const results = [];
+        try {
+            // Sanity: both runtime variants render the same visible text
+            const a = variants.runtime['join (assignFrom)'].create(row(1, 1)).node.textContent;
+            const b = variants.runtime['microJoin (assignFrom)'].create(row(1, 1)).node.textContent;
+            const c = variants.compiled['microJoin baked'].create(row(1, 1)).node.textContent;
+            if (a !== b || b !== c) throw new Error(`text mismatch: "${a}" / "${b}" / "${c}"`);
+
+            for (const [group, vs] of Object.entries(variants)) {
+                for (const op of ['create', 'rebind']) {
+                    for (const n of [1000, 10000]) {
+                        for (const layout of [false, true]) {
+                            for (const [name, variant] of Object.entries(vs)) {
+                                status(`${group} — ${op} ${n}${layout ? ' + layout' : ''} — ${name}…`);
+                                results.push({ group, op, n, layout, variant: name, ms: await measure(variant, op, n, layout) });
+                            }
+                        }
+                    }
+                }
+            }
+            const container = document.getElementById('results');
+            for (const group of Object.keys(variants)) {
+                const rows = results.filter(r => r.group === group);
+                const names = [...new Set(rows.map(r => r.variant))];
+                const cols = [];
+                for (const op of ['create', 'rebind']) for (const n of [1000, 10000]) for (const l of [false, true]) cols.push([op, n, l]);
+                const table = document.createElement('table');
+                const head = table.createTHead().insertRow();
+                for (const t of ['Variant', ...cols.map(([op, n, l]) => `${op} ${n / 1000}k${l ? '+L' : ''}`)]) head.appendChild(Object.assign(document.createElement('th'), { textContent: t }));
+                const body = table.createTBody();
+                for (const name of names) {
+                    const tr = body.insertRow();
+                    tr.insertCell().textContent = name;
+                    for (const [op, n, l] of cols) {
+                        const r = rows.find(x => x.variant === name && x.op === op && x.n === n && x.layout === l);
+                        const base = rows.find(x => x.variant === names[0] && x.op === op && x.n === n && x.layout === l);
+                        Object.assign(tr.insertCell(), { className: 'num', textContent: `${r.ms.toFixed(1)} (${(r.ms / base.ms).toFixed(2)}×)` });
+                    }
+                }
+                container.append(Object.assign(document.createElement('h2'), { textContent: group === 'runtime' ? 'Runtime (through assignFrom)' : 'Raw DOM / compiled' }), table);
+            }
+            window.__microJoinBench = results;
+            status('Done.');
+        } catch (err) {
+            console.error(err);
+            status(`Error: ${err.message}`);
+            window.__microJoinBenchError = err.message;
+        }
+    </script>
+</body>
+</html>

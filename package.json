@@ -112,9 +112,9 @@
       "default": "./syncOps/registry.js",
       "types": "./syncOps/registry.ts"
     },
-    "./handlers/microDataJoin.js": {
-      "default": "./handlers/microDataJoin.js",
-      "types": "./handlers/microDataJoin.ts"
+    "./syncOps/microJoin.js": {
+      "default": "./syncOps/microJoin.js",
+      "types": "./syncOps/microJoin.ts"
     },
     "./handlers/manageTemplateList.js": {
       "default": "./handlers/manageTemplateList.js",

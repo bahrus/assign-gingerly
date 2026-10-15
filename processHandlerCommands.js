@@ -17,7 +17,6 @@ import { findClassPrototypeInPath } from './utils/findClassPrototypeInPath.js';
 const BUILT_IN_MAP = {
     'builtIns.lazyLoad': './handlers/lazyLoad.js',
     'builtIns.lazyLoadSwitch': './handlers/lazyLoadSwitch.js',
-    'builtIns.microDataJoin': './handlers/microDataJoin.js',
     'builtIns.manageTemplateList': './handlers/manageTemplateList.js',
     'builtIns.rangeSelector': './handlers/rangeSelector.js',
     'builtIns.tree': './handlers/tree.js',

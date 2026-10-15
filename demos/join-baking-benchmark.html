@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Baking Benchmark</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 900px; padding: 0 1rem; color: #1d2330; }
+        .lede { color: #5b6475; }
+        table { border-collapse: collapse; width: 100%; font-size: 0.85rem; margin: 0.5rem 0 1.5rem; }
+        th, td { border-bottom: 1px solid #d9dee7; padding: 0.3rem 0.5rem; text-align: left; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        #stage { height: 100px; overflow: hidden; border: 1px dashed #d9dee7; }
+    </style>
+</head>
+<body>
+    <h1>Baking <code>join</code> text (B5)</h1>
+    <p class="lede">
+        Compile roadmap, step 1d. A line like <code>join: ['T+', '?.time', 's: ', '?.reason']</code>, rendered three ways:
+        <strong>text</strong> — today: one <code>textContent</code> assignment of the joined string;
+        <strong>text nodes</strong> — static pieces baked as separate text nodes in a DOM-built template, dynamic pieces set via
+        <code>.data</code>; <strong>comment markers</strong> — the same, but from a parsed HTML template (as a server would
+        send it), where comments keep adjacent text pieces from merging. Create and rebind; median of several runs.
+    </p>
+    <p id="status">Running…</p>
+    <div id="results"></div>
+    <div id="stage"></div>
+
+    <script type="module">
+        const stage = document.getElementById('stage');
+        const status = t => { document.getElementById('status').textContent = t; };
+        const median = xs => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+        const pause = () => new Promise(r => setTimeout(r, 0));
+
+        // Two line shapes: statics/dynamics alternate, starting with a static piece
+        const SHAPES = {
+            'short (2 static + 2 dynamic)': ['T+', null, 's: ', null],
+            'long (4 static + 4 dynamic)': ['Core ', null, ', flight ', null, '; landing: ', null, ' (', null],
+        };
+        const valuesFor = (shape, i, v) => shape.filter(p => p === null).map((_, d) => `v${v}-${d}-${i}`);
+
+        function makeVariants(shape) {
+            const dynamicCount = shape.filter(p => p === null).length;
+
+            // text: today's join → textContent
+            const bareLi = document.createElement('template');
+            bareLi.innerHTML = '<li></li>';
+            const joinText = values => {
+                let d = 0;
+                let s = '';
+                for (const p of shape) s += p === null ? values[d++] : p;
+                return s;
+            };
+
+            // text nodes: DOM-built template (cloneNode preserves separate and empty text nodes)
+            const nodesTpl = document.createElement('template');
+            const nodesLi = document.createElement('li');
+            const nodeSlots = [];
+            shape.forEach((p, i) => {
+                nodesLi.append(document.createTextNode(p ?? ''));
+                if (p === null) nodeSlots.push(i);
+            });
+            nodesTpl.content.append(nodesLi);
+
+            // comment markers: parsed HTML; each dynamic slot is a one-space text node between two comments
+            const markersTpl = document.createElement('template');
+            markersTpl.innerHTML = '<li>' + shape.map(p => p === null ? '<!----> <!---->' : p).join('') + '</li>';
+            const markerLi = markersTpl.content.firstElementChild;
+            const markerSlots = [];
+            markerLi.childNodes.forEach((n, i) => {
+                if (n.nodeType === Node.TEXT_NODE && n.data === ' '
+                    && n.previousSibling?.nodeType === Node.COMMENT_NODE && n.nextSibling?.nodeType === Node.COMMENT_NODE) {
+                    markerSlots.push(i);
+                }
+            });
+            if (markerSlots.length !== dynamicCount || nodeSlots.length !== dynamicCount) throw new Error('slot count mismatch');
+
+            return {
+                'text (today)': {
+                    create(values) {
+                        const li = bareLi.content.firstElementChild.cloneNode(true);
+                        li.textContent = joinText(values);
+                        return { node: li, update(vs) { li.textContent = joinText(vs); } };
+                    },
+                },
+                'text nodes (DOM-built template)': {
+                    create(values) {
+                        const li = nodesTpl.content.firstElementChild.cloneNode(true);
+                        const slots = nodeSlots.map(i => li.childNodes[i]);
+                        for (let d = 0; d < slots.length; d++) slots[d].data = values[d];
+                        return { node: li, update(vs) { for (let d = 0; d < slots.length; d++) slots[d].data = vs[d]; } };
+                    },
+                },
+                'comment markers (parsed HTML)': {
+                    create(values) {
+                        const li = markerLi.cloneNode(true);
+                        const slots = markerSlots.map(i => li.childNodes[i]);
+                        for (let d = 0; d < slots.length; d++) slots[d].data = values[d];
+                        return { node: li, update(vs) { for (let d = 0; d < slots.length; d++) slots[d].data = vs[d]; } };
+                    },
+                },
+            };
+        }
+
+        /** All variants must render the same visible text. */
+        function check(shape, variants) {
+            const values = valuesFor(shape, 0, 1);
+            const texts = Object.entries(variants).map(([name, v]) => [name, v.create(values).node.textContent]);
+            const [, expected] = texts[0];
+            for (const [name, text] of texts) {
+                // markers add no text, but the one-space placeholders are replaced, so text must match exactly
+                if (text !== expected) throw new Error(`${name}: "${text}" ≠ "${expected}"`);
+            }
+        }
+
+        async function measureCreate(variant, shape, n, layout) {
+            const samples = [];
+            for (let r = 0; r < 9; r++) {
+                stage.replaceChildren();
+                await pause();
+                const t = performance.now();
+                const ul = document.createElement('ul');
+                for (let i = 0; i < n; i++) ul.append(variant.create(valuesFor(shape, i, 1)).node);
+                stage.append(ul);
+                if (layout) void stage.offsetHeight;
+                if (r >= 2) samples.push(performance.now() - t);
+            }
+            stage.replaceChildren();
+            return median(samples);
+        }
+
+        async function measureRebind(variant, shape, n, layout) {
+            const samples = [];
+            for (let r = 0; r < 9; r++) {
+                stage.replaceChildren();
+                const ul = document.createElement('ul');
+                const items = [];
+                for (let i = 0; i < n; i++) {
+                    const item = variant.create(valuesFor(shape, i, 1));
+                    items.push(item);
+                    ul.append(item.node);
+                }
+                stage.append(ul);
+                void stage.offsetHeight;
+                const next = items.map((_, i) => valuesFor(shape, i, 2));
+                await pause();
+                const t = performance.now();
+                for (let i = 0; i < n; i++) items[i].update(next[i]);
+                if (layout) void stage.offsetHeight;
+                if (r >= 2) samples.push(performance.now() - t);
+            }
+            stage.replaceChildren();
+            return median(samples);
+        }
+
+        const results = [];
+        try {
+            for (const [shapeName, shape] of Object.entries(SHAPES)) {
+                const variants = makeVariants(shape);
+                check(shape, variants);
+                for (const [op, measure] of [['create', measureCreate], ['rebind', measureRebind]]) {
+                    for (const n of [1000, 10000]) {
+                        for (const layout of [false, true]) {
+                            for (const [name, variant] of Object.entries(variants)) {
+                                status(`${shapeName} — ${op} ${n}${layout ? ' + layout' : ''} — ${name}…`);
+                                results.push({ shape: shapeName, op, n, layout, variant: name, ms: await measure(variant, shape, n, layout) });
+                            }
+                        }
+                    }
+                }
+            }
+            // Report
+            const container = document.getElementById('results');
+            for (const shapeName of Object.keys(SHAPES)) {
+                const table = document.createElement('table');
+                const head = table.createTHead().insertRow();
+                const cols = [];
+                for (const op of ['create', 'rebind']) for (const n of [1000, 10000]) for (const layout of [false, true]) cols.push([op, n, layout]);
+                for (const t of ['Variant', ...cols.map(([op, n, l]) => `${op} ${n / 1000}k${l ? '+L' : ''}`)]) {
+                    head.appendChild(Object.assign(document.createElement('th'), { textContent: t }));
+                }
+                const body = table.createTBody();
+                const rows = results.filter(r => r.shape === shapeName);
+                for (const variant of [...new Set(rows.map(r => r.variant))]) {
+                    const tr = body.insertRow();
+                    tr.insertCell().textContent = variant;
+                    for (const [op, n, l] of cols) {
+                        const r = rows.find(x => x.variant === variant && x.op === op && x.n === n && x.layout === l);
+                        const base = rows.find(x => x.variant === 'text (today)' && x.op === op && x.n === n && x.layout === l);
+                        Object.assign(tr.insertCell(), { className: 'num', textContent: `${r.ms.toFixed(1)} (${(r.ms / base.ms).toFixed(2)}×)` });
+                    }
+                }
+                container.append(Object.assign(document.createElement('h2'), { textContent: shapeName }), table);
+            }
+            window.__joinBench = results;
+            status('Done. Ratios are relative to "text (today)"; < 1 means faster.');
+        } catch (err) {
+            console.error(err);
+            status(`Error: ${err.message}`);
+            window.__joinBenchError = err.message;
+        }
+    </script>
+</body>
+</html>

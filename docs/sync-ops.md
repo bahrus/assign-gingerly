@@ -34,8 +34,8 @@ assignFrom(oElement, {
 
    Strings that aren't references stay literals.
 4. **Async values are rejected.** If anything in the resolved config is a thenable (for example, a protocol returned a Promise), it throws rather than assigning `"[object Promise]"`. Use ` =>` with `resolve:` for async values.
-5. **The op is called** as `op(args, extra)`.
-6. **The result is assigned** to `lhsPath`, through the permission processor like any other assignment. A result of `undefined` means "don't assign"; built-in `join` always returns a string.
+5. **The LHS is resolved, and the op is called** as `op(args, extra, { lhsTarget })`, where `lhsTarget` is what `lhsPath` resolves to (the target itself for `'?. =&'`).
+6. **A returned value is assigned** to `lhsPath`, through the permission processor like any other assignment. `undefined` means "don't assign". **Value ops** (`join`) return a value. **Rendering ops** (`microJoin`) write into `lhsTarget` and return `undefined`.
 
 ### Order within one `assignFrom` call
 
@@ -47,7 +47,7 @@ When `where_x_in` / `where_y_in` / `where_z_in` expansion produces duplicate ` =
 
 ## Built-in Ops
 
-The registry ([syncOps/registry.ts](../syncOps/registry.ts)) is closed: ops are imported statically, so ` =&` never needs to load anything. Today it holds one op.
+The registry ([syncOps/registry.ts](../syncOps/registry.ts)) is closed: ops are imported statically, so ` =&` never needs to load anything. Today it holds two: `join` (a value op) and `microJoin` (a rendering op).
 
 ### `join`
 
@@ -85,6 +85,35 @@ assignFrom(el, {
 ```
 
 The [`sp` tagged template](./paths-dx.md) produces arrays in exactly the shape `join` expects.
+
+### `microJoin`
+
+Renders a template array **into the element** that the key's path resolves to. Literal strings become text, and each `{ prop, val, text? }` segment becomes an element with `itemprop=prop`, chosen by the resolved value's type:
+
+| Resolved `val` | Element | Attributes | Text (default) |
+|---|---|---|---|
+| `Date` | `<time>` | `itemprop`, `datetime` (ISO) | `toLocaleDateString()` |
+| number | `<data>` | `itemprop`, `value` (raw) | `toLocaleString()` |
+| boolean | `<data>` | `itemprop`, `value` | empty |
+| anything else | `<span>` | `itemprop` | `String(val)` |
+
+```JavaScript
+assignFrom(p, {
+    '?. =&': { microJoin: ['Launched ', { prop: 'launched', val: '?.date', text: '?.date?.longUtc' }, ' by ', { prop: 'name', val: '?.name' }] }
+}, { from: vm, pipes });
+// <p itemscope>Launched <time itemprop="launched" datetime="…">March 14, 2026 at 3:09 PM</time> by <span itemprop="name">Demo 7</span></p>
+```
+
+- **`text`** overrides the displayed text, while `val` still decides the element and its machine-readable attribute. Use [pipes](./pipes.md) to format it. Without `text`, the locale defaults above apply.
+- **Nullish values:** top-level nullish items, and segments with a nullish `val`, are omitted. A **nested sub-array** is all-or-nothing: it's dropped if any item in it is nullish or has a nullish `val` (the same as `join`).
+- **Updates:** `microJoin` owns the element's whole content, so it needs no comment markers.
+  - **Same structure** (the same sequence of text and `tag` + `itemprop` elements): later calls update the text nodes, elements, `value` and `datetime` in place.
+  - **Changed structure:** it re-renders.
+- **`itemscope`:** the element gets an empty `itemscope` attribute if it has none, so the `itemprop`s belong to it.
+- **The LHS must resolve to an element**, otherwise it throws.
+- **Cost:** semantic output costs more than a plain string. Prefer `join` when you don't need the markup. See `demos/microjoin-benchmark.html` for numbers.
+
+`microJoin` replaces the former async `builtIns.microDataJoin` handler, which has been removed.
 
 ## Where ` =&` Is Available
 

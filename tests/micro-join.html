@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>microJoin Sync Op Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+    #results { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>microJoin Sync Op Tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    import { assignFrom, assignFromAsync } from '../index.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+
+    function assert(condition, message) {
+      if (condition) {
+        results.push(`<div class="pass">✓ ${message}</div>`);
+        passed++;
+      } else {
+        results.push(`<div class="fail">✗ ${message}</div>`);
+        failed++;
+        console.error('Failed:', message);
+      }
+    }
+
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) {
+        console.error(`Expected: ${expected}, Actual: ${actual}`);
+      }
+      assert(actual === expected, message);
+    }
+
+    const date = new Date('2026-03-14T15:09:26.000Z');
+    const vm = { name: 'Demo 7', flights: 4, reused: true, launched: date, iso: '2026-03-14T15:09:26.000Z' };
+    const template = [
+      { prop: 'name', val: '?.name' }, ' flew ', { prop: 'flights', val: '?.flights' },
+      ' times; reused: ', { prop: 'reused', val: '?.reused' }, '; launched ', { prop: 'launched', val: '?.launched' },
+    ];
+
+    async function runTests() {
+
+      // Test 1: type → element mapping, text, itemscope
+      {
+        const p = document.createElement('p');
+        assignFrom(p, { '?. =&': { microJoin: template } }, { from: vm });
+        const [span, flights, reused, time] = p.children;
+        assertEquals(p.hasAttribute('itemscope'), true, 'itemscope added');
+        assertEquals(`${span.localName}|${span.getAttribute('itemprop')}|${span.textContent}`, 'span|name|Demo 7', 'string → span');
+        assertEquals(`${flights.localName}|${flights.getAttribute('value')}|${flights.textContent}`, `data|4|${(4).toLocaleString()}`, 'number → data value + locale text');
+        assertEquals(`${reused.localName}|${reused.getAttribute('value')}|${reused.textContent}`, 'data|true|', 'boolean → data value, empty text');
+        assertEquals(`${time.localName}|${time.getAttribute('datetime')}|${time.textContent}`, `time|${date.toISOString()}|${date.toLocaleDateString()}`, 'Date → time datetime + locale date');
+        assertEquals(p.childNodes.length, 7, 'text nodes between elements');
+        assertEquals(p.textContent, `Demo 7 flew ${(4).toLocaleString()} times; reused: ; launched ${date.toLocaleDateString()}`, 'overall text');
+      }
+
+      // Test 2: text override, formatted through pipes; val still decides the element
+      {
+        const p = document.createElement('p');
+        const pipes = { toDate: s => new Date(s), shout: s => `${s}!` };
+        assignFrom(p, { '?. =&': { microJoin: [
+          { prop: 'launched', val: '?.iso?.toDate', text: '?.iso?.toDate?.toISOString|' },
+          ' ', { prop: 'name', val: '?.name', text: '?.name?.shout' },
+        ] } }, { from: vm, pipes, withMethods: ['toISOString'] });
+        const [time, span] = p.children;
+        assertEquals(time.localName, 'time', 'val (a Date via a pipe) decides the element');
+        assertEquals(time.textContent, date.toISOString(), 'text override');
+        assertEquals(span.textContent, 'Demo 7!', 'text through a pipe');
+      }
+
+      // Test 3: nullish handling and optional (all-or-nothing) groups
+      {
+        const p = document.createElement('p');
+        assignFrom(p, { '?. =&': { microJoin: [
+          { prop: 'first', val: '?.first' },
+          [' ', { prop: 'middle', val: '?.middle' }],
+          ' ', { prop: 'last', val: '?.last' },
+          { prop: 'missing', val: '?.nope' },
+        ] } }, { from: { first: 'Ada', last: 'Lovelace' } });
+        assertEquals(p.textContent, 'Ada Lovelace', 'missing optional group dropped; nullish segment omitted');
+        assertEquals(p.querySelector('[itemprop=middle]'), null, 'no middle element');
+        assertEquals(p.querySelector('[itemprop=missing]'), null, 'no element for a nullish val');
+      }
+
+      // Test 4: same structure → updated in place
+      {
+        const p = document.createElement('p');
+        const cfg = { '?. =&': { microJoin: template } };
+        assignFrom(p, cfg, { from: vm });
+        const [span, flights, , time] = p.children;
+        const later = new Date('2027-01-02T00:00:00.000Z');
+        assignFrom(p, cfg, { from: { ...vm, name: 'Demo 8', flights: 5, launched: later } });
+        const [span2, flights2, , time2] = p.children;
+        assert(span2 === span && flights2 === flights && time2 === time, 'elements reused');
+        assertEquals(span.textContent, 'Demo 8', 'text updated');
+        assertEquals(flights.getAttribute('value'), '5', 'value updated');
+        assertEquals(time.getAttribute('datetime'), later.toISOString(), 'datetime updated');
+      }
+
+      // Test 5: changed structure → re-rendered
+      {
+        const p = document.createElement('p');
+        const cfg = { '?. =&': { microJoin: [{ prop: 'first', val: '?.first' }, [' ', { prop: 'middle', val: '?.middle' }]] } };
+        assignFrom(p, cfg, { from: { first: 'Ada' } });
+        assertEquals(p.children.length, 1, 'one element');
+        assignFrom(p, cfg, { from: { first: 'Ada', middle: 'King' } });
+        assertEquals(p.textContent, 'Ada King', 'optional group appears');
+        assignFrom(p, cfg, { from: { first: 42 } });
+        assertEquals(p.firstElementChild.localName, 'data', 'type change → new element');
+      }
+
+      // Test 6: LHS forms; a non-element LHS throws
+      {
+        const host = document.createElement('div');
+        host.innerHTML = '<p></p>';
+        assignFrom(host, { '?.querySelector?.p =&': { microJoin: [{ prop: 'name', val: '?.name' }] } }, { from: vm, withMethods: ['querySelector'] });
+        assertEquals(host.querySelector('p span')?.textContent, 'Demo 7', 'method-argument LHS');
+        const bare = document.createElement('p');
+        assignFrom(bare, { ' =&': { microJoin: ['x'] } }, { from: {} });
+        assertEquals(bare.textContent, 'x', "bare ' =&' targets the target");
+        let error;
+        try { assignFrom({}, { '?. =&': { microJoin: ['x'] } }, { from: {} }); } catch (e) { error = e; }
+        assert(error?.message.includes('must resolve to an element'), 'non-element LHS throws');
+      }
+
+      // Test 7: assignFromAsync, and inside a Tree pattern (rebinding in place)
+      {
+        const p = document.createElement('p');
+        await assignFromAsync(p, { '?. =&': { microJoin: [{ prop: 'name', val: '?.name' }] } }, { from: vm });
+        assertEquals(p.textContent, 'Demo 7', 'assignFromAsync');
+
+        const host = document.createElement('div');
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: {
+          rocket: ['p', { '?. =&': { microJoin: ['Rocket ', { prop: 'name', val: '?.name' }, ' (', { prop: 'stages', val: '?.stages' }, ' stages)'] } }],
+        } } };
+        await assignFromAsync(host, cfg, { from: { rocket: { name: 'Falcon 9', stages: 2 } } });
+        const span = host.querySelector('[itemprop=name]');
+        assertEquals(host.querySelector('p')?.textContent, 'Rocket Falcon 9 (2 stages)', 'Tree pattern');
+        await assignFromAsync(host, cfg, { from: { rocket: { name: 'Falcon Heavy', stages: 2 } } });
+        assert(host.querySelector('[itemprop=name]') === span, 'Tree rebind updates in place');
+        assertEquals(span.textContent, 'Falcon Heavy', 'Tree rebind text');
+      }
+
+      // Test 8: join (a value op) still assigns its result
+      {
+        const el = document.createElement('div');
+        assignFrom(el, { '?.textContent =&': { join: ['a', '?.b'] } }, { from: { b: 'c' } });
+        assertEquals(el.textContent, 'ac', 'join unchanged');
+      }
+
+      const testComplete = document.getElementById('test-complete');
+      testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
+      testComplete.setAttribute('data-passed', passed);
+      testComplete.setAttribute('data-failed', failed);
+
+      results.push(`<h2>Summary: ${passed} passed, ${failed} failed</h2>`);
+      document.getElementById('results').innerHTML = results.join('');
+    }
+
+    runTests().catch(e => {
+      console.error('Test error:', e);
+      document.getElementById('results').innerHTML += `<div class="fail">Test suite error: ${e.message}</div>`;
+      document.getElementById('test-complete').setAttribute('data-status', 'error');
+    });
+  </script>
+</body>
+</html>

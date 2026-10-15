@@ -2815,7 +2815,7 @@ await assignFromAsync(myElement, {
 
 Import paths must be local (relative, absolute, or bare specifiers — no cross-domain URLs). The module's default export is checked first; otherwise the first exported class with an `assign` method is used.
 
-Built-in handlers (`builtIns.lazyLoad`, `builtIns.microDataJoin`, etc.) auto-load without needing to be listed in `handlers`.
+Built-in handlers (`builtIns.lazyLoad`, `builtIns.tree`, etc.) auto-load without needing to be listed in `handlers`.
 
 > `join` isn't in this list — it's a synchronous [` =&` op](#sync-op-join) now, not an async `do:` handler, so it's never dynamically imported and never awaited.
 
@@ -2823,7 +2823,7 @@ Built-in handlers (`builtIns.lazyLoad`, `builtIns.microDataJoin`, etc.) auto-loa
 
 ```JavaScript
 import { builtInEmoji } from 'assign-gingerly/builtInEmoji.js';
-// { '📦': 'builtIns.lazyLoad', '🎚️': 'builtIns.lazyLoadSwitch', '🏷️': 'builtIns.microDataJoin', '📋': 'builtIns.manageTemplateList' }
+// { '📦': 'builtIns.lazyLoad', '🎚️': 'builtIns.lazyLoadSwitch', '📋': 'builtIns.manageTemplateList' }
 
 assignFrom(target, {
     '?.el =>': { do: '🏷️', get: { template: [...] } }
@@ -3156,9 +3156,9 @@ assignFrom(oElement, {
 
 **On `options.protocols`:** `getValues` runs synchronously and calls protocol handlers without awaiting them. `options.protocols` is typed to allow an async handler (`(key: string) => any | Promise<any>`), because ` =>`'s `resolve:` path can use one — but ` =&` has no await to catch a Promise coming back from one. If a resolved value under ` =&` turns out to be a thenable, assignFrom throws immediately rather than silently assigning `"[object Promise]"`. Use ` =>` with `resolve:` for handler configs that need an async protocol.
 
-### Built-in handler: `builtIns.microDataJoin`
+### Sync op: microJoin (` =&`)
 
-Renders a template array as semantic microdata-annotated DOM. Each dynamic value gets an appropriate HTML element based on its JavaScript type, with `itemprop` set to the property name.
+Renders a template array into the left-hand element as semantic, microdata-annotated content. Literal strings become text, and each `{ prop, val }` segment becomes an element chosen by its value's type, with `itemprop` set to `prop`. Unlike `join`, which assigns one string, `microJoin` **writes into the element** the ` =&` key's path resolves to (`'?. =&'` for the target itself).
 
 ```JavaScript
 const vm = {
@@ -3166,24 +3166,20 @@ const vm = {
     firstName: 'Helaena',
     birthDT: new Date('July 1, 109'),
     age: 21,
-    isHappy: false
 };
 
 assignFrom(oSection, {
-    '?.querySelector?.div =>': {
-        do: 'builtIns.microDataJoin',
-        get: {
-            template: [
-                { prop: 'firstName', val: '?.firstName' },
-                ' ',
-                { prop: 'lastName', val: '?.lastName' },
-                ' who was born on ',
-                { prop: 'birthDT', val: '?.birthDT' },
-                ' is ',
-                { prop: 'age', val: '?.age' },
-                ' years old'
-            ]
-        }
+    '?.querySelector?.div =&': {
+        microJoin: [
+            { prop: 'firstName', val: '?.firstName' },
+            ' ',
+            { prop: 'lastName', val: '?.lastName' },
+            ' who was born on ',
+            { prop: 'birthDT', val: '?.birthDT' },
+            ' is ',
+            { prop: 'age', val: '?.age' },
+            ' years old'
+        ]
     }
 }, { from: vm, withMethods: ['querySelector'] });
 ```
@@ -3191,51 +3187,48 @@ assignFrom(oSection, {
 Produces:
 
 ```html
-<div itemscope>
-    <!--?start name="microDataJoin"-->
-    <span itemprop="firstName">Helaena</span>
-     
-    <span itemprop="lastName">Targaryen</span>
-     who was born on 
-    <time itemprop="birthDT" datetime="0109-07-01T...">7/1/0109</time>
-     is 
-    <data itemprop="age" value="21">21</data>
-     years old
-    <!--?end-->
-</div>
+<div itemscope><span itemprop="firstName">Helaena</span> <span itemprop="lastName">Targaryen</span> who was born on <time itemprop="birthDT" datetime="0109-07-01T…">7/1/109</time> is <data itemprop="age" value="21">21</data> years old</div>
 ```
 
 **Type → element mapping:**
 
-| JS Type | HTML Element | Attributes | textContent |
-|---------|-------------|------------|-------------|
-| `string` | `<span>` | `itemprop` | the value |
-| `number` | `<data>` | `itemprop`, `value` (raw) | locale-formatted |
-| `boolean` | `<data>` | `itemprop`, `value` (true/false) | empty |
-| `Date` | `<time>` | `itemprop`, `datetime` (ISO) | locale-formatted |
+| Resolved `val` | Element | Attributes | Text (default) |
+|---|---|---|---|
+| `Date` | `<time>` | `itemprop`, `datetime` (ISO) | `toLocaleDateString()` |
+| number | `<data>` | `itemprop`, `value` (raw) | `toLocaleString()` |
+| boolean | `<data>` | `itemprop`, `value` (`true` / `false`) | empty |
+| anything else | `<span>` | `itemprop` | the value |
 
-**Optional segments (nested arrays):**
-
-Same all-or-nothing semantics as the [`join` sync op](#sync-op-join) — if any `val` in a nested sub-array is null/undefined, the entire sub-array is dropped:
+**Custom display text:** a segment's optional `text` overrides the displayed text, while `val` still decides the element and its machine-readable attribute. Combine it with [pipes](docs/pipes.md) for formatting:
 
 ```JavaScript
-get: {
-    template: [
-        { prop: 'firstName', val: '?.firstName' },
-        [' ', { prop: 'middleName', val: '?.middleName' }],  // dropped if middleName is undefined
-        ' ',
-        { prop: 'lastName', val: '?.lastName' }
-    ]
-}
+// with options.pipes = { toDate: s => new Date(s), parseDate: Date.parse, longUtc: new Intl.DateTimeFormat(…).format }
+{ prop: 'launched', val: '?.date_utc?.toDate', text: '?.date_utc?.parseDate?.longUtc' }
+// <time itemprop="launched" datetime="2026-03-14T15:09:26.000Z">March 14, 2026 at 3:09 PM</time>
 ```
 
-**Idempotent updates:**
+**Optional segments (nested arrays):** the same all-or-nothing semantics as [`join`](#sync-op-join). A sub-array is dropped entirely if any item in it is nullish, or is a segment whose `val` is nullish. Top-level nullish items and segments are omitted.
 
-Uses comment markers (`<!--?start name="microDataJoin"-->` / `<!--?end-->`) to track rendered content. On first call, creates all elements. On subsequent calls, updates existing elements in place (no re-creation) — `textContent`, `value`, and `datetime` attributes are updated without touching the DOM structure.
+```JavaScript
+microJoin: [
+    { prop: 'firstName', val: '?.firstName' },
+    [' ', { prop: 'middleName', val: '?.middleName' }],  // dropped if middleName is missing
+    ' ',
+    { prop: 'lastName', val: '?.lastName' }
+]
+```
 
-**Authoring with `md` tag:**
+**Updates:**
+- **Ownership:** `microJoin` owns the element's whole content, so it needs no comment markers.
+- **Same structure:** later calls update the existing text nodes, elements, `value` and `datetime` in place.
+- **Changed structure** (an optional group appearing or disappearing, or a value changing type): it re-renders.
+- **`itemscope`:** the element gets an empty `itemscope` attribute if it has none.
 
-The `md` tagged template literal produces the `{prop, val}` structure from proxy objects — full autocomplete and type safety:
+Full semantics: [docs/sync-ops.md](docs/sync-ops.md#microjoin).
+
+**Authoring with the `md` tag:**
+
+The `md` tagged template literal produces the `{ prop, val }` structure from proxy objects, with full autocomplete and type safety:
 
 ```TypeScript
 import { paths, md } from 'assign-gingerly/DX/paths.js';
@@ -3247,10 +3240,10 @@ const template = md`${$.firstName} ${$.lastName} who was born on ${$.birthDT} is
 // Produces: [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'lastName', val: '?.lastName' }, ...]
 ```
 
-For custom property names or per-segment formatting, pass an explicit object:
+For custom property names or display text, pass an explicit object:
 
 ```TypeScript
-const template = md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, format: 'long' }}`;
+const template = md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, text: '?.birthDT?.longDate' }}`;
 ```
 
 ### Built-in handler: `builtIns.manageTemplateList`
@@ -3385,7 +3378,7 @@ For the full reference, see [docs/tree.md](docs/tree.md), and [demos/tree-demo.h
 
 ## Typed Path Authoring with `paths`, `sp`, and `md`
 
-For JSON generated config files generated from TypeScript/`.mts`/`mjs` files during a build or server-side rendering, the `paths` utility provides compile-time autocomplete and type safety for `?.`-prefixed path strings. The `sp` tagged template literal ("split into parts") produces arrays suitable for the [`join` sync op](#sync-op-join). The `md` tagged template literal produces `{prop, val}` objects suitable for `builtIns.microDataJoin`.
+For JSON generated config files generated from TypeScript/`.mts`/`mjs` files during a build or server-side rendering, the `paths` utility provides compile-time autocomplete and type safety for `?.`-prefixed path strings. The `sp` tagged template literal ("split into parts") produces arrays suitable for the [`join` sync op](#sync-op-join). The `md` tagged template literal produces `{prop, val}` objects suitable for the [`microJoin` sync op](#sync-op-microjoin-).
 
 ```TypeScript
 import { paths, sp } from 'assign-gingerly/DX/paths.js';
@@ -3459,7 +3452,7 @@ const pattern = {
 
 **`md` — microdata template tag:**
 
-The `md` tag produces `{prop, val}` objects for `builtIns.microDataJoin`:
+The `md` tag produces `{prop, val}` objects for the `microJoin` sync op:
 
 ```TypeScript
 import { paths, md } from 'assign-gingerly/DX/paths.js';
@@ -3483,7 +3476,7 @@ md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, format: 'long' }}`
 | Tag | Output for proxy interpolation | Use with |
 |-----|-------------------------------|----------|
 | `sp` | `'?.firstName'` (path string) | the `join` sync op |
-| `md` | `{ prop: 'firstName', val: '?.firstName' }` | `builtIns.microDataJoin` |
+| `md` | `{ prop: 'firstName', val: '?.firstName' }` | `microJoin` (` =&`) |
 
 Both auto-detect path proxies (no `.Path` needed inside template literals) and preserve nested arrays for optional segments.
 
