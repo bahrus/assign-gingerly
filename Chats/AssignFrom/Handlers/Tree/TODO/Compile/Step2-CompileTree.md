@@ -228,5 +228,82 @@ I created the three docs, with your answers recorded as settled decisions. They'
 | 1d | [JoinTextBaking.md](./JoinTextBaking.md) | A B5 benchmark (today's `textContent` vs. baked static text nodes), with a ≥ 1.2× create / no-rebind-regression bar for building it; otherwise discard |
 | 1e | [MicroJoin.md](../../../../TODO/MicroJoin.md) | A sync ` =&` op reusing `microDataJoin`'s type → element mapping; a B6 benchmark (`join` vs. runtime `microJoin` vs. baked `microJoin`); open question on how the op applies its result (fragment vs. writing into the element) |
 
-Step 2 resumes after these.  
+Step 2 resumes after these. 
 
+## Bruce's Response III
+
+Can implementation proceed now?  Anything else that needs clarifying/ resolving first?
+
+
+## Claude's Response III: Ready, Pending Four Decisions
+
+**Short answer:** yes. Steps 1c–1e are done, and nothing earlier in the roadmap blocks Step 2. I re-read `handlers/tree.ts` against the design, though, and four things came up that change what the compiler outputs. Each has a recommended default (marked **(rec.)**), so you can just say "go with the defaults".
+
+### What gets baked (settled by your earlier answers)
+
+| Key (after `aka`) | Literal value | Compiled as |
+|---|---|---|
+| `textContent` (including the string shorthand and `_`) | a string, number or null | **baked** text, placed before any spec children, as today |
+| `name :=` | a string, number, boolean, null, or an array of those | **baked** attribute (`true` → `''`; `false` / null → absent; an array is space-joined) |
+| any other property, including `className` | — | applied per instance (and skipped on rebind, as now) |
+| anything dynamic: paths, `$root` / `$parent`, `!`, protocols, ` =&`, ` +=`, managers, repeats | — | per instance |
+
+"Literal" uses the same test as Tree's fast path (`isLiteralString`).
+
+### Decision 1: how a template is built on the client, given HTML parser fix-ups
+
+This is the important one. **Parsing an HTML string doesn't always give the DOM that `createElement` + `appendChild` gives:**
+- `['table', {}, [['tr', …]]]`: the parser inserts a `<tbody>`;
+- `['p', {}, [['div']]]`: the parser closes the `<p>` before the `<div>`;
+- nested `<a>`, `<li>` / `<option>` outside their parents, and others;
+- `['svg', …]`: Tree's `createElement` gives an HTML-namespace element, but the parser gives a real SVG element.
+
+Any of these would break equivalence, and with it the element-index walk.
+
+- **(a) (rec.)** `compileTree` stays pure, but its main output is a **template description**: a small JSON tree of tags, baked attributes and baked text. It also has a `toHTML()` serializer.
+  - The **client builds each template once with DOM calls** from the description, so the result is exactly what `createNode` builds, fix-ups and namespaces included. It's then cloned, so per-instance cost is unchanged.
+  - The **HTML strings are for the server** (Step 5) only. There, the signature check (which records the preorder tags) catches any template the parser changed, and the client falls back to building that one itself.
+- **(b)** Parse the HTML on the client too, and refuse to compile specs with parser-unsafe nesting. That means maintaining a list of HTML content-model rules, which is the same kind of "difficult to determine" table we avoided with ` :=`.
+
+### Decision 2: full or sparse `TreeNode`s (still open from my earlier list)
+
+The roadmap's principles 2 and 3 say a compiled instance has the **same `TreeNode` tree** as today. A sparse tree would need a second rebind path.
+
+- **(rec.)** Step 3 starts with **full `TreeNode`s**. The clone is walked once in preorder (`firstElementChild` / `nextElementSibling`), and every element gets its `TreeNode`. Rebinding, structure checks and managers then stay exactly as they are.
+  - Per B4, walking a whole 16-element card costs about the same as locating 3 nodes by index path.
+  - The plan is then simply the preorder node list, where most entries have "no per-instance work".
+  - **Sparse nodes become a Step 4 option,** only if the numbers are marginal.
+- This also makes relative index paths unnecessary for now. They'd come back with sparse nodes, or with Step 6's adoption.
+
+### Decision 3: baking `microJoin`
+
+A pure compiler **can't know the element types**: whether a value renders as `<span>`, `<data>` or `<time>` depends on the value at runtime.
+
+- **(rec.)** **Bake speculatively.** The compiler bakes the static text plus a `<span>` shell for each reference or segment (with `itemprop` and `itemscope` where there's a `prop`), assuming all optional groups are present.
+  - That's safe because `microJoin` already checks the structure: when a value turns out to be a number or `Date`, or a group is missing, it just re-renders that element's content. A wrong guess is never wrong output, only a bit slower.
+  - **Optionally, later:** a segment type hint (`{ prop, val, as: 'number' | 'date' }`) to bake the right shell. I wouldn't add it until a benchmark asks for it.
+  - **One fix this needs:** the parser merges adjacent literal strings into one text node, so `microJoin` should merge adjacent text items too. Otherwise baked shells never match. It's a small change to `microJoin.ts`.
+- **(alt.)** Don't bake `microJoin` in Step 2, and keep it per instance. That's simpler, but it gives up the reason it was built.
+
+### Decision 4: permissions for baked attributes
+
+At runtime, ` :=` goes through `permissionProcessor.redirectRestrictedProp`. Baked literals would skip it.
+
+- **(rec.)** `compileTree` takes an optional `canBake(attrName, value)` predicate. Step 3 wires it to the active permission processor, so a literal the profile would refuse (e.g. a `javascript:` URL) **stays per instance** and gets refused there as usual. Compiled templates are cached per (spec, `aka`, permission profile).
+- `on*` names are already refused by ` :=` itself, at compile time too.
+
+### Smaller points (no decision needed unless you object)
+
+- **Ordering edge case:** baked statics behave as if applied *before* every dynamic key. That differs from today only when a pattern sets the same attribute both statically and dynamically, with the dynamic key first. I'll document it rather than detect it.
+- **Managers** see baked attributes and text already present when they attach (today they attach first). That's the same as Step 6's server-rendered adoption, and arguably better.
+- **Wildcard `'*'`:** its spec is static, so it compiles to one template like any key.
+- **Template ids:**
+  - `key` for a top-level key;
+  - `key>n/each` and `key>n/empty` for the repeat at preorder index `n`, recursively.
+  - Step 5 can revisit the format.
+- **Location:** `handlers/compileTree.ts`, with the pure output types in `treeTypes.d.ts`, exported from `package.json` for server use.
+- **Tests:** equivalence needs something that applies the plan. Step 2 will include a minimal `instantiate(compiled, vm)` (clone + preorder walk + per-instance keys), and the tests compare its output with `createNode`'s for every `tests/tree.html` scenario. Step 3 then puts that into Tree with `TreeNode`s.
+
+### To proceed
+
+If you're fine with the four recommendations, I'll start on Step 2 as described, beginning with the `microJoin` text-merge fix.
