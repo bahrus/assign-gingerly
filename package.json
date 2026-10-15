@@ -116,6 +116,10 @@
       "default": "./syncOps/microJoin.js",
       "types": "./syncOps/microJoin.ts"
     },
+    "./handlers/compileTree.js": {
+      "default": "./handlers/compileTree.js",
+      "types": "./handlers/compileTree.ts"
+    },
     "./handlers/manageTemplateList.js": {
       "default": "./handlers/manageTemplateList.js",
       "types": "./handlers/manageTemplateList.ts"

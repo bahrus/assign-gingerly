@@ -15,8 +15,8 @@ The work is split into steps, one file each. **Step 1 is spelled out in detail**
 | 1c | [Attribute operator ` :=`](../../../../AttributeOperator.md) (core feature) | ✅ Done. |
 | 1d | [`join` text baking: benchmark, then build or discard](./JoinTextBaking.md) | ✅ Benchmarked; **discarded** (slower to create) |
 | 1e | [`microJoin` sync op: implement + benchmark](../../../../TODO/MicroJoin.md) (core feature) | ✅ Done; microDataJoin removed |
-| 2 | [`compileTree(spec)`: a pure compiler](./Step2-CompileTree.md) | **Next:** design in progress |
-| 3 | [Clone-and-bind instantiation (`compile` option)](./Step3-CloneAndBind.md) | Outline |
+| 2 | [`compileTree(spec)`: a pure compiler](./Step2-CompileTree.md) | ✅ Done: `handlers/compileTree.ts`, with equivalence tests |
+| 3 | [Clone-and-bind instantiation (`compile` option)](./Step3-CloneAndBind.md) | **Next** |
 | 4 | [Benchmark and go / no-go](./Step4-BenchmarkAndDecide.md) | Outline |
 | 5 | [Server-rendered templates](./Step5-ServerTemplates.md) | Outline |
 | 6 | [Adopting server-rendered instances (likely TreeScope)](./Step6-AdoptServerRenderedInstances.md) | Outline |

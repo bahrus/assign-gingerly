@@ -39,24 +39,10 @@
  */
 
 import { isReferenceString } from '../resolve/getValues.js';
-import type { SyncOpContext, SyncProtocolHandlers } from '../types/assign-gingerly/types.js';
-
-/** An item rendered as an element: from a segment (with `prop`) or a reference (without). */
-interface ElementItem {
-    prop?: string;
-    val: any;
-    text?: any;
-}
-
-type Item = string | ElementItem;
-
-/** What an element item renders as. */
-interface Shape {
-    tag: 'time' | 'data' | 'span';
-    attr?: 'datetime' | 'value';
-    attrValue?: string;
-    text: string;
-}
+import type {
+    MicroJoinElementItem as ElementItem, MicroJoinItem as Item, MicroJoinPlan, MicroJoinShape as Shape,
+    SyncOpContext, SyncProtocolHandlers,
+} from '../types/assign-gingerly/types.js';
 
 function isSegment(item: any): item is ElementItem {
     return !!item && typeof item === 'object' && !Array.isArray(item) && 'prop' in item;
@@ -75,25 +61,69 @@ function toItem(raw: any, value: any, protocols: SyncProtocolHandlers | undefine
 
 /**
  * Flatten (raw, resolved) into items. In a group (`strict`), any missing item makes the
- * group fail (returns false); nested groups are optional on their own.
+ * group fail (returns false); nested groups are optional on their own. `state.missing`
+ * records whether anything was left out.
  */
-function flatten(raw: any[], resolved: any[], protocols: SyncProtocolHandlers | undefined, out: Item[], strict: boolean): boolean {
+function flatten(
+    raw: any[], resolved: any[], protocols: SyncProtocolHandlers | undefined, out: Item[], strict: boolean, state: { missing: boolean }
+): boolean {
     for (let i = 0; i < resolved.length; i++) {
         const value = resolved[i];
         const rawItem = raw[i];
         if (Array.isArray(value)) {
             const group: Item[] = [];
-            if (flatten(Array.isArray(rawItem) ? rawItem : value, value, protocols, group, true)) out.push(...group);
+            if (flatten(Array.isArray(rawItem) ? rawItem : value, value, protocols, group, true, state)) {
+                out.push(...group);
+            } else {
+                state.missing = true;
+            }
             continue;
         }
         const item = toItem(rawItem, value, protocols);
         if (item === null) {
             if (strict) return false;
+            state.missing = true;
             continue;
         }
         out.push(item);
     }
     return true;
+}
+
+/**
+ * Merge adjacent text items and drop empty ones, so the items match the text nodes an
+ * HTML parser (or a baked template) would produce.
+ */
+function mergeText(items: Item[]): Item[] {
+    const merged: Item[] = [];
+    for (const item of items) {
+        if (typeof item === 'string') {
+            if (item === '') continue;
+            const last = merged.length - 1;
+            if (last >= 0 && typeof merged[last] === 'string') {
+                merged[last] += item;
+                continue;
+            }
+        }
+        merged.push(item);
+    }
+    return merged;
+}
+
+/**
+ * The rendering plan for resolved args: text and element items (adjacent text merged),
+ * each element item's shape, and whether every item was present (nothing nullish, no
+ * optional group dropped). Pure: used by the op itself and, with a sample VM, by
+ * compileTree to bake element shells.
+ */
+export function planMicroJoin(args: any[], rawArgs: any, protocols?: SyncProtocolHandlers): MicroJoinPlan {
+    const raw = Array.isArray(rawArgs) ? rawArgs : args;
+    const flat: Item[] = [];
+    const state = { missing: false };
+    flatten(raw, args, protocols, flat, false, state);
+    const items = mergeText(flat);
+    const shapes = items.map(item => (typeof item === 'string' ? undefined : shapeOf(item)));
+    return { items, shapes, complete: !state.missing };
 }
 
 /**
@@ -157,10 +187,7 @@ export function microJoin(args: any, _extra: Record<string, any>, ctx: SyncOpCon
     if (!Array.isArray(args)) {
         throw new Error('microJoin: expects an array of strings, references and { prop, val, text? } segments');
     }
-    const raw = Array.isArray(ctx?.rawArgs) ? ctx.rawArgs : args;
-    const items: Item[] = [];
-    flatten(raw, args, ctx?.protocols, items, false);
-    const shapes = items.map(item => (typeof item === 'string' ? undefined : shapeOf(item)));
+    const { items, shapes } = planMicroJoin(args, ctx?.rawArgs, ctx?.protocols);
 
     if (!element.hasAttribute('itemscope') && items.some(item => typeof item !== 'string' && item.prop !== undefined)) {
         element.setAttribute('itemscope', '');

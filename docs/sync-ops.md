@@ -119,6 +119,7 @@ assignFrom(p, {
 - **Updates:** `microJoin` owns the element's whole content, so it needs no comment markers.
   - **Same structure** (the same sequence of text and `tag` + `itemprop` elements): later calls update the text nodes, elements, `value` and `datetime` in place.
   - **Changed structure:** it re-renders.
+  - **Adjacent literal strings** render as one text node, and empty strings as none, which matches what an HTML parser (or a compiled Tree template) produces.
 - **`itemscope`:** when any segment has a `prop`, the element gets an empty `itemscope` attribute if it has none, so the `itemprop`s belong to it.
 - **The LHS must resolve to an element** (`'?. =&'`), or be an element's `textContent` (`'?.textContent =&'`, as written for `join`), in which case it renders into that element. Anything else throws.
 - **Cost:** semantic output costs more than a plain string. Prefer `join` when you don't need the markup. See `demos/microjoin-benchmark.html` for numbers.

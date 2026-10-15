@@ -49,12 +49,11 @@
  */
 import { assignFrom, categorizeKeys, handleSpreads, SUBSTITUTION_VARS } from '../assignFrom.js';
 import { applyAttribute, assignGingerly, tryAssignTo } from '../assignGingerly.js';
-import { getValue, getValues, isEventBinding, isFromStackReference } from '../resolve/getValues.js';
+import { getValue, getValues, isEventBinding } from '../resolve/getValues.js';
+import { DEFAULT_WILDCARD_PATTERN, isLiteralString, normalize, WILDCARD } from './treeSpec.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 const DEFAULT_MARKER_NAME = 'tree';
-const WILDCARD = '*';
-const DEFAULT_WILDCARD_PATTERN = { textContent: '?.' };
 /**
  * Options key carrying the tree's target (an Element, ShadowRoot or other DocumentFragment)
  * down to every node, so managers resolve through the target's — possibly scoped — registry.
@@ -86,46 +85,6 @@ function withEventKeys(pattern) {
     }
     eventKeyedPatterns.set(pattern, keyed);
     return keyed;
-}
-/** `{ textContent: text }` patterns for string shorthand, one object per string (so pattern caches hit). */
-const textPatterns = new Map();
-/** A string in the pattern slot is shorthand for `{ textContent: string }`. */
-function textPattern(text) {
-    let pattern = textPatterns.get(text);
-    if (!pattern) {
-        pattern = { textContent: text };
-        textPatterns.set(text, pattern);
-    }
-    return pattern;
-}
-function normalize(spec) {
-    const [header, patternOrText, third] = Array.isArray(spec) ? spec : [spec];
-    const pattern = typeof patternOrText === 'string' ? textPattern(patternOrText) : patternOrText;
-    // The children slot: an array of static children, or a repeat object ({ each, … })
-    let children = [];
-    let repeat;
-    if (Array.isArray(third)) {
-        children = third;
-    }
-    else if (third !== undefined) {
-        if (!third || typeof third !== 'object' || !('each' in third)) {
-            throw new Error('builtIns.tree: the children slot must be an array of specifications or a repeat object { each, … }');
-        }
-        repeat = third;
-    }
-    if (typeof header === 'string') {
-        if (header.startsWith('$:')) {
-            throw new Error(`builtIns.tree: itemscope manager headers ("${header}") are not supported yet; use { tag, ish: '${header.slice(2)}' }`);
-        }
-        return [header, header, undefined, pattern, children, repeat];
-    }
-    if (typeof header === 'function') {
-        throw new Error('builtIns.tree: class headers are not supported yet; use { tag, ish: Class }');
-    }
-    if (header && typeof header === 'object' && typeof header.tag === 'string') {
-        return [header, header.tag, header.ish, pattern, children, repeat];
-    }
-    throw new Error('builtIns.tree: an element header must be a tag name or { tag, ish? }');
 }
 /** Where an element's children go: a template's content, otherwise the element itself. */
 function containerOf(element) {
@@ -173,11 +132,6 @@ const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 const ATTR_KEY = /^([A-Za-z_:][\w:.-]*) :=$/;
 /** Fast entries per pattern, or null when the pattern needs the general path. */
 const fastPatterns = new WeakMap();
-/** Whether a string RHS is a plain literal (not a reference, negation or protocol). */
-function isLiteralString(value) {
-    return !(value.startsWith('?.') || value.startsWith('$0') || isFromStackReference(value)
-        || value.startsWith('!') || value.includes('://'));
-}
 /** A primitive literal or a `?.` path → a fast value; anything else → null. */
 function compileFastValue(value) {
     if (typeof value === 'string') {

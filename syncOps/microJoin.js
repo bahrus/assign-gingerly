@@ -56,27 +56,68 @@ function toItem(raw, value, protocols) {
 }
 /**
  * Flatten (raw, resolved) into items. In a group (`strict`), any missing item makes the
- * group fail (returns false); nested groups are optional on their own.
+ * group fail (returns false); nested groups are optional on their own. `state.missing`
+ * records whether anything was left out.
  */
-function flatten(raw, resolved, protocols, out, strict) {
+function flatten(raw, resolved, protocols, out, strict, state) {
     for (let i = 0; i < resolved.length; i++) {
         const value = resolved[i];
         const rawItem = raw[i];
         if (Array.isArray(value)) {
             const group = [];
-            if (flatten(Array.isArray(rawItem) ? rawItem : value, value, protocols, group, true))
+            if (flatten(Array.isArray(rawItem) ? rawItem : value, value, protocols, group, true, state)) {
                 out.push(...group);
+            }
+            else {
+                state.missing = true;
+            }
             continue;
         }
         const item = toItem(rawItem, value, protocols);
         if (item === null) {
             if (strict)
                 return false;
+            state.missing = true;
             continue;
         }
         out.push(item);
     }
     return true;
+}
+/**
+ * Merge adjacent text items and drop empty ones, so the items match the text nodes an
+ * HTML parser (or a baked template) would produce.
+ */
+function mergeText(items) {
+    const merged = [];
+    for (const item of items) {
+        if (typeof item === 'string') {
+            if (item === '')
+                continue;
+            const last = merged.length - 1;
+            if (last >= 0 && typeof merged[last] === 'string') {
+                merged[last] += item;
+                continue;
+            }
+        }
+        merged.push(item);
+    }
+    return merged;
+}
+/**
+ * The rendering plan for resolved args: text and element items (adjacent text merged),
+ * each element item's shape, and whether every item was present (nothing nullish, no
+ * optional group dropped). Pure: used by the op itself and, with a sample VM, by
+ * compileTree to bake element shells.
+ */
+export function planMicroJoin(args, rawArgs, protocols) {
+    const raw = Array.isArray(rawArgs) ? rawArgs : args;
+    const flat = [];
+    const state = { missing: false };
+    flatten(raw, args, protocols, flat, false, state);
+    const items = mergeText(flat);
+    const shapes = items.map(item => (typeof item === 'string' ? undefined : shapeOf(item)));
+    return { items, shapes, complete: !state.missing };
 }
 /**
  * Cached default-locale formatters. Their output matches toLocaleString() /
@@ -144,10 +185,7 @@ export function microJoin(args, _extra, ctx) {
     if (!Array.isArray(args)) {
         throw new Error('microJoin: expects an array of strings, references and { prop, val, text? } segments');
     }
-    const raw = Array.isArray(ctx?.rawArgs) ? ctx.rawArgs : args;
-    const items = [];
-    flatten(raw, args, ctx?.protocols, items, false);
-    const shapes = items.map(item => (typeof item === 'string' ? undefined : shapeOf(item)));
+    const { items, shapes } = planMicroJoin(args, ctx?.rawArgs, ctx?.protocols);
     if (!element.hasAttribute('itemscope') && items.some(item => typeof item !== 'string' && item.prop !== undefined)) {
         element.setAttribute('itemscope', '');
     }

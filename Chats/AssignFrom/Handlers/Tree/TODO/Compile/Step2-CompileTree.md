@@ -318,7 +318,7 @@ a. sounds right, especially with a recommendation below
 
 I need to read through this more carefully.  You mentioned some previous discussion which I guess I should review.  I may ask for a dumbed-down explanation of it.  I'm likely to defer to your recommendations.
 
-## Decision 3##
+** Decision 3**
 
 This is the one I've been thinking about the most.  Tying this to Decision 1, I wonder if we can insist that we only compile the template after we have a sample vm with actual data.  If the vm indicates what type of data is there (say with the first element of any applicable array), then we compile the built baked in static text nodes and the empty span / data / time tags for dynamic data.  If any of the object is missing a property, don't bake it in.
 
@@ -394,3 +394,107 @@ compileTree(spec, {
 ### Status
 
 With your answers, the only item still open is **Decision 2**. Unless you say otherwise, I'll proceed with "full". Ready to start when you are.
+
+## Bruce's Response V
+
+Let's go with the recommended "full" for Decision 2.  Please proceed and add your implementation notes below.
+
+## Claude's Implementation Notes
+
+Step 2 is done. The compiler is **[`handlers/compileTree.ts`](../../../../../../handlers/compileTree.ts)**, exported from `package.json` as `./handlers/compileTree.js` and added to `tsconfig.json`. **Tests:** 43 / 43 pass in Chromium, Firefox and WebKit. **Full suite: 133 passed, 2 skipped, 0 failed.** `tsc` is clean, in the scratch copy; no `.js` touched.
+
+### API
+
+```js
+import { compileTree, buildTemplate, toHTML } from 'assign-gingerly/handlers/compileTree.js';
+
+const compiled = compileTree({ map, aka }, { sample: vm, resolveOptions: { pipes }, canBake });
+// compiled.keys            → map keys in order ('*' included)
+// compiled.templates[id]   → { id, element, node, signature }
+buildTemplate(compiled.templates.launch);   // client: an HTMLTemplateElement, built with DOM calls (Decision 1a)
+toHTML(compiled.templates.launch.element);  // server: the same template as an HTML string
+```
+
+| Output | What it is |
+|---|---|
+| `element` (`TemplateElement`) | The template as pure data: `{ tag, attrs, content }`, with baked attributes, text and `microJoin` shells. |
+| `node` (`CompiledNode`) | Nested like the spec: `spec`, `tag`, `ish`, `pattern` (the whole pattern, the same object Tree normalizes to), `dynamic` (the keys left to apply per instance), `children`, and `repeat` (`{ spec, each, empty }` template ids). Full nodes (Decision 2): every spec element has one, and a clone's element children match `children` in order. |
+| `signature` | 32-bit FNV-1a, as 8 hex digits, of the markup plus the node shape (tags, managers, repeat references). It's for Step 5 (validating server copies). |
+
+**Template ids:**
+- a map key's template has the key as its id;
+- the repeat at preorder index `n` of template `T` has `T>n/each` and `T>n/empty`;
+- e.g. `list`, `list>0/each`, `list>0/each>2/each`.
+
+### What's baked
+
+| Key | Baked when | Notes |
+|---|---|---|
+| `textContent` (including the string shorthand and `aka` aliases such as `_`) | The value is a literal | Not for `script` / `style` (raw text). |
+| `name :=` | The value is a literal, or an array of literals, and `canBake(name, text)` allows it | `false` / `null` bake as "absent". Never `on*`, and never an aliased name; those are left to runtime, which applies its own rules. |
+| `'?. =&': { microJoin }` | A sample is given, the element has no spec children or repeat, every reference is a plain `?.` path (optionally `!` / `!!`), and every value is present in the sample | The static text, plus empty `<span>` / `<data>` / `<time>` shells chosen from the sample's types, with `itemprop` and `itemscope`. The key itself stays per instance, and its first run fills the shells in place. |
+
+**Everything else stays in `dynamic`:**
+- properties, **including `className`** (the strict `class :=` rule);
+- paths, `$root` / `$parent`, protocols;
+- events, ops and handlers.
+
+**Two identity details:**
+- When nothing in a pattern is baked, `dynamic` *is* the original pattern object, so Tree's per-pattern caches (the fast path, `plainPatterns`, event keys) still hit.
+- When everything is baked, `dynamic` is `undefined`.
+
+### Samples (Decision 3)
+
+- **The top-level sample** is `sample[key]`. Within a **repeat**, it's the first item of the array at `of` (only for `?.` paths). `empty` uses the repeat's own value.
+- **No sample:**
+  - for `'*'`, since any key can use it;
+  - under a manager (`ish`), whose subtree resolves against the manager instance;
+  - for an empty array.
+- **Resolution:** sample values are resolved with `getValues`, with the given `resolveOptions` (e.g. `pipes`). Anything that throws isn't baked.
+
+### Changes elsewhere
+
+- **`handlers/treeSpec.ts` (new, pure):** `normalize`, `isLiteralString`, `WILDCARD` and `DEFAULT_WILDCARD_PATTERN` moved here from `tree.ts`. Tree and the compiler now share one definition of the spec format and of "literal". `ManagerRef` / `NormalizedSpec` moved to `treeTypes.d.ts`.
+- **`syncOps/microJoin.ts`:**
+  - new exported `planMicroJoin(args, rawArgs, protocols)`, the pure item/shape planning, used by the op and by the compiler;
+  - adjacent literal strings are now merged, and empty ones dropped, so the op's text nodes match a baked template.
+  - Its item, shape and plan types moved to `types.d.ts`.
+- **Types:** `TemplateElement`, `CompiledNode`, `CompiledRepeat`, `CompiledTemplate`, `CompiledTree` and `CompileTreeOptions` are in `treeTypes.d.ts`.
+- **Docs:** `docs/sync-ops.md` notes the text merging. `compileTree` gets user docs in Step 3, when the `compile` option makes it useful on its own.
+
+### Tests: [`tests/compile-tree.html`](../../../../../../tests/compile-tree.html) (+ spec), 12 scenarios
+
+**Equivalence check:**
+- The page has a minimal clone-and-bind instantiator, which builds each template, imports a clone, walks it alongside the nodes, applies `dynamic`, and stamps repeats.
+- Its output is compared with `builtIns.tree`'s, via a canonical serialization (text-node boundaries kept, attributes sorted).
+
+**Scenarios:**
+1. A static-heavy card: baked markup, `dynamic` per node, `className` not baked, pattern identity kept.
+2. `aka` (`_` → baked text).
+3. Repeats: flat item templates, ids, nested repeats, `empty`, and baked text in a repeat container (items go before it, as in Tree).
+4. Parser-unsafe specs: `table > tr` (no `<tbody>`), `p > div`, `svg`, and `template` content.
+5. `microJoin` with a sample:
+   - typed shells and merged text;
+   - the first run fills the shells *in place* (same elements);
+   - a missing sample value, no sample, or a manager → not baked;
+   - a wrong type guess still renders correctly.
+6. `microJoin` in a repeat (the first item is the sample).
+7. `canBake` refusing `href`; `on*` never baked.
+8. Nothing static: `dynamic === pattern`.
+9. `toHTML` escaping and void elements; HTML round-trips for parser-safe specs.
+10. Signatures: stable, and they change with markup and with managers.
+11. The wildcard (`'*'`), with its default pattern.
+12. `microJoin` text merging.
+
+### One thing the tests surfaced
+
+**Attribute order.** Baked attributes come first, so `<p data-tags="a b" class="note">` (with `class` from a per-instance `className`) where Tree produces `<p class="note" data-tags="a b">`. Attribute order has no meaning in the DOM (selectors, `getAttribute` and microdata all ignore it), so the equivalence check compares attributes as a set. It is visible in `outerHTML`, though, so Step 3's docs should mention it alongside the "statics first" rule.
+
+### Next: Step 3
+
+Put the instantiator into Tree, behind the `compile` option, with full `TreeNode`s:
+- the template registry;
+- `importNode` for custom-element upgrades;
+- wiring `canBake` to the permission processor (a side-effect-free check);
+- running the whole `tests/tree.html` suite with compiling on.
+

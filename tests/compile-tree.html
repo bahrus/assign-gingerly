@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>compileTree Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+    #results { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>compileTree Tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    import { assignFrom, assignFromAsync } from '../index.js';
+    import { compileTree, buildTemplate, toHTML } from '../handlers/compileTree.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+
+    function assert(condition, message) {
+      if (condition) {
+        results.push(`<div class="pass">✓ ${message}</div>`);
+        passed++;
+      } else {
+        results.push(`<div class="fail">✗ ${message}</div>`);
+        failed++;
+        console.error('Failed:', message);
+      }
+    }
+
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) {
+        console.error(`${message}\n  Expected: ${expected}\n  Actual:   ${actual}`);
+      }
+      assert(actual === expected, message);
+    }
+
+    function stripComments(root) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
+      const comments = [];
+      while (walker.nextNode()) comments.push(walker.currentNode);
+      for (const comment of comments) comment.remove();
+      return root;
+    }
+
+    /**
+     * Serialize children with each element's attributes sorted: attribute order carries no
+     * meaning, and baked attributes come before per-instance ones.
+     */
+    function canonical(container) {
+      let html = '';
+      for (const node of container.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE) { html += `#${JSON.stringify(node.data)}`; continue; }
+        if (node.nodeType !== Node.ELEMENT_NODE) continue;
+        const attrs = [...node.attributes].map(a => `${a.name}=${JSON.stringify(a.value)}`).sort().join(' ');
+        const inner = node.localName === 'template' ? node.content : node;
+        html += `<${node.namespaceURI === 'http://www.w3.org/1999/xhtml' ? '' : 'ns:'}${node.localName} ${attrs}>${canonical(inner)}</>`;
+      }
+      return html;
+    }
+
+    /** Today's output: builtIns.tree into a fresh div, markers removed. */
+    async function renderTree(config, vm) {
+      const host = document.createElement('div');
+      await assignFromAsync(host, { '?. =>': { do: 'builtIns.tree', ...config } }, { from: vm });
+      return canonical(stripComments(host));
+    }
+
+    /**
+     * A minimal clone-and-bind instantiator (Step 3 puts the real one into Tree, with TreeNodes):
+     * clone each key's template, walk its elements alongside the compiled nodes, apply the
+     * per-instance keys, and stamp repeats from their item templates.
+     */
+    function instantiate(compiled, config, vm) {
+      const built = new Map();
+      const templateFor = id => {
+        if (!built.has(id)) built.set(id, buildTemplate(compiled.templates[id]));
+        return built.get(id);
+      };
+      const { aka } = config;
+      const baseOptions = { fromStack: [vm], ...(aka && { aka }) };
+
+      function stamp(id, value, options) {
+        const element = document.importNode(templateFor(id).content.firstElementChild, true);
+        bind(compiled.templates[id].node, element, value, options);
+        return element;
+      }
+
+      function bind(node, element, from, options) {
+        if (node.dynamic) assignFrom(element, node.dynamic, { ...options, from });
+        const container = element.localName === 'template' ? element.content : element;
+        if (node.repeat) {
+          const { spec: { of = '?.' }, each, empty } = node.repeat;
+          const list = of.split('?.').filter(Boolean).reduce((o, k) => o?.[k], from);
+          const items = list != null ? [...list] : [];
+          const itemOptions = of === '?.' ? options : { ...options, fromStack: [...options.fromStack, from] };
+          const elements = items.map(item => stamp(each, item, itemOptions));
+          if (items.length === 0 && empty) elements.push(stamp(empty, from, options));
+          // Like Tree's placeChildren: items go first, before any baked text
+          container.prepend(...elements);
+          return;
+        }
+        let child = container.firstElementChild;
+        for (const childNode of node.children) {
+          const next = child.nextElementSibling;
+          bind(childNode, child, from, options);
+          child = next;
+        }
+      }
+
+      const host = document.createElement('div');
+      const { map } = config;
+      for (const key of compiled.keys) {
+        if (key === '*') continue;
+        if (vm[key] != null) host.append(stamp(key, vm[key], baseOptions));
+      }
+      if ('*' in map) {
+        for (const key of Object.keys(vm)) {
+          if (!(key in map) && vm[key] != null) host.append(stamp('*', vm[key], baseOptions));
+        }
+      }
+      return canonical(host);
+    }
+
+    async function assertEquivalent(config, vm, message, compileOptions = {}) {
+      const compiled = compileTree(config, compileOptions);
+      const expected = await renderTree(config, vm);
+      assertEquals(instantiate(compiled, config, vm), expected, `equivalent: ${message}`);
+      return compiled;
+    }
+
+    async function runTests() {
+
+      // Test 1: a static-heavy card — literal text and := attributes are baked, the rest stays per instance
+      {
+        const config = { map: { launch: ['article', { 'class :=': 'card', 'aria-label :=': 'Launch', 'role :=': 'region' }, [
+          ['h3', { 'class :=': 'title', textContent: '?.name' }],
+          ['dl', { 'class :=': 'stats' }, [
+            ['dt', 'Height'], ['dd', '?.height'], ['dt', 'Mass'], ['dd', { textContent: '?.mass', 'data-unit :=': 'kg' }],
+          ]],
+          ['p', { className: 'note', 'hidden :=': false, 'data-tags :=': ['a', null, 'b'] }, [['span', 'Static']]],
+        ]] } };
+        const compiled = compileTree(config);
+        const { element, node } = compiled.templates.launch;
+        assertEquals(toHTML(element),
+          '<article class="card" aria-label="Launch" role="region"><h3 class="title"></h3><dl class="stats"><dt>Height</dt><dd></dd><dt>Mass</dt><dd data-unit="kg"></dd></dl><p data-tags="a b"><span>Static</span></p></article>',
+          'baked markup');
+        assertEquals(node.dynamic, undefined, 'fully baked root has no per-instance keys');
+        assertEquals(JSON.stringify(node.children[0].dynamic), '{"textContent":"?.name"}', 'dynamic text stays per instance');
+        assertEquals(node.children[1].children[0].dynamic, undefined, 'literal string shorthand is baked');
+        assertEquals(JSON.stringify(node.children[2].dynamic), '{"className":"note"}', 'className is not baked (strictly class :=)');
+        assert(node.children[0].pattern === config.map.launch[2][0][1], 'node keeps its original pattern');
+        await assertEquivalent(config, { launch: { name: 'Demo 7', height: 70, mass: 549054 } }, 'static-heavy card');
+      }
+
+      // Test 2: aka — keys aliased to textContent are baked; aliased attribute names are left to runtime
+      {
+        const config = { aka: { _: 'textContent' }, map: { greeting: ['p', { _: 'Hello', 'title :=': '?.t' }] } };
+        const compiled = compileTree(config);
+        assertEquals(toHTML(compiled.templates.greeting.element), '<p>Hello</p>', '_ → baked text');
+        await assertEquivalent(config, { greeting: { t: 'tip' } }, 'aka');
+      }
+
+      // Test 3: repeats — flat templates, ids, nested repeats, empty, baked text in a repeat container
+      {
+        const config = { map: {
+          list: ['ul', { 'class :=': 'list' }, {
+            of: '?.items', key: '?.id',
+            each: ['li', { 'class :=': 'item' }, [['span', '?.name'], ['ol', {}, { each: ['li', '?.'], of: '?.tags' }]]],
+            empty: ['li', 'None'],
+          }],
+          tags: ['p', 'Tags:', { each: ['b', '?.'] }],
+        } };
+        const compiled = compileTree(config);
+        assertEquals(Object.keys(compiled.templates).sort().join(' '),
+          'list list>0/each list>0/each>2/each list>0/empty tags tags>0/each', 'template ids');
+        assertEquals(toHTML(compiled.templates.list.element), '<ul class="list"></ul>', 'repeat container is empty in its template');
+        assertEquals(toHTML(compiled.templates['list>0/each'].element), '<li class="item"><span></span><ol></ol></li>', 'item template is flat');
+        assertEquals(compiled.templates.list.node.repeat.each, 'list>0/each', 'node references its item template');
+        await assertEquivalent(config, {
+          list: { items: [{ id: 1, name: 'a', tags: ['x', 'y'] }, { id: 2, name: 'b', tags: [] }] },
+          tags: ['red', 'green'],
+        }, 'repeats with items');
+        await assertEquivalent(config, { list: { items: [] }, tags: [] }, 'repeats, empty');
+      }
+
+      // Test 4: no HTML parsing on the client — parser-unsafe nesting, svg, template content
+      {
+        const config = { map: { odd: ['div', {}, [
+          ['table', {}, [['tr', {}, [['td', 'cell']]]]],
+          ['p', {}, [['div', 'inside p']]],
+          ['svg', { 'viewbox :=': '0 0 1 1' }],
+          ['template', {}, [['b', '?.x']]],
+        ]] } };
+        const compiled = await assertEquivalent(config, { odd: { x: 'in content' } }, 'tables, p > div, svg, template');
+        const content = buildTemplate(compiled.templates.odd).content;
+        assert(content.querySelector('table > tr') !== null, 'no <tbody> inserted');
+        assert(content.querySelector('p > div') !== null, '<p> not auto-closed');
+        assertEquals(content.querySelector('svg').namespaceURI, 'http://www.w3.org/1999/xhtml', 'svg as builtIns.tree creates it');
+        assertEquals(content.querySelector('template').content.childElementCount, 1, 'template children in .content');
+      }
+
+      // Test 5: microJoin with a sample VM — shells of the sample values' types
+      {
+        const born = new Date('2026-03-14T00:00:00.000Z');
+        const config = { map: { person: ['p', { '?. =&': { microJoin: [
+          '?.last', ', ', '?.first', ' (', { prop: 'age', val: '?.age' }, ') ', 'born ', { prop: 'born', val: '?.born' },
+        ] } }] } };
+        const vm = { person: { last: 'Targaryen', first: 'Helaena', age: 19, born } };
+        const compiled = await assertEquivalent(config, vm, 'microJoin, baked', { sample: vm });
+        assertEquals(toHTML(compiled.templates.person.element),
+          '<p itemscope><span></span>, <span></span> (<data itemprop="age"></data>) born <time itemprop="born"></time></p>',
+          'static text and typed shells baked (adjacent text merged)');
+
+        const p = document.importNode(buildTemplate(compiled.templates.person).content.firstElementChild, true);
+        const [span, , data, time] = p.children;
+        assignFrom(p, compiled.templates.person.node.dynamic, { from: vm.person });
+        assert(p.children[0] === span && p.children[2] === data && p.children[3] === time, 'first run fills the shells in place');
+        assertEquals(`${span.textContent}|${data.getAttribute('value')}|${time.getAttribute('datetime')}`, `Targaryen|19|${born.toISOString()}`, 'shells filled');
+
+        const missing = compileTree(config, { sample: { person: { last: 'Targaryen', age: 19, born } } });
+        assertEquals(toHTML(missing.templates.person.element), '<p></p>', 'a missing sample value → not baked');
+        assertEquals(toHTML(compileTree(config).templates.person.element), '<p></p>', 'no sample → not baked');
+
+        const managed = { map: { person: [{ tag: 'p', ish: 'some-manager' }, config.map.person[1]] } };
+        assertEquals(toHTML(compileTree(managed, { sample: vm }).templates.person.element), '<p></p>', 'manager subtree → not baked');
+
+        const guessed = await assertEquivalent(config, { person: { ...vm.person, age: 'unknown' } }, 'microJoin, wrong guess re-renders', { sample: vm });
+        assert(guessed.templates.person.element.content.some(c => c.tag === 'data'), 'shell guessed from the sample');
+      }
+
+      // Test 6: microJoin in a repeat — the first item is the sample
+      {
+        const config = { map: { crew: ['ul', {}, { each: ['li', { '?. =&': { microJoin: [{ prop: 'name', val: '?.name' }, ', ', '?.flights'] } }] }] } };
+        const vm = { crew: [{ name: 'Bob', flights: 3 }, { name: 'Doug', flights: 2 }] };
+        const compiled = await assertEquivalent(config, vm, 'microJoin in a repeat', { sample: vm });
+        assertEquals(toHTML(compiled.templates['crew>0/each'].element), '<li itemscope><span itemprop="name"></span>, <data></data></li>', 'item template baked from the first item');
+      }
+
+      // Test 7: canBake and on* — refused attributes stay per instance
+      {
+        const config = { map: { link: ['a', { 'href :=': '/docs', 'class :=': 'link', 'onclick :=': 'alert(1)' }] } };
+        const compiled = compileTree(config, { canBake: name => name !== 'href' });
+        const { element, node } = compiled.templates.link;
+        assertEquals(toHTML(element), '<a class="link"></a>', 'only allowed attributes baked');
+        assertEquals(Object.keys(node.dynamic).join(','), 'href :=,onclick :=', 'refused and on* attributes stay per instance');
+      }
+
+      // Test 8: nothing static → nothing baked, and the pattern object itself is kept
+      {
+        const config = { map: { field: ['input', { 'value :=': '?.v', disabled: true, 'title :=': '$parent?.x', 'data-x :=': '!?.flag' }] } };
+        const { node, element } = compileTree(config).templates.field;
+        assertEquals(toHTML(element), '<input>', 'nothing baked');
+        assert(node.dynamic === node.pattern, 'dynamic is the original pattern (caches keyed by it still hit)');
+      }
+
+      // Test 9: toHTML escaping and void elements; HTML round-trips for parser-safe specs
+      {
+        const config = { map: { x: ['div', { 'title :=': 'a "b" & c' }, [['span', '<x> & y'], ['br'], ['input', { 'disabled :=': true }]]] } };
+        const compiled = compileTree(config);
+        const html = toHTML(compiled.templates.x.element);
+        assertEquals(html, '<div title="a &quot;b&quot; &amp; c"><span>&lt;x&gt; &amp; y</span><br><input disabled></div>', 'escaped HTML');
+        const parsed = document.createElement('template');
+        parsed.innerHTML = html;
+        assertEquals(parsed.innerHTML, buildTemplate(compiled.templates.x).innerHTML, 'parsed HTML ≡ built template');
+      }
+
+      // Test 10: signatures
+      {
+        const a = compileTree({ map: { k: ['p', { 'class :=': 'a' }, [['b', '?.x']]] } }).templates.k.signature;
+        const b = compileTree({ map: { k: ['p', { 'class :=': 'a' }, [['b', '?.x']]] } }).templates.k.signature;
+        const c = compileTree({ map: { k: ['p', { 'class :=': 'b' }, [['b', '?.x']]] } }).templates.k.signature;
+        const d = compileTree({ map: { k: [{ tag: 'p', ish: 'm' }, { 'class :=': 'a' }, [['b', '?.x']]] } }).templates.k.signature;
+        assert(/^[0-9a-f]{8}$/.test(a) && a === b, 'stable signature');
+        assert(a !== c && a !== d, 'signature changes with markup and with managers');
+      }
+
+      // Test 11: wildcard
+      {
+        const config = { map: { name: ['h1', '?.'], '*': ['p'] } };
+        const compiled = await assertEquivalent(config, { name: 'N', a: 1, b: 'two' }, 'wildcard');
+        assertEquals(JSON.stringify(compiled.templates['*'].node.dynamic), '{"textContent":"?."}', "'*' gets the default pattern");
+      }
+
+      // Test 12: microJoin merges adjacent text and drops empty text
+      {
+        const p = document.createElement('p');
+        assignFrom(p, { '?. =&': { microJoin: ['a', 'b', '?.x', '', 'c'] } }, { from: { x: 'X' } });
+        assertEquals(p.childNodes.length, 3, 'text items merged');
+        assertEquals(p.innerHTML, 'ab<span>X</span>c', 'merged output');
+      }
+
+      const testComplete = document.getElementById('test-complete');
+      testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
+      testComplete.setAttribute('data-passed', passed);
+      testComplete.setAttribute('data-failed', failed);
+
+      results.push(`<h2>Summary: ${passed} passed, ${failed} failed</h2>`);
+      document.getElementById('results').innerHTML = results.join('');
+    }
+
+    runTests().catch(e => {
+      console.error('Test error:', e);
+      document.getElementById('results').innerHTML += `<div class="fail">Test suite error: ${e.message}</div>`;
+      document.getElementById('test-complete').setAttribute('data-status', 'error');
+    });
+  </script>
+</body>
+</html>
