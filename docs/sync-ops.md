@@ -105,12 +105,22 @@ assignFrom(p, {
 ```
 
 - **`text`** overrides the displayed text, while `val` still decides the element and its machine-readable attribute. Use [pipes](./pipes.md) to format it. Without `text`, the locale defaults above apply.
+- **Join-style arrays work too.** A bare **reference string** (`'?.name'`, `'$parent?.x'`, `'!!?.flag'`, a registered protocol) becomes an element for its resolved value, with the same type mapping but **no `itemprop`**. Literal strings stay text. So any `join` array can switch to `microJoin` unchanged, and the two forms mix freely:
+
+  ```JavaScript
+  assignFrom(el, {
+      '?.textContent =&': { microJoin: ['?.lastName', ', ', '?.firstName'] }
+  }, { from: { lastName: 'Targaryen', firstName: 'Helaena' } });
+  // <div><span>Targaryen</span>, <span>Helaena</span></div>
+  ```
+
+  Whether a string is a reference is decided from the **unresolved** array (as written in the config), so a resolved value that happens to be text (`'Helaena'`) can't be confused with a literal. Calling the op directly, without the ` =&` dispatcher, treats every string as a literal.
 - **Nullish values:** top-level nullish items, and segments with a nullish `val`, are omitted. A **nested sub-array** is all-or-nothing: it's dropped if any item in it is nullish or has a nullish `val` (the same as `join`).
 - **Updates:** `microJoin` owns the element's whole content, so it needs no comment markers.
   - **Same structure** (the same sequence of text and `tag` + `itemprop` elements): later calls update the text nodes, elements, `value` and `datetime` in place.
   - **Changed structure:** it re-renders.
-- **`itemscope`:** the element gets an empty `itemscope` attribute if it has none, so the `itemprop`s belong to it.
-- **The LHS must resolve to an element**, otherwise it throws.
+- **`itemscope`:** when any segment has a `prop`, the element gets an empty `itemscope` attribute if it has none, so the `itemprop`s belong to it.
+- **The LHS must resolve to an element** (`'?. =&'`), or be an element's `textContent` (`'?.textContent =&'`, as written for `join`), in which case it renders into that element. Anything else throws.
 - **Cost:** semantic output costs more than a plain string. Prefer `join` when you don't need the markup. See `demos/microjoin-benchmark.html` for numbers.
 
 `microJoin` replaces the former async `builtIns.microDataJoin` handler, which has been removed.

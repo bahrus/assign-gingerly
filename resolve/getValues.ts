@@ -363,6 +363,18 @@ function looksLikeReference(
 }
 
 /**
+ * Whether getValues would resolve this string (a `?.` path, root reference, protocol,
+ * or a `!`-negation of one) rather than pass it through as a literal.
+ */
+export function isReferenceString(value: string, protocols?: SyncProtocolHandlers): boolean {
+    if (value.charCodeAt(0) === 33 /* '!' */) {
+        const neg = parseNegationMarker(value);
+        return neg !== null && looksLikeReference(neg.rest, protocols);
+    }
+    return looksLikeReference(value, protocols);
+}
+
+/**
  * Resolve a single reference string (`?.` path, root ref, or protocol) to
  * its value. Callers must confirm `looksLikeReference(value)` first.
  */

@@ -137,3 +137,64 @@ The line is `'Core ', {serial}, ', flight ', {flight: number}, '; landing: ', {l
 ### Status
 
 Done. Next on the roadmap: **back to Step 2** (`compileTree`). 
+
+## Bruce's Response II
+
+Maybe it already does this, but can we make microJoin "backwards compatible" with join, so that:
+
+```JS
+assignFrom(oElement, {
+    '?.textContent =&': { microJoin: ['?.lastName', ', ', '?.firstName'] }
+}, { from: { lastName: 'Targaryen', firstName: 'Helaena' } });
+```
+
+would still create spans, data, time elements, just no itemprop attribute?
+
+Does this introduce any ambiguities?
+
+## Claude's Response II
+
+It didn't do this before (bare strings were all text), but it does now. Your example produces:
+
+```html
+<div><span>Targaryen</span>, <span>Helaena</span></div>
+```
+
+### Behavior
+
+- **A reference string becomes an element, without `itemprop`.** That covers `'?.name'`, `'$root?.x'` / `'$parent?.x'` / `'$0'`, `'!?.x'` / `'!!?.x'`, and registered protocols. The element follows the same type mapping as segments: a string gives `<span>`, a number gives `<data value>`, a boolean (e.g. `'!!?.flag'`) gives `<data value>`, and a `Date` gives `<time datetime>`.
+- **Literal strings stay text.** `{ prop, val, text? }` segments still get `itemprop`, and the two forms mix freely in one array.
+- **`itemscope` is only added when at least one segment has a `prop`.** A purely join-style array leaves the element's attributes alone.
+- **Nullish values and optional groups** behave as before (and as in `join`).
+- **In-place updates:** the "same structure" check now also compares the presence or absence of `itemprop`, so a join-style rebind updates the existing spans in place.
+
+### Does this introduce any ambiguities?
+
+There's one real ambiguity, plus a few smaller points.
+
+1. **Literal or reference? This was the real one, and it's resolved by looking at the config, not the values.** By the time an op runs, `'?.firstName'` has already resolved to `'Helaena'`, which looks exactly like the literal `', '`.
+   - So the ` =&` dispatcher now also passes the op the **unresolved** array (`ctx.rawArgs`) and the protocol handlers. `microJoin` walks the raw and resolved arrays together and asks the resolver's own test (a new `isReferenceString` in `resolve/getValues.ts`): "was this a reference?"
+   - There's no guessing from content, so a value like `'?.oops'` coming *from the data* is still just text.
+2. **A literal that starts with `?.` (or `$root`, or a protocol prefix) is always a reference.** That's the same rule as `join` and every other RHS, so nothing new. You can't write the literal text "?.foo" in either op without a pipe or a segment.
+3. **`'?.textContent =&'` means "render into the element".** For `join`, that LHS assigns a string to `textContent`. For `microJoin`, it would make no sense to assign `undefined`, so I treat an LHS ending in `textContent` on an element as that element. `'?. =&'` still works.
+   - This is a small special case, but it's what makes a `join` → `microJoin` swap a one-word change.
+   - Any other non-element LHS still throws.
+4. **Calling the op directly** (not through ` =&`) has no raw args, so every string is treated as a literal. That's safe (no accidental elements), and it's documented.
+5. **The element type follows the value type.** If `'?.age'` flips between a number and a string, the element flips between `<data>` and `<span>`, which forces a re-render instead of an in-place update. That's correct behavior, just not free.
+6. **Cost:** a `join` array switched to `microJoin` gains one element per reference, so the earlier B6 cost ratios (~3.5–5× `join` at runtime) apply. `join` remains the choice when you only want text.
+
+### Changes
+
+- **`resolve/getValues.ts`:** new exported `isReferenceString(value, protocols)`. It is `looksLikeReference` plus `!` / `!!` negation.
+- **`types.d.ts`:** `SyncOpContext` gains:
+  - `lhsParent` / `lhsKey` (the object and key the LHS path ends at);
+  - `rawArgs` (the op's unresolved arguments);
+  - `protocols`.
+- **`assignFrom.ts`:** the ` =&` dispatcher passes the fuller context. `join` ignores it.
+- **`syncOps/microJoin.ts`:**
+  - flattens the raw and resolved arrays in parallel;
+  - reference strings become `{ val }` items, so `itemprop` is only set when there's a `prop`;
+  - adds `textContent` LHS targeting;
+  - makes `itemscope` conditional.
+- **Tests:** Test 9 in `tests/micro-join.html` covers your example, a number, a negated boolean, a dropped optional group, no `itemprop` / `itemscope`, rebinding in place, and mixing with segments. **37 / 37** pass in Chromium, Firefox and WebKit. **Full suite: 130 passed, 2 skipped, 0 failed.** `tsc` is clean, in the scratch copy; no `.js` touched.
+- **Docs:** updated the `microJoin` sections of `docs/sync-ops.md` and the README.

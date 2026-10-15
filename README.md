@@ -3207,6 +3207,15 @@ Produces:
 // <time itemprop="launched" datetime="2026-03-14T15:09:26.000Z">March 14, 2026 at 3:09 PM</time>
 ```
 
+**Join-style arrays:** a bare reference string, like those [`join`](#sync-op-join) takes, also becomes an element for its value (same type mapping), just **without `itemprop`**. Literal strings stay text, so a `join` array works unchanged, and an LHS of `'?.textContent'` renders into its element:
+
+```JavaScript
+assignFrom(oElement, {
+    '?.textContent =&': { microJoin: ['?.lastName', ', ', '?.firstName'] }
+}, { from: { lastName: 'Targaryen', firstName: 'Helaena' } });
+// <span>Targaryen</span>, <span>Helaena</span>
+```
+
 **Optional segments (nested arrays):** the same all-or-nothing semantics as [`join`](#sync-op-join). A sub-array is dropped entirely if any item in it is nullish, or is a segment whose `val` is nullish. Top-level nullish items and segments are omitted.
 
 ```JavaScript
@@ -3222,7 +3231,7 @@ microJoin: [
 - **Ownership:** `microJoin` owns the element's whole content, so it needs no comment markers.
 - **Same structure:** later calls update the existing text nodes, elements, `value` and `datetime` in place.
 - **Changed structure** (an optional group appearing or disappearing, or a value changing type): it re-renders.
-- **`itemscope`:** the element gets an empty `itemscope` attribute if it has none.
+- **`itemscope`:** when any segment has a `prop`, the element gets an empty `itemscope` attribute if it has none.
 
 Full semantics: [docs/sync-ops.md](docs/sync-ops.md#microjoin).
 

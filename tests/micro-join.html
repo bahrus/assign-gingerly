@@ -158,6 +158,28 @@
         assertEquals(el.textContent, 'ac', 'join unchanged');
       }
 
+      // Test 9: join-style arrays — references become elements without itemprop
+      {
+        const el = document.createElement('div');
+        const cfg = { '?.textContent =&': { microJoin: ['?.lastName', ', ', '?.firstName', ' (', '?.age', ')', ['; aka ', '?.alias'], '!!?.royal'] } };
+        assignFrom(el, cfg, { from: { lastName: 'Targaryen', firstName: 'Helaena', age: 19, royal: 1 } });
+        const [last, first, age, royal] = el.children;
+        assertEquals(el.children.length, 4, 'one element per reference; the missing group is dropped');
+        assertEquals(`${last.localName}|${last.textContent}|${first.localName}|${first.textContent}`, 'span|Targaryen|span|Helaena', 'string references → spans');
+        assertEquals(`${age.localName}|${age.getAttribute('value')}`, 'data|19', 'number reference → data');
+        assertEquals(`${royal.localName}|${royal.getAttribute('value')}`, 'data|true', 'negated reference → boolean data');
+        assertEquals(el.querySelector('[itemprop]'), null, 'no itemprop attributes');
+        assertEquals(el.hasAttribute('itemscope'), false, 'no itemscope without itemprops');
+        assertEquals(el.textContent, `Targaryen, Helaena (${(19).toLocaleString()})`, "'?.textContent' LHS renders into the element");
+
+        assignFrom(el, cfg, { from: { lastName: 'Targaryen', firstName: 'Aegon', age: 20, royal: 1 } });
+        assert(el.children[1] === first && first.textContent === 'Aegon', 'join-style rebind updates in place');
+
+        const mixed = document.createElement('p');
+        assignFrom(mixed, { '?. =&': { microJoin: ['?.name', ' ', { prop: 'flights', val: '?.flights' }] } }, { from: vm });
+        assertEquals(`${mixed.firstElementChild.getAttribute('itemprop')}|${mixed.lastElementChild.getAttribute('itemprop')}`, 'null|flights', 'references and segments mix');
+      }
+
       const testComplete = document.getElementById('test-complete');
       testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
       testComplete.setAttribute('data-passed', passed);

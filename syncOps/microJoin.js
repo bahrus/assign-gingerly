@@ -1,54 +1,82 @@
 /**
  * microJoin — synchronous compute op for the ` =&` operator.
  *
- * Renders a template array into the LHS element as semantic, microdata-annotated
- * content: literal strings become text, and each `{ prop, val, text? }` segment
- * becomes an element chosen by the resolved value's type, with `itemprop=prop`:
+ * Renders a template array into the LHS element as semantic content. It accepts
+ * everything `join` accepts, plus `{ prop, val, text? }` segments:
  *
- * - `Date`   → `<time itemprop datetime="ISO">` (text: toLocaleDateString())
- * - number   → `<data itemprop value="n">` (text: toLocaleString())
- * - boolean  → `<data itemprop value="true|false">` (no text)
- * - anything else → `<span itemprop>` (text: String(val))
+ * - a literal string → text
+ * - a reference string (`'?.name'`, `'$parent?.x'`, `'!!?.flag'`, a protocol…) → an
+ *   element for its resolved value, **without** `itemprop`
+ * - a `{ prop, val, text? }` segment → an element for `val`, **with** `itemprop=prop`
  *
- * `text`, when given, overrides the display text (e.g. formatted through pipes),
- * while `val` still decides the element and its machine-readable attribute.
+ * The element is chosen by the resolved value's type:
+ * - `Date`   → `<time datetime="ISO">` (text: locale date)
+ * - number   → `<data value="n">` (text: locale number)
+ * - boolean  → `<data value="true|false">` (no text)
+ * - anything else → `<span>` (text: String(value))
  *
- * Nullish handling mirrors `join`: top-level null/undefined items (and segments
- * whose `val` is nullish) are omitted; a nested sub-array is all-or-nothing — it's
- * dropped entirely if any item in it is nullish or is a segment with a nullish `val`.
+ * A segment's `text`, when given, overrides the display text (e.g. formatted through
+ * pipes), while `val` still decides the element and its machine-readable attribute.
+ *
+ * Nullish handling mirrors `join`: top-level nullish items (literals, references, or
+ * segments whose `val` is nullish) are omitted; a nested sub-array is all-or-nothing —
+ * dropped if any item directly in it is missing (deeper sub-arrays are optional on
+ * their own).
  *
  * The op owns the element's whole content (no comment markers). The first call
- * renders it; later calls with the same structure update the existing text nodes and
- * elements in place, and a changed structure re-renders. The element gets an empty
- * `itemscope` attribute if it has none, so the itemprops belong to it.
+ * renders it; later calls with the same structure update text and elements in place,
+ * and a changed structure re-renders. If any segment carries an `itemprop`, the
+ * element gets an empty `itemscope` attribute (if it has none), so they belong to it.
  *
- * Writes into `ctx.lhsTarget` and returns undefined (nothing is assigned back).
+ * The LHS must resolve to an element (`'?. =&'`), or be an element's `textContent`
+ * (`'?.textContent =&'`, as with `join`) — in which case it renders into that element.
+ * Returns undefined (nothing is assigned back).
  *
  * @example
  * assignFrom(p, {
- *     '?. =&': { microJoin: ['Launched ', { prop: 'date', val: '?.launchDate' }, ' by ', { prop: 'name', val: '?.name' }] }
+ *     '?. =&': { microJoin: ['Launched ', { prop: 'date', val: '?.launchDate' }, ' by ', '?.name'] }
  * }, { from: vm });
  */
+import { isReferenceString } from '../resolve/getValues.js';
 function isSegment(item) {
     return !!item && typeof item === 'object' && !Array.isArray(item) && 'prop' in item;
 }
-/** Whether an item counts as missing for all-or-nothing groups. */
-function isMissing(item) {
-    return item == null || (isSegment(item) && item.val == null);
+/**
+ * Turn one (raw, resolved) pair into an item, or null when it's missing.
+ * Without raw args (an op called directly), every string is treated as a literal.
+ */
+function toItem(raw, value, protocols) {
+    if (isSegment(value))
+        return value.val == null ? null : value;
+    if (value == null)
+        return null;
+    if (typeof raw === 'string' && isReferenceString(raw, protocols))
+        return { val: value };
+    return String(value);
 }
-/** Flatten the template: drop missing top-level items and any sub-array containing one. */
-function flatten(template, out = []) {
-    for (const item of template) {
-        if (Array.isArray(item)) {
-            if (item.some(isMissing))
-                continue;
-            flatten(item, out);
+/**
+ * Flatten (raw, resolved) into items. In a group (`strict`), any missing item makes the
+ * group fail (returns false); nested groups are optional on their own.
+ */
+function flatten(raw, resolved, protocols, out, strict) {
+    for (let i = 0; i < resolved.length; i++) {
+        const value = resolved[i];
+        const rawItem = raw[i];
+        if (Array.isArray(value)) {
+            const group = [];
+            if (flatten(Array.isArray(rawItem) ? rawItem : value, value, protocols, group, true))
+                out.push(...group);
+            continue;
         }
-        else if (!isMissing(item)) {
-            out.push(isSegment(item) ? item : String(item));
+        const item = toItem(rawItem, value, protocols);
+        if (item === null) {
+            if (strict)
+                return false;
+            continue;
         }
+        out.push(item);
     }
-    return out;
+    return true;
 }
 /**
  * Cached default-locale formatters. Their output matches toLocaleString() /
@@ -91,25 +119,38 @@ function sameStructure(element, items, shapes) {
         }
         else {
             const el = node;
-            if (node.nodeType !== Node.ELEMENT_NODE || el.localName !== shapes[i].tag || el.getAttribute('itemprop') !== item.prop) {
+            if (node.nodeType !== Node.ELEMENT_NODE || el.localName !== shapes[i].tag
+                || el.getAttribute('itemprop') !== (item.prop ?? null)) {
                 return false;
             }
         }
     }
     return true;
 }
+/** The element to render into: the LHS itself, or the element owning an LHS `textContent`. */
+function targetElement(ctx) {
+    const isElement = (x) => typeof Element !== 'undefined' && x instanceof Element;
+    if (isElement(ctx?.lhsTarget))
+        return ctx.lhsTarget;
+    if (ctx?.lhsKey === 'textContent' && isElement(ctx.lhsParent))
+        return ctx.lhsParent;
+    return undefined;
+}
 export function microJoin(args, _extra, ctx) {
-    const element = ctx?.lhsTarget;
-    if (!(typeof Element !== 'undefined' && element instanceof Element)) {
-        throw new Error("microJoin: the ' =&' left-hand side must resolve to an element (e.g. '?. =&')");
+    const element = targetElement(ctx);
+    if (!element) {
+        throw new Error("microJoin: the ' =&' left-hand side must resolve to an element ('?. =&') or an element's textContent");
     }
     if (!Array.isArray(args)) {
-        throw new Error('microJoin: expects an array of strings and { prop, val, text? } segments');
+        throw new Error('microJoin: expects an array of strings, references and { prop, val, text? } segments');
     }
-    const items = flatten(args);
+    const raw = Array.isArray(ctx?.rawArgs) ? ctx.rawArgs : args;
+    const items = [];
+    flatten(raw, args, ctx?.protocols, items, false);
     const shapes = items.map(item => (typeof item === 'string' ? undefined : shapeOf(item)));
-    if (!element.hasAttribute('itemscope'))
+    if (!element.hasAttribute('itemscope') && items.some(item => typeof item !== 'string' && item.prop !== undefined)) {
         element.setAttribute('itemscope', '');
+    }
     if (sameStructure(element, items, shapes)) {
         // Update in place
         const { childNodes } = element;
@@ -141,7 +182,8 @@ export function microJoin(args, _extra, ctx) {
         else {
             const { tag, attr, attrValue, text } = shapes[i];
             const el = document.createElement(tag);
-            el.setAttribute('itemprop', item.prop);
+            if (item.prop !== undefined)
+                el.setAttribute('itemprop', item.prop);
             if (attr)
                 el.setAttribute(attr, attrValue);
             if (text)

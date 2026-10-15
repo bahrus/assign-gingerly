@@ -538,7 +538,9 @@ export function assignFrom(target, pattern, options, permissionProcessor) {
             const { [opName]: args, ...extra } = resolvedConfig;
             // Resolve the LHS first: rendering ops (microJoin) write into it; value ops (join) assign back to it
             const { lhsTarget, lhsParent, lhsKey } = resolveLhsPath(target, lhsPath, options);
-            const result = SYNC_OPS[opName](args, extra, { lhsTarget });
+            const result = SYNC_OPS[opName](args, extra, {
+                lhsTarget, lhsParent, lhsKey, rawArgs: config[opName], protocols: options.protocols,
+            });
             if (result === undefined)
                 continue;
             if (lhsParent != null && lhsKey != null
