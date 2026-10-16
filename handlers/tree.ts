@@ -32,6 +32,9 @@
  * third argument, and in onAssigned's ctx) to re-apply its subtree after changing its
  * own state; Tree calls it itself once an async onAssigned settles.
  *
+ * Experimental `compile` option: elements are created by cloning templates compiled from
+ * the map (static parts baked in) instead of createElement; see "compile: clone-and-bind" below.
+ *
  * Not yet supported (Phase TBD): bare class headers and `$:` headers.
  *
  * This handler is auto-loaded by processHandlerCommands when
@@ -51,14 +54,15 @@
 import { assignFrom, categorizeKeys, handleSpreads, SUBSTITUTION_VARS } from '../assignFrom.js';
 import { applyAttribute, assignGingerly, tryAssignTo } from '../assignGingerly.js';
 import { getValue, getValues, isEventBinding } from '../resolve/getValues.js';
-import { DEFAULT_WILDCARD_PATTERN, isLiteralString, normalize, WILDCARD } from './treeSpec.js';
+import { isLiteralString, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
+import { buildTemplate, compileTree } from './compileTree.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 import type {
     AssignFromHandler, AssignFromOptions, ItemscopeManagerConfig, ItemscopeRegistry, PermissionProcessor,
 } from '../types/assign-gingerly/types.js';
 import type {
-    ElementSpecification, ManagerRef, Pattern, RepeatSpecification, TreeConfig,
+    CompiledNode, CompiledTemplate, CompiledTree, ElementSpecification, ManagerRef, Pattern, RepeatSpecification, TreeConfig,
 } from '../types/assign-gingerly/treeTypes.js';
 
 const DEFAULT_MARKER_NAME = 'tree';
@@ -69,8 +73,25 @@ const DEFAULT_MARKER_NAME = 'tree';
  */
 const TREE_TARGET = Symbol('builtIns.tree target');
 
+/** Options key carrying the tree's compiled variant (with `compile`) down to repeats and rebinds. */
+const TREE_COMPILED = Symbol('builtIns.tree compiled');
+
 /** What a tree can render into. */
 type TreeTarget = Element | DocumentFragment;
+
+/**
+ * A map compiled for one effective aka and permission processor (what decides baking),
+ * with its `<template>`s, built on first use.
+ */
+interface CompiledVariant {
+    akaKey: string;
+    permissionProcessor: PermissionProcessor | undefined;
+    compiled: CompiledTree;
+    built: Map<string, HTMLTemplateElement>;
+}
+
+/** Compiled variants per map object (specs are treated as immutable: replace a map to change it). */
+const compiledMaps = new WeakMap<object, CompiledVariant[]>();
 
 /** A created element, paired with the structure it was created from and its static children. */
 interface TreeNode {
@@ -92,6 +113,8 @@ interface TreeNode {
     /** The pattern (and effective aka) last applied to the element; see bindContent */
     appliedPattern?: Pattern;
     appliedAka?: Record<string, string>;
+    /** The compiled node this node was cloned from (`compile`), for its repeat's item templates */
+    compiled?: CompiledNode;
 }
 
 /** A repeating node's items, by key, and its `empty` node while the array is empty. */
@@ -409,6 +432,7 @@ function bindRepeat(node: TreeNode, repeat: RepeatSpecification, from: any): voi
     const keyParts = key !== undefined && key.startsWith('?.') ? splitPath(key) : undefined;
     const keyFast = itemOptions === options ? fastAllowed : fastPathAllowed(itemOptions, permissionProcessor);
     const { container } = node;
+    const [eachTemplate, emptyTemplate] = repeatTemplates(node);
     const state = node.repeat ??= { items: new Map(), empty: undefined, warned: false };
     const next = new Map<unknown, TreeNode>();
     items.forEach((item, index) => {
@@ -425,7 +449,7 @@ function bindRepeat(node: TreeNode, repeat: RepeatSpecification, from: any): voi
         let itemNode = state.items.get(itemKey);
         // Removed or moved by other code: rebuild
         if (itemNode && itemNode.element.parentNode !== container) itemNode = undefined;
-        next.set(itemKey, syncNode(itemNode, each, item, itemOptions, permissionProcessor));
+        next.set(itemKey, syncNode(itemNode, each, item, itemOptions, permissionProcessor, eachTemplate));
     });
     for (const [itemKey, itemNode] of state.items) {
         if (next.get(itemKey) !== itemNode && itemNode.element.parentNode === container) itemNode.element.remove();
@@ -435,7 +459,7 @@ function bindRepeat(node: TreeNode, repeat: RepeatSpecification, from: any): voi
     let elements = [...next.values()].map(n => n.element);
     if (items.length === 0 && empty !== undefined) {
         const current = state.empty?.element.parentNode === container ? state.empty : undefined;
-        state.empty = syncNode(current, empty, from, options, permissionProcessor);
+        state.empty = syncNode(current, empty, from, options, permissionProcessor, emptyTemplate);
         elements = [state.empty.element];
     } else if (state.empty) {
         state.empty.element.remove();
@@ -494,8 +518,14 @@ function createNode(
     spec: ElementSpecification,
     value: any,
     options: AssignFromOptions,
-    permissionProcessor?: PermissionProcessor
+    permissionProcessor?: PermissionProcessor,
+    template?: CompiledTemplate
 ): TreeNode {
+    // With `compile`: clone the template, as long as it was compiled from this very spec
+    if (template && template.node.spec === spec) {
+        const variant = (options as any)[TREE_COMPILED] as CompiledVariant | undefined;
+        if (variant) return cloneNodeFrom(template, variant, value, options, permissionProcessor);
+    }
     const [, tag, ish, pattern, childSpecs, repeat] = normalize(spec);
     const element = document.createElement(tag);
     const node: TreeNode = {
@@ -531,12 +561,13 @@ function syncNode(
     spec: ElementSpecification,
     value: any,
     options: AssignFromOptions,
-    permissionProcessor?: PermissionProcessor
+    permissionProcessor?: PermissionProcessor,
+    template?: CompiledTemplate
 ): TreeNode {
     const [, tag, ish, pattern, childSpecs, repeat] = normalize(spec);
     if (!node || node.tag !== tag || node.ish !== ish || node.children.length !== childSpecs.length
         || !!node.repeat !== !!repeat) {
-        return createNode(spec, value, options, permissionProcessor);
+        return createNode(spec, value, options, permissionProcessor, template);
     }
     Object.assign(node, { spec, options, permissionProcessor });
     node.binding = true;
@@ -552,6 +583,109 @@ function syncNode(
         node.binding = false;
     }
     return node;
+}
+
+// ── compile: clone-and-bind ──────────────────────────────────────────────────
+//
+// With `compile`, a map is compiled once (handlers/compileTree.ts) into flat templates
+// with the static parts baked in. Creating a node clones its template and binds only the
+// dynamic keys; everything after creation (rebinding, managers, repeats' reconciliation)
+// is the ordinary TreeNode code. A template is only used while its node was compiled
+// from the very spec being created, so a replaced spec falls back to createElement.
+
+/** The compiled variant for this map, aka and permission processor, compiling on first use. */
+function compiledVariantFor(
+    map: Record<string, ElementSpecification>, options: AssignFromOptions, sample: any, permissionProcessor?: PermissionProcessor
+): CompiledVariant {
+    const { aka } = options as any;
+    const akaKey = aka ? JSON.stringify(aka) : '';
+    let variants = compiledMaps.get(map);
+    if (!variants) compiledMaps.set(map, variants = []);
+    let variant = variants.find(v => v.akaKey === akaKey && v.permissionProcessor === permissionProcessor);
+    if (!variant) {
+        const compiled = compileTree({ map }, {
+            sample,
+            resolveOptions: options as any,
+            // Only refuses (and warns, once per attribute) what the runtime check would refuse anyway
+            canBake: permissionProcessor
+                ? (name, text) => !permissionProcessor.checkRestrictedAttributeCall('setAttribute', [name, text]).blocked
+                : undefined,
+        });
+        variant = { akaKey, permissionProcessor, compiled, built: new Map() };
+        variants.push(variant);
+    }
+    return variant;
+}
+
+/** A repeat node's item and empty templates, when it was cloned from a compiled node. */
+function repeatTemplates(node: TreeNode): [CompiledTemplate?, CompiledTemplate?] {
+    const repeat = node.compiled?.repeat;
+    const variant = (node.options as any)[TREE_COMPILED] as CompiledVariant | undefined;
+    if (!repeat || !variant) return [];
+    const { templates } = variant.compiled;
+    return [templates[repeat.each], repeat.empty === undefined ? undefined : templates[repeat.empty]];
+}
+
+/**
+ * Create a node by cloning its template: import a copy into the target's document (which
+ * upgrades custom elements before returning), pair every element with its compiled node,
+ * then bind in preorder.
+ */
+function cloneNodeFrom(
+    template: CompiledTemplate, variant: CompiledVariant, value: any, options: AssignFromOptions, permissionProcessor?: PermissionProcessor
+): TreeNode {
+    const { id } = template;
+    let built = variant.built.get(id);
+    if (!built) {
+        built = buildTemplate(template);
+        variant.built.set(id, built);
+    }
+    const target = (options as any)[TREE_TARGET] as Node | undefined;
+    const doc = target?.ownerDocument ?? document;
+    const element = doc.importNode(built.content, true).firstElementChild!;
+    const node = pairNodes(template.node, element, options, permissionProcessor);
+    bindCloned(node, value);
+    return node;
+}
+
+/** Pair a clone's elements with the compiled nodes, building the TreeNodes (nothing runs yet). */
+function pairNodes(compiled: CompiledNode, element: Element, options: AssignFromOptions, permissionProcessor?: PermissionProcessor): TreeNode {
+    const { spec, tag, ish } = compiled;
+    const container = containerOf(element);
+    const node: TreeNode = {
+        tag, ish, element, children: [], spec, options, permissionProcessor, binding: true, container, compiled,
+    };
+    let child = (container as Element).firstElementChild;
+    for (const childCompiled of compiled.children) {
+        node.children.push(pairNodes(childCompiled, child!, options, permissionProcessor));
+        child = child!.nextElementSibling;
+    }
+    return node;
+}
+
+/** Bind a freshly cloned node and its subtree, as createNode does for a created one. */
+function bindCloned(node: TreeNode, value: any): void {
+    const { compiled, element, ish, options, permissionProcessor } = node;
+    const { pattern, dynamic, repeat } = compiled!;
+    try {
+        const from = ish === undefined ? value : attachManager(node, ish, value);
+        applyPattern(element, dynamic, from, options, permissionProcessor);
+        // The whole pattern counts as applied: its literals were baked, so rebinds skip them
+        node.appliedPattern = pattern;
+        node.appliedAka = (options as any).aka;
+        if (repeat) {
+            bindRepeat(node, repeat.spec, from);
+            return;
+        }
+        const { children, container } = node;
+        for (const child of children) bindCloned(child, from);
+        // A dynamic pattern that replaced the element's content (e.g. textContent): put the children back after it
+        if (children.some(child => child.element.parentNode !== container)) {
+            container.append(...children.map(child => child.element));
+        }
+    } finally {
+        node.binding = false;
+    }
 }
 
 /** Find the tree's markers among the target's direct children. */
@@ -576,11 +710,10 @@ function getEntries(map: Record<string, ElementSpecification>, from: any): [stri
     for (const key of Object.keys(map)) {
         if (key !== WILDCARD) entries.push([key, map[key]]);
     }
-    const wildcard = map[WILDCARD];
-    if (wildcard === undefined || from === null || typeof from !== 'object') return entries;
-    const [header, , , pattern = DEFAULT_WILDCARD_PATTERN, children, repeat] = normalize(wildcard);
+    if (map[WILDCARD] === undefined || from === null || typeof from !== 'object') return entries;
+    const wildcardSpec = wildcardSpecOf(map);
     for (const key of Object.keys(from)) {
-        if (!(key in map)) entries.push([key, [header, pattern, repeat ?? children]]);
+        if (!(key in map)) entries.push([key, wildcardSpec]);
     }
     return entries;
 }
@@ -610,7 +743,7 @@ export class TreeHandler implements AssignFromHandler {
     assign(lhsTarget: any, _resolvedParams: Record<string, any>, options: AssignFromOptions, permissionProcessor?: PermissionProcessor): void {
         // Elements, shadow roots and other document fragments
         if (!(lhsTarget instanceof Element || lhsTarget instanceof DocumentFragment)) return;
-        const { map, markerName = DEFAULT_MARKER_NAME, keepNullish, aka } = this.config;
+        const { map, markerName = DEFAULT_MARKER_NAME, keepNullish, aka, compile } = this.config;
         if (!map || typeof map !== 'object') {
             throw new Error('builtIns.tree: a "map" of VM keys to element specifications is required');
         }
@@ -623,6 +756,9 @@ export class TreeHandler implements AssignFromHandler {
             ...(aka && { aka: { ...options.aka, ...aka } }),
             [TREE_TARGET]: lhsTarget,
         } as AssignFromOptions;
+        // compile: the first call's VM is the sample that picks microJoin shells
+        const variant = compile ? compiledVariantFor(map, nestedOptions, from, permissionProcessor) : undefined;
+        if (variant) (nestedOptions as any)[TREE_COMPILED] = variant;
 
         const [start, end] = findChildMarkers(lhsTarget, markerName) ?? createMarkers(lhsTarget, markerName);
         let nodes = treeStates.get(start);
@@ -640,7 +776,8 @@ export class TreeHandler implements AssignFromHandler {
             let node = nodes.get(key);
             // Removed or moved by other code: rebuild
             if (node && node.element.parentNode !== lhsTarget) node = undefined;
-            next.set(key, syncNode(node, spec, value, nestedOptions, permissionProcessor));
+            const template = variant?.compiled.templates[key in map ? key : WILDCARD];
+            next.set(key, syncNode(node, spec, value, nestedOptions, permissionProcessor, template));
         }
         for (const [key, node] of nodes) {
             if (next.get(key) !== node && node.element.parentNode === lhsTarget) node.element.remove();

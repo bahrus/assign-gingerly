@@ -205,3 +205,55 @@ Unless you'd rather settle the `compile` value differently, I'm ready to impleme
 ## Bruce's Response II
 
 Okay, I agree with all your recommendations.  Please proceed with implementing, and add your implementation notes below.
+
+## Claude's Implementation Notes
+
+Step 3 is implemented as designed. `{ do: 'builtIns.tree', compile: true, map }` now creates elements by cloning compiled templates.
+
+**Results:**
+- **`tests/tree.html?compile`:** the whole Tree suite (119 assertions) passes with `compile: true` on every tree config, with no expected values changed.
+- **`tests/compile-tree.html`:** 60 / 60.
+- **Full suite: 139 passed, 2 skipped, 0 failed,** in Chromium, Firefox and WebKit. `tsc` is clean, in the scratch copy; no `.js` touched.
+
+### Code (`handlers/tree.ts`)
+
+- **`compiledVariantFor`:** a `WeakMap` keyed by `map`, with one variant per (effective `aka`, permission processor). Each variant holds the `CompiledTree` and its `<template>`s, built lazily per id.
+  - The **first call's VM** is the sample.
+  - **`canBake`** wraps the processor's existing `checkRestrictedAttributeCall`.
+  - The variant travels in the nested options under a `TREE_COMPILED` symbol, next to `TREE_TARGET`.
+- **`createNode(spec, …, template?)`:** clones only when `template.node.spec === spec`, and otherwise falls back to `createElement`. `syncNode` passes the template through:
+  - top-level keys use `templates[key]` (or `'*'`);
+  - repeats use their node's `compiled.repeat` ids (`repeatTemplates`).
+- **`cloneNodeFrom`:** `target.ownerDocument.importNode(template.content, true)`, then two passes:
+  - **`pairNodes`** builds every `TreeNode` (full nodes, each with a new `compiled` link), stepping through element children;
+  - **`bindCloned`** goes in preorder: attach the manager, apply `dynamic`, set `appliedPattern` to the *full* pattern (so rebinds skip the baked literals), recurse, then re-append the children if a dynamic `textContent` replaced them. Repeats go through the unchanged `bindRepeat`.
+- **The wildcard spec** is now one shared object per map: `wildcardSpecOf` in `treeSpec.ts`, used by both `getEntries` and the compiler. Before, a new array was created per key per call.
+- **Rebinding code is untouched.**
+
+### Types and docs
+
+- **`TreeConfig.compile?: boolean | string`**, documented as experimental, with a string reserved for Step 5.
+- **`docs/tree.md`** has a new section, "Compiling (`compile`, experimental)". It covers:
+  - what's baked, and "write statics as `:=` to bake them";
+  - immutable specs and defining the map once;
+  - constructor timing with `importNode`;
+  - attribute order;
+  - permissions.
+
+### Tests
+
+- **`tests/tree.html?compile`:** the page wraps `assignFrom` / `assignFromAsync` and marks every tree config `compile: true` *in place*, so config and map identities hold across calls. `tree.spec.ts` runs the page both ways.
+- **`tests/compile-tree.html`, tests 13–18,** which prove the clone path is really taken, not just that the output matches:
+  - **13: really cloned.** A custom element's constructor sees its baked attribute for every instance: the key, the repeat items and the wildcard. Without `compile` it doesn't. Its setter runs, and there are no shadowing own properties.
+  - **14: equivalence through Tree itself** (`compile` on vs. off): a card with a repeat, an empty repeat, a dynamic `textContent` on an element with children, `aka` and the wildcard.
+  - **15: rebind** keeps the element, updates dynamic values, and skips baked literals.
+  - **16: `microJoin` shells** are filled in place. A `replaceChildren` spy counts 0 calls with `compile` and 1 without.
+  - **17: permissions.** An allowed literal `href` is baked. A `javascript:` one isn't baked, and is still refused at runtime. The output is equivalent to no `compile`.
+  - **18: a new map on the same target** rebuilds from its own templates, and an inline map recreated per call still renders correctly.
+- **`tests/import-node-upgrade.html`:** the upgrade-timing proof from my previous response.
+
+### Next: Step 4
+
+Rerun the Tree benchmarks (`demos/tree-benchmark.html`) with `compile` on vs. off and vs. vanilla template cloning, against the agreed bar: **≥ 1.5× faster creation** of 1,000 static-heavy instances, with **no rebind regression**.
+
+The benchmark card should be written with ` :=` statics, so there's something to bake. A variant with property statics (`className`) shows what compiling gains without rewriting patterns.

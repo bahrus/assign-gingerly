@@ -239,10 +239,40 @@ interface TreeConfig extends HandlerConfig {
     markerName?: string;    // default 'tree'
     keepNullish?: boolean;  // default false
     aka?: Record<string, string>;  // aliases for this tree's patterns, merged over options.aka
+    compile?: boolean | string;    // experimental: clone compiled templates (see below)
 }
 ```
 
 The types live in `types/assign-gingerly/treeTypes.d.ts`.
+
+## Compiling (`compile`, experimental)
+
+```JavaScript
+const map = { launch: ['article', { 'class :=': 'card' }, [['h3', { 'class :=': 'title', _: '?.name' }], /* … */]] };
+
+assignFrom(host, { '?. =>': { do: 'builtIns.tree', compile: true, aka: { _: 'textContent' }, map } }, { from: vm });
+```
+
+With `compile`, Tree compiles the map once ([`handlers/compileTree.ts`](../handlers/compileTree.ts)) into flat `<template>`s, one per key and one per repeat `each` / `empty`. It then **creates each element by cloning its template**, instead of calling `createElement` and assigning every key.
+
+**What's baked into the templates**, and so costs nothing per instance:
+- literal `textContent`, including the string shorthand and keys aliased to it (`_`);
+- literal ` :=` attributes;
+- `microJoin`'s static text and element shells, when the first call's VM has every value. The element types come from that VM's values. If a later value has another type, `microJoin` just re-renders that element.
+
+**Everything else is applied per instance, as before.** That includes literal *properties*: write statics as attributes (`'class :=': 'card'`, not `className: 'card'`) to get them baked.
+
+**Rebinding, managers, events and repeats behave exactly as without `compile`.** Only creation changes.
+
+**Rules and differences:**
+- **Treat the map's specifications as immutable.** To change one, replace it with a new object. A template is used only for the exact spec object it was compiled from (anything else falls back to `createElement`), but an object edited *in place* isn't noticed. This is the same assumption Tree already makes when it skips literals on rebind.
+- **Define the map once** (e.g. at module level). Compiled templates are cached per `map` object, so a map literal recreated on every call is recompiled every time. That still works, but there's no gain.
+- **Custom elements** are created with `document.importNode`, which upgrades them before Tree sets any property, so setters run as with `createElement`. Two differences:
+  - every element of an instance is constructed before any pattern is applied;
+  - baked attributes are already present at construction, so they arrive through `attributeChangedCallback`.
+- **Attribute order:** baked attributes come before per-instance ones. That's visible in `outerHTML`, though not to selectors or `getAttribute`.
+- **Permissions:** with a permission processor, a literal attribute it would refuse isn't baked. It's applied, and refused, per instance, as without `compile`.
+- **The value:** `compile: 'some-name'` currently works like `true`. The name is reserved for server-rendered templates (planned).
 
 ## Performance Notes
 

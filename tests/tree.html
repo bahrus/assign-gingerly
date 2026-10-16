@@ -17,8 +17,27 @@
   <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
 
   <script type="module">
-    import { assignFrom, assignFromAsync } from '../index.js';
+    import { assignFrom as baseAssignFrom, assignFromAsync as baseAssignFromAsync } from '../index.js';
     import { builtInEmoji } from '../DX/emojis.js';
+
+    // tree.html?compile runs every test with `compile: true` on every tree config, unchanged otherwise.
+    // Configs are marked in place, so their identity (and their maps') is preserved across calls.
+    const compileMode = new URLSearchParams(location.search).has('compile');
+    const marked = new WeakSet();
+    function markTreeConfigs(value) {
+      if (!value || typeof value !== 'object' || value instanceof Node || marked.has(value)) return;
+      marked.add(value);
+      if (value.do === 'builtIns.tree' || value.do === '🌲') value.compile ??= true;
+      for (const item of Array.isArray(value) ? value : Object.values(value)) markTreeConfigs(item);
+    }
+    const assignFrom = (target, pattern, ...rest) => {
+      if (compileMode) markTreeConfigs(pattern);
+      return baseAssignFrom(target, pattern, ...rest);
+    };
+    const assignFromAsync = (target, pattern, ...rest) => {
+      if (compileMode) markTreeConfigs(pattern);
+      return baseAssignFromAsync(target, pattern, ...rest);
+    };
 
     const results = [];
     let passed = 0;

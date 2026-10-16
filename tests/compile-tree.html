@@ -19,6 +19,7 @@
   <script type="module">
     import { assignFrom, assignFromAsync } from '../index.js';
     import { compileTree, buildTemplate, toHTML } from '../handlers/compileTree.js';
+    import { PermissionProcessor } from '../assignPermissions/PermissionProcessor.js';
 
     const results = [];
     let passed = 0;
@@ -295,6 +296,111 @@
         assignFrom(p, { '?. =&': { microJoin: ['a', 'b', '?.x', '', 'c'] } }, { from: { x: 'X' } });
         assertEquals(p.childNodes.length, 3, 'text items merged');
         assertEquals(p.innerHTML, 'ab<span>X</span>c', 'merged output');
+      }
+
+      // ── Step 3: builtIns.tree with compile: true ──────────────────────────────
+
+      const treeHtml = async (config, vm, permissionProcessor) => {
+        const host = document.createElement('div');
+        await assignFromAsync(host, { '?. =>': { do: 'builtIns.tree', ...config } }, { from: vm }, permissionProcessor);
+        return host;
+      };
+      async function assertCompileEquivalent(config, vm, message, permissionProcessor) {
+        const plain = canonical(stripComments(await treeHtml(config, vm, permissionProcessor)));
+        const compiled = canonical(stripComments(await treeHtml({ ...config, compile: true }, vm, permissionProcessor)));
+        assertEquals(compiled, plain, `compile ≡ no compile: ${message}`);
+      }
+
+      // Test 13: elements really are cloned — a custom element sees baked attributes at construction,
+      // and is upgraded (setters run) before Tree binds it
+      {
+        const seen = [];
+        class XBaked extends HTMLElement {
+          constructor() { super(); seen.push(this.hasAttribute('data-baked')); }
+          set label(value) { this.dataset.label = value; }
+        }
+        customElements.define('x-baked', XBaked);
+        const spec = ['x-baked', { 'data-baked :=': 'yes', label: '?.label' }];
+        const config = { map: { one: spec, list: ['div', {}, { each: spec }], '*': spec } };
+        const vm = { one: { label: 'a' }, list: [{ label: 'b' }, { label: 'c' }], extra: { label: 'd' } };
+
+        const host = await treeHtml({ ...config, compile: true }, vm);
+        assertEquals(seen.join(','), 'true,true,true,true', 'compile: every instance (key, repeat items, wildcard) was cloned with its baked attribute');
+        assertEquals([...host.querySelectorAll('x-baked')].map(el => el.dataset.label).join(''), 'abcd', 'compile: properties went through the setter (upgraded before binding)');
+        assert([...host.querySelectorAll('x-baked')].every(el => !Object.hasOwn(el, 'label')), 'compile: no own properties shadowing the setter');
+
+        seen.length = 0;
+        await treeHtml(config, vm);
+        assertEquals(seen.join(','), 'false,false,false,false', 'without compile: createElement, attributes applied after construction');
+      }
+
+      // Test 14: compile equivalence through Tree itself
+      {
+        const card = { map: { launch: ['article', { 'class :=': 'card', 'aria-label :=': 'Launch' }, [
+          ['h3', { 'class :=': 'title', textContent: '?.name' }],
+          ['p', { className: 'note', textContent: '?.note' }, [['span', 'Static']]],
+          ['ul', 'Crew:', { of: '?.crew', key: '?.id', each: ['li', { 'class :=': 'crew' }, [['b', '?.name']]], empty: ['li', 'None'] }],
+        ]] } };
+        await assertCompileEquivalent(card, { launch: { name: 'Demo 7', note: 'dynamic text replaces children', crew: [{ id: 1, name: 'Bob' }] } }, 'card with repeat');
+        await assertCompileEquivalent(card, { launch: { name: 'Demo 8', crew: [] } }, 'empty repeat');
+        await assertCompileEquivalent({ aka: { _: 'textContent' }, map: { a: ['p', { _: 'Hi ' }], '*': ['i'] } }, { a: {}, b: 2, c: 'three' }, 'aka and wildcard');
+      }
+
+      // Test 15: rebinding a compiled tree — elements kept, dynamic values updated, baked literals untouched
+      {
+        const config = { compile: true, map: { launch: ['p', { 'class :=': 'card', textContent: '?.name' }] } };
+        const host = document.createElement('div');
+        const pattern = { '?. =>': { do: 'builtIns.tree', ...config } };
+        await assignFromAsync(host, pattern, { from: { launch: { name: 'one' } } });
+        const p = host.querySelector('p');
+        p.className = 'changed-by-other-code';
+        await assignFromAsync(host, pattern, { from: { launch: { name: 'two' } } });
+        assert(host.querySelector('p') === p && p.textContent === 'two', 'rebind updates the same element');
+        assertEquals(p.className, 'changed-by-other-code', 'rebind skips the baked literal (as Tree skips literals today)');
+      }
+
+      // Test 16: microJoin shells from the sample are filled in place — no re-render on the first stamp
+      {
+        const config = { map: { person: ['p', { '?. =&': { microJoin: ['?.last', ', ', { prop: 'age', val: '?.age' }] } }] } };
+        const vm = { person: { last: 'Targaryen', age: 19 } };
+        const { replaceChildren } = Element.prototype;
+        let calls = 0;
+        Element.prototype.replaceChildren = function (...args) { calls++; return replaceChildren.apply(this, args); };
+        try {
+          await treeHtml({ ...config, compile: true }, vm);
+          assertEquals(calls, 0, 'compile: microJoin found its baked shells (no re-render)');
+          calls = 0;
+          await treeHtml(config, vm);
+          assertEquals(calls, 1, 'without compile: microJoin renders once');
+        } finally {
+          Element.prototype.replaceChildren = replaceChildren;
+        }
+        await assertCompileEquivalent(config, vm, 'microJoin');
+      }
+
+      // Test 17: permissions — a literal the profile refuses isn't baked, and is refused at runtime as before
+      {
+        const permissionProcessor = new PermissionProcessor({ restrictedPropSettings: [{ props: 'href', attr: true, allowFromSameDomain: true }] });
+        const config = { map: { ok: ['a', { 'href :=': '/docs' }], bad: ['a', { 'href :=': 'javascript:alert(1)' }] } };
+        const vm = { ok: {}, bad: {} };
+        const host = await treeHtml({ ...config, compile: true }, vm, permissionProcessor);
+        const [ok, bad] = host.querySelectorAll('a');
+        assertEquals(ok.getAttribute('href'), '/docs', 'allowed literal attribute baked');
+        assertEquals(bad.hasAttribute('href'), false, 'refused literal attribute: not baked, and still refused at runtime');
+        await assertCompileEquivalent(config, vm, 'permissions', permissionProcessor);
+      }
+
+      // Test 18: a different map on the same target, and an inline map recreated per call
+      {
+        const host = document.createElement('div');
+        const render = map => assignFromAsync(host, { '?. =>': { do: 'builtIns.tree', compile: true, map } }, { from: { a: { x: 1 } } });
+        await render({ a: ['p', { 'class :=': 'first', textContent: '?.x' }] });
+        // (Markers are stripped from a copy: the live ones are how Tree finds its nodes on the next call)
+        const html = () => stripComments(host.cloneNode(true)).innerHTML;
+        await render({ a: ['section', { 'class :=': 'second' }, [['b', '?.x']]] });
+        assertEquals(html(), '<section class="second"><b>1</b></section>', 'a new map (new specs) rebuilds from its own templates');
+        await render({ a: ['section', { 'class :=': 'second' }, [['b', '?.x']]] });
+        assertEquals(html(), '<section class="second"><b>1</b></section>', 'an inline map recreated per call still renders correctly');
       }
 
       const testComplete = document.getElementById('test-complete');

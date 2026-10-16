@@ -28,7 +28,7 @@
 
 import { getValue, getValues, isReferenceString } from '../resolve/getValues.js';
 import { planMicroJoin } from '../syncOps/microJoin.js';
-import { DEFAULT_WILDCARD_PATTERN, isLiteralString, normalize, WILDCARD } from './treeSpec.js';
+import { isLiteralString, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
 import type { GetValuesOptions } from '../types/assign-gingerly/types.js';
 import type {
     CompiledNode, CompiledTemplate, CompiledTree, CompileTreeOptions, ElementSpecification, Pattern, TemplateElement, TreeConfig,
@@ -65,9 +65,8 @@ export function compileTree(config: Pick<TreeConfig, 'map' | 'aka'>, options: Co
     const keys = Object.keys(map);
     for (const key of keys) {
         if (key === WILDCARD) {
-            // As builtIns.tree does: a '*' spec without a pattern shows the value. Any key may use it, so no sample.
-            const [header, , , pattern = DEFAULT_WILDCARD_PATTERN, children, repeat] = normalize(map[key]);
-            compileTemplate(key, [header, pattern, repeat ?? children] as ElementSpecification, undefined, ctx);
+            // The same spec object builtIns.tree uses for unmatched keys. Any key may use it, so no sample.
+            compileTemplate(key, wildcardSpecOf(map), undefined, ctx);
         } else {
             const keySample = sample != null && typeof sample === 'object' && key in sample ? { value: sample[key] } : undefined;
             compileTemplate(key, map[key], keySample, ctx);

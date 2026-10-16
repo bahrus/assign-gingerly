@@ -55,6 +55,24 @@ export function normalize(spec: ElementSpecification): NormalizedSpec {
     throw new Error('builtIns.tree: an element header must be a tag name or { tag, ish? }');
 }
 
+/** The specification each unmatched key gets, per map (see wildcardSpecOf). */
+const wildcardSpecs = new WeakMap<object, { source: ElementSpecification; spec: ElementSpecification }>();
+
+/**
+ * The specification for VM keys a map doesn't name: the map's `'*'` specification, with
+ * the default pattern when it has none. One shared object per map (not per key or call),
+ * so spec identity holds across calls, as it does for named keys.
+ */
+export function wildcardSpecOf(map: Record<string, ElementSpecification>): ElementSpecification {
+    const source = map[WILDCARD];
+    const cached = wildcardSpecs.get(map);
+    if (cached?.source === source) return cached.spec;
+    const [header, , , pattern = DEFAULT_WILDCARD_PATTERN, children, repeat] = normalize(source);
+    const spec = [header, pattern, repeat ?? children] as ElementSpecification;
+    wildcardSpecs.set(map, { source, spec });
+    return spec;
+}
+
 /** Whether a string RHS is a plain literal (not a reference, negation or protocol). */
 export function isLiteralString(value: string): boolean {
     return !(value.startsWith('?.') || value.startsWith('$0') || isFromStackReference(value)
