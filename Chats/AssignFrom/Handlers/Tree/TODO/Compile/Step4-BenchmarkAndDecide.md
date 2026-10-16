@@ -391,4 +391,62 @@ Done. `<template id="row-tpl">` is now on one line (`<tr><td></td><td></td><td><
 
 A proper run (the 9-sample, fresh-page method) would settle it in about 25 minutes. I haven't run it, per your request. **Let me know if you want it.**
 
+## Bruce's Response VI
+
+Can you please update the [manage template list](../../../../../../docs/manage-template-list.md) with up-to-date information about timing, and also mention that the tree handler can seemingly handle everything that the manage template list can do, and seemingly faster? Should we investigate optimizing manage template list to match? 
+
+There is one [external package](https://github.com/bahrus/three-peat) that I maintain that relies on manage template list.  But I do wonder if you see benefits to continuing to support manage template list, especially after doing step 5?  Should we deprecate and then remove manage template list?  Or do you see
+
+## Claude's Response VI
+
+(Your message seems to end mid-sentence, at "Or do you see". I've answered what's there; tell me if there was more.)
+
+### `docs/manage-template-list.md` is updated
+
+- **Benchmark section, rewritten.** The old numbers were artifacts of the timing bug, e.g. "Create 10,000: 13.3 ms, 23× faster than vanilla". So was the faster-than-Solid/Svelte/Lit table built on them. The section now:
+  - says plainly that those numbers were wrong, and why;
+  - gives the current Chromium and Firefox results next to Tree and both vanilla pages;
+  - explains the **total** vs. **script** split and the `?cv` option.
+- **Reconciliation:** documents the new reordering (minimal moves; append is still one insertion).
+- **Await:** a note to use `assignFromAsync`, since the handler is async. The doc's own two examples used `assignFrom`, the same pattern that broke the benchmark page; they now use `assignFromAsync`.
+- **New section, "manageTemplateList and builtIns.tree".** It says when to use which.
+- **Link fix:** the benchmark link pointed to a `nicholaskajoh/js-framework-benchmark` fork; it now points to the canonical `krausest/js-framework-benchmark`. The demo pages still have the old link; I can change them too.
+
+### "Tree can seemingly handle everything manageTemplateList can do": not quite
+
+**For lists defined in JavaScript, yes:** Tree covers them, and is faster on these benchmarks. But `manageTemplateList` has a different starting point, and some features Tree lacks.
+
+**Its starting point is existing HTML.** It clones a `<template>` (or fragment) authored in the page, and three-peat even derives that template from the first child of server-rendered markup. Tree has no "here's my HTML" mode; its markup comes from a JavaScript spec. **That's what three-peat relies on**, and it's HTML-first by design.
+
+**Features with no Tree equivalent:**
+- `infer` / `itemprop` distribution (which three-peat's examples lean on);
+- hiding removed items (`forget: false`);
+- `method: 'prepend' | 'after'`;
+- multi-element items (`configs`);
+- `fromHost`;
+- `waitForSettled`;
+- `yieldEvery`.
+
+### Should we optimize manageTemplateList to match?
+
+**Probably worth a short, bounded pass, after profiling.** Where its time goes:
+- **Totals are close to vanilla.** The gap shows in **script time**: ~90–150 ms for 10,000 rows vs. Tree's ~80 ms (single samples).
+- **The likely cost is per item.** Each clone goes through the general `assignFrom` path. That means `categorizeKeys`, option-object spreads (`{ from: item, fromStack, pipes, ...withOptions }`) and, on this page, `pin` resolution, all per row.
+- **Tree's fix for the same problem applies here.** Tree solved it with its fast path: patterns of plain keys and `?.` paths compiled once per pattern object and applied directly. The same idea should transfer to `toClone`. That's mostly reuse, not new design.
+
+### Deprecate and remove?
+
+**My recommendation: don't remove it. Converge the engines instead, and decide about the API later.**
+
+1. **They already share code.** The reordering is now one routine (`utils/placeNodes.ts`). The remaining duplication is keyed reconciliation and per-item binding, and that can be shared the same way.
+2. **Step 5 points toward Tree adopting existing templates.** Step 5 has Tree read `<template>`s emitted by a server; Step 6 adopts server-rendered instances. A natural extension is **"Tree from an existing template plus a binding map"**: compile the plan from HTML instead of a spec. That's exactly `manageTemplateList`'s model. Once that exists, `manageTemplateList` can become a **thin adapter**: its config API and features (three-peat keeps working) on top of Tree's repeat engine.
+3. **Then deprecation is a choice, not a migration.** If three-peat moves to the template mode, `manageTemplateList` can be deprecated with a clear replacement. If not, the adapter costs little to keep.
+4. **Removing it now** would leave three-peat, and HTML-first authoring in general, without a supported path.
+
+### Questions for you
+
+1. **A bounded optimization pass on `manageTemplateList` now** (profile, then a `toClone` fast path), or after Step 5?
+2. **Is the convergence direction OK?** That means adding a "Tree from an existing template" idea to the roadmap (after Step 5 / 6), with `manageTemplateList` becoming an adapter over it.
+3. **Update the demo pages' benchmark links** to `krausest/js-framework-benchmark` too? 
+
 

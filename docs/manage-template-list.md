@@ -35,7 +35,7 @@ const vm = {
     ]
 };
 
-await assignFrom(document.getElementById('rankings-body') /** this is the target **/, {
+await assignFromAsync(document.getElementById('rankings-body') /** this is the target **/, {
     '?. =>': {
         do: 'builtIns.manageTemplateList',
         resolve: {
@@ -118,15 +118,25 @@ await assignFrom(document.getElementById('rankings-body') /** this is the target
 6. If `waitForSettled` is enabled, waits for async mutations to quiesce
 7. Inserts the fragment between the markers in one DOM operation
 
+The handler is asynchronous (it resolves `forEach` / `instantiate` with `resolve`, and may wait or yield), so **await it with `assignFromAsync`**. With the synchronous `assignFrom`, the call returns before the clones are in the DOM.
+
 ### Subsequent Calls (Reconciliation)
 
 On each subsequent call with the same target:
 
 | Scenario | Action |
 |----------|--------|
-| New key appeared | Clone template, apply assignments, append |
+| New key appeared | Clone template, apply assignments, insert at the item's position |
 | Key disappeared | Hide (`hidden` attribute) or remove (if `forget: true`) |
-| Key still present | Update clone in place (re-run `assignFrom` — no re-cloning) |
+| Key still present | Update clone in place (re-run `assignFrom`, no re-cloning) |
+| Order changed | Move items into key order with as few DOM moves as possible |
+
+**Ordering.** The clones always end up in the iterable's order:
+- **Appending or updating** (kept items in their old order, new items only at the end) is still a single fragment insertion.
+- **Reordering, or new items among existing ones,** keeps the longest run of items already in order and moves only the rest (`utils/placeNodes.ts`, shared with `builtIns.tree`). Swapping two of 1,000 rows is 2 moves.
+- **Multi-node items move as a unit.**
+
+(Before this, existing clones were never moved, so reorders and mid-list insertions weren't reflected in the DOM.)
 
 State is tracked via a WeakMap keyed by the start comment marker.
 
@@ -323,7 +333,7 @@ const config = {
     }
 };
 
-assignFrom(tbody, config, {
+await assignFromAsync(tbody, config, {
     from: { data },
     protocols: { globalThis: k => globalThis[k] }
 });
@@ -333,36 +343,57 @@ This bypasses `infer` (no `querySelectorAll` per item) and directly accesses `tr
 
 ## Performance Benchmark
 
-Tested against vanilla JS implementations using the [js-framework-benchmark](https://github.com/nicholaskajoh/js-framework-benchmark) methodology (1,000 / 10,000 rows, keyed reconciliation, create/update/swap/append/clear):
+**A correction first.** Earlier versions of this section reported, e.g., *Create 10,000 in 13.3 ms, 23× faster than vanilla*, and a faster-than-Solid/Svelte/Lit comparison built on those numbers. **Those numbers were wrong:**
+- The benchmark page called the synchronous `assignFrom`, which returns before this (async) handler has inserted the rows. So in Chromium the timer stopped **before any rows existed**: at the moment "Create 10,000 … 10.4 ms" was recorded, 0 of the 10,000 rows were in the DOM.
+- "Swap rows" was also a no-op, because existing clones were never reordered.
 
-| Operation | manageTemplateList | Vanilla (createElement) | Vanilla (template clone) | MTL vs Vanilla-Tpl |
-|-----------|-------------------|------------------------|--------------------------|-------------------|
-| Create 1,000 | 9.7ms | 25.0ms | 23.1ms | **2.4x faster** |
-| Update every 10th | 15.7ms | 28.8ms | 16.3ms | ~parity |
-| Swap rows 1↔998 | 14.3ms | 28.8ms | 12.4ms | ~parity |
-| Append 1,000 | 15.0ms | 54.5ms | 52.3ms | **3.5x faster** |
-| Clear | 14.7ms | 14.6ms | 13.1ms | ~parity |
-| Create 10,000 | 13.3ms | 297.1ms | 309.4ms | **23x faster** |
+The page now awaits `assignFromAsync`, and swaps really swap (see *Subsequent Calls*).
 
-*Chromium, headless, measured click-to-idle (includes layout/paint). Results from synchronous `assignFrom` with direct cell-access bindings.*
+**Current results.** Measured on [`demos/js-framework-benchmark.html`](../demos/js-framework-benchmark.html) and its siblings, which share one harness:
+- the same rows, data and operations as [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark);
+- ms from click until the next frame is rendered (so including the browser's layout and paint);
+- medians of 9 samples (3 fresh page loads × 3 runs), one machine.
 
-**Why it's fast:**
-- `assignFrom` is fully synchronous — zero microtask yields between items
-- All 1,000 clones are batched into a `DocumentFragment` and inserted in one DOM operation
-- Keyed reconciliation (via `Map`) enables O(1) lookups for existing items
-- Direct path evaluation (`cells?.0?.textContent`) avoids DOM queries entirely
-- No framework abstraction layer — path resolution is cached string splitting + property access
+| Operation | manageTemplateList | builtIns.tree | Vanilla (createElement) | Vanilla (template clone) |
+|---|---|---|---|---|
+| **Chromium** | | | | |
+| Create 1,000 | 29.3 | 24.0 | 22.2 | 24.0 |
+| Append 1,000 | 57.5 | 46.7 | 44.9 | 48.0 |
+| Update every 10th | 48.6 | 33.0 | 45.6 | 33.5 |
+| Swap rows 1↔998 | 41.7 | 15.3 | 45.5 | 19.8 |
+| Clear | 23.6 | 16.4 | 18.9 | 17.6 |
+| Create 10,000 | 299.8 | 296.9 | 259.9 | 292.8 |
+| **Firefox** | | | | |
+| Create 1,000 | 31 | 23 | 22 | 23 |
+| Append 1,000 | 50 | 34 | 49 | 47 |
+| Update every 10th | 40 | 26 | 46 | 28 |
+| Swap rows 1↔998 | 39 | 12 | 47 | 21 |
+| Clear | 56 | 44 | 46 | 45 |
+| Create 10,000 | 336 | 259 | 221 | 255 |
 
-**Comparison with frameworks** (approximate, from published js-framework-benchmark results):
+**Reading the numbers:**
+- **Rendering dominates.** For 10,000 rows, the browser's style, layout and paint is most of each total.
+- **The pages split the time.** Each result line also shows a **script** time: until the rows are in the DOM and handed to the browser, which is the part the library controls. A **`?cv`** option lays the table out as a grid with `content-visibility: auto` on each row, so off-screen rows skip layout and paint. That roughly halves the totals.
+- **Script time, from single samples (Chromium, Create 10,000):**
+  - `manageTemplateList` ~90–150 ms;
+  - `builtIns.tree` ~80 ms;
+  - vanilla `createElement` ~30 ms.
+- **`manageTemplateList` is close to vanilla on totals,** but it's the slowest of the four on most operations here. Its per-item work goes through the general `assignFrom` path; this page uses `pin` bindings.
+- WebKit was measured too, but its timings varied too much between runs on the benchmark machine to tabulate.
 
-| Framework | Create 1,000 | vs manageTemplateList |
-|-----------|-------------|----------------------|
-| Vanilla JS | ~25ms | 2.5x slower |
-| Solid | ~45ms | 4.6x slower |
-| Svelte | ~50ms | 5.2x slower |
-| Lit | ~55ms | 5.7x slower |
-| **manageTemplateList** | **~10ms** | — |
+The vanilla template-clone page was measured before two fixes to that page, which may lower its numbers somewhat: a per-row `await` was removed, and its template is now written on one line, without whitespace text nodes.
 
-*Note: Framework numbers are approximate and measured on different hardware. Direct comparison requires running on the same machine. The relative ordering is what matters.*
+## manageTemplateList and builtIns.tree
 
-See `demos/js-framework-benchmark.html` for the live benchmark page.
+[`builtIns.tree`](./tree.md) also renders keyed lists (a repeat: `{ each, of, key, empty }`). For lists whose markup is defined in JavaScript, it's currently the faster choice on these benchmarks. Its extras:
+- nesting, `empty`, itemscope managers as view models;
+- an opt-in template `compile` mode.
+
+**`manageTemplateList` is the choice when the markup already exists as HTML.** It clones a `<template>` (or fragment) authored in the page, or derived from server-rendered markup, as `three-peat` does. Its other features have no Tree equivalent yet:
+- `infer` / `itemprop` distribution;
+- hiding removed items instead of removing them (`forget: false`);
+- `method: 'prepend' | 'after'` placement;
+- multi-element items (`configs`);
+- `fromHost`;
+- `waitForSettled`;
+- `yieldEvery`.
