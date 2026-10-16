@@ -564,3 +564,46 @@ export function whenSettled(target: any): Promise<void> {
 
 **Shall I rename it to `whenHandled`, or another name you prefer?**
 
+## Bruce's Response IX
+
+I think I will "park" Steps 5 and Step 6 for a good while, and rotate back to other things, and consider Steps 5 and 6 only if use cases come up.
+
+One thing -- I can't find any discussion of the compile option in [tree](../../../../../../docs/tree.md).  Can you add it with your latest performance findings?  I'm seeing a statistically significant benefit from compiling with the js-framework-benchmark-tree.html.   Can you go back to tree-benchmark, make sure content-visibility is applied, synch (little difference from that) is applied?
+
+## Claude's Response IX
+
+Noted: Steps 5 and 6 are **parked**. I marked them so in the roadmap README.
+
+### `docs/tree.md`
+
+The section existed: *"Compiling (`compile`, experimental)"*, added in Step 3. But it sat between "Config" and "Performance Notes", with nothing pointing to it. Now:
+- **The intro links to it** ("For large lists, see Compiling").
+- **It has a new "When it helps: measured" subsection:**
+  - Step 4's static-heavy card results: `:=` + compile 1.2–1.4× (Chromium) and 1.6–1.9× (Firefox, WebKit) faster creation; within ~1.1–1.25× of hand-written cloning; no gain in Chromium without `:=` statics.
+  - The js-framework rows with layout: Tree → Tree `compile` Create 10,000 296.9 → 261.3 ms (Chromium) and 259 → 224 ms (Firefox); Append 1,000 46.7 → 31.2 / 34 → 28 ms.
+
+  That matches the benefit you're seeing. In my run 3, I'd called the row differences noise; the later runs show them consistently on the bigger operations.
+- **The guidance:** bake by writing statics as ` :=`; layout dims the visible gain (with the total vs. script times and `?cv` explained); use it for large or frequently created lists.
+- **A note** that the compiler is only downloaded for `compile` trees.
+
+### `demos/tree-benchmark.html`
+
+- **content-visibility is now on by default, for both shapes:**
+  - cards get `content-visibility: auto`;
+  - rows get the same grid treatment as the js-framework pages, since table rows ignore it.
+
+  `?cv=0` restores the old, no-content-visibility measurement. Before, `?cv` was opt-in and silently did nothing for the rows.
+- **The sync `assignFrom`:** Tree and `manageTemplateList` now run through the sync `assignFrom` + `whenSettled` instead of `assignFromAsync`.
+- **Smoke run** (one run per approach, Chromium; indicative only), create 1,000 with forced layout:
+
+  | | Tree | Tree compile | Tree := | Tree := compile | createElement | template clone |
+  |---|---|---|---|---|---|---|
+  | cards, cv on (default) | 23.9 | 20.7 | 18.5 | **15.0** | 14.9 | 12.9 |
+  | cards, `?cv=0` | 47.8 | 45.6 | 41.0 | 37.5 | 37.1 | 38.1 |
+  | rows, cv on | 7.5 | 6.2 | 6.4 | **5.7** | 5.1 | 5.7 |
+
+  **With content-visibility, layout gets cheap enough that the compile gain shows up even with layout included:** ~1.6× for cards, close to hand-written cloning.
+- **The page's spec** (`tests/tree-benchmark.spec.ts`, Chromium) passes.
+
+Still open from earlier, whenever you return to this: renaming `whenSettled` to `whenHandled` (Response VIII).
+

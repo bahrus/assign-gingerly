@@ -4,6 +4,8 @@ A handler that builds a small tree of elements from a view model, and rebinds it
 
 Tree adds no microdata and doesn't adopt existing (server-rendered) markup. It aims at simple scenarios.
 
+**For large lists,** see [Compiling (`compile`)](#compiling-compile-experimental): an opt-in mode that clones precompiled templates, with static parts baked in, instead of creating each element.
+
 **Demo:** [demos/tree-demo.html](../demos/tree-demo.html) builds a launch summary from a JSON API response. Run `npm run serve`, then open `/demos/tree-demo.html`.
 
 Design discussion: `Chats/AssignFrom/Handlers/TODO/TreeScope/Tree.md`.
@@ -273,6 +275,34 @@ With `compile`, Tree compiles the map once ([`handlers/compileTree.ts`](../handl
 - **Attribute order:** baked attributes come before per-instance ones. That's visible in `outerHTML`, though not to selectors or `getAttribute`.
 - **Permissions:** with a permission processor, a literal attribute it would refuse isn't baked. It's applied, and refused, per instance, as without `compile`.
 - **The value:** `compile: 'some-name'` currently works like `true`. The name is reserved for server-rendered templates (planned).
+- **Loading:** the compiler (`handlers/compileTree.js`) is only downloaded for trees with `compile`, so trees without it don't pay for it.
+
+### When it helps: measured
+
+Compiling speeds up **creating** elements. Rebinding is unchanged, by design. How much depends on how much of the markup is static, and on how much of the time is the browser's own layout and paint.
+
+**Static-heavy cards, build only** ([`demos/tree-benchmark.html`](../demos/tree-benchmark.html)): 16 elements, 3 bound values, 24 statics. One fresh page per approach, 3 runs × 11 samples, `?layout=0`.
+
+| Create (vs. today's Tree) | Chromium | Firefox | WebKit |
+|---|---|---|---|
+| `compile`, statics written as ` :=`, 1,000 cards | 1.18–1.42× faster | 1.60–1.92× | 1.60–1.70× |
+| the same, 10,000 cards | 1.19–1.21× | 1.78–1.94× | 1.71–1.83× |
+| `compile` with property statics (`className: …`) | ~1.0× (no gain) | 1.30–1.39× | 1.25–1.32× |
+| compiled, vs. hand-written template cloning | 1.06–1.19× of it | 1.13–1.18× | 1.17–1.25× |
+
+**Rows with layout** ([`demos/js-framework-benchmark-tree.html`](../demos/js-framework-benchmark-tree.html)): the js-framework-benchmark rows, timed until the next frame is rendered. 9 samples per page.
+
+| Tree → Tree `compile` (ms) | Chromium | Firefox |
+|---|---|---|
+| Create 1,000 | 24.0 → 23.5 | 23 → 22 |
+| Append 1,000 | 46.7 → 31.2 | 34 → 28 |
+| Create 10,000 | 296.9 → 261.3 | 259 → 224 |
+
+**What this says:**
+- **The gain comes from baking, not from cloning.** Write statics as ` :=` attributes and literal text. In Chromium, whose `createElement` is fast, compiling *without* ` :=` statics gains nothing.
+- **Compiled Tree is close to the floor:** within ~1.1–1.25× of hand-written template cloning.
+- **Layout and paint shrink the visible gain.** With rows rendered on screen, a large part of each total is the browser's work. The benchmark pages show both a **total** and a **script** time (until the rows are handed to the browser), and offer **`?cv`** (`content-visibility: auto` on rows), which removes most off-screen layout.
+- **Use it for large or frequently created lists with static markup.** For small trees the one-time compile isn't worth it.
 
 ## Performance Notes
 

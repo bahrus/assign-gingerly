@@ -26,7 +26,10 @@
         and <code>manageTemplateList</code> (rows only). <strong>B2</strong> compares nested vs. flat templates.
         Step 4 added Tree variants: <code>compile: true</code>, statics written as <code>:=</code> attributes, and both.
         Options: <code>?only=card|row</code>, <code>?ops=create,rebind</code>, <code>?runs=N</code>,
-        <code>?approach=Name</code> (one approach per page, which avoids order effects), <code>?layout=0</code>, <code>?cv</code>.
+        <code>?approach=Name</code> (one approach per page, which avoids order effects), <code>?layout=0</code>,
+        <code>?cv=0</code> (content-visibility is on by default for cards and rows; rows are laid out as a grid, since
+        table rows ignore it). Tree and <code>manageTemplateList</code> run through the sync <code>assignFrom</code> +
+        <code>whenSettled</code>.
     </p>
     <p id="status">Starting…</p>
     <div id="results"></div>
@@ -37,11 +40,11 @@
     <template id="mtl-row"><tr><td data-f="id"></td><td><a data-f="label"></a></td><td><span data-f="qty"></span></td><td data-f="price"></td></tr></template>
 
     <script type="module">
-        import { assignFromAsync } from '../index.js';
+        import { assignFrom, whenSettled } from '../index.js';
 
         const stage = document.getElementById('stage');
 
-        // URL options: ?cv → content-visibility on cards; ?layout=0 → no forced layout; ?only=card|row → one shape
+        // URL options: ?cv=0 → no content-visibility (on by default); ?layout=0 → no forced layout; ?only=card|row → one shape
         const params = new URLSearchParams(location.search);
         const FORCE_LAYOUT = params.get('layout') !== '0';
         const ONLY = params.get('only');
@@ -50,13 +53,27 @@
         const RUNS = Number(params.get('runs')) || 5;
         // ?approach=Tree%20compile → only that approach (a fresh page per approach avoids order effects, e.g. in WebKit)
         const APPROACH = params.get('approach');
-        if (params.has('cv')) {
-            // Note: content-visibility has no effect on table rows (containment doesn't apply to table-internal boxes)
+        // content-visibility: auto on every card and row, so off-screen items skip layout and paint.
+        // Table rows ignore it (CSS containment doesn't apply to internal table boxes), so the rows'
+        // table is laid out as a grid, as on the js-framework-benchmark pages.
+        const CV = params.get('cv') !== '0';
+        if (CV) {
             document.head.append(Object.assign(document.createElement('style'), {
-                textContent: '.card { content-visibility: auto; contain-intrinsic-size: 500px; }',
+                textContent: `
+                    .card { content-visibility: auto; contain-intrinsic-size: auto 500px; }
+                    .stage table, .stage tbody { display: block; }
+                    .stage tr { display: grid; grid-template-columns: 4rem 1fr 4rem 6rem; content-visibility: auto; contain-intrinsic-size: auto 1.6rem; }
+                    .stage td { display: block; }
+                `,
             }));
         }
-        const MODE = [params.has('cv') ? 'content-visibility' : 'no content-visibility', FORCE_LAYOUT ? 'forced layout' : 'no forced layout'].join(', ');
+        const MODE = [CV ? 'content-visibility' : 'no content-visibility', FORCE_LAYOUT ? 'forced layout' : 'no forced layout'].join(', ');
+
+        /** The sync assignFrom, resolving once its fire-and-forget ' =>' handler is done (rows in the DOM). */
+        const render = (target, pattern, options) => {
+            assignFrom(target, pattern, options);
+            return whenSettled(target);
+        };
         const statusEl = document.getElementById('status');
         const status = text => { statusEl.textContent = text; };
         const nextFrame = () => new Promise(r => setTimeout(r, 0));
@@ -222,7 +239,7 @@
             const map = { items: [wrapperTag, { className: wrapperClass }, { each, key: '?.id' }] };
             return host => {
                 const cfg = { '?. =>': { do: 'builtIns.tree', aka: { _: 'textContent' }, compile, map } };
-                return { render: data => assignFromAsync(host, cfg, { from: { items: data } }) };
+                return { render: data => render(host, cfg, { from: { items: data } }) };
             };
         }
 
@@ -278,7 +295,7 @@
                             },
                         } };
                         const protocols = { globalThis: k => globalThis[k] };
-                        return { render: data => assignFromAsync(tbody, cfg, { from: { items: data }, protocols }) };
+                        return { render: data => render(tbody, cfg, { from: { items: data }, protocols }) };
                     },
                 },
             },
