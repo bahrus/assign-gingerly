@@ -87,11 +87,20 @@ The third fundamental utility function is:
 - Wait for `enhance` (EMC JSON imports) to finish
 
 ```TypeScript
-import { assignFrom } from 'assign-gingerly/assignFrom.js';           // sync (default)
-import { assignFromAsync } from 'assign-gingerly/assignFromAsync.js';  // async when needed
+import { assignFrom, whenSettled } from 'assign-gingerly/assignFrom.js';  // sync (default)
+import { assignFromAsync } from 'assign-gingerly/assignFromAsync.js';     // async when needed
 ```
 
-For most use cases — including `manageTemplateList`, reactive merge cycles, and DOM binding — the sync `assignFrom` is the right choice. It delivers near-vanilla-JS performance by avoiding microtask overhead.
+For most use cases (reactive merge cycles, DOM binding, and handlers like `manageTemplateList` and `builtIns.tree`), the sync `assignFrom` is the right choice: it avoids microtask overhead. Handlers themselves bind each item synchronously, either way.
+
+**Knowing when the sync call's background work is done: `whenSettled(target)`.** It resolves when the ` =>` handlers, `#[x]` handlers and `enhance` work that `assignFrom` started for `target` have finished. Failures are still reported, as uncaught errors, and `whenSettled` itself never rejects. For example, to time a render:
+
+```TypeScript
+assignFrom(tbody, { '?. =>': { do: 'builtIns.tree', map } }, { from: vm });  // returns at once
+await whenSettled(tbody);                                                   // rows are in the DOM
+```
+
+Without it (or `assignFromAsync`), code after the call runs before the handler has rendered anything.
 
 assignFrom adds support for:
 

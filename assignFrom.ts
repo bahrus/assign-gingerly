@@ -644,17 +644,18 @@ export function assignFrom(
     processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, options, permissionProcessor);
   }
 
-  // Process handler commands — fire-and-forget (async)
+  // Process handler commands — fire-and-forget (async); whenSettled(target) awaits them
   if (handlerKeys.length > 0) {
-    import('./processHandlerCommands.js').then(({ processHandlerCommands }) => {
-      processHandlerCommands(target, handlerKeys, expandedPattern, options, permissionProcessor);
-    });
+    trackPending(target, withHandlerCommands(processHandlerCommands =>
+      processHandlerCommands(target, handlerKeys, expandedPattern, options, permissionProcessor)
+    ));
   }
 
-  // Process #[x] handler keys — fire-and-forget (async)
+  // Process #[x] handler keys — fire-and-forget (async); whenSettled(target) awaits them
   if (idRefHandlerKeys.length > 0 && (options.pin || options.at)) {
     const ids = getEffectiveIds(options)!;
-    import('./processHandlerCommands.js').then(({ processHandlerCommands }) => {
+    trackPending(target, withHandlerCommands(processHandlerCommands => {
+      const runs: Promise<void>[] = [];
       for (const key of idRefHandlerKeys) {
         const parsed = parseIdRef(key);
         if (!parsed) continue;
@@ -662,9 +663,10 @@ export function assignFrom(
         if (!el) continue;
         const syntheticKey = parsed.remainingPath ? `${parsed.remainingPath} =>` : ' =>';
         const syntheticPattern = { [syntheticKey]: expandedPattern[key] };
-        processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissionProcessor);
+        runs.push(processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissionProcessor));
       }
-    });
+      return Promise.all(runs);
+    }));
   }
 
   // Process inferred assignments (sync)
@@ -682,14 +684,76 @@ export function assignFrom(
     }
   }
 
-  // Process bulk enhancements — fire-and-forget (async)
+  // Process bulk enhancements — fire-and-forget (async); whenSettled(target) awaits them
   if (options.enhance && options.enhance.length > 0) {
-    import('./enhanceAll.js').then(({ enhanceAll }) => {
-      enhanceAll(target, options.enhance!, permissionProcessor);
-    });
+    trackPending(target, import('./enhanceAll.js').then(({ enhanceAll }) =>
+      enhanceAll(target, options.enhance!, permissionProcessor)
+    ));
   }
 
   return target;
+}
+
+type ProcessHandlerCommands = typeof import('./processHandlerCommands.js').processHandlerCommands;
+
+/** processHandlerCommands, once loaded (as assignFromAsync caches it). */
+let cachedProcessHandlerCommands: ProcessHandlerCommands | undefined;
+
+/**
+ * Run `use` with processHandlerCommands: right away once the module is loaded (so the
+ * handler starts within this assignFrom call), after loading it the first time. A dynamic
+ * import() of an already-loaded module still resolves in a later task, so importing on
+ * every call would delay every handler by a task.
+ */
+function withHandlerCommands<T>(use: (processHandlerCommands: ProcessHandlerCommands) => T | Promise<T>): Promise<T> {
+  if (cachedProcessHandlerCommands) {
+    try {
+      return Promise.resolve(use(cachedProcessHandlerCommands));
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+  return import('./processHandlerCommands.js').then(({ processHandlerCommands }) => {
+    cachedProcessHandlerCommands = processHandlerCommands;
+    return use(processHandlerCommands);
+  });
+}
+
+/** Fire-and-forget work started by the sync assignFrom, per target, for whenSettled. */
+const pendingWork = new WeakMap<object, Promise<void>>();
+
+/**
+ * Record fire-and-forget work for `target`. Its failure is still reported (via
+ * reportError, as an uncaught error), not swallowed, while whenSettled just resolves.
+ */
+function trackPending(target: any, work: Promise<unknown>): void {
+  const settled = work.then(() => undefined, (error) => {
+    if (typeof reportError === 'function') reportError(error); else console.error(error);
+  });
+  if (target === null || (typeof target !== 'object' && typeof target !== 'function')) return;
+  const previous = pendingWork.get(target);
+  const all = previous ? Promise.all([previous, settled]).then(() => undefined) : settled;
+  pendingWork.set(target, all);
+  all.then(() => { if (pendingWork.get(target) === all) pendingWork.delete(target); });
+}
+
+/**
+ * Resolves when the fire-and-forget work that the synchronous `assignFrom` started for
+ * `target` has finished: ` =>` handlers, `#[x]` handlers and bulk enhancements. So code can
+ * use the sync API and still know when everything is in place, e.g. to time a render:
+ *
+ * ```js
+ * assignFrom(tbody, pattern, options);   // returns immediately
+ * await whenSettled(tbody);              // handlers done, rows in the DOM
+ * ```
+ *
+ * Covers work started on `target` itself (not on other targets, e.g. inside handlers).
+ * Resolves immediately when nothing is pending. Never rejects: failures are reported as
+ * uncaught errors when they happen. (assignFromAsync awaits the same work directly.)
+ */
+export function whenSettled(target: any): Promise<void> {
+  const trackable = target !== null && (typeof target === 'object' || typeof target === 'function');
+  return (trackable && pendingWork.get(target)) || Promise.resolve();
 }
 
 export default assignFrom;

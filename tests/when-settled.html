@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>whenSettled Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>whenSettled tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+  <template id="li-tpl"><li></li></template>
+
+  <script type="module">
+    import { assignFrom, whenSettled } from '../index.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+    function assert(condition, message) {
+      results.push(`<div class="${condition ? 'pass' : 'fail'}">${condition ? '✓' : '✗'} ${message}</div>`);
+      condition ? passed++ : failed++;
+      if (!condition) console.error('Failed:', message);
+    }
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) console.error(`${message}\n  Expected: ${expected}\n  Actual:   ${actual}`);
+      assert(actual === expected, message);
+    }
+
+    const treeConfig = list => ({ '?. =>': { do: 'builtIns.tree', map: { list: ['ul', {}, { each: ['li', '?.'] }] } } });
+
+    async function runTests() {
+      // Test 1: the sync assignFrom returns before its ' =>' handler has run; whenSettled waits for it
+      {
+        const host = document.createElement('div');
+        assignFrom(host, treeConfig(), { from: { list: ['a', 'b', 'c'] } });
+        assertEquals(host.querySelectorAll('li').length, 0, 'sync assignFrom: the handler has not run yet when it returns');
+        await whenSettled(host);
+        assertEquals(host.querySelectorAll('li').length, 3, 'whenSettled: resolved once the handler is done (rows in the DOM)');
+      }
+
+      // Test 2: manageTemplateList (an async handler) too
+      {
+        const host = document.createElement('ul');
+        const cfg = { '?. =>': {
+          do: 'builtIns.manageTemplateList',
+          resolve: { forEach: '?.list', instantiate: 'globalThis://li-tpl', forget: true },
+          fromEachItem: { textContent: '?.', resolve: { key: '?.' } },
+        } };
+        assignFrom(host, cfg, { from: { list: ['x', 'y'] }, protocols: { globalThis: k => globalThis[k] } });
+        await whenSettled(host);
+        assertEquals([...host.querySelectorAll('li')].map(li => li.textContent).join(','), 'x,y', 'whenSettled: manageTemplateList rows in the DOM');
+      }
+
+      // Test 3: several calls on one target — whenSettled waits for all of them
+      {
+        const host = document.createElement('div');
+        assignFrom(host, treeConfig(), { from: { list: ['1'] } });
+        assignFrom(host, { '?. =>': { do: 'builtIns.tree', markerName: 'second', map: { more: ['p', '?.'] } } }, { from: { more: 'two' } });
+        await whenSettled(host);
+        assert(host.querySelector('li') && host.querySelector('p')?.textContent === 'two', 'whenSettled: waits for every pending call on the target');
+      }
+
+      // Test 4: a failing handler is still reported (as an uncaught error), and whenSettled resolves
+      {
+        const host = document.createElement('div');
+        const reported = [];
+        const onError = event => { reported.push(event.error?.message ?? event.message); event.preventDefault(); };
+        window.addEventListener('error', onError);
+        try {
+          assignFrom(host, { '?. =>': { do: 'builtIns.noSuchHandler' } }, { from: {} });
+          await whenSettled(host);
+        } finally {
+          window.removeEventListener('error', onError);
+        }
+        assert(reported.some(message => /unknown handler/.test(message)), 'a failing handler is reported, not swallowed');
+        assert(true, 'whenSettled resolves even when a handler failed');
+      }
+
+      // Test 5: nothing pending → resolves immediately (also for primitives)
+      {
+        const plain = document.createElement('div');
+        assignFrom(plain, { textContent: '?.t' }, { from: { t: 'no handlers' } });
+        let resolved = false;
+        whenSettled(plain).then(() => { resolved = true; });
+        await Promise.resolve();
+        assert(resolved, 'whenSettled: resolves at once when nothing is pending');
+        await whenSettled(42);
+        assert(true, 'whenSettled: accepts non-object targets');
+      }
+
+      document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
+      const done = document.getElementById('test-complete');
+      done.setAttribute('data-passed', passed);
+      done.setAttribute('data-failed', failed);
+      done.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
+    }
+
+    runTests().catch(e => {
+      console.error('Test error:', e);
+      document.getElementById('results').innerHTML += `<div class="fail">Test suite error: ${e.message}</div>`;
+      document.getElementById('test-complete').setAttribute('data-status', 'error');
+    });
+  </script>
+</body>
+</html>

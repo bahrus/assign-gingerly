@@ -118,7 +118,9 @@ await assignFromAsync(document.getElementById('rankings-body') /** this is the t
 6. If `waitForSettled` is enabled, waits for async mutations to quiesce
 7. Inserts the fragment between the markers in one DOM operation
 
-The handler is asynchronous (it resolves `forEach` / `instantiate` with `resolve`, and may wait or yield), so **await it with `assignFromAsync`**. With the synchronous `assignFrom`, the call returns before the clones are in the DOM.
+The handler is asynchronous: it resolves `forEach` / `instantiate` with `resolve`, and may wait or yield. With the synchronous `assignFrom`, the call **returns before the clones are in the DOM**; per-item binding is synchronous either way. To know when the list is rendered, use either:
+- `assignFrom(target, …)` followed by `await whenSettled(target)`; or
+- `await assignFromAsync(target, …)`.
 
 ### Subsequent Calls (Reconciliation)
 
@@ -347,7 +349,7 @@ This bypasses `infer` (no `querySelectorAll` per item) and directly accesses `tr
 - The benchmark page called the synchronous `assignFrom`, which returns before this (async) handler has inserted the rows. So in Chromium the timer stopped **before any rows existed**: at the moment "Create 10,000 … 10.4 ms" was recorded, 0 of the 10,000 rows were in the DOM.
 - "Swap rows" was also a no-op, because existing clones were never reordered.
 
-The page now awaits `assignFromAsync`, and swaps really swap (see *Subsequent Calls*).
+The page now waits for the handler, and swaps really swap (see *Subsequent Calls*). By default it uses the sync `assignFrom` followed by `await whenSettled(tbody)`; `?async` switches it to `assignFromAsync`. Both give the same times.
 
 **Current results.** Measured on [`demos/js-framework-benchmark.html`](../demos/js-framework-benchmark.html) and its siblings, which share one harness:
 - the same rows, data and operations as [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark);

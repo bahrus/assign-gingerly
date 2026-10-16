@@ -84,10 +84,13 @@
     </table>
 
     <script type="module">
-        // assignFromAsync: render() must wait for the ' =>' handler, or the timings stop before the rows exist
-        import { assignFromAsync } from '../index.js';
-        import { createBenchmark, setupPage } from './js-framework-benchmark-common.js';
+        import { assignFrom, assignFromAsync, whenSettled } from '../index.js';
+        import { addToggle, createBenchmark, setupPage } from './js-framework-benchmark-common.js';
 
+        // Default: the sync assignFrom, then whenSettled (its ' =>' handler runs fire-and-forget;
+        // without waiting for it, the timings would stop before the rows exist). ?async: assignFromAsync.
+        const useAsync = new URLSearchParams(location.search).has('async');
+        addToggle('async', '<code>assignFromAsync</code> instead of <code>assignFrom</code> + <code>whenSettled</code> (reloads)');
         setupPage();
 
         // --- Data generation (same as js-framework-benchmark) ---
@@ -142,10 +145,13 @@
 
         // --- Render ---
         async function render() {
-            await assignFromAsync(tbody, assignValues, {
-                from: { data },
-                protocols
-            });
+            const options = { from: { data }, protocols };
+            if (useAsync) {
+                await assignFromAsync(tbody, assignValues, options);
+            } else {
+                assignFrom(tbody, assignValues, options);
+                await whenSettled(tbody);
+            }
         }
 
         // --- Benchmark helper (shared: total and script times) ---

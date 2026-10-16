@@ -79,12 +79,15 @@
     </table>
 
     <script type="module">
-        import { assignFromAsync } from '../index.js';
+        import { assignFrom, assignFromAsync, whenSettled } from '../index.js';
         import { addToggle, createBenchmark, setupPage } from './js-framework-benchmark-common.js';
 
         // ?compile → compile: true. Each mode gets a fresh page, so the two never share state.
         const compile = new URLSearchParams(location.search).has('compile');
         addToggle('compile', '<code>compile: true</code> (reloads)');
+        // Default: the sync assignFrom, then whenSettled (its ' =>' handler runs fire-and-forget). ?async: assignFromAsync.
+        const useAsync = new URLSearchParams(location.search).has('async');
+        addToggle('async', '<code>assignFromAsync</code> instead of <code>assignFrom</code> + <code>whenSettled</code> (reloads)');
         setupPage();
         document.querySelector('h1').textContent += compile ? ' (compile: true)' : ' (no compile)';
 
@@ -125,7 +128,13 @@
 
         // --- Render ---
         async function render() {
-            await assignFromAsync(table, assignValues, { from: { data } });
+            const options = { from: { data } };
+            if (useAsync) {
+                await assignFromAsync(table, assignValues, options);
+            } else {
+                assignFrom(table, assignValues, options);
+                await whenSettled(table);
+            }
         }
 
         // --- Benchmark helper (shared: total and script times) ---

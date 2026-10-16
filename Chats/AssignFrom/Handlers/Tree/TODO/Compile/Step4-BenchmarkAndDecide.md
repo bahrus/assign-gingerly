@@ -449,4 +449,118 @@ There is one [external package](https://github.com/bahrus/three-peat) that I mai
 2. **Is the convergence direction OK?** That means adding a "Tree from an existing template" idea to the roadmap (after Step 5 / 6), with `manageTemplateList` becoming an adapter over it.
 3. **Update the demo pages' benchmark links** to `krausest/js-framework-benchmark` too? 
 
+## Bruce's Response VII
+
+I agree that the previously published stats didn't seem right at all.  However, I do think there were some legitimate optimizations that were accomplished by providing both a sync assignFrom and an async one.  The sync assignFrom I believe significantly narrows the amount of awaits that happen during processing.  I'm concerned that the solution to measuring the performance was to move away from using the sync assignFrom, which I saw reading your updated documentation (maybe you mentioned it above, and I didn't see it).
+
+Can you look more closely at finding a way for us to be able ot use the sync assignFrom, and still measure when script processing has completed, and where we tell the browser "okay, render now" (admittedly, maybe not some much on rebinding)?  Maybe we need an additional hook?  I'm a bit confused on this point.
+
+Ideally both the tree and managed template list benchmarking tests would use the sync assignFrom support.
+
+I know that even with the sync assignFrom, there is a fire and forget step when we invoke the handler.  Can we track this so that we know when everything is finished from the script point of view?
+
+Or am I wrong?  Do both the async and sync have the same number of awaits total, so that the benefits were all illusory?
+
+## Claude's Response VII
+
+### Short answer
+
+**The benefits aren't illusory, and the benchmark change didn't give them up. But you were right that there was something to fix.** I found and fixed two things:
+1. **A hook, `whenSettled(target)`:** the pages can now use the sync `assignFrom` and still know when the handler has finished.
+2. **A real inefficiency in the sync `assignFrom`:** it re-imported the handler module on every call, costing a task hop each time. It now caches it, as `assignFromAsync` does.
+
+The two benchmark pages now use **sync `assignFrom` + `whenSettled` by default**, with an `?async` checkbox for comparison. After the fix, both modes give the same times.
+
+### Where the awaits actually are
+
+**Per row (thousands per render): none, in either mode.** The per-item binding is synchronous inside the handlers, whichever entry point the page calls:
+- `manageTemplateList` binds each clone with the **sync** `assignFrom` (`handlers/manageTemplateList.ts`);
+- Tree applies each node's pattern through its synchronous fast path or the sync `assignFrom`.
+
+**This is where the sync API pays off, and it was never affected by the page's choice.**
+
+**Per render (a constant handful):** for a pattern whose only key is ` =>`, both entry points run **the same `processHandlerCommands`**, with the same awaits inside:
+- resolving the handler class;
+- `resolve` for `manageTemplateList`;
+- the new `prepare` hook, only when it returns a promise;
+- awaiting `handler.assign`.
+
+The only difference is at the top:
+- **`assignFromAsync`** awaits that work, so the caller knows when it's done.
+- **The sync `assignFrom`** starts it and returns at once, so the caller can't know.
+
+So switching the page's one outer call changes a few awaits per render, not per row. **My doc update overstated it** when it read as "use `assignFromAsync`". I've corrected the docs (below).
+
+### Why the original page measured 0 rows
+
+With the sync call, there was nothing to wait on, so the page waited only for the next frame. And the sync `assignFrom` started handlers via `import('./processHandlerCommands.js').then(…)` **on every call**. Even for an already-loaded module, a dynamic `import()` resolves in a **later task**, not a microtask, so Chromium could render a frame first.
+
+### Fix 1: `whenSettled(target)` (new, exported from `assignFrom.js` / `index.js`)
+
+```js
+assignFrom(tbody, pattern, options);   // returns immediately, as before
+await whenSettled(tbody);              // the ' =>' handler is done: rows are in the DOM
+```
+
+- **Tracking:** the sync `assignFrom` now records the fire-and-forget work it starts for a target (` =>` handlers, `#[x]` handlers, `enhance`), per target, in a `WeakMap`. `whenSettled` resolves when all of it has finished, including several calls on the same target.
+- **No API change** to `assignFrom`, and no cost when unused beyond one `WeakMap` entry while work is pending.
+- **Errors aren't swallowed:** a failing handler is reported via `reportError`, as an uncaught error (it used to be an unhandled rejection). `whenSettled` itself never rejects.
+- **Scope:** work started on `target` itself, not on other targets inside handlers. For "the rows are rendered", that's exactly what's needed.
+
+### Fix 2: the sync `assignFrom` caches the handler module
+
+Measured on the pages (single samples, Chromium):
+- **Before the fix,** sync + `whenSettled` was consistently **~10 ms slower** than `assignFromAsync` (Tree Create 10,000 script: 60.0 vs. 50.2 ms; swap 39.6 vs. 26.8 ms), the cost of the per-call `import()`.
+- **After caching `processHandlerCommands`** the first time (as `assignFromAsync` already did), a handler starts within the `assignFrom` call. The two modes are now equal: **Tree 48.7 vs. 49.8 ms, swap 25.5 vs. 26.9 ms; `manageTemplateList` 93.1 vs. 101.0 ms.**
+
+This speeds up **every** sync `assignFrom` call with a ` =>` handler, not just benchmarks.
+
+### Pages, tests and docs
+
+- **Benchmark pages:** `js-framework-benchmark.html` and `js-framework-benchmark-tree.html` use **sync `assignFrom` + `whenSettled` by default**; the **`?async` checkbox** switches to `assignFromAsync`. The script and total times work in both modes.
+- **Tests:** a new [`tests/when-settled.html`](../../../../../../tests/when-settled.html) (8 checks) covers:
+  - the sync call returns before the handler runs, and `whenSettled` waits for it (Tree and `manageTemplateList`);
+  - several calls on one target;
+  - a failing handler is reported and `whenSettled` still resolves;
+  - nothing pending resolves at once.
+
+  **Full suite: 145 passed, 2 skipped, 0 failed.** `tsc` is clean, in the scratch copy; no `.js` touched.
+- **Docs:**
+  - **README** (*assignFrom and assignFromAsync*): documents `whenSettled`, with the timing example, and notes that handlers bind items synchronously either way.
+  - **`docs/manage-template-list.md`:** now offers both options (`assignFrom` + `whenSettled`, or `assignFromAsync`) instead of only the async one. The benchmark note says the page uses sync + `whenSettled` by default.
+
+  ## Bruce's Response VIII
+
+  Using "waitForSettled" isn't my favorite solution -- it is a costly, imprecise, sledgehammer approach.
+
+  I noticed that "trackPending" was added to assignFrom, that seems more precise and lighter work.  Could that be used instead?
+
+## Claude's Response VIII
+
+**It already is. The names are confusingly close, and that's on me.** There are two different things:
+
+| | `whenSettled(target)` (new, what the pages use) | `waitForSettled` (an existing `manageTemplateList` option) |
+|---|---|---|
+| Where | `assignFrom.ts` | `utils/waitForSettled.ts` |
+| How it works | Returns the promise that **`trackPending`** recorded for `target`, or an already-resolved one. That's all. | A **`MutationObserver`** plus a **100 ms idle debounce** (resolves when nothing has mutated for `idleMs`), with an optional timeout |
+| Cost | One `WeakMap` lookup. The tracking itself is one `.then` per fire-and-forget call. | Observes the subtree and waits at least `idleMs` |
+| Precision | Exact: resolves when the handler's own promise settles | Heuristic: "probably quiet now" |
+
+The whole of `whenSettled`:
+
+```ts
+export function whenSettled(target: any): Promise<void> {
+  const trackable = target !== null && (typeof target === 'object' || typeof target === 'function');
+  return (trackable && pendingWork.get(target)) || Promise.resolve();
+}
+```
+
+`trackPending` writes into `pendingWork`, and `whenSettled` is the public way to read it. `trackPending` itself stays internal: it's called by `assignFrom` when it starts the work. **The benchmark pages don't use `waitForSettled` at all**; it's still only the opt-in `manageTemplateList` option it always was.
+
+**To avoid the confusion, I'd rename `whenSettled`.** It's new, so nothing depends on it yet. Some options:
+- **`whenHandled(target)`** (my pick): it resolves when the ` =>` handlers (and `#[x]` / `enhance` work) that `assignFrom` started for `target` are done;
+- `pendingFor(target)`;
+- `untilIdle(target)`, though that's closer to `waitForSettled` again.
+
+**Shall I rename it to `whenHandled`, or another name you prefer?**
 
