@@ -89,6 +89,56 @@ type Repeat = { each: ElementSpecification; of?: string; key?: string; empty?: E
 
 Bare class headers and `$:` headers are reserved for a later phase and throw for now. Use `{ tag, ish }` instead.
 
+## Authoring with `` tree`…` `` (optional)
+
+Nested `[tag, pattern, children]` arrays are easy to get wrong by hand. [`DX/tree.js`](../DX/tree.ts) provides a lit-like tagged template that **produces the same tree notation**:
+
+```JavaScript
+import { tree, each } from 'assign-gingerly/DX/tree.js';
+import { paths } from 'assign-gingerly/DX/paths.js';
+
+const p = paths(); // typed with paths<Launch>() in TypeScript
+
+const map = {
+    launch: tree`
+        <article class="card" aria-label=${p.label}>
+            <h3 class="title">${p.name}</h3>
+            <p>Launched ${p.date} by ${p.rocket}</p>
+            <ul ${each(p.crew, { key: '?.id' })}>
+                <li>${'?.name'}</li>
+            </ul>
+            <button @click=${{ call: 'launch' }}>Launch</button>
+        </article>`,
+};
+// → ['article', { 'class :=': 'card', 'aria-label :=': '?.label' }, [
+//       ['h3', { 'class :=': 'title', textContent: '?.name' }],
+//       ['p', { '?. =&': { microJoin: ['Launched ', '?.date', ' by ', '?.rocket'] } }],
+//       ['ul', {}, { each: ['li', { textContent: '?.name' }], of: '?.crew', key: '?.id' }],
+//       ['button', { ' +=': { on: 'click', call: 'launch' }, textContent: 'Launch' }],
+//   ]]
+```
+
+| In the template | Becomes |
+|---|---|
+| `name="literal"`, `name` (no value) | `'name :=': 'literal'` / `true`: an **attribute**, baked under `compile` |
+| `name=${value}` | `'name :=': value` |
+| `.prop=${value}` | `prop: value` (a property, as in lit) |
+| `@event=${{ call: 'm' }}` or `@event=${'m'}` | an event binding (`' +='`, then `'?. +='`; at most two per element) |
+| `ish=${Manager}` | the `{ tag, ish }` header |
+| `${each(of, { key, empty })}` in attribute position | the repeat; the element's single child is the item |
+| one `${value}`, or literal text, as content | `textContent` |
+| text mixed with `${…}` | a [`microJoin`](./sync-ops.md#microjoin) (an element per value) |
+| `` ${tree`…`} `` as content | a child element (composition) |
+
+**Details:**
+- **`${…}` values** may be `?.` strings or `paths()` proxies; proxies become their path string.
+- **Whitespace:** whitespace-only text between elements is dropped, and an element's content is trimmed where the whitespace contains a line break (indentation).
+- **Text and elements:** an element holds text or child elements, not both. A leading literal text before the children is the exception, as in the tree notation.
+- **Attribute values:** each is a literal or a single `${…}`. Mixing them (`class="a ${x}"`) is an error.
+- **Caching:** results are cached per call site, so the same template with the same values returns the same spec object. Tree's spec identity (`compile`, literal skipping on rebind) holds across calls.
+- **Parser:** a small one of its own, not the browser's, so there's no `<tbody>` insertion or `<p>` auto-closing, and it runs on a server.
+- **Errors:** malformed or unsupported templates (two roots, a mismatched closing tag, text after a child) throw with the template in the message.
+
 ## Arrays
 
 Put a **repeat object** in the children slot, in place of the array of static children:

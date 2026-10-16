@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>tree`…` Tagged Template Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>tree`…` tagged template tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    import { assignFrom, whenSettled } from '../index.js';
+    import { tree, each } from '../DX/tree.js';
+    import { paths, md } from '../DX/paths.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+    function assert(condition, message) {
+      results.push(`<div class="${condition ? 'pass' : 'fail'}">${condition ? '✓' : '✗'} ${message}</div>`);
+      condition ? passed++ : failed++;
+      if (!condition) console.error('Failed:', message);
+    }
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) console.error(`${message}\n  Expected: ${expected}\n  Actual:   ${actual}`);
+      assert(actual === expected, message);
+    }
+    const json = value => JSON.stringify(value);
+    function throws(fn, pattern, message) {
+      let error;
+      try { fn(); } catch (e) { error = e; }
+      assert(error && pattern.test(error.message), `${message}${error ? '' : ' (did not throw)'}`);
+    }
+
+    async function render(map, vm, extra = {}) {
+      const host = document.createElement('div');
+      assignFrom(host, { '?. =>': { do: 'builtIns.tree', map, ...extra } }, { from: vm });
+      await whenSettled(host);
+      return host;
+    }
+
+    const p = paths();
+
+    async function runTests() {
+      // Test 1: the design example → the tree notation written by hand
+      {
+        const card = () => tree`
+          <article class="card" aria-label=${p.label}>
+            <h3 class="title">${p.name}</h3>
+            <p>Launched ${p.date} by ${p.rocket}</p>
+            <ul ${each(p.crew, { key: '?.id' })}>
+              <li>${'?.name'}</li>
+            </ul>
+            <button @click=${{ call: 'launch' }}>Launch</button>
+          </article>`;
+        assertEquals(json(card()), json(['article', { 'class :=': 'card', 'aria-label :=': '?.label' }, [
+          ['h3', { 'class :=': 'title', textContent: '?.name' }],
+          ['p', { '?. =&': { microJoin: ['Launched ', '?.date', ' by ', '?.rocket'] } }],
+          ['ul', {}, { each: ['li', { textContent: '?.name' }], of: '?.crew', key: '?.id' }],
+          ['button', { ' +=': { on: 'click', call: 'launch' }, textContent: 'Launch' }],
+        ]]), 'the design example produces the expected tree notation');
+        assert(card() === card(), 'cached per call site: the same template and values give the same spec object');
+      }
+
+      // Test 2: renders through builtIns.tree exactly like hand-written notation; compile bakes its literal attributes
+      {
+        const map = { launch: tree`
+          <article class="card">
+            <h3 class="title">${'?.name'}</h3>
+            <dl><dt>Height</dt><dd>${'?.height'}</dd></dl>
+            <ol ${each('?.crew', { key: '?.id', empty: tree`<li>None</li>` })}><li class="crew">${'?.name'}</li></ol>
+          </article>` };
+        const byHand = { launch: ['article', { 'class :=': 'card' }, [
+          ['h3', { 'class :=': 'title', textContent: '?.name' }],
+          ['dl', {}, [['dt', { textContent: 'Height' }], ['dd', { textContent: '?.height' }]]],
+          ['ol', {}, { each: ['li', { 'class :=': 'crew', textContent: '?.name' }], of: '?.crew', key: '?.id', empty: ['li', { textContent: 'None' }] }],
+        ]] };
+        const vm = { launch: { name: 'Demo 7', height: '70 m', crew: [{ id: 1, name: 'Bob' }, { id: 2, name: 'Doug' }] } };
+        const html = (await render(map, vm)).innerHTML;
+        assertEquals(html, (await render(byHand, vm)).innerHTML, 'renders the same DOM as the hand-written notation');
+        assert(html.includes('<li class="crew">Bob</li>'), 'repeat items rendered');
+        const empty = await render(map, { launch: { name: 'x', height: 'y', crew: [] } });
+        assertEquals(empty.querySelector('ol').textContent, 'None', 'each(…, { empty }) renders the empty spec');
+        const compiled = await render(map, vm, { compile: true });
+        assertEquals(compiled.innerHTML, html, 'compile: same output');
+      }
+
+      // Test 3: attributes, properties, booleans, entities, void and self-closing elements, ish headers
+      {
+        class XThing {}
+        assertEquals(json(tree`<input .value=${'?.v'} disabled type="text" title="a &amp; b &lt;c&gt; &#65;&#x42;">`),
+          json(['input', { value: '?.v', 'disabled :=': true, 'type :=': 'text', 'title :=': 'a & b <c> AB' }]),
+          '.prop → property; bare name → true; literal attributes; entities decoded; void element');
+        assertEquals(json(tree`<div><x-icon name="star" /><span>after</span></div>`),
+          json(['div', {}, [['x-icon', { 'name :=': 'star' }], ['span', { textContent: 'after' }]]]),
+          'self-closing elements');
+        const spec = tree`<section ish=${XThing}><p>${'?.x'}</p></section>`;
+        assert(spec[0].tag === 'section' && spec[0].ish === XThing, 'ish=${Manager} → { tag, ish } header');
+      }
+
+      // Test 4: events
+      {
+        assertEquals(json(tree`<button @click=${'save'} @focus=${{ call: 'track' }}>Go</button>`),
+          json(['button', { ' +=': { on: 'click', call: 'save' }, '?. +=': { on: 'focus', call: 'track' }, textContent: 'Go' }]),
+          '@event=${"method"} and @event=${config}; two bindings use the two self-binding keys');
+        throws(() => tree`<b @a=${'x'} @b=${'y'} @c=${'z'}></b>`, /at most two @event/, 'a third @event binding is a clear error');
+      }
+
+      // Test 5: text handling — whitespace, leading text with children, microJoin, md segments, paths proxies
+      {
+        assertEquals(json(tree`
+          <ul>
+            <li>one</li>
+          </ul>`), json(['ul', {}, [['li', { textContent: 'one' }]]]), 'indentation whitespace dropped');
+        assertEquals(json(tree`<p>Total: <b>${'?.n'}</b></p>`),
+          json(['p', { textContent: 'Total: ' }, [['b', { textContent: '?.n' }]]]), 'leading literal text before children → textContent');
+        assertEquals(json(tree`<p>${p.first} ${p.last}</p>`),
+          json(['p', { '?. =&': { microJoin: ['?.first', ' ', '?.last'] } }]), 'paths proxies + mixed text → microJoin');
+        assertEquals(json(tree`<p>${md`${p.first} ${p.last}`[0]}</p>`),
+          json(['p', { '?. =&': { microJoin: [{ prop: 'first', val: '?.first' }] } }]), 'a { prop, val } segment as the only content → microJoin');
+        const span = await render({ person: tree`<p>${p.last}, ${p.first}</p>` }, { person: { last: 'Targaryen', first: 'Helaena' } });
+        assertEquals(span.querySelector('p').innerHTML, '<span>Targaryen</span>, <span>Helaena</span>', 'mixed text renders through microJoin');
+      }
+
+      // Test 6: composition and caching with changing values
+      {
+        const item = tree`<li>${'?.name'}</li>`;
+        const list = tree`<ul ${each('?.items')}>${item}</ul>`;
+        const host = await render({ list }, { list: { items: [{ name: 'a' }, { name: 'b' }] } });
+        assertEquals(host.querySelectorAll('li').length, 2, '${tree`…`} composes as a child (here, the repeat item)');
+        const make = path => tree`<b>${path}</b>`;
+        assert(make('?.a') === make('?.a') && make('?.a') !== make('?.b'), 'cache: same values → same object; different values → new object');
+      }
+
+      // Test 7: clear errors
+      {
+        throws(() => tree`<p>a</p><p>b</p>`, /exactly one root element/, 'two roots');
+        throws(() => tree`<p><b>x</b> trailing</p>`, /text after a child element/, 'text after a child element');
+        throws(() => tree`<p class="a ${'?.b'}"></p>`, /mixes text and/, 'mixed attribute value');
+        throws(() => tree`<p><b>x</p></b>`, /doesn't match/, 'mismatched closing tag');
+        throws(() => tree`<ul ${each('?.x')}><li></li><li></li></ul>`, /exactly one child element/, 'each(…) with two children');
+      }
+
+      document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
+      const done = document.getElementById('test-complete');
+      done.setAttribute('data-passed', passed);
+      done.setAttribute('data-failed', failed);
+      done.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
+    }
+
+    runTests().catch(e => {
+      console.error('Test error:', e);
+      document.getElementById('results').innerHTML += `<div class="fail">Test suite error: ${e.message}</div>`;
+      document.getElementById('test-complete').setAttribute('data-status', 'error');
+    });
+  </script>
+</body>
+</html>

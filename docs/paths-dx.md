@@ -206,6 +206,20 @@ Custom property names or per-segment config via explicit objects:
 md`${{ prop: 'birthDate', val: $.birthDT, text: '?.birthDT?.longDate' }}`
 ```
 
+## `tree` — Element Specifications for builtIns.tree
+
+A lit-like tagged template in [`DX/tree.ts`](../DX/tree.ts) that produces builtIns.tree specifications. Path proxies work inside it, as in `sp` / `md`:
+
+```ts
+import { tree, each } from 'assign-gingerly/DX/tree.js';
+
+tree`<h3 class="title">${$.name}</h3>`        // ['h3', { 'class :=': 'title', textContent: '?.name' }]
+tree`<p>${$.first} ${$.last}</p>`              // ['p', { '?. =&': { microJoin: ['?.first', ' ', '?.last'] } }]
+tree`<ul ${each($.items, { key: '?.id' })}><li>${'?.name'}</li></ul>`
+```
+
+The full mapping is in [docs/tree.md](./tree.md#authoring-with-tree-optional). Also new in `paths`: **`pathOf(value)`** returns a path proxy's `?.` string (or undefined for anything else), for tools like this one.
+
 ---
 
 ## Full Roundabout Example

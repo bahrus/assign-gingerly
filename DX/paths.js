@@ -30,6 +30,10 @@ const PATH_SYMBOL = Symbol('assign-gingerly-path');
 function isPathProxy(value) {
     return !!value && (typeof value === 'object' || typeof value === 'function') && PATH_SYMBOL in value;
 }
+/** The `?.` path string of a path proxy (from `paths()`), or undefined for anything else. */
+export function pathOf(value) {
+    return isPathProxy(value) ? value[PATH_SYMBOL] : undefined;
+}
 const COMMAND_TOKEN_SUFFIXES = {
     Each: '?.@each',
     EqNot: ' =!',

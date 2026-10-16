@@ -33,6 +33,11 @@ function isPathProxy(value: unknown): value is { [PATH_SYMBOL]: string } {
     return !!value && (typeof value === 'object' || typeof value === 'function') && PATH_SYMBOL in value;
 }
 
+/** The `?.` path string of a path proxy (from `paths()`), or undefined for anything else. */
+export function pathOf(value: unknown): string | undefined {
+    return isPathProxy(value) ? value[PATH_SYMBOL] : undefined;
+}
+
 const COMMAND_TOKEN_SUFFIXES = {
     Each: '?.@each',
     EqNot: ' =!',

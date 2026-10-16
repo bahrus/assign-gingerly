@@ -148,6 +148,10 @@
       "default": "./DX/paths.js",
       "types": "./DX/paths.ts"
     },
+    "./DX/tree.js": {
+      "default": "./DX/tree.js",
+      "types": "./DX/tree.ts"
+    },
     "./DX/IterableMixin.js": {
       "default": "./DX/IterableMixin.js",
       "types": "./DX/IterableMixin.ts"

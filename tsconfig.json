@@ -13,6 +13,7 @@
 		"types/global.d.ts",
 		"DX/emojis.ts",
 		"DX/paths.ts",
+		"DX/tree.ts",
 		"DX/IterableMixin.ts",
 		"DX/strictDefaultPermissions.ts",
 		"handlers/tree.ts",
