@@ -750,6 +750,12 @@
         }
       }
 
+      // The compiler is only downloaded for trees with `compile` (TreeHandler.prepare)
+      {
+        const loaded = performance.getEntriesByType('resource').some(entry => entry.name.includes('/handlers/compileTree.js'));
+        assertEquals(loaded, compileMode, compileMode ? 'compile: compileTree.js was loaded' : 'no compile: compileTree.js was never loaded');
+      }
+
       const testComplete = document.getElementById('test-complete');
       testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
       testComplete.setAttribute('data-passed', passed);

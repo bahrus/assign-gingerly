@@ -55,7 +55,6 @@ import { assignFrom, categorizeKeys, handleSpreads, SUBSTITUTION_VARS } from '..
 import { applyAttribute, assignGingerly, tryAssignTo } from '../assignGingerly.js';
 import { getValue, getValues, isEventBinding } from '../resolve/getValues.js';
 import { isLiteralString, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
-import { buildTemplate, compileTree } from './compileTree.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 import type {
@@ -92,6 +91,10 @@ interface CompiledVariant {
 
 /** Compiled variants per map object (specs are treated as immutable: replace a map to change it). */
 const compiledMaps = new WeakMap<object, CompiledVariant[]>();
+
+/** The compiler module, loaded by TreeHandler.prepare only for `compile` configs. */
+let compiler: typeof import('./compileTree.js') | undefined;
+let warnedNoCompiler = false;
 
 /** A created element, paired with the structure it was created from and its static children. */
 interface TreeNode {
@@ -603,7 +606,7 @@ function compiledVariantFor(
     if (!variants) compiledMaps.set(map, variants = []);
     let variant = variants.find(v => v.akaKey === akaKey && v.permissionProcessor === permissionProcessor);
     if (!variant) {
-        const compiled = compileTree({ map }, {
+        const compiled = compiler!.compileTree({ map }, {
             sample,
             resolveOptions: options as any,
             // Only refuses (and warns, once per attribute) what the runtime check would refuse anyway
@@ -637,7 +640,7 @@ function cloneNodeFrom(
     const { id } = template;
     let built = variant.built.get(id);
     if (!built) {
-        built = buildTemplate(template);
+        built = compiler!.buildTemplate(template);
         variant.built.set(id, built);
     }
     const target = (options as any)[TREE_TARGET] as Node | undefined;
@@ -740,6 +743,12 @@ export class TreeHandler implements AssignFromHandler {
         this.config = config;
     }
 
+    /** Load the compiler, only for `compile` configs and only once (assignFrom awaits this before assign). */
+    static prepare(config: TreeConfig): Promise<void> | void {
+        if (!config.compile || compiler) return;
+        return import('./compileTree.js').then(module => { compiler = module; });
+    }
+
     assign(lhsTarget: any, _resolvedParams: Record<string, any>, options: AssignFromOptions, permissionProcessor?: PermissionProcessor): void {
         // Elements, shadow roots and other document fragments
         if (!(lhsTarget instanceof Element || lhsTarget instanceof DocumentFragment)) return;
@@ -756,8 +765,13 @@ export class TreeHandler implements AssignFromHandler {
             ...(aka && { aka: { ...options.aka, ...aka } }),
             [TREE_TARGET]: lhsTarget,
         } as AssignFromOptions;
-        // compile: the first call's VM is the sample that picks microJoin shells
-        const variant = compile ? compiledVariantFor(map, nestedOptions, from, permissionProcessor) : undefined;
+        // compile: the first call's VM is the sample that picks microJoin shells.
+        // (Without prepare() having loaded the compiler, e.g. assign() called directly, Tree just doesn't compile.)
+        if (compile && !compiler && !warnedNoCompiler) {
+            warnedNoCompiler = true;
+            console.warn("builtIns.tree: 'compile' needs TreeHandler.prepare(config) to load the compiler first (assignFrom does this); not compiling");
+        }
+        const variant = compile && compiler ? compiledVariantFor(map, nestedOptions, from, permissionProcessor) : undefined;
         if (variant) (nestedOptions as any)[TREE_COMPILED] = variant;
 
         const [start, end] = findChildMarkers(lhsTarget, markerName) ?? createMarkers(lhsTarget, markerName);

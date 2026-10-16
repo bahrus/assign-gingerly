@@ -143,6 +143,10 @@ export async function processHandlerCommands(target, handlerKeys, pattern, optio
                 });
                 Object.assign(resolvedParams, asyncResolved);
             }
+            // Let the handler load what this config needs (awaited only when it returns a promise)
+            const preparing = HandlerClass.prepare?.(config);
+            if (preparing)
+                await preparing;
             // Instantiate and invoke the handler
             const handler = new HandlerClass(config);
             //return; //1.5ms

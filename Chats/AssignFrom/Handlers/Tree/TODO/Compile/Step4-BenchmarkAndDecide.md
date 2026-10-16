@@ -121,3 +121,96 @@ Firefox and WebKit timers have 1 ms resolution, so their 1k numbers are coarse. 
 
 1. **Accept the conditional pass:** opt-in `compile`, documented with the ` :=` guidance, not the default?
 2. **Next:** Step 5 (server-rendered templates), the small bookkeeping optimization, or pause the roadmap here? Given that layout dominates on real pages, Step 5's value is mostly the **SSR / adoption story** (Step 6) rather than raw speed. I'd do it only if server rendering is a goal for you.
+
+## Bruce's Response
+
+I was inclined to that agree that compile should be opt in for the simple reason that launching the handler is asynchronous, so we should be able to choose what to import at that point, and since not all content repeats, importing something that is designed for repeating scenarios seems wasteful.
+
+Can you please do at least one more experiment?
+
+Can you create a page that does the same exact thing [js-framework-benchmark-vanilla](../../../../../../demos/js-framework-benchmark.html) does -- but using the tree handler instead of the manage template list handler?
+
+Make it possible to test compiling and no compiling options (either with one page with a checkbox or two pages).
+
+## Claude's Response II
+
+### 1. The compiler is now imported only when `compile` is set
+
+I took your point literally and implemented it:
+- **`processHandlerCommands`** now calls an optional **`static prepare(config)`** on a handler class before instantiating it, and awaits it only when it returns a promise. The hook is documented on `AssignFromHandlerConstructor` in `types.d.ts`.
+- **`TreeHandler.prepare`** does `import('./compileTree.js')` only for configs with `compile`, and only once.
+- `tree.ts` no longer imports the compiler statically, so **trees without `compile` never download it**.
+- If `assign()` is called directly, without `prepare`, a `compile` config renders uncompiled, with a one-time warning.
+
+**Test:** `tests/tree.html` now checks the page's resource timing. `compileTree.js` is **never fetched** in the normal run and **is fetched** in the `?compile` run. All Tree and `compileTree` tests pass.
+
+### 2. The experiment: [`demos/js-framework-benchmark-tree.html`](../../../../../../demos/js-framework-benchmark-tree.html)
+
+It's the same page as `js-framework-benchmark.html`:
+- the same data generator, buttons and timing (`render`, then `requestAnimationFrame` + `setTimeout`);
+- `builtIns.tree` instead of `manageTemplateList`;
+- the same row markup: `td.a`, `td.b`, and `button.remove` with "×", written as ` :=` statics and literal text.
+
+A **`compile: true` checkbox** reloads the page with `?compile`, so the two modes never share state. A smoke test confirmed that both modes build the same 1,000 rows as the `manageTemplateList` page, and that update and swap work.
+
+### Two bugs found in the existing `manageTemplateList` page
+
+While checking that each page's timing covers its work, I found two problems in `demos/js-framework-benchmark.html`. I **left the page unchanged.**
+1. **In Chromium, its timer stops before any rows exist.** It calls the synchronous `assignFrom`, whose ` =>` handler work runs afterwards. At the moment "Create 10,000 … 10.4 ms" was written, **0 of the 10,000 rows existed**. That's why it reported ~12 ms for every operation in Chromium. Firefox happened to cover the work. The fix is `await assignFromAsync(…)`. For the comparison below, I measured a copy with that one change (scratch only).
+2. **"Swap rows" doesn't swap.** After it, row 2 still has id 3, where Tree and vanilla show 1000. So its swap timing measures a no-op, and I've left it out below.
+
+Both look worth fixing in the page, along with the `manageTemplateList` swap behavior itself. **Shall I?**
+
+### Results
+
+**Pages:**
+- vanilla (`createElement`, re-appending every row on each render);
+- vanilla template;
+- `manageTemplateList` (awaited);
+- Tree;
+- Tree with `compile`.
+
+**Method:**
+- each page loaded 3 times in a fresh browser, interleaved;
+- per load, one untimed warm-up sequence, then 3 timed sequences of create 1k → append 1k → update every 10th → swap → clear → create 10k → clear;
+- medians of 9 samples, in ms, as the pages measure them; × vanilla in parentheses.
+
+| | Chromium | | | Firefox | | | WebKit | | |
+|---|---|---|---|---|---|---|---|---|---|
+| | **mTL** | **Tree** | **Tree compile** | **mTL** | **Tree** | **Tree compile** | **mTL** | **Tree** | **Tree compile** |
+| Create 1,000 | 34.2 (1.22) | 25.4 (0.90) | 24.4 (0.87) | 32 (1.45) | 24 (1.09) | 23 (1.05) | 226 (1.17) | 202 (1.05) | 191 (0.99) |
+| Append 1,000 | 58.7 (1.24) | 36.6 (0.77) | 41.5 (0.88) | 49 (1.09) | 30 (0.67) | 31 (0.69) | 319 (0.87) | 226 (0.62) | 230 (0.63) |
+| Update every 10th | 54.5 (1.15) | 38.9 (0.82) | 38.5 (0.81) | 41 (0.89) | 27 (0.59) | 25 (0.54) | 220 (0.60) | 166 (0.45) | 166 (0.45) |
+| Swap rows | (no-op) | 31.5 (0.56) | 47.9 (0.84) | (no-op) | 32 (0.70) | 33 (0.72) | (no-op) | 296 (0.79) | 297 (0.79) |
+| Clear | 24.7 (1.30) | 16.9 (0.89) | 16.5 (0.87) | 53 (1.15) | 41 (0.89) | 43 (0.93) | 184 (1.20) | 158 (1.03) | 126 (0.82) |
+| Create 10,000 | 848.6 (2.48) | 368.0 (1.08) | 355.0 (1.04) | 317 (1.43) | 260 (1.17) | 267 (1.20) | 2121 (1.16) | 1883 (1.03) | 1878 (1.03) |
+
+**Baselines:**
+- Vanilla: create 1k 28.1 / 22 / 193 ms; create 10k 342 / 222 / 1829 ms.
+- Vanilla template: create 1k 25.7 / 23 / 182 ms; swap 30.2 / 18 / 88 ms.
+
+### What this says
+
+1. **Tree beats `manageTemplateList` on every operation in every browser:**
+   - 1.1–1.4× on create 1k;
+   - **2.3× on create 10k in Chromium**, 1.1–1.2× elsewhere;
+   - 1.3–1.6× on append and update.
+
+   Against vanilla, Tree is at parity on creates (0.90–1.17×) and faster on append and update (0.45–0.82×). That's because this "vanilla" page re-appends every row on each render.
+2. **Compiling makes no measurable difference here,** within ±10%. The differences go both ways and are mostly noise. The reason is that the timing includes waiting for the next frame (`requestAnimationFrame`), so results land on ~16 ms frame boundaries. For example, Chromium's swap 31.5 vs. 47.9 ms is exactly one frame apart, for an operation where `compile` runs identical code. These rows are also **binding-heavy**: 5 elements, 2 bound values, and only 4 small statics. That matches Step 4: compiling pays off for static-heavy markup, built without layout, and this benchmark is neither.
+3. **A real finding about Tree: swapping two rows is slow in Firefox and especially WebKit.** WebKit takes 296 ms vs. 88 ms for vanilla template; Firefox 32 vs. 18 ms. The cause is `placeChildren`. After a swap, its cursor falls out of step, so it **moves nearly every row after the first swapped one** (~997 `insertBefore` calls) instead of 2. Chromium moves nodes cheaply, so it barely shows there (31.5 vs. 30.2 ms). A smarter placement, such as only moving elements that are out of order relative to a longest-increasing-subsequence, as keyed frameworks do, would fix it. That's independent of compiling.
+
+### Updated recommendation
+
+- **`compile` stays opt-in,** now loaded only when used. That's your reasoning, and both experiments support it. It matters for large, static-heavy content with ` :=` statics, and is neutral otherwise.
+- **The swap / reorder fix in `placeChildren`** looks like a better use of the next effort than Step 5, since it affects every Tree with a keyed repeat.
+
+### Questions for you
+
+1. **Fix the two `js-framework-benchmark.html` bugs** (the await, and the swap), and look at why `manageTemplateList` doesn't reorder?
+2. **Optimize Tree's reordering** (the swap case) next?
+3. **Step 5:** still deferred?
+
+## Bruce's Response II
+
+Yes, please address both 1, and 2, before moving on to step  5.
