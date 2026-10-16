@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>importNode Upgrade Timing</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+    .info { color: #555; }
+  </style>
+</head>
+<body>
+  <h1>Does <code>document.importNode</code> upgrade custom elements before it returns?</h1>
+  <p>Compiled Tree templates are built in a <code>&lt;template&gt;</code>'s inert document. Each instance is then
+    copied into the page with <code>importNode</code> (Step 3's plan) or <code>cloneNode</code>, and Tree sets
+    properties on it <em>before</em> inserting it. This page checks whether the custom elements are already
+    upgraded at that point.</p>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+    function check(condition, message) {
+      results.push(`<div class="${condition ? 'pass' : 'fail'}">${condition ? '✓' : '✗'} ${message}</div>`);
+      condition ? passed++ : failed++;
+      if (!condition) console.error('Failed:', message);
+    }
+    function note(message) {
+      results.push(`<div class="info">• ${message}</div>`);
+      console.log(message);
+    }
+
+    const log = [];
+    class XProbe extends HTMLElement {
+      #label = '(unset)';
+      constructor() { super(); log.push('constructor'); }
+      static observedAttributes = ['data-baked'];
+      attributeChangedCallback(name, _old, value) { log.push(`attributeChanged ${name}=${value}`); }
+      connectedCallback() { log.push('connected'); }
+      get label() { return this.#label; }
+      set label(value) { log.push(`set label=${value}`); this.#label = value; }
+    }
+    customElements.define('x-probe', XProbe);
+
+    // A template built the way compileTree's buildTemplate builds it: elements created in the template's inert document
+    const template = document.createElement('template');
+    const inert = template.content.ownerDocument;
+    const shell = inert.createElement('div');
+    const probe = inert.createElement('x-probe');
+    probe.setAttribute('data-baked', 'yes');
+    shell.append(probe);
+    template.content.append(shell);
+    check(!(template.content.querySelector('x-probe') instanceof XProbe), 'baseline: the element in the template content is not upgraded (inert document)');
+
+    // 1. importNode into the page's document — what Step 3 proposes
+    {
+      log.length = 0;
+      const copy = document.importNode(template.content, true).firstElementChild;
+      const el = copy.firstElementChild;
+      const upgradedOnReturn = el instanceof XProbe;
+      const logOnReturn = log.join(', ');
+      check(upgradedOnReturn, 'importNode: upgraded before importNode returns (still disconnected)');
+      check(logOnReturn === 'constructor, attributeChanged data-baked=yes', `importNode: constructor and attributeChangedCallback already ran (log: ${logOnReturn})`);
+      el.label = 'from Tree';
+      check(log.includes('set label=from Tree') && !Object.hasOwn(el, 'label'), 'importNode: a property set right after goes through the class setter');
+      check(!el.isConnected, 'importNode: none of this needed the element to be connected');
+    }
+
+    // 2. cloneNode — the copy stays in the inert document
+    {
+      log.length = 0;
+      const copy = template.content.cloneNode(true).firstElementChild;
+      const el = copy.firstElementChild;
+      check(!(el instanceof XProbe) && log.length === 0, 'cloneNode: NOT upgraded (the clone belongs to the inert document, which has no registry)');
+      el.label = 'from Tree';
+      check(Object.hasOwn(el, 'label'), 'cloneNode: a property set now becomes an own property (it will shadow the setter later)');
+
+      customElements.upgrade(copy);
+      check(!(el instanceof XProbe), 'cloneNode + customElements.upgrade(): still not upgraded (the element\'s document is the inert one)');
+
+      document.body.append(copy);
+      const upgradedOnConnect = el instanceof XProbe;
+      check(upgradedOnConnect, 'cloneNode: upgraded only when inserted into the page');
+      check(el.label === 'from Tree' && Object.hasOwn(el, 'label') && !log.includes('set label=from Tree'),
+        'cloneNode: the earlier own property shadows the setter, which never ran (the "lazy property" bug)');
+      copy.remove();
+    }
+
+    // 3. createElement — what Tree does today, for comparison
+    {
+      log.length = 0;
+      const el = document.createElement('x-probe');
+      check(el instanceof XProbe && log.join(', ') === 'constructor', 'createElement (today): upgraded immediately');
+    }
+
+    // 4. Where customElements.upgrade() does apply: an element created in the page's document before define()
+    {
+      const early = document.createElement('x-later');
+      class XLater extends HTMLElement {}
+      customElements.define('x-later', XLater);
+      check(!(early instanceof XLater), 'an element created before define() is not upgraded by define() while disconnected');
+      customElements.upgrade(early);
+      check(early instanceof XLater, 'customElements.upgrade() upgrades it (its document is the page, which has the definition)');
+      note('So upgrade() is for disconnected elements of a document that has the definition, created before define(). importNode creates its copies after define(), in the page document, so it upgrades them itself.');
+    }
+
+    document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
+    const done = document.getElementById('test-complete');
+    done.setAttribute('data-passed', passed);
+    done.setAttribute('data-failed', failed);
+    done.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
+  </script>
+</body>
+</html>
