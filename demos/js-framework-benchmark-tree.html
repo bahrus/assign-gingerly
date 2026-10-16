@@ -55,9 +55,7 @@
         operations. The same page as <a href="./js-framework-benchmark.html">js-framework-benchmark.html</a>
         (<code>manageTemplateList</code>), with <code>builtIns.tree</code> instead.</p>
 
-    <div class="controls">
-        <label><input type="checkbox" id="compile"> <code>compile: true</code> (reloads the page)</label>
-    </div>
+    <div class="controls" id="options"></div>
     <div class="controls">
         <button id="btn-create">Create 1,000</button>
         <button id="btn-create10k">Create 10,000</button>
@@ -82,16 +80,12 @@
 
     <script type="module">
         import { assignFromAsync } from '../index.js';
+        import { addToggle, createBenchmark, setupPage } from './js-framework-benchmark-common.js';
 
         // ?compile → compile: true. Each mode gets a fresh page, so the two never share state.
         const compile = new URLSearchParams(location.search).has('compile');
-        const checkbox = document.getElementById('compile');
-        checkbox.checked = compile;
-        checkbox.addEventListener('change', () => {
-            const url = new URL(location.href);
-            if (checkbox.checked) url.searchParams.set('compile', ''); else url.searchParams.delete('compile');
-            location.href = url.href;
-        });
+        addToggle('compile', '<code>compile: true</code> (reloads)');
+        setupPage();
         document.querySelector('h1').textContent += compile ? ' (compile: true)' : ' (no compile)';
 
         // --- Data generation (same as js-framework-benchmark) ---
@@ -115,7 +109,6 @@
         let data = [];
         const table = document.getElementById('table');
         const resultsEl = document.getElementById('results');
-        let timings = [];
 
         // The same row as the manageTemplateList page's <template id="row-tpl">, as a Tree spec.
         // Statics are ` :=` attributes and literal text, so with compile they're baked into the template.
@@ -135,19 +128,8 @@
             await assignFromAsync(table, assignValues, { from: { data } });
         }
 
-        // --- Benchmark helper ---
-        async function benchmark(name, fn) {
-            const start = performance.now();
-            fn();
-            await render();
-            // Wait for idle (requestAnimationFrame + setTimeout flush)
-            await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
-            const elapsed = performance.now() - start;
-            timings.push({ name, elapsed, rows: data.length });
-            resultsEl.textContent = timings.map(t =>
-                `${t.name.padEnd(25)} ${t.elapsed.toFixed(1).padStart(8)}ms  (${t.rows} rows)`
-            ).join('\n');
-        }
+        // --- Benchmark helper (shared: total and script times) ---
+        const benchmark = createBenchmark(render, () => data.length);
 
         // --- Operations ---
         document.getElementById('btn-create').addEventListener('click', () => {

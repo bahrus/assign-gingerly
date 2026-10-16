@@ -27,20 +27,19 @@
 
     <pre id="results">Click a button to run a benchmark operation...</pre>
 
-    <template id="row-tpl">
-        <tr>
-            <td></td>
-            <td></td>
-            <td><button class="remove">×</button></td>
-        </tr>
-    </template>
+    <!-- One line, so cloning a row copies no whitespace text nodes -->
+    <template id="row-tpl"><tr><td></td><td></td><td><button class="remove">×</button></td></tr></template>
 
     <table>
         <thead><tr><th>ID</th><th>Label</th><th></th></tr></thead>
         <tbody id="tbody"></tbody>
     </table>
 
-    <script>
+    <script type="module">
+        import { createBenchmark, setupPage } from './js-framework-benchmark-common.js';
+
+        setupPage();
+
         // --- Data generation (same as js-framework-benchmark) ---
         const adjectives = ['pretty', 'large', 'big', 'small', 'tall', 'short', 'long', 'handsome', 'plain', 'quaint', 'clean', 'elegant', 'easy', 'angry', 'crazy', 'helpful', 'mushy', 'odd', 'unsightly', 'adorable', 'important', 'inexpensive', 'cheap', 'expensive', 'fancy'];
         const colours = ['red', 'yellow', 'blue', 'green', 'pink', 'brown', 'purple', 'brown', 'white', 'black', 'orange'];
@@ -61,15 +60,13 @@
         // --- State ---
         let data = [];
         const tbody = document.getElementById('tbody');
-        const resultsEl = document.getElementById('results');
         const template = document.getElementById('row-tpl');
-        let timings = [];
 
         // Map of id → row element for keyed reconciliation
         let rowMap = new Map();
 
         // --- Clone template and populate ---
-        async function createRow(item) {
+        function createRow(item) {
             const clone = template.content.cloneNode(true);
             const tr = clone.firstElementChild;
             tr.dataset.id = item.id;
@@ -80,7 +77,7 @@
         }
 
         // --- Keyed render ---
-        async function render() {
+        function render() {
             const newRowMap = new Map();
             const fragment = document.createDocumentFragment();
             let needsRebuild = false;
@@ -93,7 +90,7 @@
                     rowMap.delete(item.id);
                 } else {
                     // New row — clone template
-                    row = await createRow(item);
+                    row = createRow(item);
                     needsRebuild = true;
                 }
                 newRowMap.set(item.id, row);
@@ -116,21 +113,8 @@
             rowMap = newRowMap;
         }
 
-        // --- Benchmark helper ---
-        function benchmark(name, fn) {
-            const start = performance.now();
-            fn();
-            render();
-            requestAnimationFrame(() => {
-                setTimeout(() => {
-                    const elapsed = performance.now() - start;
-                    timings.push({ name, elapsed, rows: data.length });
-                    resultsEl.textContent = timings.map(t =>
-                        `${t.name.padEnd(25)} ${t.elapsed.toFixed(1).padStart(8)}ms  (${t.rows} rows)`
-                    ).join('\n');
-                }, 0);
-            });
-        }
+        // --- Benchmark helper (shared: total and script times) ---
+        const benchmark = createBenchmark(render, () => data.length);
 
         // --- Operations ---
         document.getElementById('btn-create').addEventListener('click', () => {

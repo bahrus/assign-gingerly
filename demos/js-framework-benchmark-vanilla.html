@@ -32,7 +32,11 @@
         <tbody id="tbody"></tbody>
     </table>
 
-    <script>
+    <script type="module">
+        import { createBenchmark, setupPage } from './js-framework-benchmark-common.js';
+
+        setupPage();
+
         // --- Data generation (same as js-framework-benchmark) ---
         const adjectives = ['pretty', 'large', 'big', 'small', 'tall', 'short', 'long', 'handsome', 'plain', 'quaint', 'clean', 'elegant', 'easy', 'angry', 'crazy', 'helpful', 'mushy', 'odd', 'unsightly', 'adorable', 'important', 'inexpensive', 'cheap', 'expensive', 'fancy'];
         const colours = ['red', 'yellow', 'blue', 'green', 'pink', 'brown', 'purple', 'brown', 'white', 'black', 'orange'];
@@ -53,8 +57,6 @@
         // --- State ---
         let data = [];
         const tbody = document.getElementById('tbody');
-        const resultsEl = document.getElementById('results');
-        let timings = [];
 
         // --- Vanilla render (keyed by data-id) ---
         function render() {
@@ -106,21 +108,8 @@
             tbody.appendChild(fragment);
         }
 
-        // --- Benchmark helper ---
-        function benchmark(name, fn) {
-            const start = performance.now();
-            fn();
-            render();
-            requestAnimationFrame(() => {
-                setTimeout(() => {
-                    const elapsed = performance.now() - start;
-                    timings.push({ name, elapsed, rows: data.length });
-                    resultsEl.textContent = timings.map(t =>
-                        `${t.name.padEnd(25)} ${t.elapsed.toFixed(1).padStart(8)}ms  (${t.rows} rows)`
-                    ).join('\n');
-                }, 0);
-            });
-        }
+        // --- Benchmark helper (shared: total and script times) ---
+        const benchmark = createBenchmark(render, () => data.length);
 
         // --- Operations ---
         document.getElementById('btn-create').addEventListener('click', () => {

@@ -294,3 +294,101 @@ Vanilla for comparison: Chromium create 1k 22.2 ms and create 10k 259.9 ms; Fire
 ### Status
 
 Items 1 and 2 are done. **Ready for Step 5** when you are.
+
+## Bruce's Response III
+
+Sorry to keep pushing off step 5, I just want to be thorough.
+
+When I open the various list framework benchmark pages (js-framework-*.html) the headline number now reflects the time to render rows, which is an honest accounting.  We should definitely show that number, as it is important.  But it does tend to swallow what we are in control of.  But can you please:
+
+1.  Apply the css-visibility technique to each of the pages in a uniform way.
+2.  If possible, also, additionally show how long it took before telling the browser "here are the rows, now do your thing"?
+
+Please don't run any lengthy timing tests for this ask unless absolutely necessary.
+
+## Claude's Response III
+
+Both are done, uniformly, through one shared module: [`demos/js-framework-benchmark-common.js`](../../../../../../demos/js-framework-benchmark-common.js). All four pages now use it:
+- `js-framework-benchmark.html` (`manageTemplateList`);
+- `-tree.html`;
+- `-vanilla.html`;
+- `-vanilla-template.html`.
+
+The two vanilla pages' scripts became modules for the import. It's a hand-written `.js` with no `.ts` source; a `.mjs` wouldn't load, because the dev server serves `.mjs` as `text/html`.
+
+### 1. Content-visibility: a `?cv` checkbox on every page
+
+**One catch:** `content-visibility` **has no effect on native table rows.** It's built on CSS containment, which doesn't apply to internal table boxes (rows, cells). Putting it on the `<tr>`s as they are would silently do nothing.
+
+So with `?cv`, every page applies the same stylesheet:
+- `table`, `thead` and `tbody` become `display: block`;
+- each `tr` becomes `display: grid` (three columns) with `content-visibility: auto; contain-intrinsic-size: auto 2.1rem`;
+- cells become blocks.
+
+The rows look the same, but now they're ordinary boxes, so **rows outside the viewport skip layout and paint.**
+
+The checkbox reloads the page with the flag, keeping other flags; the Tree page's compile checkbox works the same way. So any combination works, e.g. `js-framework-benchmark-tree.html?compile&cv`.
+
+### 2. A second number: "script", the time until the rows are handed to the browser
+
+Every result line now reads:
+
+```
+Create 10,000              172.1ms  (10000 rows)  script    80.2ms
+```
+
+- **total**, as before: from the click until the next frame has rendered (`requestAnimationFrame` + `setTimeout`). It **includes the browser's style, layout and paint.**
+- **script:** until the page's `render()` has finished. The rows are in the DOM, but **no layout or paint has happened yet.** That's the part the library (or the vanilla code) controls.
+
+A note under the buttons explains both. The line format keeps the total and the row count where `tests/benchmark.spec.ts` (and my runner) parse them. That spec still passes.
+
+### A quick smoke test (no timing runs, as you asked)
+
+One Create 10,000 followed by one Swap, per page and mode, Chromium only: **single samples, so indicative only.**
+
+| Page | Create 10k, total → with `?cv` | Create 10k, script | Swap, total → with `?cv` |
+|---|---|---|---|
+| vanilla | 290 → 118 | 27–30 | 316 → 104 |
+| vanilla template | 351 → 127 | 49–81 | 119 → 20 |
+| manageTemplateList | 423 → 193 | 88–154 | 226 → 103 |
+| Tree | 343 → 172 | 80 | 68 → 71 |
+| Tree compile | 321 → 187 | 66 | 66 → 82 |
+
+**What it suggests** (to be confirmed by a proper run, if you want one):
+- **`?cv` roughly halves (or better) the totals,** because the browser only lays out the rows near the viewport. The script part doesn't change, as expected.
+- **The script numbers separate what we control:**
+  - Tree ~80 ms vs. `manageTemplateList` ~90–150 ms for 10,000 rows;
+  - Tree compile ~66 ms;
+  - the vanilla template page ~50–80 ms. Its `render()` awaits once per row, which costs it.
+  - Vanilla `createElement` ~30 ms is the floor in Chromium, which has a fast `createElement` (as seen in Step 4).
+- **Even with `?cv`, a large share of the total is the browser's work**, not ours: e.g. Tree 172 ms total vs. 80 ms script.
+
+### Status
+
+Done. Step 5 is next, when you're ready.
+
+## Bruce's Response IV
+
+Can you please remove the repeated awaits per row for the vanilla template page?
+
+## Claude's Response IV
+
+Done. In [`demos/js-framework-benchmark-vanilla-template.html`](../../../../../../demos/js-framework-benchmark-vanilla-template.html), `createRow` and `render` are now plain synchronous functions, so there's no `await` per row.
+
+**Smoke check** (single samples, Chromium): Create 10,000 script time is **48–62 ms**, from 49–81 ms; total 329 ms (130 ms with `?cv`). Swap is 114 ms (20 ms with `?cv`). Rows and both modes work.
+
+**The page is still slower than the `createElement` page** (~30 ms script). One likely reason, which I haven't changed: its `<template id="row-tpl">` is written with indentation, so **every cloned row also copies ~6 whitespace text nodes**: 4 between the cells inside the `<tr>`, plus 2 around it in the cloned fragment. The `createElement` page and Tree's templates have none. Writing the template on one line (`<tr><td></td><td></td><td><button class="remove">×</button></td></tr>`) would make it a fairer floor. **Shall I?**
+
+## Bruce's Response V
+
+Yes, please.
+
+## Claude's Response V
+
+Done. `<template id="row-tpl">` is now on one line (`<tr><td></td><td></td><td><button class="remove">×</button></td></tr>`), so a cloned row copies no whitespace text nodes.
+
+**Smoke check** (single samples, Chromium): rows, swap and both modes work. Create 10,000 script time was **42 ms with `?cv` and 73 ms without**; earlier single samples were 48–62 ms. That's **no clear change**: at one sample, the noise is larger than the effect. So I can't confirm that the whitespace explained the gap to the `createElement` page (~30 ms, also single samples). Step 4's isolated runs found Chromium's `createElement` to be about as fast as cloning, so the two pages may simply be close, with single samples scattering around that.
+
+A proper run (the 9-sample, fresh-page method) would settle it in about 25 minutes. I haven't run it, per your request. **Let me know if you want it.**
+
+

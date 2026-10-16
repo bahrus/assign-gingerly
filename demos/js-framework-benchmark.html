@@ -86,6 +86,9 @@
     <script type="module">
         // assignFromAsync: render() must wait for the ' =>' handler, or the timings stop before the rows exist
         import { assignFromAsync } from '../index.js';
+        import { createBenchmark, setupPage } from './js-framework-benchmark-common.js';
+
+        setupPage();
 
         // --- Data generation (same as js-framework-benchmark) ---
         const adjectives = ['pretty', 'large', 'big', 'small', 'tall', 'short', 'long', 'handsome', 'plain', 'quaint', 'clean', 'elegant', 'easy', 'angry', 'crazy', 'helpful', 'mushy', 'odd', 'unsightly', 'adorable', 'important', 'inexpensive', 'cheap', 'expensive', 'fancy'];
@@ -108,7 +111,6 @@
         let data = [];
         const tbody = document.getElementById('tbody');
         const resultsEl = document.getElementById('results');
-        let timings = [];
         const assignValues = {
             '?. =>': {
                 do: 'builtIns.manageTemplateList',
@@ -146,19 +148,8 @@
             });
         }
 
-        // --- Benchmark helper ---
-        async function benchmark(name, fn) {
-            const start = performance.now();
-            fn();
-            await render();
-            // Wait for idle (requestAnimationFrame + setTimeout flush)
-            await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
-            const elapsed = performance.now() - start;
-            timings.push({ name, elapsed, rows: data.length });
-            resultsEl.textContent = timings.map(t =>
-                `${t.name.padEnd(25)} ${t.elapsed.toFixed(1).padStart(8)}ms  (${t.rows} rows)`
-            ).join('\n');
-        }
+        // --- Benchmark helper (shared: total and script times) ---
+        const benchmark = createBenchmark(render, () => data.length);
 
         // --- Operations ---
         document.getElementById('btn-create').addEventListener('click', () => {
