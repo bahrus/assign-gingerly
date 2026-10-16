@@ -17,7 +17,7 @@ The work is split into steps, one file each. **Step 1 is spelled out in detail**
 | 1e | [`microJoin` sync op: implement + benchmark](../../../../TODO/MicroJoin.md) (core feature) | ✅ Done; microDataJoin removed |
 | 2 | [`compileTree(spec)`: a pure compiler](./Step2-CompileTree.md) | ✅ Done: `handlers/compileTree.ts`, with equivalence tests |
 | 3 | [Clone-and-bind instantiation (`compile` option)](./Step3-CloneAndBind.md) | ✅ Done: the whole Tree suite passes with `compile: true` |
-| 4 | [Benchmark and go / no-go](./Step4-BenchmarkAndDecide.md) | **Next** |
+| 4 | [Benchmark and go / no-go](./Step4-BenchmarkAndDecide.md) | ✅ Measured: 1.6–1.9× (Firefox, WebKit), 1.2–1.4× (Chromium, near its floor) with ` :=` statics. **Conditional pass proposed; awaiting decision** |
 | 5 | [Server-rendered templates](./Step5-ServerTemplates.md) | Outline |
 | 6 | [Adopting server-rendered instances (likely TreeScope)](./Step6-AdoptServerRenderedInstances.md) | Outline |
 
