@@ -84,7 +84,8 @@
     </table>
 
     <script type="module">
-        import { assignFrom } from '../assignFrom.js';
+        // assignFromAsync: render() must wait for the ' =>' handler, or the timings stop before the rows exist
+        import { assignFromAsync } from '../index.js';
 
         // --- Data generation (same as js-framework-benchmark) ---
         const adjectives = ['pretty', 'large', 'big', 'small', 'tall', 'short', 'long', 'handsome', 'plain', 'quaint', 'clean', 'elegant', 'easy', 'angry', 'crazy', 'helpful', 'mushy', 'odd', 'unsightly', 'adorable', 'important', 'inexpensive', 'cheap', 'expensive', 'fancy'];
@@ -139,7 +140,7 @@
 
         // --- Render ---
         async function render() {
-            await assignFrom(tbody, assignValues, {
+            await assignFromAsync(tbody, assignValues, {
                 from: { data },
                 protocols
             });

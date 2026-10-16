@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>manageTemplateList Reorder Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>manageTemplateList reorder tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <template id="item-tpl"><li></li></template>
+  <!-- Two nodes per item: a text node and an element -->
+  <template id="pair-tpl">#<b></b></template>
+
+  <script type="module">
+    import { assignFromAsync } from '../index.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+    function assert(condition, message) {
+      results.push(`<div class="${condition ? 'pass' : 'fail'}">${condition ? '✓' : '✗'} ${message}</div>`);
+      condition ? passed++ : failed++;
+      if (!condition) console.error('Failed:', message);
+    }
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) console.error(`${message}\n  Expected: ${expected}\n  Actual:   ${actual}`);
+      assert(actual === expected, message);
+    }
+
+    const protocols = { globalThis: k => globalThis[k] };
+    const make = n => Array.from({ length: n }, (_, i) => ({ id: i, name: `item ${i}` }));
+    const expectOrder = list => list.map(item => item.name).join('|');
+
+    /** Render `list` into `host`, counting insertBefore calls (DOM moves and insertions). */
+    function renderer(host, templateId) {
+      const cfg = { '?. =>': {
+        do: 'builtIns.manageTemplateList',
+        resolve: { forEach: '?.list', instantiate: `globalThis://${templateId}`, forget: true },
+        fromEachItem: { textContent: '?.name', resolve: { key: '?.id' } },
+      } };
+      const { insertBefore } = Node.prototype;
+      const render = async list => {
+        render.moves = 0;
+        Node.prototype.insertBefore = function (...args) { render.moves++; return insertBefore.apply(this, args); };
+        try { await assignFromAsync(host, cfg, { from: { list }, protocols }); } finally { Node.prototype.insertBefore = insertBefore; }
+      };
+      return render;
+    }
+
+    async function runTests() {
+      // Test 1: single-element items
+      {
+        const host = document.createElement('ul');
+        const render = renderer(host, 'item-tpl');
+        const names = () => [...host.querySelectorAll('li')].map(li => li.textContent).join('|');
+
+        let list = make(1000);
+        await render(list);
+        assertEquals(names(), expectOrder(list), 'create 1,000');
+        assertEquals(render.moves, 1, 'create: one fragment insertion');
+        const first = host.querySelector('li');
+
+        await render(list = [...list]);
+        assertEquals(render.moves, 0, 'unchanged order: no moves');
+        assert(host.querySelector('li') === first, 'unchanged order: elements kept');
+
+        list = [...list];
+        [list[1], list[998]] = [list[998], list[1]];
+        await render(list);
+        assertEquals(names(), expectOrder(list), 'swap: rows actually swapped');
+        assert(render.moves <= 2, `swap: at most 2 moves (moved ${render.moves})`);
+
+        list = [...list].reverse();
+        await render(list);
+        assertEquals(names(), expectOrder(list), 'reverse');
+
+        list = [...list].sort(() => Math.random() - 0.5);
+        await render(list);
+        assertEquals(names(), expectOrder(list), 'shuffle');
+
+        list = [...list.slice(0, 10), { id: 'new', name: 'new in the middle' }, ...list.slice(10, 500)];
+        await render(list);
+        assertEquals(names(), expectOrder(list), 'insert in the middle + remove: new item lands in place, not at the end');
+
+        list = [...list, ...make(3).map(item => ({ id: `tail-${item.id}`, name: `tail ${item.id}` }))];
+        await render(list);
+        assertEquals(names(), expectOrder(list), 'append');
+        assertEquals(render.moves, 1, 'append: still one fragment insertion');
+      }
+
+      // Test 2: multi-node items (a text node + an element each) move as a unit
+      {
+        const host = document.createElement('div');
+        const render = renderer(host, 'pair-tpl');
+        const text = () => host.textContent;
+        const expectText = list => list.map(item => `#${item.name}`).join('');
+        let list = make(5);
+        await render(list);
+        assertEquals(text(), expectText(list), 'pairs: create');
+        list = [list[4], list[1], list[2], list[3], list[0]];
+        await render(list);
+        assertEquals(text(), expectText(list), 'pairs: swap keeps each text node with its element');
+        list = [...list].reverse();
+        await render(list);
+        assertEquals(text(), expectText(list), 'pairs: reverse');
+      }
+
+      document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
+      const done = document.getElementById('test-complete');
+      done.setAttribute('data-passed', passed);
+      done.setAttribute('data-failed', failed);
+      done.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
+    }
+
+    runTests().catch(e => {
+      console.error('Test error:', e);
+      document.getElementById('results').innerHTML += `<div class="fail">Test suite error: ${e.message}</div>`;
+      document.getElementById('test-complete').setAttribute('data-status', 'error');
+    });
+  </script>
+</body>
+</html>

@@ -214,3 +214,83 @@ Both look worth fixing in the page, along with the `manageTemplateList` swap beh
 ## Bruce's Response II
 
 Yes, please address both 1, and 2, before moving on to step  5.
+
+## Claude's Implementation Notes: Reordering and the Benchmark Page
+
+Both are done.
+
+**Results:**
+- **Full suite: 142 passed, 2 skipped, 0 failed,** in Chromium, Firefox and WebKit.
+- **`tree.html`:** 130 / 130, normally and with `?compile`.
+- **New `template-list-reorder.html`:** 14 / 14.
+- `tsc` is clean, in the scratch copy; no `.js` touched.
+
+### Minimal-move placement, shared: [`utils/placeNodes.ts`](../../../../../../utils/placeNodes.ts)
+
+`placeNodes(parent, nodes, first)` puts `nodes` in order, starting at `first`:
+1. **Fast path:** nodes already in place are skipped. An unchanged order is one walk and **0 moves**.
+2. **On the first mismatch,** the longest run of the remaining nodes that are already in relative order stays put. That's a longest increasing subsequence of their current positions, O(n log n), as keyed frameworks do. Only the others move, so **a swap is 2 moves** instead of ~997.
+3. **Consecutive nodes that move or are new go in together** through one fragment, so **creating a list is a single insertion**.
+4. **Other nodes in the region** (a repeat container's own text, or a node added by other code) end up after the items. If one sits before or between them, placement falls back to the old cursor walk, which is still correct.
+
+**`builtIns.tree`** uses it for repeat items and for top-level keys, replacing its two copies of the cursor loop.
+
+**`manageTemplateList`** used to **never move existing items**: it updated them in place and appended new clones before the end marker. That's why "Swap rows" did nothing, and why an item inserted mid-list landed at the end. Now:
+- when kept items stay in their old relative order and all new items come after them (create, append, update, remove), it still does its **single fragment append**, unchanged;
+- otherwise it calls `placeNodes` with every item's nodes in key order. **Multi-node items** (e.g. a text node plus an element) move as a unit.
+
+### The benchmark page
+
+[`demos/js-framework-benchmark.html`](../../../../../../demos/js-framework-benchmark.html) now uses `await assignFromAsync(…)`, so its timings cover the render. Before, in Chromium, they stopped before any rows existed. Its swap now really swaps (row 2 becomes id 1000).
+
+### Tests
+
+- **`tests/tree.html`, new "reorder" section:**
+  - unchanged order → 0 moves;
+  - create 1,000 → at most 2 insertions;
+  - swap → right order, ≤ 2 moves;
+  - reverse, shuffle, insert + remove → right order;
+  - the container's own text stays after the items;
+  - a foreign node in the container → still the right order.
+- **[`tests/template-list-reorder.html`](../../../../../../tests/template-list-reorder.html) (new), for `manageTemplateList`:**
+  - create → one insertion;
+  - unchanged → 0 moves, elements kept;
+  - swap → really swapped, ≤ 2 moves;
+  - reverse, shuffle;
+  - an item inserted mid-list lands in place;
+  - append → still one insertion;
+  - two-node items move as a unit.
+- **`tests/benchmark.spec.ts`** now also runs the Tree page with and without `compile`, and prints a 5-column table. It got a 180 s timeout: five pages with Create 10,000 exceed the default 30 s.
+
+### Benchmark after the fixes
+
+The same method as before: 9 samples per page; ms; × vanilla in parentheses. Chromium and Firefox are from one run, WebKit from a confirming rerun.
+
+| Swap rows 1↔998 | Before | **After** | vanilla template |
+|---|---|---|---|
+| Tree, Chromium | 31.5 | **15.3 (0.34)** | 19.8 |
+| Tree, Firefox | 32 | **12 (0.26)** | 21 |
+| Tree, WebKit | 296 | **48 (0.13)** | 85 |
+| manageTemplateList, Chromium / Firefox / WebKit | no-op | 41.7 / 39 / 191 | |
+
+**Tree now swaps faster than vanilla template cloning in every browser.** `manageTemplateList` now really swaps, at 0.5–0.9× vanilla.
+
+| Other operations, after | Chromium: mTL / Tree / Tree compile | Firefox: mTL / Tree / Tree compile |
+|---|---|---|
+| Create 1,000 | 29.3 / 24.0 / 23.5 | 31 / 23 / 22 |
+| Append 1,000 | 57.5 / 46.7 / 31.2 | 50 / 34 / 28 |
+| Update every 10th | 48.6 / 33.0 / 32.2 | 40 / 26 / 23 |
+| Clear | 23.6 / 16.4 / 16.4 | 56 / 44 / 42 |
+| Create 10,000 | 299.8 / 296.9 / 261.3 | 336 / 259 / 224 |
+
+Vanilla for comparison: Chromium create 1k 22.2 ms and create 10k 259.9 ms; Firefox 22 and 221 ms.
+
+**What the numbers say:**
+- **Nothing regressed.** Creates and updates are where they were.
+- **One WebKit run** showed Tree's Create 10,000 at 2.2× vanilla. The confirming rerun had it at **1.02×**, with vanilla itself varying 751 → 1,871 ms between runs. WebKit timings on this machine swing a lot from run to run, so only large effects (like the swap) are reliable there.
+- **Tree vs. Tree compile** still differs within frame-quantization noise, as before. These rows are binding-heavy.
+- **`manageTemplateList` remains the slowest of the five on most operations.** Tree is 1.2–1.4× faster creating 1,000 rows, and 1.0–1.3× creating 10,000.
+
+### Status
+
+Items 1 and 2 are done. **Ready for Step 5** when you are.

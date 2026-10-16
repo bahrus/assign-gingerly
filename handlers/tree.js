@@ -56,6 +56,7 @@ import { getValue, getValues, isEventBinding } from '../resolve/getValues.js';
 import { isLiteralString, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
+import { placeNodes } from '../utils/placeNodes.js';
 const DEFAULT_MARKER_NAME = 'tree';
 /**
  * Options key carrying the tree's target (an Element, ShadowRoot or other DocumentFragment)
@@ -333,15 +334,7 @@ function attachManager(node, ish, value) {
 }
 /** Place elements as the container's first children, in order, moving only the ones out of place. */
 function placeChildren(container, elements) {
-    let cursor = container.firstChild;
-    for (const element of elements) {
-        if (element === cursor) {
-            cursor = cursor.nextSibling;
-        }
-        else {
-            container.insertBefore(element, cursor);
-        }
-    }
+    placeNodes(container, elements, container.firstChild);
 }
 /**
  * Stamp `each` once per item of the array at `of`, reusing items' nodes by `key`
@@ -633,15 +626,7 @@ function getEntries(map, from) {
 }
 /** Place elements in order right after `start`, moving only the ones that are out of place. */
 function placeInOrder(parent, elements, start) {
-    let cursor = start.nextSibling;
-    for (const element of elements) {
-        if (element === cursor) {
-            cursor = cursor.nextSibling;
-        }
-        else {
-            parent.insertBefore(element, cursor);
-        }
-    }
+    placeNodes(parent, elements, start.nextSibling);
 }
 /**
  * TreeHandler — builds a tree of elements from a VM, and rebinds it on later calls.

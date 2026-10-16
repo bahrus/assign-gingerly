@@ -57,6 +57,7 @@ import { getValue, getValues, isEventBinding } from '../resolve/getValues.js';
 import { isLiteralString, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
+import { placeNodes } from '../utils/placeNodes.js';
 import type {
     AssignFromHandler, AssignFromOptions, ItemscopeManagerConfig, ItemscopeRegistry, PermissionProcessor,
 } from '../types/assign-gingerly/types.js';
@@ -406,14 +407,7 @@ function attachManager(node: TreeNode, ish: ManagerRef, value: any): any {
 
 /** Place elements as the container's first children, in order, moving only the ones out of place. */
 function placeChildren(container: ParentNode, elements: Element[]): void {
-    let cursor = container.firstChild;
-    for (const element of elements) {
-        if (element === cursor) {
-            cursor = cursor.nextSibling;
-        } else {
-            container.insertBefore(element, cursor);
-        }
-    }
+    placeNodes(container, elements, container.firstChild);
 }
 
 /**
@@ -723,14 +717,7 @@ function getEntries(map: Record<string, ElementSpecification>, from: any): [stri
 
 /** Place elements in order right after `start`, moving only the ones that are out of place. */
 function placeInOrder(parent: TreeTarget, elements: Element[], start: Comment): void {
-    let cursor = start.nextSibling;
-    for (const element of elements) {
-        if (element === cursor) {
-            cursor = cursor.nextSibling;
-        } else {
-            parent.insertBefore(element, cursor);
-        }
-    }
+    placeNodes(parent, elements, start.nextSibling);
 }
 
 /**

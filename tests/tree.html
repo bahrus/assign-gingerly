@@ -750,6 +750,55 @@
         }
       }
 
+      // Reordering a keyed repeat moves as few elements as possible
+      {
+        const host = document.createElement('div');
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: { list: ['ul', 'Items:', { each: ['li', '?.name'], key: '?.id' }] } } };
+        const make = n => Array.from({ length: n }, (_, i) => ({ id: i, name: `item ${i}` }));
+        const names = () => [...host.querySelectorAll('li')].map(li => li.textContent);
+        const expectOrder = list => list.map(item => item.name).join('|');
+        const { insertBefore } = Node.prototype;
+        let moves = 0;
+        const render = async list => {
+          moves = 0;
+          Node.prototype.insertBefore = function (...args) { moves++; return insertBefore.apply(this, args); };
+          try { await assignFromAsync(host, cfg, { from: { list } }); } finally { Node.prototype.insertBefore = insertBefore; }
+        };
+
+        let list = make(1000);
+        await render(list);
+        const ul = host.querySelector('ul');
+        assert(moves <= 2, `reorder: creating 1,000 items inserts them in one go, not one by one (insertBefore calls: ${moves})`);
+        await render(list = [...list]);
+        assertEquals(moves, 0, 'reorder: unchanged order → no moves');
+
+        list = [...list];
+        [list[1], list[998]] = [list[998], list[1]];
+        await render(list);
+        assertEquals(names().join('|'), expectOrder(list), 'reorder: swap gives the right order');
+        assert(moves <= 2, `reorder: swapping two of 1,000 items moves at most 2 (moved ${moves})`);
+
+        list = [...list].reverse();
+        await render(list);
+        assertEquals(names().join('|'), expectOrder(list), 'reorder: reverse gives the right order');
+
+        list = [...list].sort(() => Math.random() - 0.5);
+        await render(list);
+        assertEquals(names().join('|'), expectOrder(list), 'reorder: shuffle gives the right order');
+
+        list = [{ id: 'new', name: 'new' }, ...list.slice(0, 500), ...list.slice(600)];
+        await render(list);
+        assertEquals(names().join('|'), expectOrder(list), 'reorder: insert + remove gives the right order');
+        assertEquals(ul.lastChild.nodeType === Node.TEXT_NODE && ul.lastChild.data, 'Items:', "reorder: the container's own text stays after the items");
+
+        // Another node before the items (e.g. added by other code): still the right order, items first
+        ul.prepend(document.createComment('foreign'));
+        list = [...list].reverse();
+        await render(list);
+        assertEquals(names().join('|'), expectOrder(list), 'reorder: right order with a foreign node in the container');
+        assertEquals(ul.firstElementChild === ul.firstChild, true, 'reorder: items placed before the foreign node');
+      }
+
       // The compiler is only downloaded for trees with `compile` (TreeHandler.prepare)
       {
         const loaded = performance.getEntriesByType('resource').some(entry => entry.name.includes('/handlers/compileTree.js'));

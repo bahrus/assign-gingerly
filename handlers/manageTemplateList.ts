@@ -31,6 +31,7 @@ import { findMarkers, createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX
 import { resolveValue } from '../resolve/resolveValues.js';
 import { assignFrom } from '../assignFrom.js';
 import { processInferredAssignments } from '../inferredAssignments.js';
+import { placeNodes } from '../utils/placeNodes.js';
 import type { PermissionProcessor } from '../types/assign-gingerly/types.js';
 
 /**
@@ -265,6 +266,25 @@ export class ManageTemplateListHandler implements AssignFromHandler {
             }
         }
 
+        // Did the kept items stay in their old relative order, with all new items after them?
+        // Then appending the new items' fragment is enough; otherwise everything is placed in order.
+        const oldIndex = new Map(state.keyOrder.map((key, index) => [key, index]));
+        let inOrder = true;
+        let lastIndex = -1;
+        let sawNew = false;
+        for (const key of newKeys) {
+            const index = oldIndex.get(key);
+            if (index === undefined || newKeyToNodes.get(key) !== state.keyToNodes.get(key)) {
+                sawNew = true;
+                continue;
+            }
+            if (sawNew || index < lastIndex) {
+                inOrder = false;
+                break;
+            }
+            lastIndex = index;
+        }
+
         // Wait for async rendering in the fragment to settle before committing
         if (fragment.childNodes.length > 0) {
             const waitOpt = resolvedParams.waitForSettled;
@@ -280,7 +300,11 @@ export class ManageTemplateListHandler implements AssignFromHandler {
             }
 
             // Insert new fragment before end marker
-            endMarker.parentNode!.insertBefore(fragment, endMarker);
+            if (inOrder) endMarker.parentNode!.insertBefore(fragment, endMarker);
+        }
+        if (!inOrder) {
+            // Reordered (or new items among kept ones): move as few nodes as possible into key order
+            placeNodes(endMarker.parentNode!, newKeys.flatMap(key => newKeyToNodes.get(key)!), startMarker.nextSibling);
         }
 
         // Update state
