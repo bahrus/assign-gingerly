@@ -6,7 +6,7 @@ The handler not only builds a tree of DOM elements from a view model, it rebinds
 
 ## Server Side Rendering [TODO]?
 
-The library can quite easily generate HTML in a node based server solution, but 
+The library can quite easily generate HTML in a node.js based server solution, but 
 the tree handler does not yet provide a way of hydrating server-rendered HTML markup (maybe with the help of microdata attributes).  That is a parked concept that is awaiting for a "no brainer" use case.
 
 ## Compiling to a template for optimum performance
