@@ -91,7 +91,7 @@ Bare class headers and `$:` headers are reserved for a later phase and throw for
 
 ## Authoring with `` tree`…` `` (optional)
 
-Nested `[tag, pattern, children]` arrays are easy to get wrong by hand. [`DX/tree.js`](../DX/tree.ts) provides a lit-like tagged template that **produces the same tree notation**:
+Nested `[tag, pattern, children]` arrays are easy to get wrong by hand. [`DX/tree.js`](../DX/tree.ts) provides a lit-like tagged template that **produces the same tree notation**. (In VS Code, two extensions highlight and check it; see [Editor support](#editor-support-vs-code).) For example:
 
 ```JavaScript
 import { tree, each } from 'assign-gingerly/DX/tree.js';
@@ -193,7 +193,42 @@ The type can also come from elsewhere: `@typedef {import('./launch-api.js').Laun
   - as content, it's a child where children are expected and text otherwise;
   - as an `@event` value, it may be a method name or a config.
 
-  It shows as `‹text›` in the notation. This is what [gingerly-tree-analyzer](https://github.com/bahrus/gingerly-tree-analyzer) uses.
+  It shows as `‹text›` in the notation. This is what [Gingerly Tree Analyzer](#editor-support-vs-code) uses.
+
+### Editor support (VS Code)
+
+Two VS Code extensions support `` tree`…` ``. They're split the way lit's are: lit-html highlights, and lit-plugin analyzes.
+
+| | [Gingerly Tree](https://marketplace.visualstudio.com/items?itemName=andersonbruceb.gingerly-tree) ([source](https://github.com/bahrus/gingerly-tree)) | [Gingerly Tree Analyzer](https://marketplace.visualstudio.com/items?itemName=andersonbruceb.gingerly-tree-analyzer) ([source](https://github.com/bahrus/gingerly-tree-analyzer)) |
+|---|---|---|
+| **Does** | Syntax highlighting | Errors as you type, hovers, type checks |
+| **How** | TextMate grammars, plus a script for the Markdown Preview. No extension code. | A TypeScript plugin for script files, and the extension itself for Markdown and HTML |
+| **JS/TS files** | ✅ | ✅ |
+| **HTML `<script>` tags** | ✅ | ✅ |
+| **Markdown code blocks** (`js`, `ts`, …, and `<script>` in `html` blocks) | ✅, in the editor and in the Markdown Preview | ✅ |
+| **VS Code for the Web** (vscode.dev, github.dev) | ✅ | ✅ errors and hovers (type checks need the desktop) |
+
+Installing the analyzer installs Gingerly Tree too.
+
+**Gingerly Tree** highlights:
+- `` tree`…` ``, `` DX.tree`…` `` and `` 🌲`…` ``;
+- tags and attributes as markup, with their own colors for the `.prop`, `@event` and `ish` attributes;
+- each `${…}` as code;
+- `?.` path strings inside `${…}` (`${'?.name'}`, `'$parent?.upcoming'`), colored as variables rather than strings.
+
+**Gingerly Tree Analyzer** builds on [`analyzeTree`](#authoring-with-tree-optional) above, so its errors are exactly the ones the tag would throw:
+- **Errors** (the `TreeTemplateError`s described above) are underlined where they are. Examples: a mismatched closing tag, text after a child, or an attribute mixing text and `${…}`.
+- **Hovering a template** shows the notation it produces, written as in this page. `paths()` chains show as their `?.` paths, and values that can't be known statically show as `‹expr›`.
+- **Hovering an attribute** says what it maps to (`.prop` → a property, `@event` → `' +='`, a plain name → `' :='`, `ish` → the header).
+- **In JS/TS files:**
+  - `.prop` names are checked against the element's type (`HTMLElementTagNameMap`, including custom elements declared there);
+  - a non-standard `@event` name gets a hint (custom events are fine);
+  - `ish=${…}` must be a class or a registered name;
+  - a `tree` that isn't imported from `assign-gingerly/DX/tree.js` is flagged, with a quick fix.
+- **Tag names:** in script files, it follows the import (`import { tree as t }` works). In Markdown and HTML snippets, it matches `tree` and `DX.tree`, plus any names added in the `gingerlyTree.tags` setting.
+- **Which assign-gingerly:** it prefers the project's own copy of assign-gingerly, when that copy has `analyzeTree`. Each hover names the version in use.
+
+GitHub's rendering of Markdown (this page included) uses its own highlighter, which neither extension can change.
 
 ## Arrays
 
