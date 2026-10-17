@@ -30,7 +30,7 @@ const vm = {
     patch: { small: './data/mission-patch.svg', alt: 'Demo Mission 7 patch' },
 };
 
-await assignFromAsync(document.getElementById('api-response'), {
+assignFrom(document.getElementById('api-response'), {
     '?. =>': {
         do: 'builtIns.tree',
         map: {
@@ -58,7 +58,7 @@ The `🌲` emoji alias works too, when `builtInEmoji` is passed as `handlers`.
 The target can be an **element**, a **`ShadowRoot`**, or any other **`DocumentFragment`**, so a web component can render straight into its shadow root:
 
 ```JavaScript
-await assignFromAsync(this.shadowRoot, { '?. =>': { do: 'builtIns.tree', map: { … } } }, { from: this });
+assignFrom(this.shadowRoot, { '?. =>': { do: 'builtIns.tree', map: { … } } }, { from: this });
 ```
 
 - **Managers resolve through the target's registry:** `{ tag, ish }` headers look the name up in the target's `customElementRegistry` (so a shadow root with a **scoped** registry uses its own managers), then fall back to the global one.
