@@ -1,6 +1,8 @@
 # builtIns.tree
 
-A handler that builds a small tree of elements from a view model, and rebinds it in place on later calls. Each `map` entry pairs a VM key with an **element specification**: a tag name, or a tuple of tag, assignFrom pattern, and static children.
+The tree handler enables inserting html into a node, based on the data in the view model.  It fundamentally rests on a terse, 100% declarative JSON syntax for rapid side-effect free parsing.  The DX experience, though, is a bit challenging, so lit-like DX experience is provided, optimally during the build or server side rendering process, but it can also run in the browser.
+
+The handler that builds a tree of DOM elements from a view model, and rebinds it in place on later calls. Each `map` entry pairs a VM key with an **element specification**: a tag name, or a tuple of tag, assignFrom pattern, and static children.
 
 Tree adds no microdata and doesn't adopt existing (server-rendered) markup. It aims at simple scenarios.
 
@@ -8,7 +10,7 @@ Tree adds no microdata and doesn't adopt existing (server-rendered) markup. It a
 
 **Demo:** [demos/tree-demo.html](../demos/tree-demo.html) builds a launch summary from a JSON API response. Run `npm run serve`, then open `/demos/tree-demo.html`.
 
-Design discussion: `Chats/AssignFrom/Handlers/TODO/TreeScope/Tree.md`.
+Design discussion: [Chats](../Chats/AssignFrom/Handlers/Tree/).
 
 ## Basic Example
 
