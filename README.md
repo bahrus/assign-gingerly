@@ -3390,11 +3390,25 @@ Key points:
 - **Rebinding in place:** later calls re-apply patterns to the elements already created; only a changed structure is rebuilt.
 - **Arrays:** `['ul', {}, { each: ['li', { textContent: '?.name' }], key: '?.id', empty: ['li', { textContent: 'None' }] }]` stamps `each` per item, with keyed reuse across calls.
 - **Formatting** via [pipes](docs/pipes.md), and **itemscope managers as view models** via `{ tag, ish }` headers.
+- **Authoring with markup:** the [`` tree`…` `` tagged template](#tree--element-specifications-from-markup) writes specifications as lit-like HTML, and produces the same notation.
+- **Compiling** (`compile: true`, opt-in): clones precompiled templates with static parts baked in, for large lists. See [docs/tree.md](docs/tree.md#compiling-compile-experimental).
 - **Emoji alias:** `🌲`.
+
+```JavaScript
+import { tree, each } from 'assign-gingerly/DX/tree.js';
+
+const map = {
+    launch: tree`
+        <article class="card">
+            <h3 class="title">${'?.name'}</h3>
+            <ul ${each('?.crew', { key: '?.id' })}><li>${'?.name'}</li></ul>
+        </article>`,
+};
+```
 
 For the full reference, see [docs/tree.md](docs/tree.md), and [demos/tree-demo.html](demos/tree-demo.html) for a complete example.
 
-## Typed Path Authoring with `paths`, `sp`, and `md`
+## Typed Path Authoring with `paths`, `sp`, `md`, and `tree`
 
 For JSON generated config files generated from TypeScript/`.mts`/`mjs` files during a build or server-side rendering, the `paths` utility provides compile-time autocomplete and type safety for `?.`-prefixed path strings. The `sp` tagged template literal ("split into parts") produces arrays suitable for the [`join` sync op](#sync-op-join). The `md` tagged template literal produces `{prop, val}` objects suitable for the [`microJoin` sync op](#sync-op-microjoin-).
 
@@ -3485,8 +3499,9 @@ const template = md`${$.firstName} ${$.lastName} born ${$.birthDT}, age ${$.age}
 For custom property names or per-segment config, pass an explicit object:
 
 ```TypeScript
-md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, format: 'long' }}`
-// [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'birthDate', val: '?.birthDT', format: 'long' }]
+md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, text: '?.birthDT?.longDate' }}`
+// [{ prop: 'firstName', val: '?.firstName' }, ' ', { prop: 'birthDate', val: '?.birthDT', text: '?.birthDT?.longDate' }]
+// (text: the displayed text, here formatted through a pipe; val still decides the element, e.g. <time datetime>)
 ```
 
 **Difference between `sp` and `md`:**
@@ -3497,6 +3512,45 @@ md`${$.firstName} ${{ prop: 'birthDate', val: $.birthDT, format: 'long' }}`
 | `md` | `{ prop: 'firstName', val: '?.firstName' }` | `microJoin` (` =&`) |
 
 Both auto-detect path proxies (no `.Path` needed inside template literals) and preserve nested arrays for optional segments.
+
+### `tree` — element specifications from markup
+
+[`DX/tree.js`](DX/tree.ts) provides a lit-like tagged template that produces [`builtIns.tree`](#built-in-handler-builtinstree) element specifications, so nested `[tag, pattern, children]` arrays can be written as markup. Path proxies work inside it, as in `sp` / `md`:
+
+```TypeScript
+import { tree, each } from 'assign-gingerly/DX/tree.js';
+import { paths } from 'assign-gingerly/DX/paths.js';
+
+const $ = paths<Launch>();
+
+const card = tree`
+    <article class="card" aria-label=${$.label}>
+        <h3 class="title">${$.name}</h3>
+        <p>Launched ${$.date} by ${$.rocket}</p>
+        <ul ${each($.crew, { key: '?.id' })}><li>${'?.name'}</li></ul>
+        <button @click=${{ call: 'launch' }}>Launch</button>
+    </article>`;
+// ['article', { 'class :=': 'card', 'aria-label :=': '?.label' }, [
+//     ['h3', { 'class :=': 'title', textContent: '?.name' }],
+//     ['p', { '?. =&': { microJoin: ['Launched ', '?.date', ' by ', '?.rocket'] } }],
+//     ['ul', {}, { each: ['li', { textContent: '?.name' }], of: '?.crew', key: '?.id' }],
+//     ['button', { ' +=': { on: 'click', call: 'launch' }, textContent: 'Launch' }],
+// ]]
+```
+
+- **Attributes:** `name="…"` and `name=${…}` set **attributes** (` :=`); literal ones are baked under Tree's `compile`. `.name=${…}` sets a **property**, and `@event=${…}` binds an event, as in lit.
+- **Content:** one `${…}` or literal text becomes `textContent`. Text mixed with `${…}` becomes a `microJoin`. A nested `` ${tree`…`} `` is a child element, and `${null}` renders nothing.
+- **Anything else:** for keys markup can't express (e.g. `' ?='` ternaries), put a pattern object in attribute position, `<span ${{ '_ ?=': [...] }}>`, and it's merged in.
+- **Results are cached per call site,** so the same template returns the same specification object.
+- **It parses with its own small parser,** so it also runs on a server.
+
+Full mapping: [docs/tree.md](docs/tree.md#authoring-with-tree-optional).
+
+| Tag | Produces | Use with |
+|-----|----------|----------|
+| `sp` | path strings and literals | the `join` sync op |
+| `md` | `{ prop, val }` segments and literals | `microJoin` (` =&`) |
+| `tree` | element specifications | `builtIns.tree` |
 
 ## Cached Element Resolution with `#[x]` and `pin`
 

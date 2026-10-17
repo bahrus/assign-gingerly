@@ -12,6 +12,8 @@
  * | `@click=${{ call: 'm' }}` / `${'m'}` | `' +=': { on: 'click', call: 'm' }` (event binding)   |
  * | `ish=${Manager}`                     | the `{ tag, ish }` header                             |
  * | `${each(of, { key, empty })}`        | the repeat `{ each, of, key, empty }` (one child)     |
+ * | `${{ '_ ?=': […] }}` (attribute pos.) | merged into the pattern: any key markup can't express |
+ * | `${null / undefined / false / ''}`   | nothing, as content (e.g. an optional child)          |
  * | text only / one `${value}` as content | `textContent: …`                                     |
  * | text mixed with `${…}`               | `'?. =&': { microJoin: [...] }`                       |
  * | `${tree`…`}` as content              | a child element (composition)                         |
@@ -220,6 +222,8 @@ const isHole = (part: Part): part is Hole => typeof part === 'object';
 const isBlankText = (node: ParsedElement | Part[]) => Array.isArray(node) && node.every(part => typeof part === 'string' && !part.trim());
 const isEachDirective = (value: any): value is EachDirective => !!value && typeof value === 'object' && value.kind === 'each';
 const isTreeResult = (value: any) => !!value && typeof value === 'object' && treeResults.has(value);
+const isNothing = (value: any) => value == null || value === false || value === '';
+const isPlainObject = (value: any) => !!value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype;
 /** A `${…}` value as it goes into a pattern: a paths() proxy becomes its `?.` string. */
 const valueOf = (value: any) => pathOf(value) ?? value;
 
@@ -251,11 +255,17 @@ function toSpec(element: ParsedElement, values: any[], strings: TemplateStringsA
     let repeat: Record<string, any> | undefined;
     for (const index of element.directives) {
         const directive = values[index];
-        if (!isEachDirective(directive)) fail('only each(…) can be placed in attribute position');
-        if (repeat) fail('only one each(…) per element');
-        repeat = { of: directive.of };
-        if (directive.key !== undefined) repeat.key = directive.key;
-        if (directive.empty !== undefined) repeat.empty = directive.empty;
+        if (isEachDirective(directive)) {
+            if (repeat) fail('only one each(…) per element');
+            repeat = { of: directive.of };
+            if (directive.key !== undefined) repeat.key = directive.key;
+            if (directive.empty !== undefined) repeat.empty = directive.empty;
+        } else if (isPlainObject(directive)) {
+            // A pattern spread: any keys the markup can't express (e.g. '_ ?=' ternaries, ' =>' handlers)
+            for (const key of Object.keys(directive)) pattern[key] = valueOf(directive[key]);
+        } else {
+            fail('only each(…) or a pattern object can be placed in attribute position');
+        }
     }
 
     const content = element.children.filter(node => !isBlankText(node));
@@ -271,6 +281,8 @@ function toSpec(element: ParsedElement, values: any[], strings: TemplateStringsA
             continue;
         }
         for (const part of node) {
+            // Nothing to render (as in lit): null, undefined, false or ''
+            if (isHole(part) && isNothing(values[part.hole])) continue;
             if (isHole(part) && isTreeResult(values[part.hole])) {
                 children.push(values[part.hole]);
             } else if (children.length > 0) {

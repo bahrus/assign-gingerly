@@ -129,6 +129,10 @@ const map = {
 | one `${value}`, or literal text, as content | `textContent` |
 | text mixed with `${…}` | a [`microJoin`](./sync-ops.md#microjoin) (an element per value) |
 | `` ${tree`…`} `` as content | a child element (composition) |
+| `${{ '_ ?=': […], … }}` in attribute position | merged into the pattern: for keys markup can't express (ternaries, handlers, sync ops) |
+| `${null}`, `${undefined}`, `${false}`, `${''}` as content | nothing (e.g. an optional child) |
+
+[`demos/tree-demo.html`](../demos/tree-demo.html) is written with `tree`, including a pattern spread for its ternaries and an optional child. [`demos/tree-demo-with-managed-template-list.html`](../demos/tree-demo-with-managed-template-list.html) writes a similar tree in raw notation, for comparison.
 
 **Details:**
 - **`${…}` values** may be `?.` strings or `paths()` proxies; proxies become their path string.

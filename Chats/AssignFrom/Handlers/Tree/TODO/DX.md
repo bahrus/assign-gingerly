@@ -189,3 +189,66 @@ tree`<article class="card" aria-label=${p.label}>
 - **A bundler plugin** that replaces each `` tree`…` `` with its output at build time: no runtime parser at all.
 - **Using it in the demos** (e.g. `demos/tree-demo.html`), to show it next to the raw notation.
 
+##  Bruce's Response
+
+Can you please document this DX library in all the appropriate places?  I guess mostly docs/tree.md, but perhaps other places as well as appropriate.
+
+Yes, please use it in the demos as well.  I plan to work on creating a vs code plugin for tree, but I will do that in a separate package.
+
+## Claude's Implementation Notes II
+
+Both are done.
+
+**Results:**
+- **Full suite: 149 passed, 4 skipped, 0 failed.**
+- **`tests/dx-tree.html`:** grows to 27 checks.
+- `tsc` is clean, in the scratch copy; no `.js` touched.
+
+### Documentation, everywhere it belongs
+
+- **`docs/tree.md`:**
+  - the *Authoring with `` tree`…` ``* section, with the full mapping, now also listing the two extensions below;
+  - a pointer to the demos.
+- **`README.md`:**
+  - **The `builtIns.tree` section** now mentions `tree` (with an example) and `compile`, with links.
+  - **The typed-authoring section** is renamed *"Typed Path Authoring with `paths`, `sp`, `md`, and `tree`"*. It has a new `tree` subsection, with the example, its output, the key rules and a link to the full mapping, plus a table comparing the three tags.
+  - **I also fixed a stale `md` example** there that still used the dead `format` field (now `text`, formatted through a pipe).
+- **`docs/paths-dx.md`:** a `tree` section next to `sp` / `md`, plus the new `pathOf`.
+
+### The demo: [`demos/tree-demo.html`](../../../../../demos/tree-demo.html) is now authored with `tree`
+
+The whole map is written as markup. The page still shows the resulting config, which is pure JSON, now labeled as what the templates produced. Its intro and "What this demo exercises" list explain the template syntax.
+
+**[`demos/tree-demo-with-managed-template-list.html`](../../../../../demos/tree-demo-with-managed-template-list.html) keeps the raw notation**, and the intro points to it for comparison. Shall I convert that one too?
+
+**Two small extensions to the tag,** which the demo needed (both lit-like, tested, and documented):
+1. **Pattern spread:** a plain object in attribute position is merged into the element's pattern. That's the escape hatch for keys markup can't express. The demo's status badge uses ternaries:
+
+   ```js
+   success: tree`<span ${{
+       '_ ?=': ['$parent?.upcoming', 'Upcoming', ['?.', 'Success', 'Failure']],
+       'className ?=': ['$parent?.upcoming', 'badge pending', ['?.', 'badge ok', 'badge bad']],
+   }}></span>`
+   ```
+2. **"Nothing" content:** `${null}`, `${undefined}`, `${false}` or `${''}` as content renders nothing, as in lit. That's what an optional child needs. The demo's `spec(label, value, action = null)` row helper is one template with `${action}` in the middle.
+
+**One visible change in the demo's output:** mixed text now goes through `microJoin`, as decided. So the date renders as `<span>March 14, 2026 at 3:09 PM</span> UTC`, and similarly the crew role and the failure lines. (Before, `join` produced one text string.) It looks the same.
+
+**Checked in a browser** (Chromium):
+- all ten sections render with their classes, and the layout is unchanged;
+- the manager-driven badge and links state work, including the async "verifying… → ✓ verified";
+- "Increase by one" (70 → 71 m), "Toggle units" (no tree rerun, same rows) and "Set details to null" (the placeholder) work;
+- reruns reuse 50 of 50 elements;
+- no console errors or warnings.
+
+### The VS Code plugin
+
+Since you're planning one: the tag's output is plain data, and it lives in one small, pure, Node-safe module (`DX/tree.ts`). So the plugin could import it to show the produced tree notation on hover, or to surface the tag's errors as diagnostics. The errors quote the template. Exporting the parser's positions (line and column) would make the diagnostics point at the exact spot; that's easy to add if you want it.
+
+## Bruce's Response II
+
+> Exporting the parser's positions (line and column) would make the diagnostics point at the exact spot; that's easy to add if you want it.
+
+Yes, please
+
+

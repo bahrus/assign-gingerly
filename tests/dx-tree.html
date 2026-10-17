@@ -139,6 +139,19 @@
         assert(make('?.a') === make('?.a') && make('?.a') !== make('?.b'), 'cache: same values → same object; different values → new object');
       }
 
+      // Test 8: pattern spread (keys markup can't express) and "nothing" content
+      {
+        assertEquals(json(tree`<span class="badge" ${{ '_ ?=': ['?.ok', 'Yes', 'No'], title: p.tip }}></span>`),
+          json(['span', { 'class :=': 'badge', '_ ?=': ['?.ok', 'Yes', 'No'], title: '?.tip' }]),
+          'a plain object in attribute position is merged into the pattern (proxies converted)');
+        const row = action => tree`<div><span>Label</span>${action}<span>${'?.v'}</span></div>`;
+        assertEquals(json(row(null)), json(['div', {}, [['span', { textContent: 'Label' }], ['span', { textContent: '?.v' }]]]),
+          'null content renders nothing (an optional child left out)');
+        assertEquals(json(row(tree`<button>Go</button>`)[2].map(child => child[0])), json(['span', 'button', 'span']),
+          'the same template with a child in that position');
+        throws(() => tree`<b ${42}></b>`, /each\(…\) or a pattern object/, 'other values in attribute position are an error');
+      }
+
       // Test 7: clear errors
       {
         throws(() => tree`<p>a</p><p>b</p>`, /exactly one root element/, 'two roots');

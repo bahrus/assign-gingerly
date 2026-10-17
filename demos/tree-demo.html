@@ -136,29 +136,34 @@
         (<a href="./data/launch.json">data/launch.json</a>, a fictional launch modeled on the SpaceX API v4 shape).
         The API response is used as-is (only UI state is overlaid), stateless formatting comes from named
         <code>pipes</code>, the rocket card and links bar each get an itemscope manager as their view model, and the
-        tree config itself is pure JSON (shown below the log). Lists use Tree's native arrays; see also the
-        <a href="./tree-demo-with-managed-template-list.html">variant that delegates lists to manageTemplateList</a>.
+        tree is authored with the <code>tree`…`</code> tagged template (<code>DX/tree.js</code>), which produces plain
+        tree notation: the config is pure JSON (shown below the log). Lists use Tree's native arrays; see also the
+        <a href="./tree-demo-with-managed-template-list.html">variant that delegates lists to manageTemplateList</a>,
+        which writes the same tree in raw notation, for comparison.
     </p>
 
     <details>
         <summary>What this demo exercises</summary>
         <ul>
-            <li><strong>Element specifications</strong> as <code>[tag, pattern, children]</code> tuples; patterns resolve
-                against the key's value (<code>'?.small'</code> reads <code>vm.patch.small</code>).</li>
-            <li><strong>Text shorthand</strong>: a string in the pattern slot is <code>textContent</code>
-                (<code>['h3', 'Crew']</code>, <code>['strong', '?.name']</code>), and the tree config's
-                <code>aka: { _: 'textContent' }</code> covers mixed patterns (<code>{ className: 'name', _: '?.' }</code>,
-                <code>'_ ?='</code>, <code>'_ =&amp;'</code>).</li>
+            <li><strong>Authoring with <code>tree`…`</code></strong>: lit-like markup that produces
+                <code>[tag, pattern, children]</code> element specifications. Literal attributes become <code>' :='</code>
+                attributes (<code>class="card crew"</code>), <code>${…}</code> values are paths (<code>src=${'?.small'}</code> reads
+                <code>vm.patch.small</code>), <code>.dateTime=</code> sets a property, and an element's only
+                <code>${…}</code> is its <code>textContent</code>. Keys markup can't express (the <code>' ?='</code> ternaries)
+                are spread in as a pattern object: <code>&lt;span ${{ '_ ?=': [...] }}&gt;</code>.</li>
+            <li><strong>microJoin</strong>: text mixed with values (<code>${'?.parseDate?.longUtc'} UTC</code>,
+                <code>T+${'?.time'}s: ${'?.reason'}</code>) becomes a <code>microJoin</code>: each value in its own element
+                (<code>&lt;span&gt;</code>, or <code>&lt;data value&gt;</code> for numbers), the literal text around it.</li>
             <li><strong>Pipes</strong>: named functions used as path segments. The date is
-                <code>join: ['?.parseDate?.longUtc', ' UTC']</code> with <code>parseDate: Date.parse</code> and
-                <code>longUtc</code> a preconfigured <code>Intl.DateTimeFormat</code>'s <code>format</code>; core summaries are
-                a pipe too.</li>
+                <code>'?.parseDate?.longUtc'</code> with <code>parseDate: Date.parse</code> and <code>longUtc</code> a
+                preconfigured <code>Intl.DateTimeFormat</code>'s <code>format</code>; core summaries are a pipe too.</li>
             <li><strong>Itemscope managers as view models</strong>: <code>{ tag: 'section', ish: 'rocket-manager' }</code>
                 attaches <code>RocketManager</code> to the rocket card (by registered name, so the config stays JSON; no
                 <code>itemscope</code> attribute). The card's patterns read its getters (<code>'?.heightLabel'</code>).
                 "Toggle units" sets <code>rocket.ish.metric</code>, whose setter calls <code>ctx.rebind()</code>: the card
                 updates without a tree rerun, and the setting survives "Run again".</li>
             <li><strong>Events</strong>: the "Increase by one" button binds its own click with
+                <code>@click=${{ call: 'increaseHeightByOne' }}</code>, i.e.
                 <code>' +=': { on: 'click', call: 'increaseHeightByOne' }</code>. Its host is the subtree's
                 <code>from</code> — the card's <code>RocketManager</code> — so no host lookup or attribute is needed; the method
                 calls <code>ctx.rebind()</code>. Tree gives the binding a default dedup key, so reruns replace the listener
@@ -174,8 +179,9 @@
             <li><strong><code>$parent</code></strong>: the status badge hangs off the <code>success</code> key and reads its
                 sibling <code>upcoming</code> from the enclosing view model, via <code>' ?='</code> ternaries
                 (<code>['$parent?.upcoming', 'Upcoming', ['?.', 'Success', 'Failure']]</code>).</li>
-            <li><strong>Native arrays</strong>: an object in the children slot repeats instead of listing static children —
-                <code>['ul', pattern, { each, key, empty, of }]</code>. <code>each</code> is stamped once per item (inside it,
+            <li><strong>Native arrays</strong>: <code>&lt;ul ${each(of, { key, empty })}&gt;</code> makes the element a repeat
+                (<code>['ul', pattern, { each, key, empty, of }]</code>), with its single child as the item.
+                <code>each</code> is stamped once per item (inside it,
                 <code>?.</code> is the item and <code>$parent</code> the array's holder), <code>key</code> reuses items' elements
                 across reruns, <code>empty</code> replaces the items when there are none (failures), and <code>of</code> points
                 at the array (<code>of: '?.linkList'</code> repeats over the links manager's getter). Lists are rendered
@@ -217,6 +223,7 @@
 
     <script type="module">
         import { assignFromAsync } from '../index.js';
+        import { tree, each } from '../DX/tree.js';
 
         const launchEl = document.getElementById('launch');
         const logEl = document.getElementById('log');
@@ -320,89 +327,88 @@
         registry.define(RocketManager.is, { manager: RocketManager });
         registry.define(LinksManager.is, { manager: LinksManager });
 
-        // ── The tree: pure JSON ───────────────────────────────────────────────
+        // ── The tree, authored with tree`…` (it produces plain JSON) ──────────
 
-        /** A label/value row; `action` is an optional element placed right after the label. */
-        const spec = (label, value, action) => ['div', { className: 'spec' }, [
-            ['span', { className: 'label', _: label }],
-            ...(action ? [action] : []),
-            ['span', value],
-        ]];
+        /** A label/value row; `action` is an optional element placed right after the label (null → nothing). */
+        const spec = (label, value, action = null) => tree`
+            <div class="spec">
+                <span class="label">${label}</span>
+                ${action}
+                <span>${value}</span>
+            </div>`;
 
         const pattern = {
             '?. =>': {
                 do: 'builtIns.tree',
                 // details may be null: keep its <p> and show a placeholder instead
                 keepNullish: true,
-                // A string in the pattern slot is textContent; _ covers textContent inside pattern objects
+                // _ covers textContent inside the pattern objects spread below
                 aka: { _: 'textContent' },
                 map: {
-                    patch: ['img', { className: 'patch', src: '?.small', alt: '?.alt', width: 112, height: 112 }],
-                    name: ['h2', { className: 'name', _: '?.' }],
-                    // Hangs off `success`, and reads its sibling `upcoming` from the VM via $parent
-                    success: ['span', {
+                    patch: tree`<img class="patch" src=${'?.small'} alt=${'?.alt'} width="112" height="112">`,
+                    name: tree`<h2 class="name">${'?.'}</h2>`,
+                    // Hangs off `success`, and reads its sibling `upcoming` from the VM via $parent.
+                    // Ternaries (' ?=') have no markup syntax, so they're spread in as a pattern object.
+                    success: tree`<span ${{
                         '_ ?=': ['$parent?.upcoming', 'Upcoming', ['?.', 'Success', 'Failure']],
                         'className ?=': ['$parent?.upcoming', 'badge pending', ['?.', 'badge ok', 'badge bad']],
-                    }],
-                    date_utc: ['time', {
-                        className: 'date',
-                        dateTime: '?.',
-                        '_ =&': { join: ['?.parseDate?.longUtc', ' UTC'] },
-                    }],
-                    details: ['p', {
+                    }}></span>`,
+                    // Text mixed with ${…} becomes a microJoin: the formatted date in its own element, then " UTC"
+                    date_utc: tree`<time class="date" .dateTime=${'?.'}>${'?.parseDate?.longUtc'} UTC</time>`,
+                    details: tree`<p ${{
                         '_ ?=': ['?.', '??', 'No details provided.'],
                         'className ?=': ['?.', 'details', 'details empty'],
-                    }],
-                    // The links bar's patterns read the LinksManager instance (className, linkList)
-                    links: [{ tag: 'nav', ish: 'links-manager' }, { className: '?.className', ariaLabel: 'Launch links' }, [
-                        // Repeat over a getter on the links manager
-                        ['ul', {}, {
-                            of: '?.linkList',
-                            each: ['li', {}, [['a', { href: '?.href', _: '?.name', target: '_blank', rel: 'noopener' }]]],
-                            key: '?.name',
-                        }],
-                    ]],
-                    // The rocket card's patterns read RocketManager getters
-                    rocket: [{ tag: 'section', ish: RocketManager.is }, { className: 'card rocket' }, [
-                        ['h3', '?.title'],
-                        // The button binds its own click (' +='); its host is the card's RocketManager
-                        spec('Height', '?.heightLabel', ['button', {
-                            type: 'button',
-                            className: 'inc',
-                            _: 'Increase by one',
-                            ' +=': { on: 'click', call: 'increaseHeightByOne' },
-                        }]),
-                        spec('Mass', '?.massLabel'),
-                        spec('Engines', '?.enginesLabel'),
-                    ]],
-                    crew: ['section', { className: 'card crew' }, [
-                        ['h3', 'Crew'],
-                        // vm.crew is the node's value, so the default of: '?.' is the array itself
-                        ['ul', {}, {
-                            each: ['li', {}, [
-                                ['strong', '?.name'],
-                                ['span', { '_ =&': { join: [' — ', '?.role'] } }],
-                                ['small', '?.agency'],
-                            ]],
-                            key: '?.name',
-                        }],
-                    ]],
-                    cores: ['section', { className: 'card cores' }, [
-                        ['h3', 'First-stage cores'],
-                        ['ul', {}, { each: ['li', '?.coreSummary'], key: '?.serial' }],
-                    ]],
-                    failures: ['section', { className: 'card failures' }, [
-                        ['h3', 'Failures'],
-                        ['ul', {}, {
-                            each: ['li', { '_ =&': { join: ['T+', '?.time', 's: ', '?.reason'] } }],
-                            key: '?.time',
-                            // Rendered instead of items when the array is empty
-                            empty: ['li', { className: 'muted', _: 'No failures recorded.' }],
-                        }],
-                    ]],
+                    }}></p>`,
+                    // The links bar's patterns read the LinksManager instance (className, linkList);
+                    // the list repeats over a getter on that manager
+                    links: tree`
+                        <nav ish="links-manager" class=${'?.className'} aria-label="Launch links">
+                            <ul ${each('?.linkList', { key: '?.name' })}>
+                                <li><a href=${'?.href'} target="_blank" rel="noopener">${'?.name'}</a></li>
+                            </ul>
+                        </nav>`,
+                    // The rocket card's patterns read RocketManager getters. The button binds its own
+                    // click; its host is the card's RocketManager.
+                    rocket: tree`
+                        <section ish=${RocketManager.is} class="card rocket">
+                            <h3>${'?.title'}</h3>
+                            ${spec('Height', '?.heightLabel', tree`
+                                <button type="button" class="inc" @click=${{ call: 'increaseHeightByOne' }}>Increase by one</button>`)}
+                            ${spec('Mass', '?.massLabel')}
+                            ${spec('Engines', '?.enginesLabel')}
+                        </section>`,
+                    // vm.crew is the node's value, so each()'s default of: '?.' is the array itself
+                    crew: tree`
+                        <section class="card crew">
+                            <h3>Crew</h3>
+                            <ul ${each('?.', { key: '?.name' })}>
+                                <li>
+                                    <strong>${'?.name'}</strong>
+                                    <span> — ${'?.role'}</span>
+                                    <small>${'?.agency'}</small>
+                                </li>
+                            </ul>
+                        </section>`,
+                    cores: tree`
+                        <section class="card cores">
+                            <h3>First-stage cores</h3>
+                            <ul ${each('?.', { key: '?.serial' })}><li>${'?.coreSummary'}</li></ul>
+                        </section>`,
+                    failures: tree`
+                        <section class="card failures">
+                            <h3>Failures</h3>
+                            <ul ${each('?.', {
+                                key: '?.time',
+                                // Rendered instead of items when the array is empty
+                                empty: tree`<li class="muted">No failures recorded.</li>`,
+                            })}>
+                                <li>T+${'?.time'}s: ${'?.reason'}</li>
+                            </ul>
+                        </section>`,
                 },
             },
         };
+        // What the templates produced: plain tree notation, pure JSON
         document.getElementById('config').textContent = JSON.stringify(pattern, null, 2);
 
         // ── Wiring ───────────────────────────────────────────────────────────
