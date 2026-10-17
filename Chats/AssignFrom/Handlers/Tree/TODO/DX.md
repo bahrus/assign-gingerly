@@ -301,4 +301,34 @@ The parser now records the source position of every element, attribute, directiv
 
 **Docs:** `docs/tree.md` describes the error, its fields, and the code frame.
 
+## Bruce's Response III
+
+The line in tree.md:
+
+```js
+const p = paths(); // typed with paths<Launch>() in TypeScript
+```
+
+Can you also show the JSDoc way of typing p?
+
+## Claude's Response IV
+
+Done. `docs/tree.md` now has a **"Typing the paths"** paragraph after the example, showing both ways.
+- **TypeScript:** `const p = paths<Launch>();`
+- **JavaScript with JSDoc:** a `@typedef` for the view model, and `p` annotated with `PathProxy`, the type `paths<T>()` returns:
+
+  ```js
+  // @ts-check   (or "checkJs": true in jsconfig.json / tsconfig.json)
+  /** @typedef {object} Launch … @property {{ id: string, name: string }[]} crew */
+
+  /** @type {import('assign-gingerly/DX/paths.js').PathProxy<Launch>} */
+  const p = paths();
+  ```
+
+  The typedef can also be imported (`@typedef {import('./launch-api.js').Launch} Launch`) or derived from a JSON sample (`@typedef {typeof launchJson} Launch`).
+
+**Verified** with `tsc --checkJs` on a small file using `tree` and `each`: the valid paths check, and a deliberate typo (`p.nmae`) is the only error: *"Property 'nmae' does not exist on type 'PathProxy<Launch, never>'"*.
+
+The example's comment now says `// untyped here; see "Typing the paths" below`.
+
 

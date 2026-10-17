@@ -97,7 +97,7 @@ Nested `[tag, pattern, children]` arrays are easy to get wrong by hand. [`DX/tre
 import { tree, each } from 'assign-gingerly/DX/tree.js';
 import { paths } from 'assign-gingerly/DX/paths.js';
 
-const p = paths(); // typed with paths<Launch>() in TypeScript
+const p = paths(); // untyped here; see "Typing the paths" below
 
 const map = {
     launch: tree`
@@ -117,6 +117,37 @@ const map = {
 //       ['button', { ' +=': { on: 'click', call: 'launch' }, textContent: 'Launch' }],
 //   ]]
 ```
+
+**Typing the paths.** With a type for the view model, `p.name`, `p.crew` and so on are checked and autocompleted, and a typo is an error.
+
+In **TypeScript**, pass the type to `paths`:
+
+```TypeScript
+interface Launch { label: string; name: string; date: string; rocket: string; crew: { id: string; name: string }[] }
+
+const p = paths<Launch>();
+```
+
+In **JavaScript with JSDoc**, annotate `p` with `PathProxy`, the type `paths<T>()` returns:
+
+```JavaScript
+// @ts-check   (or "checkJs": true in jsconfig.json / tsconfig.json)
+import { paths } from 'assign-gingerly/DX/paths.js';
+
+/**
+ * @typedef {object} Launch
+ * @property {string} label
+ * @property {string} name
+ * @property {string} date
+ * @property {string} rocket
+ * @property {{ id: string, name: string }[]} crew
+ */
+
+/** @type {import('assign-gingerly/DX/paths.js').PathProxy<Launch>} */
+const p = paths();
+```
+
+The type can also come from elsewhere: `@typedef {import('./launch-api.js').Launch} Launch`, or `@typedef {typeof launchJson} Launch` for an imported JSON sample.
 
 | In the template | Becomes |
 |---|---|
