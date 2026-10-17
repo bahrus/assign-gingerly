@@ -17,6 +17,7 @@
  * | text only / one `${value}` as content | `textContent: …`                                     |
  * | text mixed with `${…}`               | `'?. =&': { microJoin: [...] }`                       |
  * | `${tree`…`}` as content              | a child element (composition)                         |
+ * | `${choose(on, cases, fallback)}`     | a switch `{ switch, cases, default }` (one child)     |
  *
  * `${…}` values may be `?.` strings or `paths()` proxies (converted to their path).
  * Whitespace-only text between elements is dropped, and an element's content is trimmed
@@ -67,7 +68,7 @@ export class TreeTemplateError extends Error {
         this.column = column;
     }
 }
-/** Specifications this tag produced, so `${tree`…`}` in content is recognized as a child. */
+/** Specifications this tag (or choose()) produced, so `${tree`…`}` in content is recognized as a child. */
 const treeResults = new WeakSet();
 const cache = new WeakMap();
 /** Make an element a repeat: `<ul ${each('?.items', { key: '?.id' })}><li>…</li></ul>`. */
@@ -79,6 +80,40 @@ export function each(of = '?.', options = {}) {
     if (empty !== undefined)
         directive.empty = empty;
     return directive;
+}
+/** Recent choose() results per discriminant, so the same choice returns the same object (as tree`…` does). */
+const chooseCache = new Map();
+const CHOOSE_CACHE_SIZE = 8;
+/**
+ * Choose one of several specifications from the data, on every render (like lit's `choose`):
+ * `${choose('?.phase', { hold: tree`…`, scrubbed: tree`…` }, tree`<p>Unknown</p>`)}` as content,
+ * or as a whole map value. Produces the switch `{ switch, cases, default }`. The discriminant
+ * is matched with `String(value)` against the case keys; nullish or unmatched → `fallback`.
+ * A `null` case (or no case and no fallback) renders nothing.
+ */
+export function choose(on, cases, fallback) {
+    const path = pathOf(on) ?? on;
+    const keys = Object.keys(cases);
+    const recent = typeof path === 'string' ? chooseCache.get(path) : undefined;
+    const cached = recent?.find(spec => spec.default === fallback && sameCases(spec.cases, cases, keys));
+    if (cached)
+        return cached;
+    const spec = { switch: path, cases: { ...cases } };
+    if (fallback !== undefined)
+        spec.default = fallback;
+    treeResults.add(spec);
+    if (typeof path === 'string') {
+        const list = recent ?? [];
+        list.unshift(spec);
+        list.length = Math.min(list.length, CHOOSE_CACHE_SIZE);
+        chooseCache.set(path, list);
+    }
+    return spec;
+}
+/** The same cases: the same keys, in order, with identical specifications. */
+function sameCases(a, b, keysB) {
+    const keysA = Object.keys(a);
+    return keysA.length === keysB.length && keysA.every((key, i) => key === keysB[i] && a[key] === b[key]);
 }
 export function tree(strings, ...values) {
     const cached = cache.get(strings);

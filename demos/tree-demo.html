@@ -48,9 +48,11 @@
                 "patch    status   status"
                 "patch    date     date"
                 "details  details  details"
+                "mission  mission  mission"
                 "links    links    links"
                 "rocket   rocket   crew"
-                "cores    cores    failures";
+                "cores    cores    failures"
+                "timeline timeline timeline";
             gap: 0.75rem 1.25rem;
             border: 1px solid var(--line);
             border-radius: 12px;
@@ -67,13 +69,15 @@
         #launch > .crew     { grid-area: crew; }
         #launch > .cores    { grid-area: cores; }
         #launch > .failures { grid-area: failures; }
+        #launch > .mission  { grid-area: mission; }
+        #launch > .timeline { grid-area: timeline; }
         @media (max-width: 640px) {
             #launch {
                 grid-template-columns: 80px minmax(0, 1fr);
                 grid-template-areas:
                     "patch name" "patch status" "patch date"
-                    "details details" "links links"
-                    "rocket rocket" "crew crew" "cores cores" "failures failures";
+                    "details details" "mission mission" "links links"
+                    "rocket rocket" "crew crew" "cores cores" "failures failures" "timeline timeline";
             }
             .patch { width: 80px; height: 80px; }
         }
@@ -112,6 +116,25 @@
         .links a { color: var(--accent); }
         .links.verifying::after { content: "verifying…"; color: var(--pending); font-size: 0.85rem; }
         .links.verified::after { content: "✓ verified"; color: var(--ok); font-size: 0.85rem; }
+
+        /* Mission status: one card per phase, each with its own markup (a switch) */
+        .mission { border-left: 6px solid var(--line); }
+        .mission.scheduled { border-left-color: var(--accent); }
+        .mission.hold, .mission.unknown { border-left-color: var(--pending); }
+        .mission.in-flight, .mission.success { border-left-color: var(--ok); }
+        .mission.scrubbed, .mission.failure { border-left-color: var(--bad); }
+        .mission .big { font-size: 1.4rem; font-weight: 600; margin: 0.25rem 0; font-variant-numeric: tabular-nums; }
+        .mission p { margin: 0.25rem 0; }
+
+        /* Flight timeline: each event kind has its own markup (a switch per item) */
+        .timeline ol { list-style: none; padding: 0; margin: 0; }
+        .timeline li { display: flex; gap: 0.75rem; align-items: baseline; padding: 0.2rem 0; border-top: 1px dashed var(--line); }
+        .timeline .t { font-family: ui-monospace, monospace; font-size: 0.8rem; color: var(--muted); min-width: 5.5rem; }
+        .timeline .milestone strong { color: var(--ok); }
+        .timeline .anomaly { background: #fdf0ee; }
+        .timeline .anomaly strong { color: var(--bad); }
+        .timeline .anomaly em { color: var(--muted); }
+        .timeline .note { color: var(--muted); }
 
         .panels { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; margin-top: 1.5rem; }
         @media (max-width: 760px) { .panels { grid-template-columns: minmax(0, 1fr); } }
@@ -186,6 +209,14 @@
                 across reruns, <code>empty</code> replaces the items when there are none (failures), and <code>of</code> points
                 at the array (<code>of: '?.linkList'</code> repeats over the links manager's getter). Lists are rendered
                 synchronously with the rest of the tree.</li>
+            <li><strong>Switches</strong>: <code>${choose('?.phase', { scheduled: tree`…`, hold: tree`…`, … }, fallback)}</code>
+                produces <code>{ switch, cases, default }</code>, which renders the case the data picks, on every render. The
+                <em>Mission status</em> card has six phases with genuinely different markup (a countdown, a hold reason, live
+                altitude and speed, spec rows, a failure list…), and a fallback for a status with no case. "Next phase" steps
+                through a simulated status feed: a new phase replaces only the card. "Tick" changes values within the phase:
+                the same card is rebound in place. Compare the status badge, whose <code>' ?='</code> ternaries can only
+                switch its <em>text</em>. In the <em>Flight timeline</em>, the switch is <code>each</code>'s item, so every
+                event (a milestone, an anomaly, or anything else, via the fallback) gets its own markup.</li>
         </ul>
         <p><strong>By design:</strong></p>
         <ul>
@@ -200,6 +231,8 @@
         <button id="null-details">Set details to null</button>
         <button id="toggle-units">Toggle units</button>
         <button id="change-links">Change links</button>
+        <button id="next-phase">Next phase</button>
+        <button id="tick">Tick</button>
         <button id="rebuild">Clear &amp; rebuild</button>
     </div>
 
@@ -223,7 +256,7 @@
 
     <script type="module">
         import { assignFromAsync } from '../index.js';
-        import { tree, each } from '../DX/tree.js';
+        import { tree, each, choose } from '../DX/tree.js';
 
         const launchEl = document.getElementById('launch');
         const logEl = document.getElementById('log');
@@ -243,19 +276,57 @@
         const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
         // UI state only: the API response is used as-is, with these overlaid.
-        const ui = { details: undefined, linkSuffix: '' };
+        const ui = { details: undefined, linkSuffix: '', phase: 0, tick: 0 };
+
+        /** Flight events; each status below shows the first `upTo` of them (plus its own `extra`). */
+        const events = [
+            { t: -3600, kind: 'note', label: 'Propellant load started' },
+            { t: -600, kind: 'milestone', label: 'Terminal count' },
+            { t: -540, kind: 'note', label: 'Hold called: upper-level winds' },
+            { t: 0, kind: 'milestone', label: 'Liftoff' },
+            { t: 42, kind: 'anomaly', label: 'Engine 7 shutdown', detail: 'Flight continued on 8 engines' },
+            { t: 72, kind: 'milestone', label: 'Max-Q' },
+            { t: 158, kind: 'milestone', label: 'MECO and stage separation' },
+            { t: 520, kind: 'milestone', label: 'Booster landing' },
+        ];
+
+        /**
+         * A simulated live status feed (UI state, like details and links): "Next phase" steps through it,
+         * "Tick" advances the values within a phase. Each status's `phase` picks the Mission status case.
+         */
+        const feed = [
+            { upTo: 2, status: tick => ({ phase: 'scheduled', window: response.date_utc, countdown: Math.max(0, 600 - 45 * tick) }) },
+            { upTo: 3, status: tick => ({ phase: 'hold', reason: 'Upper-level winds out of limits', resumeIn: Math.max(0, 25 - 5 * tick) }) },
+            { upTo: 6, status: tick => ({ phase: 'inFlight', stage: tick < 3 ? 'first stage' : 'second stage', altitude: 12 + 9 * tick, speed: 1450 + 640 * tick }) },
+            { upTo: 8, status: () => ({ phase: 'success', orbit: 'Low Earth orbit, 51.6°', landing: 'Droneship (ASDS)' }) },
+            // Other outcomes
+            { upTo: 2, status: () => ({ phase: 'scrubbed', reason: 'Ground-side valve fault', newDate: '2026-03-16T14:22:00.000Z' }),
+                extra: [{ t: -480, kind: 'note', label: 'Scrub called' }] },
+            { upTo: 6, status: () => ({ phase: 'failure', reasons: [{ time: 139, reason: 'Second-stage engine shutdown' }, { time: 141, reason: 'Vehicle lost' }] }),
+                extra: [{ t: 139, kind: 'anomaly', label: 'Second-stage engine shutdown', detail: 'Telemetry lost at T+141s' }] },
+            // No case for this phase, nor for the 'telemetry' event kind: both show their fallback
+            { upTo: 4, status: () => ({ phase: 'telemetryLost' }), extra: [{ t: 30, kind: 'telemetry', label: 'Telemetry dropout' }] },
+        ];
 
         function currentVm() {
-            const { details, linkSuffix } = ui;
+            const { details, linkSuffix, phase, tick } = ui;
             const links = Object.fromEntries(Object.entries(response.links)
                 .map(([name, href]) => [name, href && href + linkSuffix]));
-            return { ...response, ...(details !== undefined && { details }), links };
+            const { upTo, status, extra = [] } = feed[phase];
+            const timeline = [...events.slice(0, upTo), ...extra].sort((a, b) => a.t - b.t);
+            return { ...response, ...(details !== undefined && { details }), links, mission: status(tick), timeline };
         }
 
         /** Stateless formatters, usable as path segments: '?.date_utc?.parseDate?.longUtc' */
         const pipes = {
             parseDate: Date.parse,
             longUtc: new Intl.DateTimeFormat(undefined, { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).format,
+            /** Seconds → m:ss */
+            clock: s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`,
+            /** Seconds from liftoff → T−m:ss / T+m:ss */
+            tPlus: t => `T${t < 0 ? '−' : '+'}${pipes.clock(Math.abs(t))}`,
+            km: n => `${n} km`,
+            kmh: n => `${n.toLocaleString()} km/h`,
             coreSummary: ({ serial, flight, reused, landing_success, landing_type }) =>
                 `${serial}, flight ${flight}${reused ? ' (reused)' : ''}; landing: ${landing_success ? 'success' : 'not successful'} (${landing_type})`,
         };
@@ -359,6 +430,50 @@
                         '_ ?=': ['?.', '??', 'No details provided.'],
                         'className ?=': ['?.', 'details', 'details empty'],
                     }}></p>`,
+                    // A switch: one card per phase, each with its own markup, picked from the data on every
+                    // render. (The status badge above can only switch text.) A new phase replaces the card;
+                    // the same phase rebinds it in place. A phase with no case gets the fallback.
+                    mission: choose('?.phase', {
+                        scheduled: tree`
+                            <section class="card mission scheduled">
+                                <h3>Scheduled</h3>
+                                <p>Window opens ${'?.window?.parseDate?.longUtc'} UTC</p>
+                                <p class="big">T−${'?.countdown?.clock'}</p>
+                            </section>`,
+                        hold: tree`
+                            <section class="card mission hold">
+                                <h3>Hold</h3>
+                                <p>${'?.reason'}</p>
+                                <p class="big">Resuming in ${'?.resumeIn'} min</p>
+                            </section>`,
+                        inFlight: tree`
+                            <section class="card mission in-flight">
+                                <h3>In flight: ${'?.stage'}</h3>
+                                ${spec('Altitude', '?.altitude?.km')}
+                                ${spec('Speed', '?.speed?.kmh')}
+                            </section>`,
+                        success: tree`
+                            <section class="card mission success">
+                                <h3>Mission success</h3>
+                                ${spec('Orbit', '?.orbit')}
+                                ${spec('Booster', '?.landing')}
+                            </section>`,
+                        scrubbed: tree`
+                            <section class="card mission scrubbed">
+                                <h3>Scrubbed</h3>
+                                <p>${'?.reason'}</p>
+                                <p>Next attempt: ${'?.newDate?.parseDate?.longUtc'} UTC</p>
+                            </section>`,
+                        failure: tree`
+                            <section class="card mission failure">
+                                <h3>Mission failure</h3>
+                                <ul ${each('?.reasons', { key: '?.time' })}><li>T+${'?.time'}s: ${'?.reason'}</li></ul>
+                            </section>`,
+                    }, tree`
+                        <section class="card mission unknown">
+                            <h3>Status unknown</h3>
+                            <p class="muted">No case for this status, so the fallback is shown.</p>
+                        </section>`),
                     // The links bar's patterns read the LinksManager instance (className, linkList);
                     // the list repeats over a getter on that manager
                     links: tree`
@@ -404,6 +519,22 @@
                             })}>
                                 <li>T+${'?.time'}s: ${'?.reason'}</li>
                             </ul>
+                        </section>`,
+                    // A switch as each()'s item: every event kind gets its own markup ('telemetry' has no case: the fallback)
+                    timeline: tree`
+                        <section class="card timeline">
+                            <h3>Flight timeline</h3>
+                            <ol ${each('?.', { key: '?.t' })}>
+                                ${choose('?.kind', {
+                                    milestone: tree`<li class="milestone"><span class="t">${'?.t?.tPlus'}</span><strong>${'?.label'}</strong></li>`,
+                                    anomaly: tree`
+                                        <li class="anomaly">
+                                            <span class="t">${'?.t?.tPlus'}</span>
+                                            <strong>${'?.label'}</strong>
+                                            <em>${'?.detail'}</em>
+                                        </li>`,
+                                }, tree`<li class="note"><span class="t">${'?.t?.tPlus'}</span><span>${'?.label'}</span></li>`)}
+                            </ol>
                         </section>`,
                 },
             },
@@ -461,10 +592,27 @@
             log('Change links', `webcast → ${child('links').querySelector('a')?.href.split('/').pop()}`);
         });
 
+        document.getElementById('next-phase').addEventListener('click', async () => {
+            const card = child('mission');
+            const items = [...launchEl.querySelectorAll('.timeline li')];
+            Object.assign(ui, { phase: (ui.phase + 1) % feed.length, tick: 0 });
+            const { phase } = currentVm().mission;
+            await build(`Phase → ${phase}`);
+            const kept = [...launchEl.querySelectorAll('.timeline li')].filter(li => items.includes(li)).length;
+            log(`Phase → ${phase}`, `mission card replaced: ${child('mission') !== card}; timeline: ${kept} of ${items.length} events kept`);
+        });
+
+        document.getElementById('tick').addEventListener('click', async () => {
+            const card = child('mission');
+            ui.tick++;
+            await build('Tick');
+            log('Tick', `same case, so the same mission card is rebound in place: ${child('mission') === card}`);
+        });
+
         document.getElementById('rebuild').addEventListener('click', async () => {
             launchEl.replaceChildren();
             logEl.replaceChildren();
-            Object.assign(ui, { details: undefined, linkSuffix: '' });
+            Object.assign(ui, { details: undefined, linkSuffix: '', phase: 0, tick: 0 });
             await build('Rebuild');
         });
 

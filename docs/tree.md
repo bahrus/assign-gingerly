@@ -70,11 +70,13 @@ assignFrom(this.shadowRoot, { '?. =>': { do: 'builtIns.tree', map: { … } } }, 
 type ElementSpecification =
     | Header
     | [Header, Pattern | string]
-    | [Header, Pattern | string, ElementSpecification[] | Repeat | NestedTree];   // static children, a repeat (see Arrays) or a nested tree (see Nested Trees)
+    | [Header, Pattern | string, ElementSpecification[] | Repeat | NestedTree]   // static children, a repeat (see Arrays) or a nested tree (see Nested Trees)
+    | Switch;                                                                      // one of several specifications, picked by the data (see Switches)
 
 type Header = tagName | { tag: tagName; ish?: string | ManagerClass };   // see Itemscope Managers below
 type Repeat = { each: ElementSpecification; of?: string; key?: string; empty?: ElementSpecification };
 type NestedTree = { map: Record<string, ElementSpecification>; markerName?: string; keepNullish?: boolean; aka?: Record<string, string>; compile?: boolean };
+type Switch = { switch: string; cases: Record<string, ElementSpecification | null>; default?: ElementSpecification | null };
 ```
 
 - **The pattern** is an [assignFrom](./assignFrom.md) pattern applied to the created element, with `from` set to **the key's VM value**. So `'?.small'` above reads `vm.patch.small`.
@@ -172,10 +174,11 @@ The type can also come from elsewhere: `@typedef {import('./launch-api.js').Laun
 | one `${value}`, or literal text, as content | `textContent` |
 | text mixed with `${…}` | a [`microJoin`](./sync-ops.md#microjoin) (an element per value) |
 | `` ${tree`…`} `` as content | a child element (composition) |
+| `${choose(on, cases, fallback)}` as content, or as a whole map value | a [switch](#switches) (`{ switch, cases, default }`) |
 | `${{ '_ ?=': […], … }}` in attribute position | merged into the pattern: for keys markup can't express (ternaries, handlers, sync ops) |
 | `${null}`, `${undefined}`, `${false}`, `${''}` as content | nothing (e.g. an optional child) |
 
-[`demos/tree-demo.html`](../demos/tree-demo.html) is written with `tree`, including a pattern spread for its ternaries and an optional child. [`demos/tree-demo-with-managed-template-list.html`](../demos/tree-demo-with-managed-template-list.html) writes a similar tree in raw notation, for comparison.
+[`demos/tree-demo.html`](../demos/tree-demo.html) is written with `tree`, including a pattern spread for its ternaries, an optional child, and `choose` switches. [`demos/tree-demo-with-managed-template-list.html`](../demos/tree-demo-with-managed-template-list.html) writes a similar tree in raw notation, for comparison.
 
 **Details:**
 - **`${…}` values** may be `?.` strings or `paths()` proxies; proxies become their path string.
@@ -286,6 +289,56 @@ Native arrays are the default. Delegating a list to [`builtIns.manageTemplateLis
 - **removed items should be hidden rather than discarded** (`forget: false`).
 
 The trade-off is that the handler runs asynchronously. Inside Tree it's fire-and-forget, so the list fills in just after the tree. [demos/tree-demo-with-managed-template-list.html](../demos/tree-demo-with-managed-template-list.html) shows that approach.
+
+## Switches
+
+A **switch** renders one of several specifications, picked from the data **on every render**. It goes anywhere an element specification goes: a `map` value, a static child, a repeat's `each` (so each item picks its own markup) or `empty`, or a case of another switch.
+
+```JavaScript
+mission: {
+    switch: '?.phase',
+    cases: {
+        hold: ['section', { 'class :=': 'card hold' }, [['h3', 'Hold'], ['p', '?.reason']]],
+        scrubbed: ['section', { 'class :=': 'card scrubbed' }, [['h3', 'Scrubbed'], ['p', '?.reason'], ['p', '?.newDate']]],
+        success: ['p', { 'class :=': 'ok', _: 'Mission success' }],
+        quiet: null,                                      // renders nothing
+    },
+    default: ['p', { 'class :=': 'muted', _: 'Status unknown.' }],   // optional
+}
+```
+
+With `` tree`…` ``, use **`choose(on, cases, fallback?)`** (after lit's `choose` directive). It produces the same object, as a whole map value or as content, where it stands for one child:
+
+```JavaScript
+import { tree, each, choose } from 'assign-gingerly/DX/tree.js';
+
+map: {
+    mission: choose('?.phase', {
+        hold: tree`<section class="card hold"><h3>Hold</h3><p>${'?.reason'}</p></section>`,
+        success: tree`<p class="ok">Mission success</p>`,
+    }, tree`<p class="muted">Status unknown.</p>`),
+
+    // Per item: each()'s single child is the item, and here the item is a switch
+    timeline: tree`
+        <ol ${each('?.', { key: '?.t' })}>
+            ${choose('?.kind', {
+                milestone: tree`<li class="milestone">${'?.label'}</li>`,
+                anomaly: tree`<li class="anomaly"><strong>${'?.label'}</strong><em>${'?.detail'}</em></li>`,
+            })}
+        </ol>`,
+}
+```
+
+- **Matching:** the discriminant (`switch`) is resolved against the switch position's value, like any RHS value (`'?.phase'`, `'$parent?.mode'`, pipes too). It's matched with `String(value)` against the `cases` keys, so numbers and booleans work (`true: […]`, `2: […]`). Nullish, or no matching key, means `default`.
+- **Nothing to render:** a `null` case, or no match and no `default`. A placeholder comment (`<!--?switch-->`) keeps the switch's slot, so its siblings and its parent aren't rebuilt.
+- **The chosen case** renders against the **same value** as the switch: a switch is a choice, not a new scope.
+- **Rebinding:**
+  - **the same case as last time** is rebound in place, like any element;
+  - **another case** replaces the previous one **in its slot**. The previous case is discarded, managers and their state included. (Keeping cases alive but hidden may become an option later.)
+- **Why not `` ${cond ? tree`…` : tree`…`} ``?** A `${…}` is evaluated once, when the template is built, so it bakes one branch into the spec. And `' ?='` ternaries switch values (text, classes), not elements.
+- **`compile`:** each case is compiled to its own template (ids `<switch id>/case:<key>` and `<switch id>/default`). A switch among static children has no element in its parent's template; its case is cloned and placed when the parent is bound.
+
+See the *Mission status* card and the *Flight timeline* in [demos/tree-demo.html](../demos/tree-demo.html).
 
 ## Nested Trees
 

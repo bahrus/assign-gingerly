@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>builtIns.tree switch Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>builtIns.tree switch tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    import { assignFrom, assignFromAsync } from '../index.js';
+    import { tree, each, choose, analyzeTree, TreeUnknown } from '../DX/tree.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+    function assert(condition, message) {
+      results.push(`<div class="${condition ? 'pass' : 'fail'}">${condition ? '✓' : '✗'} ${message}</div>`);
+      condition ? passed++ : failed++;
+      if (!condition) console.error('Failed:', message);
+    }
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) console.error(`${message}\n  Expected: ${expected}\n  Actual:   ${actual}`);
+      assert(actual === expected, message);
+    }
+
+    /** The host's content, without Tree's start/end markers (switch placeholders stay visible). */
+    const markup = host => host.innerHTML.replace(/<!--\?start name="[^"]*"-->|<!--\?end-->/g, '');
+    const render = (host, map, from, extra = {}) => assignFrom(host, { '?. =>': { do: 'builtIns.tree', map, ...extra } }, { from });
+
+    const statusSwitch = {
+      switch: '?.phase',
+      cases: {
+        hold: ['section', { className: 'hold' }, [['h3', 'Hold'], ['p', '?.reason']]],
+        scrubbed: ['section', { className: 'scrubbed' }, [['h3', 'Scrubbed'], ['p', '?.reason'], ['p', '?.newDate']]],
+        success: ['p', { className: 'success', textContent: 'Success' }],
+        quiet: null,
+      },
+      default: ['p', { className: 'unknown', textContent: 'Status unknown' }],
+    };
+
+    async function runTests() {
+      // Load tree.js once, so the sync assignFrom calls below render synchronously
+      await assignFromAsync(document.createElement('div'), { '?. =>': { do: 'builtIns.tree', map: {} } }, { from: {} });
+
+      // Test 1: a switch as a map value — picks the case, rebinds the same case in place, replaces on a new case
+      {
+        const host = document.createElement('div');
+        const map = { status: statusSwitch };
+        render(host, map, { status: { phase: 'hold', reason: 'Weather' } });
+        assertEquals(markup(host), '<section class="hold"><h3>Hold</h3><p>Weather</p></section>', 'map value: renders the matching case');
+        const section = host.querySelector('section');
+        render(host, map, { status: { phase: 'hold', reason: 'Range' } });
+        assert(host.querySelector('section') === section, 'map value: the same case is rebound in place (same element)');
+        assertEquals(section.querySelector('p').textContent, 'Range', 'map value: … with the new values');
+        render(host, map, { status: { phase: 'scrubbed', reason: 'Valve', newDate: 'Tuesday' } });
+        assertEquals(markup(host), '<section class="scrubbed"><h3>Scrubbed</h3><p>Valve</p><p>Tuesday</p></section>', 'map value: another case replaces it');
+        assert(!section.isConnected, 'map value: the previous case is discarded');
+        render(host, map, { status: { phase: 'somethingElse' } });
+        assertEquals(markup(host), '<p class="unknown">Status unknown</p>', 'map value: no matching case → default');
+        render(host, map, { status: { phase: null } });
+        assertEquals(markup(host), '<p class="unknown">Status unknown</p>', 'map value: a nullish discriminant → default');
+        render(host, map, { status: { phase: 'quiet' } });
+        assertEquals(markup(host), '<!--?switch-->', 'map value: a null case renders nothing, keeping a placeholder');
+        render(host, map, { status: { phase: 'success' } });
+        assertEquals(markup(host), '<p class="success">Success</p>', 'map value: from nothing back to a case');
+      }
+
+      // Test 2: no default, no match → nothing; a switch keeps its place among map keys
+      {
+        const host = document.createElement('div');
+        const map = {
+          title: ['h2', '?.'],
+          body: { switch: '?.kind', cases: { a: ['p', 'A'], b: ['p', 'B'] } },
+          footer: ['footer', '?.'],
+        };
+        render(host, map, { title: 'T', body: { kind: 'a' }, footer: 'F' });
+        assertEquals(markup(host), '<h2>T</h2><p>A</p><footer>F</footer>', 'among keys: rendered in map order');
+        const [h2, footer] = [host.querySelector('h2'), host.querySelector('footer')];
+        render(host, map, { title: 'T', body: { kind: 'zzz' }, footer: 'F' });
+        assertEquals(markup(host), '<h2>T</h2><!--?switch--><footer>F</footer>', 'among keys: no match and no default → only the placeholder');
+        render(host, map, { title: 'T', body: { kind: 'b' }, footer: 'F' });
+        assertEquals(markup(host), '<h2>T</h2><p>B</p><footer>F</footer>', 'among keys: the case returns to the same place');
+        assert(host.querySelector('h2') === h2 && host.querySelector('footer') === footer, 'among keys: the other keys are untouched');
+      }
+
+      // Test 3: a switch among static children — siblings and the parent are kept, even when it renders nothing
+      {
+        const host = document.createElement('div');
+        const map = {
+          card: ['article', { className: 'card' }, [
+            ['h3', '?.title'],
+            { switch: '?.mode', cases: { edit: ['input', { value: '?.title' }], view: ['span', 'Viewing'] } },
+            ['small', 'end'],
+          ]],
+        };
+        render(host, map, { card: { title: 'One', mode: 'view' } });
+        assertEquals(markup(host), '<article class="card"><h3>One</h3><span>Viewing</span><small>end</small></article>', 'static child: renders in place');
+        const [article, h3, small] = ['article', 'h3', 'small'].map(s => host.querySelector(s));
+        render(host, map, { card: { title: 'Two', mode: 'edit' } });
+        assertEquals(host.querySelector('article > :nth-child(2)').localName, 'input', 'static child: the new case takes the same position');
+        assertEquals(host.querySelector('input').value, 'Two', "static child: the case resolves against the parent's value");
+        assert(host.querySelector('article') === article && host.querySelector('h3') === h3 && host.querySelector('small') === small,
+          'static child: the parent and siblings are not rebuilt');
+        render(host, map, { card: { title: 'Three', mode: 'none' } });
+        assertEquals(markup(host), '<article class="card"><h3>Three</h3><!--?switch--><small>end</small></article>', 'static child: nothing → placeholder between the siblings');
+        assert(host.querySelector('article') === article, 'static child: rendering nothing does not rebuild the parent');
+        render(host, map, { card: { title: 'Four', mode: 'view' } });
+        assertEquals(markup(host), '<article class="card"><h3>Four</h3><span>Viewing</span><small>end</small></article>', 'static child: back from nothing, in place');
+      }
+
+      // Test 4: per-item switching in a repeat — each item picks its own case; keys keep items' elements
+      {
+        const host = document.createElement('div');
+        const map = {
+          timeline: ['ol', {}, {
+            key: '?.t',
+            each: { switch: '?.kind', cases: {
+              milestone: ['li', { className: 'milestone', textContent: '?.label' }],
+              anomaly: ['li', { className: 'anomaly' }, [['strong', '?.label'], ['em', '?.detail']]],
+            }, default: ['li', { className: 'note', textContent: '?.label' }] },
+          }],
+        };
+        const events = [
+          { t: 1, kind: 'milestone', label: 'Liftoff' },
+          { t: 2, kind: 'anomaly', label: 'Vibration', detail: 'within limits' },
+          { t: 3, kind: 'note', label: 'Max-Q' },
+        ];
+        render(host, map, { timeline: events });
+        assertEquals([...host.querySelectorAll('li')].map(li => li.className).join(','), 'milestone,anomaly,note', 'repeat: each item renders its own case');
+        assertEquals(host.querySelector('.anomaly em').textContent, 'within limits', "repeat: a case's children resolve against the item");
+        const [first, second] = host.querySelectorAll('li');
+        render(host, map, { timeline: [events[0], { ...events[1], kind: 'milestone' }, events[2]] });
+        assert(host.querySelector('li') === first, 'repeat: an item keeping its case keeps its element');
+        assert(!second.isConnected && host.querySelectorAll('li')[1].className === 'milestone', 'repeat: an item changing case is replaced, in place');
+        render(host, map, { timeline: [events[2], events[0]] });
+        assertEquals([...host.querySelectorAll('li')].map(li => li.textContent).join(','), 'Max-Q,Liftoff', 'repeat: reordering moves the switched items');
+        assert(host.querySelectorAll('li')[1] === first, 'repeat: … reusing their elements');
+      }
+
+      // Test 5: nested switches, literal discriminants (numbers, booleans) and $parent
+      {
+        const host = document.createElement('div');
+        const map = {
+          panel: { switch: '$parent?.signedIn', cases: {
+            true: { switch: '?.level', cases: { 1: ['b', 'Level one'], 2: ['i', 'Level two'] } },
+            false: ['a', { href: '#login', textContent: 'Sign in' }],
+          } },
+        };
+        render(host, map, { signedIn: true, panel: { level: 2 } });
+        assertEquals(markup(host), '<i>Level two</i>', 'nested: a switch inside a case; booleans and numbers match by String()');
+        render(host, map, { signedIn: true, panel: { level: 1 } });
+        assertEquals(markup(host), '<b>Level one</b>', "nested: the inner switch changes case");
+        render(host, map, { signedIn: false, panel: { level: 1 } });
+        assertEquals(markup(host), '<a href="#login">Sign in</a>', 'nested: the outer switch, discriminant from $parent');
+      }
+
+      // Test 6: leaving a case discards its manager; staying keeps it
+      {
+        let constructed = 0;
+        class CounterManager {
+          static is = 'switch-counter-manager';
+          count = 0;
+          constructor(element, initVals) { constructed++; Object.assign(this, initVals); }
+          get label() { return `count ${this.count}`; }
+        }
+        const host = document.createElement('div');
+        const map = { view: { switch: '?.tab', cases: {
+          counter: [{ tag: 'section', ish: CounterManager }, {}, [['span', '?.label']]],
+          about: ['p', 'About'],
+        } } };
+        render(host, map, { view: { tab: 'counter' } });
+        const section = host.querySelector('section');
+        section.ish.count = 5;
+        render(host, map, { view: { tab: 'counter' } });
+        assertEquals(constructed, 1, 'manager: the same case keeps its manager');
+        assertEquals(host.querySelector('span').textContent, 'count 5', "manager: … and its state");
+        render(host, map, { view: { tab: 'about' } });
+        render(host, map, { view: { tab: 'counter' } });
+        assertEquals(constructed, 2, 'manager: switching away and back builds a new one (the case was discarded)');
+        assertEquals(host.querySelector('span').textContent, 'count 0', 'manager: … with fresh state');
+      }
+
+      // Test 7: compile — the same markup as without, through case changes, in static children and repeats
+      {
+        const map = {
+          status: statusSwitch,
+          card: ['article', { 'class :=': 'card' }, [
+            ['h3', '?.title'],
+            { switch: '?.mode', cases: { edit: ['input', { value: '?.title' }], view: ['span', { 'class :=': 'v', textContent: 'Viewing' }] } },
+            ['small', 'end'],
+          ]],
+          items: ['ul', {}, { each: { switch: '?.kind', cases: { a: ['li', { 'class :=': 'a', textContent: '?.n' }], b: ['li', { 'class :=': 'b', textContent: '?.n' }] } } }],
+        };
+        const vms = [
+          { status: { phase: 'hold', reason: 'Wind' }, card: { title: 'X', mode: 'view' }, items: [{ kind: 'a', n: 1 }, { kind: 'b', n: 2 }] },
+          { status: { phase: 'scrubbed', reason: 'Valve', newDate: 'Fri' }, card: { title: 'Y', mode: 'edit' }, items: [{ kind: 'b', n: 1 }, { kind: 'zzz', n: 2 }] },
+          { status: { phase: 'quiet' }, card: { title: 'Z', mode: 'none' }, items: [] },
+          { status: { phase: 'success' }, card: { title: 'W', mode: 'view' }, items: [{ kind: 'a', n: 3 }] },
+        ];
+        const plain = document.createElement('div');
+        const compiled = document.createElement('div');
+        let same = true;
+        for (const vm of vms) {
+          render(plain, map, vm);
+          await assignFromAsync(compiled, { '?. =>': { do: 'builtIns.tree', compile: true, map } }, { from: vm });
+          if (markup(plain) !== markup(compiled)) { same = false; console.error(markup(plain), '\n', markup(compiled)); }
+        }
+        assert(same, 'compile: the same markup as without compile, through every case change');
+        const { compileTree } = await import('../handlers/compileTree.js');
+        const { templates, switches } = compileTree({ map });
+        assert(!!switches.status && switches.status.cases.hold === 'status/case:hold' && !!templates['status/case:hold'], 'compile: a map-value switch compiles each case to its own template');
+        assert(!('status/case:quiet' in templates), 'compile: a null case has no template');
+        assertEquals(templates['status/case:hold'].element.content[0].content[0], 'Hold', "compile: a case's literal text is baked");
+        assert(!!switches['items>0/each'], "compile: a repeat's switched item compiles as a switch");
+        assert(templates.card.node.children[1].switch?.cases.view === 'card>2/case:view', 'compile: a static-child switch is a slot with its own case templates');
+        assertEquals(templates.card.element.content.length, 2, "compile: … and has no element in its parent's template");
+      }
+
+      // Test 8: choose() in tree`…` — the notation, caching, as a child, as each's item, as a map value
+      {
+        const hold = tree`<section class="hold"><h3>Hold</h3><p>${'?.reason'}</p></section>`;
+        const make = () => choose('?.phase', { hold, quiet: null }, tree`<p>Unknown</p>`);
+        const spec = make();
+        assertEquals(JSON.stringify(spec), JSON.stringify({ switch: '?.phase', cases: { hold, quiet: null }, default: ['p', { textContent: 'Unknown' }] }),
+          'choose: produces { switch, cases, default }');
+        assert(make() === spec, 'choose: the same choice returns the same object (spec identity holds across calls)');
+        const card = tree`
+          <article>
+            <h3>${'?.title'}</h3>
+            ${choose('?.mode', { view: tree`<span>Viewing</span>` })}
+          </article>`;
+        assertEquals(card[2][1].switch, '?.mode', 'choose: as content, a child of the element');
+        const list = tree`<ol ${each('?.', { key: '?.t' })}>${choose('?.kind', { a: tree`<li>A</li>` })}</ol>`;
+        assertEquals(list[2].each.switch, '?.kind', "choose: as each(…)'s single child, the repeat's item");
+        const host = document.createElement('div');
+        render(host, { status: spec, card }, { status: { phase: 'hold', reason: 'Rain' }, card: { title: 'C', mode: 'view' } });
+        assertEquals(markup(host), '<section class="hold"><h3>Hold</h3><p>Rain</p></section><article><h3>C</h3><span>Viewing</span></article>',
+          'choose: renders as a map value and as a child');
+        const { spec: analyzed, errors } = analyzeTree(['<div>', '</div>'], [choose('?.x', { a: tree`<b>A</b>` })]);
+        assert(errors.length === 0 && analyzed[2][0].switch === '?.x', 'choose: analyzeTree takes it as a child');
+        const unknown = analyzeTree(['<ul ', '>', '</ul>'], [each('?.'), choose(new TreeUnknown('k'), { a: tree`<li>A</li>` })]);
+        assert(unknown.errors.length === 0, 'choose: an unknown discriminant is fine for analyzeTree');
+      }
+
+      // Test 9: malformed switches fail clearly (assignFromAsync rejects with the handler's error)
+      {
+        let message = '';
+        try { await assignFromAsync(document.createElement('div'), { '?. =>': { do: 'builtIns.tree', map: { x: { switch: 42, cases: {} } } } }, { from: { x: {} } }); } catch (e) { message = e.message; }
+        assert(message.includes('"switch" path'), 'error: a non-string discriminant');
+        message = '';
+        try { await assignFromAsync(document.createElement('div'), { '?. =>': { do: 'builtIns.tree', map: { x: { switch: '?.k' } } } }, { from: { x: {} } }); } catch (e) { message = e.message; }
+        assert(message.includes('"cases" object'), 'error: missing cases');
+      }
+
+      document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = failed === 0 ? 'success' : 'failure';
+    }
+
+    runTests().catch(error => {
+      console.error(error);
+      assert(false, `unexpected error: ${error.message}`);
+      document.getElementById('results').innerHTML = results.join('');
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = 'failure';
+    });
+  </script>
+</body>
+</html>

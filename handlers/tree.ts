@@ -37,6 +37,11 @@
  * third argument, and in onAssigned's ctx) to re-apply its subtree after changing its
  * own state; Tree calls it itself once an async onAssigned settles.
  *
+ * Switches: `{ switch, cases, default? }` anywhere a specification goes renders the case
+ * the discriminant picks, against the same value. The same case is rebound in place; a
+ * different case replaces the previous one in its slot. When nothing renders, a placeholder
+ * comment keeps the slot, so the switch's siblings and parent aren't rebuilt.
+ *
  * Experimental `compile` option: elements are created by cloning templates compiled from
  * the map (static parts baked in) instead of createElement; see "compile: clone-and-bind" below.
  *
@@ -59,7 +64,7 @@
 import { assignFrom, categorizeKeys, handleSpreads, SUBSTITUTION_VARS } from '../assignFrom.js';
 import { applyAttribute, assignGingerly, tryAssignTo } from '../assignGingerly.js';
 import { getValue, getValues, isEventBinding } from '../resolve/getValues.js';
-import { isLiteralString, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
+import { checkSwitch, isLiteralString, isSwitch, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 import { placeNodes } from '../utils/placeNodes.js';
@@ -67,9 +72,12 @@ import type {
     AssignFromHandler, AssignFromOptions, ItemscopeManagerConfig, ItemscopeRegistry, PermissionProcessor,
 } from '../types/assign-gingerly/types.js';
 import type {
-    CompiledNode, CompiledTemplate, CompiledTree, ElementSpecification, ManagerRef, NestedTreeSpecification, Pattern,
-    RepeatSpecification, TreeConfig,
+    CompiledNode, CompiledSwitch, CompiledTemplate, CompiledTree, ElementSpecification, ManagerRef, NestedTreeSpecification,
+    Pattern, RepeatSpecification, SwitchSpecification, TreeConfig,
 } from '../types/assign-gingerly/treeTypes.js';
+
+/** What a spec compiles to: a template, or (for a switch) its compiled cases. */
+type CompiledEntry = CompiledTemplate | CompiledSwitch;
 
 const DEFAULT_MARKER_NAME = 'tree';
 
@@ -108,6 +116,10 @@ interface TreeNode {
     tag: string;
     /** The header's manager, if any — part of the structure, like the tag */
     ish: ManagerRef | undefined;
+    /**
+     * The node's element. For a switch slot, the rendered case's element, or (rendering
+     * nothing) its placeholder comment: only placed and removed, never bound.
+     */
     element: Element;
     children: TreeNode[];
     /** The latest spec and options, so a manager's rebind() re-applies what the last call applied */
@@ -127,7 +139,23 @@ interface TreeNode {
     appliedAka?: Record<string, string>;
     /** The compiled node this node was cloned from (`compile`), for its repeat's item templates */
     compiled?: CompiledNode;
+    /** Present when the node is a switch slot (see syncSwitch) */
+    switch?: SwitchState;
 }
+
+/** A switch slot: which case it rendered, that case's node, and its placeholder for rendering nothing. */
+interface SwitchState {
+    /** The case last rendered (DEFAULT_CASE for `default`); undefined before the first render */
+    caseKey: string | typeof DEFAULT_CASE | undefined;
+    inner: TreeNode | undefined;
+    placeholder: Comment | undefined;
+}
+
+/** A switch's `default`, as a case key (can't collide with a `cases` key). */
+const DEFAULT_CASE = Symbol('builtIns.tree default case');
+
+/** The comment holding an empty switch's slot. */
+const SWITCH_PLACEHOLDER = '?switch';
 
 /** A repeating node's items, by key, and its `empty` node while the array is empty. */
 interface RepeatState {
@@ -536,15 +564,71 @@ function rebindNode(node: TreeNode): void {
     }
 }
 
+/** The compiled entry (template or switch) with this id, in the node's compiled variant. */
+function compiledEntry(options: AssignFromOptions, id: string | undefined): CompiledEntry | undefined {
+    const variant = (options as any)[TREE_COMPILED] as CompiledVariant | undefined;
+    if (!variant || id === undefined) return undefined;
+    const { templates, switches } = variant.compiled;
+    return templates[id] ?? switches[id];
+}
+
+/**
+ * Render a switch: pick the case for the discriminant (resolved against `value`) and render
+ * it against that same value. The same case as last time is rebound in place; another case
+ * (or nothing, shown by a placeholder comment) replaces the previous one in the slot, so the
+ * caller keeps the same node and sees no structural change.
+ */
+function syncSwitch(
+    node: TreeNode | undefined,
+    spec: SwitchSpecification,
+    value: any,
+    options: AssignFromOptions,
+    permissionProcessor?: PermissionProcessor,
+    compiled?: CompiledEntry
+): TreeNode {
+    checkSwitch(spec);
+    const { switch: on, cases, default: fallback } = spec;
+    const root = (options as any)[TREE_TARGET] as Element;
+    const discriminant = on.startsWith('?.')
+        ? resolvePath(on, splitPath(on), value, options, root, fastPathAllowed(options, permissionProcessor), permissionProcessor)
+        : getValue(on, value, { ...options, from: value, root, permissionProcessor } as any);
+    const caseName = discriminant == null ? undefined : String(discriminant);
+    const caseKey = caseName !== undefined && Object.hasOwn(cases, caseName) ? caseName : DEFAULT_CASE;
+    const chosen = caseKey === DEFAULT_CASE ? fallback : cases[caseKey];
+
+    const state = node?.switch;
+    const compiledSwitch = compiled && 'cases' in compiled && compiled.spec === spec ? compiled : undefined;
+    const caseEntry = compiledSwitch && compiledEntry(options, caseKey === DEFAULT_CASE ? compiledSwitch.default : compiledSwitch.cases[caseKey]);
+    const previous = state?.caseKey === caseKey ? state.inner : undefined;
+    const inner = chosen == null ? undefined : syncNode(previous, chosen, value, options, permissionProcessor, caseEntry);
+    const placeholder = inner ? state?.placeholder : state?.placeholder ?? document.createComment(SWITCH_PLACEHOLDER);
+    // A placeholder stands in for the element: it's only placed and removed
+    const element = inner?.element ?? placeholder as unknown as Element;
+
+    if (!node || !state) {
+        return {
+            tag: '', ish: undefined, element, children: [], spec, options, permissionProcessor, binding: false,
+            container: element, nested: false, switch: { caseKey, inner, placeholder },
+        };
+    }
+    // Another case (or a rebuilt one) takes the previous element's place
+    const { element: old } = node;
+    if (old !== element && old.parentNode) old.replaceWith(element);
+    Object.assign(node, { element, container: element, spec, options, permissionProcessor });
+    Object.assign(state, { caseKey, inner, placeholder });
+    return node;
+}
+
 function createNode(
     spec: ElementSpecification,
     value: any,
     options: AssignFromOptions,
     permissionProcessor?: PermissionProcessor,
-    template?: CompiledTemplate
+    template?: CompiledEntry
 ): TreeNode {
+    if (isSwitch(spec)) return syncSwitch(undefined, spec, value, options, permissionProcessor, template);
     // With `compile`: clone the template, as long as it was compiled from this very spec
-    if (template && template.node.spec === spec) {
+    if (template && 'node' in template && template.node.spec === spec) {
         const variant = (options as any)[TREE_COMPILED] as CompiledVariant | undefined;
         if (variant) return cloneNodeFrom(template, variant, value, options, permissionProcessor);
     }
@@ -585,10 +669,11 @@ function syncNode(
     value: any,
     options: AssignFromOptions,
     permissionProcessor?: PermissionProcessor,
-    template?: CompiledTemplate
+    template?: CompiledEntry
 ): TreeNode {
+    if (isSwitch(spec)) return syncSwitch(node?.switch ? node : undefined, spec, value, options, permissionProcessor, template);
     const [, tag, ish, pattern, childSpecs, repeat, nested] = normalize(spec);
-    if (!node || node.tag !== tag || node.ish !== ish || node.children.length !== childSpecs.length
+    if (!node || node.switch || node.tag !== tag || node.ish !== ish || node.children.length !== childSpecs.length
         || !!node.repeat !== !!repeat || node.nested !== (nested !== undefined)) {
         return createNode(spec, value, options, permissionProcessor, template);
     }
@@ -640,13 +725,12 @@ function compiledVariantFor(
     return variant;
 }
 
-/** A repeat node's item and empty templates, when it was cloned from a compiled node. */
-function repeatTemplates(node: TreeNode): [CompiledTemplate?, CompiledTemplate?] {
+/** A repeat node's item and empty templates (or switches), when it was cloned from a compiled node. */
+function repeatTemplates(node: TreeNode): [CompiledEntry?, CompiledEntry?] {
     const repeat = node.compiled?.repeat;
-    const variant = (node.options as any)[TREE_COMPILED] as CompiledVariant | undefined;
-    if (!repeat || !variant) return [];
-    const { templates } = variant.compiled;
-    return [templates[repeat.each], repeat.empty === undefined ? undefined : templates[repeat.empty]];
+    if (!repeat) return [];
+    const { options } = node;
+    return [compiledEntry(options, repeat.each), compiledEntry(options, repeat.empty)];
 }
 
 /**
@@ -681,6 +765,18 @@ function pairNodes(compiled: CompiledNode, element: Element, options: AssignFrom
     };
     let child = (container as Element).firstElementChild;
     for (const childCompiled of compiled.children) {
+        if (childCompiled.switch) {
+            // A switch has no element in the template: hold its slot with a placeholder until it's bound
+            const placeholder = element.ownerDocument.createComment(SWITCH_PLACEHOLDER);
+            container.insertBefore(placeholder, child);
+            const slot = placeholder as unknown as Element;
+            node.children.push({
+                tag: '', ish: undefined, element: slot, children: [], spec: childCompiled.spec, options, permissionProcessor,
+                binding: false, container: slot, nested: false, compiled: childCompiled,
+                switch: { caseKey: undefined, inner: undefined, placeholder },
+            });
+            continue;
+        }
         node.children.push(pairNodes(childCompiled, child!, options, permissionProcessor));
         child = child!.nextElementSibling;
     }
@@ -690,6 +786,11 @@ function pairNodes(compiled: CompiledNode, element: Element, options: AssignFrom
 /** Bind a freshly cloned node and its subtree, as createNode does for a created one. */
 function bindCloned(node: TreeNode, value: any): void {
     const { compiled, element, ish, options, permissionProcessor } = node;
+    if (compiled!.switch) {
+        // Renders its case in place of the placeholder (cloned from the case's own template)
+        syncSwitch(node, compiled!.switch.spec, value, options, permissionProcessor, compiled!.switch);
+        return;
+    }
     const { pattern, dynamic, repeat, nested } = compiled!;
     try {
         const from = ish === undefined ? value : attachManager(node, ish, value);
@@ -809,7 +910,7 @@ export class TreeHandler implements AssignFromHandler {
             let node = nodes.get(key);
             // Removed or moved by other code: rebuild
             if (node && node.element.parentNode !== lhsTarget) node = undefined;
-            const template = variant?.compiled.templates[key in map ? key : WILDCARD];
+            const template = compiledEntry(nestedOptions, key in map ? key : WILDCARD);
             next.set(key, syncNode(node, spec, value, nestedOptions, permissionProcessor, template));
         }
         for (const [key, node] of nodes) {

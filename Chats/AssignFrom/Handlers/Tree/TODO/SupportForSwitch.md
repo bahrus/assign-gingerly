@@ -140,3 +140,75 @@ map: {
 2. `choose` in `DX/tree.ts`, with `analyzeTree` support;
 3. the demo;
 4. the analyzer.
+
+## Bruce's Response I
+
+I agree with all your recommendations, except 4.  I'm on the fence on that one. Maybe there should be an option to decide whether to retain and hide or discard.  We an always add it later if that seems like the better approach.
+
+## Claude's Implementation Notes
+
+Done, as proposed. **On question 4, v1 discards** the case it leaves. A "retain and hide" option can be added later without changing the notation, since a slot already remembers the case it rendered. Nothing is committed.
+
+**Results** (in a scratch copy, as before, so your `.js` is untouched):
+
+| | |
+|---|---|
+| New `tests/tree-switch.html` | **49 / 49**, in Chromium, Firefox and WebKit |
+| Full Playwright suite | **155 passed, 4 skipped** (the same 4 as before) |
+| `tsc --noEmit` | clean |
+| `demos/tree-demo.html`, driven in Chromium | every phase and tick as intended, no console errors |
+| gingerly-tree-analyzer | unit 29 / 29, e2e and web pass, typecheck clean |
+
+### 1. Tree: `{ switch, cases, default }`
+
+- **`handlers/tree.ts`:**
+  - A switch becomes a **slot** node: `syncSwitch` resolves the discriminant, picks the case, and renders it against the same value.
+  - **The same case** is rebound in place. **Another case** replaces the previous element with `replaceWith`, so the parent, the siblings and the caller's bookkeeping see no change.
+  - **Nothing to render** (a `null` case, or no match and no `default`): a `<!--?switch-->` comment holds the slot.
+  - It works everywhere a spec goes: map values (`'*'` included), static children, a repeat's `each` and `empty`, and nested switches.
+- **`handlers/treeSpec.ts`:** `isSwitch` and `checkSwitch` (clear errors for a non-string `switch` or missing `cases`).
+- **`handlers/compileTree.ts`** (`compile`):
+  - **Each case gets its own template:** `<id>/case:<key>` and `<id>/default`. The switch itself is a `CompiledSwitch`, in a new `switches` record on `CompiledTree`.
+  - **A switch among static children** has no element in its parent's template. At clone time a placeholder holds its slot, and its case is cloned into it.
+  - The test checks that compiled and uncompiled trees produce identical markup through every case change.
+- **Types** (`types/assign-gingerly/treeTypes.d.ts`): `SwitchSpecification` (now part of `ElementSpecification`), `CompiledSwitch` and `ChooseCases`. **`types` is a submodule**, so that change needs its own commit there.
+
+### 2. DX: `choose(on, cases, fallback?)`
+
+- It produces the switch object, and it's recognized as a child in content position. That covers `each(…)`'s item, too.
+- **Results are cached**, so the same choice returns the same object, as `` tree`…` `` does, and spec identity holds across calls. The cache keeps the last 8 per discriminant.
+- **`analyzeTree`** accepts it, including with a `TreeUnknown` discriminant.
+
+### 3. The demo (`demos/tree-demo.html`)
+
+- **Mission status:** `choose` over `scheduled`, `hold`, `inFlight`, `success`, `scrubbed` and `failure`, each with its own markup:
+  - scheduled: a countdown;
+  - hold: a hold reason;
+  - in flight and success: spec rows;
+  - failure: a nested `each` list.
+
+  A `telemetryLost` status has no case, so it shows the fallback.
+- **Flight timeline:** `choose` as `each`'s item. Milestones and anomalies have their own markup. A `telemetry` event has no case, so it gets the fallback.
+- **"Next phase"** steps through a simulated status feed, and the log confirms that only the card is replaced. **"Tick"** changes values within a phase, and the log confirms the same card is rebound.
+- **The status badge's text-only ternaries** are mentioned as the contrast.
+
+### 4. Docs
+
+`docs/tree.md` now has:
+- a **Switches** section: the notation, `choose`, matching, rebinding, why `${cond ? … : …}` doesn't work, and `compile`;
+- the `Switch` type in *Element Specifications*;
+- a `choose` row in the DX table.
+
+### 5. Gingerly Tree Analyzer
+
+- **`choose(…)` is now evaluated with stand-ins,** as `each(…)` is. Hovers show the switch in the notation, and errors inside its cases are underlined where they are.
+- **A project whose assign-gingerly predates `choose`** gets `‹…›` there, rather than an error.
+
+**Something to know:** your `npm run update` there had moved the analyzer to `typescript@7.0.2`, which has no JS compiler API, and every test failed. That was the risk I flagged in the analyzer's notes. It had also bumped `@types/vscode` past `engines.vscode`, which `vsce` refuses to package. I restored both, and added `.ncurc.json` (`"reject": ["typescript", "@types/vscode"]`) so `npm run update` leaves them alone. The README explains why.
+
+### To do on your side
+
+1. **Run your build** in assign-gingerly, to get the `.js` for `DX/tree.ts`, `handlers/tree.ts`, `handlers/treeSpec.ts` and `handlers/compileTree.ts`.
+2. **Commit the `types` submodule** separately.
+3. **Rebuild or repackage the analyzer** when convenient. It bundles assign-gingerly from source, so it picks up `choose` automatically.
+

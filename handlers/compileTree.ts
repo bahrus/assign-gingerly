@@ -24,14 +24,21 @@
  *
  * Template ids: a map key's template has the key as its id; the repeat at preorder
  * index n of template T has `T>n/each` and `T>n/empty`.
+ *
+ * Switches: each case compiles to its own template, `S/case:<key>` and `S/default`, where S
+ * is the id the switch would have had as a template (a map key, `T>n/each`, …), or `T>n`
+ * for a switch among static children. A switch has no element: at that id there's a
+ * `CompiledSwitch` (in `switches`) instead of a template, and as a static child it's a
+ * slot that the case is placed into at bind time.
  */
 
 import { getValue, getValues, isReferenceString } from '../resolve/getValues.js';
 import { planMicroJoin } from '../syncOps/microJoin.js';
-import { isLiteralString, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
+import { checkSwitch, isLiteralString, isSwitch, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
 import type { GetValuesOptions } from '../types/assign-gingerly/types.js';
 import type {
-    CompiledNode, CompiledTemplate, CompiledTree, CompileTreeOptions, ElementSpecification, Pattern, TemplateElement, TreeConfig,
+    CompiledNode, CompiledSwitch, CompiledTemplate, CompiledTree, CompileTreeOptions, ElementSpecification, Pattern,
+    SwitchSpecification, TemplateElement, TreeConfig,
 } from '../types/assign-gingerly/treeTypes.js';
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
@@ -49,6 +56,7 @@ type Sample = { value: any } | undefined;
 
 interface CompileContext {
     templates: Record<string, CompiledTemplate>;
+    switches: Record<string, CompiledSwitch>;
     aka: Record<string, string>;
     canBake: (name: string, value: string) => boolean;
     resolveOptions: GetValuesOptions;
@@ -60,7 +68,7 @@ export function compileTree(config: Pick<TreeConfig, 'map' | 'aka'>, options: Co
     // The tree's own aka applies over the options' aka, as in builtIns.tree
     const effectiveAka = { ...resolveOptions.aka, ...aka };
     const ctx: CompileContext = {
-        templates: {}, aka: effectiveAka, canBake, resolveOptions: { ...resolveOptions, aka: effectiveAka },
+        templates: {}, switches: {}, aka: effectiveAka, canBake, resolveOptions: { ...resolveOptions, aka: effectiveAka },
     };
     const keys = Object.keys(map);
     for (const key of keys) {
@@ -72,10 +80,14 @@ export function compileTree(config: Pick<TreeConfig, 'map' | 'aka'>, options: Co
             compileTemplate(key, map[key], keySample, ctx);
         }
     }
-    return { keys, templates: ctx.templates };
+    return { keys, templates: ctx.templates, switches: ctx.switches };
 }
 
 function compileTemplate(id: string, spec: ElementSpecification, sample: Sample, ctx: CompileContext): void {
+    if (isSwitch(spec)) {
+        ctx.switches[id] = compileSwitch(id, spec, sample, ctx);
+        return;
+    }
     const [element, node] = compileNode(spec, sample, id, { index: 0 }, ctx);
     ctx.templates[id] = { id, element, node, signature: signatureOf(element, node) };
 }
@@ -115,11 +127,39 @@ function compileNode(
         return [element, node];
     }
     for (const childSpec of childSpecs) {
+        if (isSwitch(childSpec)) {
+            // No element in this template: a slot, with each case in its own template
+            const compiledSwitch = compileSwitch(`${templateId}>${counter.index++}`, childSpec, nodeSample, ctx);
+            node.children.push({ spec: childSpec, tag: '', children: [], switch: compiledSwitch });
+            continue;
+        }
         const [childElement, childNode] = compileNode(childSpec, nodeSample, templateId, counter, ctx);
         element.content.push(childElement);
         node.children.push(childNode);
     }
     return [element, node];
+}
+
+/**
+ * Compile each case of a switch as its own template (a nested switch: its own CompiledSwitch).
+ * Cases render against the switch's value, so they share its sample: microJoin shells are
+ * only baked for the case whose values the sample has, and a wrong guess is safe.
+ */
+function compileSwitch(base: string, spec: SwitchSpecification, sample: Sample, ctx: CompileContext): CompiledSwitch {
+    checkSwitch(spec);
+    const { cases, default: fallback } = spec;
+    const compiled: CompiledSwitch = { spec, cases: {} };
+    for (const key of Object.keys(cases)) {
+        const caseSpec = cases[key];
+        if (caseSpec == null) continue;
+        compileTemplate(`${base}/case:${key}`, caseSpec, sample, ctx);
+        compiled.cases[key] = `${base}/case:${key}`;
+    }
+    if (fallback != null) {
+        compileTemplate(`${base}/default`, fallback, sample, ctx);
+        compiled.default = `${base}/default`;
+    }
+    return compiled;
 }
 
 /** The sample for a repeat's items: the first item of the sample's array at `of`. */
@@ -288,7 +328,8 @@ export function toHTML({ tag, attrs, content }: TemplateElement): string {
 }
 
 /** The node tree's shape: tags, managers, repeat references and nested trees. */
-function shapeOf({ tag, ish, children, repeat, nested }: CompiledNode): string {
+function shapeOf({ tag, ish, children, repeat, nested, switch: compiledSwitch }: CompiledNode): string {
+    if (compiledSwitch) return `{switch:${Object.values(compiledSwitch.cases).join('|')}|${compiledSwitch.default ?? ''}}`;
     let shape = tag;
     if (ish !== undefined) shape += `:${typeof ish === 'string' ? ish : ish.is ?? ish.name}`;
     if (repeat) return `${shape}{${repeat.each}|${repeat.empty ?? ''}}`;

@@ -4,6 +4,19 @@
  * Pure: no DOM access, so compileTree can run on a server.
  */
 import { isFromStackReference } from '../resolve/getValues.js';
+/** Whether a specification is a switch (`{ switch, cases, default? }`) rather than an element. */
+export function isSwitch(spec) {
+    return !!spec && typeof spec === 'object' && !Array.isArray(spec) && 'switch' in spec;
+}
+/** Check a switch's shape, so a malformed one fails with a clear message. */
+export function checkSwitch(spec) {
+    const { switch: on, cases } = spec;
+    if (typeof on !== 'string')
+        throw new Error('builtIns.tree: a switch needs a "switch" path, e.g. { switch: \'?.status\', cases: { … } }');
+    if (!cases || typeof cases !== 'object' || Array.isArray(cases)) {
+        throw new Error('builtIns.tree: a switch needs a "cases" object of case → specification');
+    }
+}
 /** The map key whose specification applies to VM keys the map doesn't name. */
 export const WILDCARD = '*';
 /** The pattern a `'*'` specification gets when it has none. */
@@ -20,6 +33,9 @@ function textPattern(text) {
     return pattern;
 }
 export function normalize(spec) {
+    // Switches are resolved to a case before anything normalizes them
+    if (isSwitch(spec))
+        throw new Error('builtIns.tree: a switch has no element of its own to normalize');
     const [header, patternOrText, third] = Array.isArray(spec) ? spec : [spec];
     const pattern = typeof patternOrText === 'string' ? textPattern(patternOrText) : patternOrText;
     // The children slot: an array of static children, a repeat object ({ each, … }) or a nested tree ({ map, … })
@@ -63,6 +79,9 @@ const wildcardSpecs = new WeakMap();
  */
 export function wildcardSpecOf(map) {
     const source = map[WILDCARD];
+    // A switch keeps its cases as written (the default pattern is for a bare element)
+    if (isSwitch(source))
+        return source;
     const cached = wildcardSpecs.get(map);
     if (cached?.source === source)
         return cached.spec;
