@@ -28,7 +28,8 @@
  * rebind) holds across calls.
  *
  * Parsed with a small parser of its own (not the browser's HTML parser, which would insert
- * `<tbody>`, auto-close `<p>`, etc.), so it also runs on a server.
+ * `<tbody>`, auto-close `<p>`, etc.), so it also runs on a server. Errors are
+ * TreeTemplateErrors, located precisely (see TreeTemplateLocation) for editors and tools.
  *
  * @example
  * const p = paths<Launch>();
@@ -43,11 +44,19 @@
  */
 
 import { pathOf } from './paths.js';
-import type { EachDirective, EachOptions, ElementSpecification, Pattern } from '../types/assign-gingerly/treeTypes.js';
+import type {
+    EachDirective, EachOptions, ElementSpecification, Pattern, TreeTemplateLocation,
+} from '../types/assign-gingerly/treeTypes.js';
 
 const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
-const HOLE = /(\d+)/g;
 const SELF_EVENT_KEYS = [' +=', '?. +='];
+
+/** Markers for `${…}` positions in the joined source (private-use characters, not expected in templates). */
+const HOLE_OPEN = '';
+const HOLE_CLOSE = '';
+const HOLE = /(\d+)/g;
+const HOLE_AT_START = /^(\d+)/;
+const holeMarker = (index: number) => `${HOLE_OPEN}${index}${HOLE_CLOSE}`;
 
 /** A `${…}` position in the template. */
 interface Hole {
@@ -56,12 +65,37 @@ interface Hole {
 
 type Part = string | Hole;
 
+/** A run of text (with holes), and the source position of each part. */
+interface TextNode {
+    parts: Part[];
+    positions: number[];
+    pos: number;
+}
+
 interface ParsedElement {
     tag: string;
-    attrs: { name: string; parts: Part[] | true }[];
-    /** Values placed in attribute position (e.g. each()) */
-    directives: number[];
-    children: (ParsedElement | Part[])[];
+    pos: number;
+    attrs: { name: string; parts: Part[] | true; pos: number }[];
+    /** Values placed in attribute position (e.g. each()), with their positions */
+    directives: { hole: number; pos: number }[];
+    children: (ParsedElement | TextNode)[];
+}
+
+/** A tree`…` error, with its location in the template (for editors and tools). */
+export class TreeTemplateError extends Error implements TreeTemplateLocation {
+    part: number;
+    offset: number;
+    line: number;
+    column: number;
+    constructor(message: string, location: TreeTemplateLocation) {
+        super(message);
+        this.name = 'TreeTemplateError';
+        const { part, offset, line, column } = location;
+        this.part = part;
+        this.offset = offset;
+        this.line = line;
+        this.column = column;
+    }
 }
 
 /** Specifications this tag produced, so `${tree`…`}` in content is recognized as a child. */
@@ -81,91 +115,139 @@ export function each(of: any = '?.', options: EachOptions = {}): EachDirective {
 export function tree(strings: TemplateStringsArray, ...values: any[]): ElementSpecification {
     const cached = cache.get(strings);
     if (cached && sameValues(cached.values, values)) return cached.spec;
-    const source = strings.reduce((text, s, i) => text + s + (i < values.length ? `${i}` : ''), '');
-    const roots = parse(source).filter(node => !isBlankText(node));
-    if (roots.length !== 1 || Array.isArray(roots[0])) {
-        throw new Error(`tree\`…\`: expected exactly one root element in:\n${preview(strings)}`);
+    // Join the static strings with hole markers, remembering where each string starts
+    const starts: number[] = [];
+    let source = '';
+    strings.forEach((s, i) => {
+        starts.push(source.length);
+        source += s;
+        if (i < values.length) source += holeMarker(i);
+    });
+    const ctx: Context = { strings, values, starts };
+    const roots = parse(source, ctx).filter(node => !isBlankText(node));
+    if (roots.length !== 1 || isTextNode(roots[0])) {
+        const at = roots.length > 1 ? roots[1].pos : roots[0]?.pos ?? 0;
+        throw error(ctx, at, 'expected exactly one root element');
     }
-    const spec = toSpec(roots[0] as ParsedElement, values, strings);
+    const spec = toSpec(roots[0] as ParsedElement, ctx);
     treeResults.add(spec as object);
     cache.set(strings, { values, spec });
     return spec;
 }
 
+interface Context {
+    strings: TemplateStringsArray;
+    values: any[];
+    /** Where each static string starts in the joined source */
+    starts: number[];
+}
+
+// ── Locations and errors ─────────────────────────────────────────────────────
+
+/** The location of a source position: its static string and offset, and line/column as displayed. */
+function locate({ strings, starts }: Context, pos: number): TreeTemplateLocation {
+    let part = 0;
+    while (part + 1 < starts.length && starts[part + 1] <= pos) part++;
+    // A position inside a hole marker belongs to the end of the string before it
+    const offset = Math.min(pos - starts[part], strings[part].length);
+    const shown = displayText(strings, part, offset);
+    const lineStart = shown.lastIndexOf('\n') + 1;
+    return { part, offset, line: shown.split('\n').length, column: shown.length - lineStart + 1 };
+}
+
+/** The template up to (part, offset), as displayed: each hole shown as `${…}`. */
+function displayText(strings: TemplateStringsArray, part: number, offset: number): string {
+    return strings.slice(0, part).map(s => `${s}\${…}`).join('') + strings[part].slice(0, offset);
+}
+
+function error(ctx: Context, pos: number, message: string): TreeTemplateError {
+    const location = locate(ctx, pos);
+    const { line, column } = location;
+    const lines = ctx.strings.join('${…}').split('\n');
+    const frame = `${lines[line - 1]}\n${' '.repeat(column - 1)}^`;
+    return new TreeTemplateError(`tree\`…\`: ${message} (line ${line}, column ${column})\n${frame}`, location);
+}
+
 // ── Parsing ──────────────────────────────────────────────────────────────────
 
-function parse(source: string): (ParsedElement | Part[])[] {
-    const root: ParsedElement = { tag: '#root', attrs: [], directives: [], children: [] };
+function parse(source: string, ctx: Context): (ParsedElement | TextNode)[] {
+    const root: ParsedElement = { tag: '#root', pos: 0, attrs: [], directives: [], children: [] };
     const stack: ParsedElement[] = [root];
     let pos = 0;
-    let text = '';
+    let textStart = -1;
     const flushText = () => {
-        if (text) stack[stack.length - 1].children.push(splitHoles(text));
-        text = '';
+        if (textStart >= 0) stack[stack.length - 1].children.push(splitText(source.slice(textStart, pos), textStart));
+        textStart = -1;
     };
     while (pos < source.length) {
         const ch = source[pos];
         if (ch === '<' && source.startsWith('<!--', pos)) {
+            flushText();
             const end = source.indexOf('-->', pos + 4);
-            if (end < 0) throw new Error('tree`…`: unclosed comment');
+            if (end < 0) throw error(ctx, pos, 'unclosed comment');
             pos = end + 3;
             continue;
         }
         if (ch === '<' && source[pos + 1] === '/') {
             flushText();
             const end = source.indexOf('>', pos);
+            if (end < 0) throw error(ctx, pos, 'unclosed closing tag');
             const tag = source.slice(pos + 2, end).trim();
-            const open = stack.pop()!;
+            const open = stack[stack.length - 1];
             if (open === root || open.tag !== tag) {
-                throw new Error(`tree\`…\`: </${tag}> doesn't match <${open === root ? '(none)' : open.tag}>`);
+                throw error(ctx, pos, `</${tag}> doesn't match <${open === root ? '(none)' : open.tag}>`);
             }
+            stack.pop();
             pos = end + 1;
             continue;
         }
         if (ch === '<' && /[A-Za-z]/.test(source[pos + 1] ?? '')) {
             flushText();
-            pos = parseOpenTag(source, pos, stack);
+            pos = parseOpenTag(source, pos, stack, ctx);
             continue;
         }
-        if (ch === '<' && source[pos + 1] === '') {
-            throw new Error('tree`…`: a ${} tag name is not supported');
-        }
-        text += ch;
+        if (ch === '<' && source[pos + 1] === HOLE_OPEN) throw error(ctx, pos, 'a ${…} tag name is not supported');
+        if (textStart < 0) textStart = pos;
         pos++;
     }
     flushText();
-    if (stack.length > 1) throw new Error(`tree\`…\`: <${stack[stack.length - 1].tag}> is not closed`);
+    if (stack.length > 1) {
+        const open = stack[stack.length - 1];
+        throw error(ctx, open.pos, `<${open.tag}> is not closed`);
+    }
     return root.children;
 }
 
 /** Parse `<tag attrs…>` at `pos`; pushes the element (and onto the stack unless void/self-closing). */
-function parseOpenTag(source: string, pos: number, stack: ParsedElement[]): number {
+function parseOpenTag(source: string, pos: number, stack: ParsedElement[], ctx: Context): number {
+    const start = pos;
     const tagMatch = /^<([A-Za-z][\w:.-]*)/.exec(source.slice(pos));
     const tag = tagMatch![1];
-    const element: ParsedElement = { tag, attrs: [], directives: [], children: [] };
+    const element: ParsedElement = { tag, pos: start, attrs: [], directives: [], children: [] };
     pos += tagMatch![0].length;
     for (;;) {
         while (/\s/.test(source[pos] ?? '')) pos++;
-        if (pos >= source.length) throw new Error(`tree\`…\`: <${tag} is not closed`);
+        if (pos >= source.length) throw error(ctx, start, `<${tag} is not closed`);
         if (source[pos] === '>') { pos++; break; }
         if (source.startsWith('/>', pos)) {
             pos += 2;
             stack[stack.length - 1].children.push(element);
             return pos;
         }
-        const hole = /^(\d+)/.exec(source.slice(pos));
+        const hole = HOLE_AT_START.exec(source.slice(pos));
         if (hole) {
-            element.directives.push(Number(hole[1]));
+            element.directives.push({ hole: Number(hole[1]), pos });
             pos += hole[0].length;
             continue;
         }
         const nameMatch = /^[^\s=>/]+/.exec(source.slice(pos));
-        if (!nameMatch) throw new Error(`tree\`…\`: unexpected "${source[pos]}" in <${tag}>`);
+        if (!nameMatch) throw error(ctx, pos, `unexpected "${source[pos]}" in <${tag}>`);
         const name = nameMatch[0];
+        const attrPos = pos;
         pos += name.length;
         while (/\s/.test(source[pos] ?? '')) pos++;
         if (source[pos] !== '=') {
-            element.attrs.push({ name, parts: true });
+            element.attrs.push({ name, parts: true, pos: attrPos });
             continue;
         }
         pos++;
@@ -174,7 +256,7 @@ function parseOpenTag(source: string, pos: number, stack: ParsedElement[]): numb
         const quote = source[pos];
         if (quote === '"' || quote === "'") {
             const end = source.indexOf(quote, pos + 1);
-            if (end < 0) throw new Error(`tree\`…\`: unclosed attribute value in <${tag}>`);
+            if (end < 0) throw error(ctx, pos, `unclosed attribute value in <${tag}>`);
             raw = source.slice(pos + 1, end);
             pos = end + 1;
         } else {
@@ -182,26 +264,34 @@ function parseOpenTag(source: string, pos: number, stack: ParsedElement[]): numb
             raw = match[0];
             pos += raw.length;
         }
-        element.attrs.push({ name, parts: splitHoles(raw) });
+        element.attrs.push({ name, parts: splitText(raw, 0).parts, pos: attrPos });
     }
     stack[stack.length - 1].children.push(element);
     if (!VOID_TAGS.has(tag.toLowerCase())) stack.push(element);
     return pos;
 }
 
-/** Split text into literal strings (entities decoded) and holes. */
-function splitHoles(raw: string): Part[] {
+/** Split text into literal strings (entities decoded) and holes, with each part's source position. */
+function splitText(raw: string, pos: number): TextNode {
     const parts: Part[] = [];
+    const positions: number[] = [];
     let last = 0;
+    const pushLiteral = (from: number, to: number) => {
+        const literal = decodeEntities(raw.slice(from, to));
+        if (literal) {
+            parts.push(literal);
+            positions.push(pos + from);
+        }
+    };
     for (const match of raw.matchAll(HOLE)) {
-        const literal = decodeEntities(raw.slice(last, match.index));
-        if (literal) parts.push(literal);
+        const index = match.index!;
+        pushLiteral(last, index);
         parts.push({ hole: Number(match[1]) });
-        last = match.index! + match[0].length;
+        positions.push(pos + index);
+        last = index + match[0].length;
     }
-    const tail = decodeEntities(raw.slice(last));
-    if (tail) parts.push(tail);
-    return parts;
+    pushLiteral(last, raw.length);
+    return { parts, positions, pos };
 }
 
 const NAMED_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
@@ -219,7 +309,8 @@ function decodeEntities(text: string): string {
 // ── Conversion to tree notation ──────────────────────────────────────────────
 
 const isHole = (part: Part): part is Hole => typeof part === 'object';
-const isBlankText = (node: ParsedElement | Part[]) => Array.isArray(node) && node.every(part => typeof part === 'string' && !part.trim());
+const isTextNode = (node: ParsedElement | TextNode): node is TextNode => 'parts' in node;
+const isBlankText = (node: ParsedElement | TextNode) => isTextNode(node) && node.parts.every(part => typeof part === 'string' && !part.trim());
 const isEachDirective = (value: any): value is EachDirective => !!value && typeof value === 'object' && value.kind === 'each';
 const isTreeResult = (value: any) => !!value && typeof value === 'object' && treeResults.has(value);
 const isNothing = (value: any) => value == null || value === false || value === '';
@@ -227,15 +318,16 @@ const isPlainObject = (value: any) => !!value && typeof value === 'object' && Ob
 /** A `${…}` value as it goes into a pattern: a paths() proxy becomes its `?.` string. */
 const valueOf = (value: any) => pathOf(value) ?? value;
 
-function toSpec(element: ParsedElement, values: any[], strings: TemplateStringsArray): ElementSpecification {
+function toSpec(element: ParsedElement, ctx: Context): ElementSpecification {
     const { tag } = element;
-    const fail = (message: string): never => { throw new Error(`tree\`…\`: <${tag}>: ${message} in:\n${preview(strings)}`); };
+    const { values } = ctx;
+    const fail = (message: string, pos = element.pos): never => { throw error(ctx, pos, `<${tag}>: ${message}`); };
     const pattern: Pattern = {};
     let ish: any;
     let events = 0;
 
-    for (const { name, parts } of element.attrs) {
-        const value = parts === true ? true : attributeValue(parts, values, fail, name);
+    for (const { name, parts, pos } of element.attrs) {
+        const value = parts === true ? true : attributeValue(parts, values, message => fail(message, pos), name);
         if (name === 'ish') {
             ish = value;
         } else if (name.startsWith('.')) {
@@ -244,8 +336,8 @@ function toSpec(element: ParsedElement, values: any[], strings: TemplateStringsA
             const on = name.slice(1);
             const config = typeof value === 'string' ? { call: value }
                 : value && typeof value === 'object' ? value
-                : fail(`@${on} needs an event config object (e.g. { call: 'method' }) or a method name`);
-            const key = SELF_EVENT_KEYS[events++] ?? fail('at most two @event bindings per element are supported');
+                : fail(`@${on} needs an event config object (e.g. { call: 'method' }) or a method name`, pos);
+            const key = SELF_EVENT_KEYS[events++] ?? fail('at most two @event bindings per element are supported', pos);
             pattern[key] = { on, ...config };
         } else {
             pattern[`${name} :=`] = value;
@@ -253,10 +345,10 @@ function toSpec(element: ParsedElement, values: any[], strings: TemplateStringsA
     }
 
     let repeat: Record<string, any> | undefined;
-    for (const index of element.directives) {
-        const directive = values[index];
+    for (const { hole, pos } of element.directives) {
+        const directive = values[hole];
         if (isEachDirective(directive)) {
-            if (repeat) fail('only one each(…) per element');
+            if (repeat) fail('only one each(…) per element', pos);
             repeat = { of: directive.of };
             if (directive.key !== undefined) repeat.key = directive.key;
             if (directive.empty !== undefined) repeat.empty = directive.empty;
@@ -264,7 +356,7 @@ function toSpec(element: ParsedElement, values: any[], strings: TemplateStringsA
             // A pattern spread: any keys the markup can't express (e.g. '_ ?=' ternaries, ' =>' handlers)
             for (const key of Object.keys(directive)) pattern[key] = valueOf(directive[key]);
         } else {
-            fail('only each(…) or a pattern object can be placed in attribute position');
+            fail('only each(…) or a pattern object can be placed in attribute position', pos);
         }
     }
 
@@ -275,33 +367,42 @@ function toSpec(element: ParsedElement, values: any[], strings: TemplateStringsA
     // Children: elements, and ${tree`…`} values in content; text before the first child is the element's own
     const children: ElementSpecification[] = [];
     const textParts: Part[] = [];
+    const textPositions: number[] = [];
     for (const node of content) {
-        if (!Array.isArray(node)) {
-            children.push(toSpec(node, values, strings));
+        if (!isTextNode(node)) {
+            children.push(toSpec(node, ctx));
             continue;
         }
-        for (const part of node) {
+        node.parts.forEach((part, i) => {
+            const pos = node.positions[i];
             // Nothing to render (as in lit): null, undefined, false or ''
-            if (isHole(part) && isNothing(values[part.hole])) continue;
+            if (isHole(part) && isNothing(values[part.hole])) return;
             if (isHole(part) && isTreeResult(values[part.hole])) {
                 children.push(values[part.hole]);
             } else if (children.length > 0) {
-                if (isHole(part) || part.trim()) fail('text after a child element isn\'t supported (wrap the text in an element)');
+                if (isHole(part) || part.trim()) fail('text after a child element isn\'t supported (wrap the text in an element)', pos + leadingSpace(part));
             } else {
                 textParts.push(part);
+                textPositions.push(pos);
             }
-        }
+        });
     }
     const ownText = trimFormatting(textParts);
     if (repeat) {
         if (children.length !== 1 || ownText.length > 0) fail('an element with each(…) must contain exactly one child element (the item)');
         third = { each: children[0], ...repeat };
     } else {
-        applyText(ownText, children.length > 0, pattern, values, fail);
+        const firstHole = textParts.findIndex(isHole);
+        applyText(ownText, children.length > 0, pattern, values, message => fail(message, textPositions[firstHole] ?? element.pos));
         if (children.length > 0) third = children;
     }
 
     return (third ? [header, pattern, third] : [header, pattern]) as ElementSpecification;
+}
+
+/** How many whitespace characters a literal part starts with (so errors point at the text itself). */
+function leadingSpace(part: Part): number {
+    return typeof part === 'string' ? part.length - part.trimStart().length : 0;
 }
 
 /** An attribute's value: a literal string, or one `${…}` (as its value). Mixed text and `${}` isn't supported. */
@@ -372,9 +473,4 @@ function sameValue(a: any, b: any): boolean {
         const y = b[key];
         return x === y || (pathOf(x) !== undefined && pathOf(x) === pathOf(y));
     });
-}
-
-function preview(strings: TemplateStringsArray): string {
-    const text = strings.join('${…}').trim();
-    return text.length > 300 ? `${text.slice(0, 300)}…` : text;
 }

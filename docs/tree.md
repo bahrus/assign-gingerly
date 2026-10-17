@@ -141,7 +141,17 @@ const map = {
 - **Attribute values:** each is a literal or a single `${…}`. Mixing them (`class="a ${x}"`) is an error.
 - **Caching:** results are cached per call site, so the same template with the same values returns the same spec object. Tree's spec identity (`compile`, literal skipping on rebind) holds across calls.
 - **Parser:** a small one of its own, not the browser's, so there's no `<tbody>` insertion or `<p>` auto-closing, and it runs on a server.
-- **Errors:** malformed or unsupported templates (two roots, a mismatched closing tag, text after a child) throw with the template in the message.
+- **Errors:** malformed or unsupported templates (two roots, a mismatched closing tag, text after a child) throw a **`TreeTemplateError`** (exported from `DX/tree.js`). Its message has the location and a code frame:
+
+  ```
+  tree`…`: <p>: attribute "class" mixes text and ${…}; … (line 2, column 6)
+    <p class="a ${…}"></p>
+       ^
+  ```
+
+  For editors and tools, the error carries its location:
+  - **`part` and `offset`** are exact: the index of the template's static string (the template literal's quasi) and the offset within it, which map straight to source positions;
+  - **`line` and `column`** are 1-based, in the template as displayed, with each `${…}` shown as `${…}`.
 
 ## Arrays
 

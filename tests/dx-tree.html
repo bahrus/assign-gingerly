@@ -17,7 +17,7 @@
 
   <script type="module">
     import { assignFrom, whenSettled } from '../index.js';
-    import { tree, each } from '../DX/tree.js';
+    import { tree, each, TreeTemplateError } from '../DX/tree.js';
     import { paths, md } from '../DX/paths.js';
 
     const results = [];
@@ -150,6 +150,26 @@
         assertEquals(json(row(tree`<button>Go</button>`)[2].map(child => child[0])), json(['span', 'button', 'span']),
           'the same template with a child in that position');
         throws(() => tree`<b ${42}></b>`, /each\(…\) or a pattern object/, 'other values in attribute position are an error');
+      }
+
+      // Test 9: errors carry precise locations (for editors): part/offset exact, line/column as displayed
+      {
+        const caught = fn => { try { fn(); } catch (e) { return e; } };
+        const where = e => e && `${e.name}|${e.part}:${e.offset}|${e.line}:${e.column}`;
+
+        const attr = caught(() => tree`<div>\n  <p class="a ${'?.x'}"></p>\n</div>`);
+        assert(attr instanceof TreeTemplateError, 'errors are TreeTemplateErrors');
+        assertEquals(where(attr), 'TreeTemplateError|0:11|2:6', 'mixed attribute: points at the attribute (part 0, offset 11; line 2, column 6)');
+        assert(/\(line 2, column 6\)\n  <p class="a \$\{…\}"><\/p>\n     \^/.test(attr.message), 'message has the location and a code frame with a caret');
+
+        const trailing = caught(() => tree`<p>${'?.a'}<b>x</b> trailing</p>`);
+        assertEquals(where(trailing), 'TreeTemplateError|1:9|1:17', 'text after a child: points at the text, in the second static string (part 1, offset 9)');
+
+        const mismatch = caught(() => tree`<ul>\n<li></ul>`);
+        assertEquals(where(mismatch), 'TreeTemplateError|0:9|2:5', 'mismatched closing tag: points at </ul>');
+
+        const roots = caught(() => tree`<p>a</p>\n<p>b</p>`);
+        assertEquals(where(roots), 'TreeTemplateError|0:9|2:1', 'two roots: points at the second');
       }
 
       // Test 7: clear errors

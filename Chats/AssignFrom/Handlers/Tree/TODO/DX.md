@@ -251,4 +251,54 @@ Since you're planning one: the tag's output is plain data, and it lives in one s
 
 Yes, please
 
+## Claude's Implementation Notes III
+
+Done.
+
+**Results:**
+- **`tests/dx-tree.html`:** 33 / 33 in Chromium, Firefox and WebKit.
+- **Full suite:** 149 passed, 4 skipped, 0 failed.
+- **The demo:** rechecked, with the same output and no errors.
+- `tsc` is clean, in the scratch copy; no `.js` touched.
+
+### `TreeTemplateError` (exported from `DX/tree.js`)
+
+Every `` tree`…` `` error is now a `TreeTemplateError` with its location (type `TreeTemplateLocation` in `treeTypes.d.ts`):
+
+| Field | Meaning | For |
+|---|---|---|
+| `part` | Index of the template's static string (`strings[part]`, the template literal's **quasi**) | **Exact mapping to source.** In the TypeScript AST, quasi `part` of the tagged template has a known start position; add `offset`. |
+| `offset` | Offset within that static string | |
+| `line`, `column` | 1-based, in the template **as displayed** (each `${…}` shown as `${…}`) | The message and humans. These are exact for lines, and for columns unless a `${…}` precedes on the same line, whose source length the tag can't know. That's why tools should use `part` / `offset`. |
+
+The message carries the same location plus a **code frame** with a caret:
+
+```
+tree`…`: <p>: attribute "class" mixes text and ${…}; use a single ${…} (e.g. a pipe, or a computed value) (line 2, column 6)
+  <p class="a ${…}"></p>
+     ^
+```
+
+**Each error points at the construct responsible:**
+- **The attribute** for attribute errors (mixed values, bad `@event` values, a third `@event`).
+- **The `${…}`** for a directive that isn't `each(…)` or a pattern object, and for a second `each(…)`.
+- **The text itself** for text after a child element, skipping its leading whitespace.
+- **The `</tag>`** for a mismatched closing tag.
+- **The opening `<tag`** for unclosed elements and `each(…)` with the wrong number of children.
+- **The second root** for "exactly one root element".
+
+**One small caveat for the plugin:** `offset` counts characters of the **cooked** string (escapes resolved). It equals the source offset unless the template contains escape sequences (e.g. `\n` or `` \` `` written in the literal), which is rare in markup. If that matters, the plugin can map through `strings.raw[part]`. I can switch the offsets to raw ones if you'd prefer.
+
+### How it's done
+
+The parser now records the source position of every element, attribute, directive and text part (literals and holes). A position in the joined template maps back to (`part`, `offset`) through the start of each static string. The module was rewritten as a whole for this; it now uses `` / `` escape sequences for its internal hole markers instead of literal private-use characters, which were fragile to edit.
+
+**Tests (Test 9), checking exact locations:**
+- a mixed attribute: part 0, offset 11; line 2, column 6; the message and its caret frame;
+- text after a child, in the **second** static string: part 1, offset 9; line 1, column 17;
+- a mismatched closing tag;
+- two roots.
+
+**Docs:** `docs/tree.md` describes the error, its fields, and the code frame.
+
 
