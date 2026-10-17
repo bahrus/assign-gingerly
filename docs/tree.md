@@ -4,7 +4,7 @@ The tree handler enables inserting html into a node, based on the data from a vi
 
 The handler not only builds a tree of DOM elements from a view model, it rebinds it in place on later calls. Each `map` entry pairs a VM key with an **element specification**: a tag name, or a tuple of tag, assignFrom pattern, and static children.
 
-Tree adds no microdata and doesn't adopt existing (server-rendered) markup. It aims at simple scenarios.
+The tree handler does not yet provide a way of hydrating server-rendered HTML markup.  That is a parked concept that is awaiting for a "no brainer" use case.
 
 **For large lists,** see [Compiling (`compile`)](#compiling-compile-experimental): an opt-in mode that clones precompiled templates, with static parts baked in, instead of creating each element.
 
