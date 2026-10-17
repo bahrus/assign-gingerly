@@ -1,6 +1,6 @@
 # builtIns.tree
 
-The tree handler enables inserting html into a node, based on the data in the view model.  It fundamentally rests on a terse, 100% declarative JSON syntax for rapid side-effect free parsing.  The DX experience, though, is a bit challenging, so lit-like DX experience is provided, optimally during the build or server side rendering process, but it can also run in the browser.
+The tree handler enables inserting html into a node, based on the data from a view model.  It fundamentally rests on a terse, 100% declarative JSON syntax for rapid side-effect free parsing.  The DX experience, though, is a bit challenging, so a lit-like DX experience is provided.
 
 The handler that builds a tree of DOM elements from a view model, and rebinds it in place on later calls. Each `map` entry pairs a VM key with an **element specification**: a tag name, or a tuple of tag, assignFrom pattern, and static children.
 
@@ -92,9 +92,13 @@ type NestedTree = { map: Record<string, ElementSpecification>; markerName?: stri
 
 Bare class headers and `$:` headers are reserved for a later phase and throw for now. Use `{ tag, ish }` instead.
 
-## Authoring with `` tree`…` `` (optional)
+## Authoring with a lit-like `` tree`…` `` tagged template literal (optional)
 
-Nested `[tag, pattern, children]` arrays are easy to get wrong by hand. [`DX/tree.js`](../DX/tree.ts) provides a lit-like tagged template that **produces the same tree notation**. (In VS Code, two extensions highlight and check it; see [Editor support](#editor-support-vs-code).) For example:
+Nested `[tag, pattern, children]` arrays are easy to get wrong by hand. [`DX/tree.js`](../DX/tree.ts) provides a lit-like tagged template that **produces the same tree notation**. (In VS Code, two extensions highlight and check it; see [Editor support](#editor-support-vs-code).) 
+
+Ideally, use of the DX library would be done during the build or server-side processing step, keeping the assign-gingerly instructions easy to digest via its terse, JSON, declarative, side-effect free syntax.  However, it can be used in the browser as well.
+
+For example:
 
 ```JavaScript
 import { tree, each } from 'assign-gingerly/DX/tree.js';
