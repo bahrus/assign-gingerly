@@ -17,7 +17,7 @@
 
   <script type="module">
     import { assignFrom, whenSettled } from '../index.js';
-    import { tree, each, TreeTemplateError } from '../DX/tree.js';
+    import { tree, each, TreeTemplateError, analyzeTree, TreeUnknown } from '../DX/tree.js';
     import { paths, md } from '../DX/paths.js';
 
     const results = [];
@@ -152,24 +152,91 @@
         throws(() => tree`<b ${42}></b>`, /each\(…\) or a pattern object/, 'other values in attribute position are an error');
       }
 
-      // Test 9: errors carry precise locations (for editors): part/offset exact, line/column as displayed
+      // Test 9: errors carry precise locations (for editors): part/offset exact (raw offsets: each \n escape in these templates is 2 source characters), line/column as displayed
       {
         const caught = fn => { try { fn(); } catch (e) { return e; } };
         const where = e => e && `${e.name}|${e.part}:${e.offset}|${e.line}:${e.column}`;
 
         const attr = caught(() => tree`<div>\n  <p class="a ${'?.x'}"></p>\n</div>`);
         assert(attr instanceof TreeTemplateError, 'errors are TreeTemplateErrors');
-        assertEquals(where(attr), 'TreeTemplateError|0:11|2:6', 'mixed attribute: points at the attribute (part 0, offset 11; line 2, column 6)');
+        assertEquals(where(attr), 'TreeTemplateError|0:12|2:6', 'mixed attribute: points at the attribute (part 0, raw offset 12; line 2, column 6)');
         assert(/\(line 2, column 6\)\n  <p class="a \$\{…\}"><\/p>\n     \^/.test(attr.message), 'message has the location and a code frame with a caret');
 
         const trailing = caught(() => tree`<p>${'?.a'}<b>x</b> trailing</p>`);
         assertEquals(where(trailing), 'TreeTemplateError|1:9|1:17', 'text after a child: points at the text, in the second static string (part 1, offset 9)');
 
         const mismatch = caught(() => tree`<ul>\n<li></ul>`);
-        assertEquals(where(mismatch), 'TreeTemplateError|0:9|2:5', 'mismatched closing tag: points at </ul>');
+        assertEquals(where(mismatch), 'TreeTemplateError|0:10|2:5', 'mismatched closing tag: points at </ul>');
 
         const roots = caught(() => tree`<p>a</p>\n<p>b</p>`);
-        assertEquals(where(roots), 'TreeTemplateError|0:9|2:1', 'two roots: points at the second');
+        assertEquals(where(roots), 'TreeTemplateError|0:10|2:1', 'two roots: points at the second');
+      }
+
+      // Test 10: error offsets are raw (source) offsets, so escapes before the error don't shift them
+      {
+        const caught = fn => { try { fn(); } catch (e) { return e; } };
+        const escaped = caught(() => tree`<p>\`x\`</b>`);
+        assertEquals(`${escaped.part}:${escaped.offset}`, '0:8', 'raw offset: two \\` escapes before </b> (cooked offset 6)');
+        const emoji = caught(() => tree`<p>\u{1F332}</b>`);
+        assertEquals(`${emoji.part}:${emoji.offset}`, '0:12', 'raw offset: a \\u{…} escape (2 cooked units, 9 raw characters)');
+        const noRaw = analyzeTree(['<p>`x`</b>'], []).errors[0];
+        assertEquals(`${noRaw.part}:${noRaw.offset}`, '0:6', 'without strings.raw, the offset is in the cooked string');
+      }
+
+      // Test 11: analyzeTree, with known values, matches the tag
+      {
+        const analyze = (strings, ...values) => analyzeTree(strings, values);
+        const result = analyze`<article class="card" aria-label=${p.label}>
+            <h3 class="title">${p.name}</h3>
+            <ul ${each(p.crew, { key: '?.id' })}><li>${'?.name'}</li></ul>
+            <button @click=${{ call: 'launch' }}>Launch</button>
+          </article>`;
+        assertEquals(json(result.errors), '[]', 'analyzeTree: no errors');
+        assertEquals(json(result.spec), json(['article', { 'class :=': 'card', 'aria-label :=': '?.label' }, [
+          ['h3', { 'class :=': 'title', textContent: '?.name' }],
+          ['ul', {}, { each: ['li', { textContent: '?.name' }], of: '?.crew', key: '?.id' }],
+          ['button', { ' +=': { on: 'click', call: 'launch' }, textContent: 'Launch' }],
+        ]]), 'analyzeTree: the same notation as the tag');
+        const nested = analyze`<ul ${each('?.items')}>${analyze`<li>${'?.n'}</li>`.spec}</ul>`;
+        assertEquals(json(nested.spec), json(['ul', {}, { each: ['li', { textContent: '?.n' }], of: '?.items' }]),
+          'analyzeTree: a nested analyzeTree spec composes like a nested tree`…`');
+
+        const errors = analyze`<p>a</p><p>b</p>`;
+        assert(errors.errors[0] instanceof TreeTemplateError && /exactly one root/.test(errors.errors[0].message) && errors.spec === undefined,
+          'analyzeTree: errors are returned, not thrown');
+        const third = analyze`<b @a=${'x'} @b=${'y'} @c=${'z'}></b>`;
+        assert(third.errors.length === 1 && third.elements[0]?.tag === 'b', 'analyzeTree: elements are still returned when only the conversion fails');
+      }
+
+      // Test 12: analyzeTree with statically unknown values (TreeUnknown) is lenient
+      {
+        const analyze = (strings, ...values) => analyzeTree(strings, values);
+        const U = new TreeUnknown('x');
+        const ok = (result, message) => {
+          if (result.errors.length) console.error(message, result.errors[0].message);
+          assert(result.errors.length === 0, message);
+        };
+        ok(analyze`<ul ${U}><li>${'?.n'}</li></ul>`, 'an unknown in attribute position (each(…) or a pattern object) is accepted');
+        ok(analyze`<ul ${each('?.items')}>${U}</ul>`, 'an unknown as the repeat item is a child');
+        const row = analyze`<div><span>a</span>${U}<span>b</span></div>`;
+        ok(row, 'an unknown between child elements is a child');
+        assertEquals(row.spec[2].length, 3, '…placed among the children');
+        const text = analyze`<p>${U}</p>`;
+        assertEquals(json(text.spec), json(['p', { textContent: '‹x›' }]), 'an unknown as the only content is text, shown as ‹x›');
+        ok(analyze`<button @click=${U}>Go</button>`, 'an unknown @event value is accepted');
+        assert(analyze`<p class="a ${U}"></p>`.errors.length === 1, 'real errors are still reported around unknowns');
+      }
+
+      // Test 13: analyzeTree describes the elements, with locations
+      {
+        const analyze = (strings, ...values) => analyzeTree(strings, values);
+        const { elements: [div] } = analyze`<div class="a" .value=${new TreeUnknown()} @click=${'go'} ${{ title: 'x' }}>
+  <span hidden></span></div>`;
+        assertEquals(json(div.attributes.map(({ name, hole, location: { part, offset } }) => [name, hole, part, offset])),
+          json([['class', null, 0, 5], ['.value', 0, 0, 15], ['@click', 1, 1, 1], ]), 'attributes: names, hole indexes, locations');
+        assertEquals(json(div.directives.map(({ hole, location: { part, offset } }) => [hole, part, offset])), json([[2, 2, 1]]), 'directives');
+        assertEquals(json([div.children[0].tag, div.children[0].location.part, div.children[0].location.offset, div.children[0].attributes[0].name]),
+          json(['span', 3, 4, 'hidden']), 'child elements, with locations');
       }
 
       // Test 7: clear errors

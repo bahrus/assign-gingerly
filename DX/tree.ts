@@ -46,6 +46,7 @@
 import { pathOf } from './paths.js';
 import type {
     EachDirective, EachOptions, ElementSpecification, Pattern, TreeTemplateLocation,
+    TreeAnalysis, TreeTemplateElement, TreeTemplateStrings,
 } from '../types/assign-gingerly/treeTypes.js';
 
 const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
@@ -115,7 +116,65 @@ export function each(of: any = '?.', options: EachOptions = {}): EachDirective {
 export function tree(strings: TemplateStringsArray, ...values: any[]): ElementSpecification {
     const cached = cache.get(strings);
     if (cached && sameValues(cached.values, values)) return cached.spec;
-    // Join the static strings with hole markers, remembering where each string starts
+    const ctx = createContext(strings, values);
+    const spec = toSpec(parseRoot(ctx), ctx);
+    treeResults.add(spec as object);
+    cache.set(strings, { values, spec });
+    return spec;
+}
+
+/**
+ * A `${…}` value that isn't known statically, for analyzeTree: an editor or build tool analyzing
+ * source passes one for each expression it can't evaluate. Tree treats it leniently (it may be a
+ * child, text, a directive or an event config), and shows it as `‹text›` in the produced notation.
+ */
+export class TreeUnknown {
+    readonly text: string;
+    constructor(text = '…') {
+        this.text = text;
+    }
+    toJSON(): string {
+        return `‹${this.text}›`;
+    }
+}
+
+/**
+ * Analyzes a tree`…` template without running it, for editors and build tools: the same parser
+ * and rules as the tag, but errors are returned rather than thrown, and nothing is cached.
+ * Pass the template's static strings (with `raw`, so error offsets are source offsets) and a
+ * stand-in for each `${…}`: the value if it's known (a `?.` string, `each(…)`, a plain object,
+ * another analyzeTree result's `spec`, null…), or a `TreeUnknown`.
+ */
+export function analyzeTree(strings: TreeTemplateStrings, values: any[]): TreeAnalysis {
+    const ctx = createContext(strings, values);
+    let root: ParsedElement;
+    try {
+        root = parseRoot(ctx);
+    } catch (e) {
+        if (e instanceof TreeTemplateError) return { elements: [], errors: [e] };
+        throw e;
+    }
+    const elements = [describe(root, ctx)];
+    try {
+        const spec = toSpec(root, ctx);
+        treeResults.add(spec as object);
+        return { spec, elements, errors: [] };
+    } catch (e) {
+        if (e instanceof TreeTemplateError) return { elements, errors: [e] };
+        throw e;
+    }
+}
+
+interface Context {
+    strings: TreeTemplateStrings;
+    values: any[];
+    /** Where each static string starts in the joined source */
+    starts: number[];
+    source: string;
+}
+
+/** Join the static strings with hole markers, remembering where each string starts. */
+function createContext(strings: TreeTemplateStrings, values: any[]): Context {
     const starts: number[] = [];
     let source = '';
     strings.forEach((s, i) => {
@@ -123,28 +182,40 @@ export function tree(strings: TemplateStringsArray, ...values: any[]): ElementSp
         source += s;
         if (i < values.length) source += holeMarker(i);
     });
-    const ctx: Context = { strings, values, starts };
-    const roots = parse(source, ctx).filter(node => !isBlankText(node));
+    return { strings, values, starts, source };
+}
+
+/** The template's single root element. */
+function parseRoot(ctx: Context): ParsedElement {
+    const roots = parse(ctx.source, ctx).filter(node => !isBlankText(node));
     if (roots.length !== 1 || isTextNode(roots[0])) {
         const at = roots.length > 1 ? roots[1].pos : roots[0]?.pos ?? 0;
         throw error(ctx, at, 'expected exactly one root element');
     }
-    const spec = toSpec(roots[0] as ParsedElement, ctx);
-    treeResults.add(spec as object);
-    cache.set(strings, { values, spec });
-    return spec;
+    return roots[0] as ParsedElement;
 }
 
-interface Context {
-    strings: TemplateStringsArray;
-    values: any[];
-    /** Where each static string starts in the joined source */
-    starts: number[];
+/** The parsed element tree, with locations, for analyzeTree. */
+function describe(element: ParsedElement, ctx: Context): TreeTemplateElement {
+    const { tag, pos, attrs, directives, children } = element;
+    return {
+        tag,
+        location: locate(ctx, pos),
+        attributes: attrs.map(({ name, parts, pos }) => {
+            const hole = parts !== true && parts.length === 1 && isHole(parts[0]) ? parts[0].hole : undefined;
+            return { name, location: locate(ctx, pos), ...(hole === undefined ? {} : { hole }) };
+        }),
+        directives: directives.map(({ hole, pos }) => ({ hole, location: locate(ctx, pos) })),
+        children: children.filter((node): node is ParsedElement => !isTextNode(node)).map(child => describe(child, ctx)),
+    };
 }
 
 // ── Locations and errors ─────────────────────────────────────────────────────
 
-/** The location of a source position: its static string and offset, and line/column as displayed. */
+/**
+ * The location of a source position: its static string and offset (in the raw string, i.e. the
+ * source, when `strings.raw` is there), and line/column as displayed.
+ */
 function locate({ strings, starts }: Context, pos: number): TreeTemplateLocation {
     let part = 0;
     while (part + 1 < starts.length && starts[part + 1] <= pos) part++;
@@ -152,11 +223,37 @@ function locate({ strings, starts }: Context, pos: number): TreeTemplateLocation
     const offset = Math.min(pos - starts[part], strings[part].length);
     const shown = displayText(strings, part, offset);
     const lineStart = shown.lastIndexOf('\n') + 1;
-    return { part, offset, line: shown.split('\n').length, column: shown.length - lineStart + 1 };
+    const raw = strings.raw?.[part];
+    return {
+        part,
+        offset: raw === undefined ? offset : rawOffset(raw, offset),
+        line: shown.split('\n').length,
+        column: shown.length - lineStart + 1,
+    };
+}
+
+/** The offset in a raw template string (escapes as written) of an offset in its cooked string. */
+function rawOffset(raw: string, cookedOffset: number): number {
+    let i = 0;
+    let cooked = 0;
+    while (cooked < cookedOffset && i < raw.length) {
+        if (raw[i] !== '\\') {
+            i++;
+            cooked++;
+            continue;
+        }
+        const escape = /^\\(?:u\{([\da-fA-F]+)\}|u[\da-fA-F]{4}|x[\da-fA-F]{2}|(\r\n|[\n\r])|[\s\S])/.exec(raw.slice(i))!;
+        const [text, codePoint, lineContinuation] = escape;
+        const length = lineContinuation ? 0 : codePoint ? String.fromCodePoint(parseInt(codePoint, 16)).length : 1;
+        if (cooked + length > cookedOffset) break;
+        i += text.length;
+        cooked += length;
+    }
+    return i;
 }
 
 /** The template up to (part, offset), as displayed: each hole shown as `${…}`. */
-function displayText(strings: TemplateStringsArray, part: number, offset: number): string {
+function displayText(strings: TreeTemplateStrings, part: number, offset: number): string {
     return strings.slice(0, part).map(s => `${s}\${…}`).join('') + strings[part].slice(0, offset);
 }
 
@@ -314,6 +411,7 @@ const isBlankText = (node: ParsedElement | TextNode) => isTextNode(node) && node
 const isEachDirective = (value: any): value is EachDirective => !!value && typeof value === 'object' && value.kind === 'each';
 const isTreeResult = (value: any) => !!value && typeof value === 'object' && treeResults.has(value);
 const isNothing = (value: any) => value == null || value === false || value === '';
+const isUnknown = (value: any): value is TreeUnknown => value instanceof TreeUnknown;
 const isPlainObject = (value: any) => !!value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype;
 /** A `${…}` value as it goes into a pattern: a paths() proxy becomes its `?.` string. */
 const valueOf = (value: any) => pathOf(value) ?? value;
@@ -335,6 +433,7 @@ function toSpec(element: ParsedElement, ctx: Context): ElementSpecification {
         } else if (name.startsWith('@')) {
             const on = name.slice(1);
             const config = typeof value === 'string' ? { call: value }
+                : isUnknown(value) ? { '…': value }
                 : value && typeof value === 'object' ? value
                 : fail(`@${on} needs an event config object (e.g. { call: 'method' }) or a method name`, pos);
             const key = SELF_EVENT_KEYS[events++] ?? fail('at most two @event bindings per element are supported', pos);
@@ -355,6 +454,9 @@ function toSpec(element: ParsedElement, ctx: Context): ElementSpecification {
         } else if (isPlainObject(directive)) {
             // A pattern spread: any keys the markup can't express (e.g. '_ ?=' ternaries, ' =>' handlers)
             for (const key of Object.keys(directive)) pattern[key] = valueOf(directive[key]);
+        } else if (isUnknown(directive)) {
+            // Statically unknown (analyzeTree): an each(…) or a pattern object, presumably
+            pattern['…'] = directive;
         } else {
             fail('only each(…) or a pattern object can be placed in attribute position', pos);
         }
@@ -368,6 +470,9 @@ function toSpec(element: ParsedElement, ctx: Context): ElementSpecification {
     const children: ElementSpecification[] = [];
     const textParts: Part[] = [];
     const textPositions: number[] = [];
+    // A statically unknown ${…} (analyzeTree) is taken as a child where children are expected, else as text
+    const unknownIsChild = !!repeat || content.some(node => !isTextNode(node)
+        || node.parts.some(part => isHole(part) && isTreeResult(values[part.hole])));
     for (const node of content) {
         if (!isTextNode(node)) {
             children.push(toSpec(node, ctx));
@@ -377,7 +482,7 @@ function toSpec(element: ParsedElement, ctx: Context): ElementSpecification {
             const pos = node.positions[i];
             // Nothing to render (as in lit): null, undefined, false or ''
             if (isHole(part) && isNothing(values[part.hole])) return;
-            if (isHole(part) && isTreeResult(values[part.hole])) {
+            if (isHole(part) && (isTreeResult(values[part.hole]) || (unknownIsChild && isUnknown(values[part.hole])))) {
                 children.push(values[part.hole]);
             } else if (children.length > 0) {
                 if (isHole(part) || part.trim()) fail('text after a child element isn\'t supported (wrap the text in an element)', pos + leadingSpace(part));

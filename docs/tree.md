@@ -181,8 +181,19 @@ The type can also come from elsewhere: `@typedef {import('./launch-api.js').Laun
   ```
 
   For editors and tools, the error carries its location:
-  - **`part` and `offset`** are exact: the index of the template's static string (the template literal's quasi) and the offset within it, which map straight to source positions;
+  - **`part` and `offset`** are exact: the index of the template's static string (the template literal's quasi) and the offset within its **raw** text (escapes as written), so they map straight to source positions;
   - **`line` and `column`** are 1-based, in the template as displayed, with each `${…}` shown as `${…}`.
+- **Static analysis (`analyzeTree`):** editors and build tools can check a template without running it. `analyzeTree(strings, values)` uses the same parser and rules as the tag, but **returns** its errors instead of throwing, and caches nothing. It returns `{ spec, elements, errors }`:
+  - **`spec`:** the notation;
+  - **`elements`:** the parsed elements, with each attribute's and directive's location, for checks and completions;
+  - **`errors`:** `TreeTemplateError`s.
+
+  For each `${…}`, pass the value if it's known statically (a `?.` string, `each(…)`, a plain object, a nested `analyzeTree` result's `spec`, `null`…), or else a **`TreeUnknown`**. Tree treats an unknown leniently:
+  - in attribute position, it may be `each(…)` or a pattern object;
+  - as content, it's a child where children are expected and text otherwise;
+  - as an `@event` value, it may be a method name or a config.
+
+  It shows as `‹text›` in the notation. This is what [gingerly-tree-analyzer](https://github.com/bahrus/gingerly-tree-analyzer) uses.
 
 ## Arrays
 
