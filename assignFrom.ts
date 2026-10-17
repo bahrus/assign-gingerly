@@ -6,7 +6,9 @@
  * 
  * For async protocol handlers or awaitable handler execution, use assignFromAsync.
  * 
- * Handler commands (` =>`) are fire-and-forget (kicked off asynchronously, not awaited).
+ * Handler commands (` =>`) are fire-and-forget: they run synchronously as far as they can
+ * (once processHandlerCommands and the handler are loaded, a sync handler finishes before
+ * assignFrom returns), and anything that must wait continues asynchronously, not awaited.
  * Sync-op commands (` =&`) are always fully synchronous — see SYNC_OPS.
  */
 
@@ -644,18 +646,18 @@ export function assignFrom(
     processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, options, permissionProcessor);
   }
 
-  // Process handler commands — fire-and-forget (async); whenSettled(target) awaits them
+  // Process handler commands — fire-and-forget (sync when possible); whenSettled(target) awaits what's left
   if (handlerKeys.length > 0) {
-    trackPending(target, withHandlerCommands(processHandlerCommands =>
+    runHandlerCommands(target, processHandlerCommands =>
       processHandlerCommands(target, handlerKeys, expandedPattern, options, permissionProcessor)
-    ));
+    );
   }
 
-  // Process #[x] handler keys — fire-and-forget (async); whenSettled(target) awaits them
+  // Process #[x] handler keys — fire-and-forget (sync when possible); whenSettled(target) awaits what's left
   if (idRefHandlerKeys.length > 0 && (options.pin || options.at)) {
     const ids = getEffectiveIds(options)!;
-    trackPending(target, withHandlerCommands(processHandlerCommands => {
-      const runs: Promise<void>[] = [];
+    runHandlerCommands(target, processHandlerCommands => {
+      const pending: Promise<void>[] = [];
       for (const key of idRefHandlerKeys) {
         const parsed = parseIdRef(key);
         if (!parsed) continue;
@@ -663,10 +665,12 @@ export function assignFrom(
         if (!el) continue;
         const syntheticKey = parsed.remainingPath ? `${parsed.remainingPath} =>` : ' =>';
         const syntheticPattern = { [syntheticKey]: expandedPattern[key] };
-        runs.push(processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissionProcessor));
+        // One element's failure doesn't stop the others
+        const run = attempt(() => processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissionProcessor));
+        if (run) pending.push(run);
       }
-      return Promise.all(runs);
-    }));
+      return pending.length > 0 ? Promise.all(pending).then(() => undefined) : undefined;
+    });
   }
 
   // Process inferred assignments (sync)
@@ -696,27 +700,44 @@ export function assignFrom(
 
 type ProcessHandlerCommands = typeof import('./processHandlerCommands.js').processHandlerCommands;
 
-/** processHandlerCommands, once loaded (as assignFromAsync caches it). */
+/** processHandlerCommands, once loaded (shared with assignFromAsync, via loadHandlerCommands). */
 let cachedProcessHandlerCommands: ProcessHandlerCommands | undefined;
 
 /**
- * Run `use` with processHandlerCommands: right away once the module is loaded (so the
- * handler starts within this assignFrom call), after loading it the first time. A dynamic
- * import() of an already-loaded module still resolves in a later task, so importing on
- * every call would delay every handler by a task.
+ * processHandlerCommands: synchronously once the module is loaded, otherwise a promise
+ * that loads (and caches) it. A dynamic import() of an already-loaded module still
+ * resolves in a later task, so importing on every call would delay every handler by a
+ * task. assignFromAsync uses this too, so whichever API runs first loads it for both.
  */
-function withHandlerCommands<T>(use: (processHandlerCommands: ProcessHandlerCommands) => T | Promise<T>): Promise<T> {
-  if (cachedProcessHandlerCommands) {
-    try {
-      return Promise.resolve(use(cachedProcessHandlerCommands));
-    } catch (error) {
-      return Promise.reject(error);
-    }
+export function loadHandlerCommands(): ProcessHandlerCommands | Promise<ProcessHandlerCommands> {
+  return cachedProcessHandlerCommands ?? import('./processHandlerCommands.js').then(({ processHandlerCommands }) =>
+    cachedProcessHandlerCommands = processHandlerCommands
+  );
+}
+
+/** Call `run`, turning a synchronous throw into a rejected promise. */
+function attempt(run: () => Promise<void> | void): Promise<void> | void {
+  try {
+    return run();
+  } catch (error) {
+    return Promise.reject(error);
   }
-  return import('./processHandlerCommands.js').then(({ processHandlerCommands }) => {
-    cachedProcessHandlerCommands = processHandlerCommands;
-    return use(processHandlerCommands);
-  });
+}
+
+/**
+ * Run `use` with processHandlerCommands: right away once the module is loaded (so a sync
+ * handler finishes within this assignFrom call), after loading it the first time. Only
+ * work still pending afterwards is tracked for whenSettled. Failures, sync or not, are
+ * reported (see trackPending), never thrown to assignFrom's caller.
+ */
+function runHandlerCommands(target: any, use: (processHandlerCommands: ProcessHandlerCommands) => Promise<void> | void): void {
+  const loaded = loadHandlerCommands();
+  if (typeof loaded === 'function') {
+    const pending = attempt(() => use(loaded));
+    if (pending) trackPending(target, pending);
+    return;
+  }
+  trackPending(target, loaded.then(use));
 }
 
 /** Fire-and-forget work started by the sync assignFrom, per target, for whenSettled. */
@@ -739,7 +760,8 @@ function trackPending(target: any, work: Promise<unknown>): void {
 
 /**
  * Resolves when the fire-and-forget work that the synchronous `assignFrom` started for
- * `target` has finished: ` =>` handlers, `#[x]` handlers and bulk enhancements. So code can
+ * `target` has finished: ` =>` handlers (a handler that ran synchronously is already
+ * done), `#[x]` handlers and bulk enhancements. So code can
  * use the sync API and still know when everything is in place, e.g. to time a render:
  *
  * ```js

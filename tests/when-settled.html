@@ -35,7 +35,8 @@
     const treeConfig = list => ({ '?. =>': { do: 'builtIns.tree', map: { list: ['ul', {}, { each: ['li', '?.'] }] } } });
 
     async function runTests() {
-      // Test 1: the sync assignFrom returns before its ' =>' handler has run; whenSettled waits for it
+      // Test 1: on first use (processHandlerCommands and the handler not loaded yet), the sync
+      // assignFrom returns before its ' =>' handler has run; whenSettled waits for it
       {
         const host = document.createElement('div');
         assignFrom(host, treeConfig(), { from: { list: ['a', 'b', 'c'] } });
@@ -92,6 +93,57 @@
         assert(resolved, 'whenSettled: resolves at once when nothing is pending');
         await whenSettled(42);
         assert(true, 'whenSettled: accepts non-object targets');
+      }
+
+      // Test 6: once loaded, a sync handler runs (and its return value is applied) before assignFrom returns
+      {
+        class Doubler { constructor(config) { this.config = config; } assign(lhs, { n }) { return n * 2; } }
+        const obj = { value: 0 };
+        assignFrom(obj, { '?.value =>': { do: 'double', get: { n: '?.n' } } }, { from: { n: 21 }, handlers: { double: Doubler } });
+        assertEquals(obj.value, 42, 'sync handler: return value assigned before assignFrom returns');
+        let settled = false;
+        whenSettled(obj).then(() => { settled = true; });
+        await Promise.resolve();
+        assert(settled, 'sync handler: nothing left pending for whenSettled');
+
+        const host = document.createElement('div');
+        assignFrom(host, treeConfig(), { from: { list: ['a', 'b'] } });
+        assertEquals(host.querySelectorAll('li').length, 2, 'builtIns.tree (already loaded): rendered before assignFrom returns');
+      }
+
+      // Test 7: a sync handler that throws is still reported (not thrown to the caller), and later configs don't run
+      {
+        class Boom { assign() { throw new Error('boom'); } }
+        class Mark { assign(lhs) { lhs.marked = true; } }
+        const obj = {};
+        const reported = [];
+        const onError = event => { reported.push(event.error?.message ?? event.message); event.preventDefault(); };
+        window.addEventListener('error', onError);
+        let thrown = false;
+        try {
+          try {
+            assignFrom(obj, { '?. =>': [{ do: 'boom' }, { do: 'mark' }] }, { from: {}, handlers: { boom: Boom, mark: Mark } });
+          } catch { thrown = true; }
+          await whenSettled(obj);
+          await new Promise(resolve => setTimeout(resolve));
+        } finally {
+          window.removeEventListener('error', onError);
+        }
+        assert(!thrown, 'sync handler error: not thrown to the assignFrom caller');
+        assert(reported.includes('boom'), 'sync handler error: reported');
+        assert(!obj.marked, 'sync handler error: later configs for the key do not run');
+      }
+
+      // Test 8: a sync handler, then an async one, then a sync one — still strictly in order
+      {
+        const log = [];
+        class Now { constructor(c) { this.c = c; } assign() { log.push(this.c.tag); } }
+        class Later { constructor(c) { this.c = c; } async assign() { await null; log.push(this.c.tag); } }
+        const obj = {};
+        assignFrom(obj, { '?. =>': [{ do: 'now', tag: 1 }, { do: 'later', tag: 2 }, { do: 'now', tag: 3 }] }, { from: {}, handlers: { now: Now, later: Later } });
+        assertEquals(log.join(), '1', 'mixed: the sync handler before the first async one ran synchronously');
+        await whenSettled(obj);
+        assertEquals(log.join(), '1,2,3', 'mixed: the rest ran in order, and whenSettled waited for it');
       }
 
       document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;

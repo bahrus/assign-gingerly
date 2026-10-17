@@ -24,6 +24,11 @@
  *
  * Fully synchronous inside `assign()`.
  *
+ * Nested trees: a `{ map, … }` object in the children slot (a tree config minus `do`)
+ * renders a tree into the element, with the element's value as its VM, synchronously.
+ * (A ` =>` builtIns.tree in a pattern is also synchronous once tree.js is loaded, which
+ * it is while a tree runs, but goes through the handler dispatch.)
+ *
  * Itemscope managers: an object header `{ tag, ish }` attaches a manager (a registered
  * name, or a class that's auto-registered) to the element, without an `itemscope`
  * attribute. Each call assigns the key's value to `el.ish`, and the element's own
@@ -62,7 +67,8 @@ import type {
     AssignFromHandler, AssignFromOptions, ItemscopeManagerConfig, ItemscopeRegistry, PermissionProcessor,
 } from '../types/assign-gingerly/types.js';
 import type {
-    CompiledNode, CompiledTemplate, CompiledTree, ElementSpecification, ManagerRef, Pattern, RepeatSpecification, TreeConfig,
+    CompiledNode, CompiledTemplate, CompiledTree, ElementSpecification, ManagerRef, NestedTreeSpecification, Pattern,
+    RepeatSpecification, TreeConfig,
 } from '../types/assign-gingerly/treeTypes.js';
 
 const DEFAULT_MARKER_NAME = 'tree';
@@ -114,6 +120,8 @@ interface TreeNode {
     container: ParentNode;
     /** Present when the node repeats (`{ each, … }` in the children slot) instead of having static children */
     repeat?: RepeatState;
+    /** Whether the node renders a nested tree (`{ map, … }` in the children slot) — structure, like a repeat */
+    nested: boolean;
     /** The pattern (and effective aka) last applied to the element; see bindContent */
     appliedPattern?: Pattern;
     appliedAka?: Record<string, string>;
@@ -466,13 +474,26 @@ function bindRepeat(node: TreeNode, repeat: RepeatSpecification, from: any): voi
 }
 
 /**
- * Apply a node's own pattern, then sync its static children or its repeat, all against `from`.
+ * Render a nested tree (`{ map, … }` in the children slot) into the node's container, with
+ * `from` as its VM: what `{ '?. =>': { do: 'builtIns.tree', ...nested } }` in the node's
+ * pattern would do, without the handler dispatch. The nested tree keeps its own state
+ * (between its own markers), so later calls rebind it in place.
+ */
+function bindNested(node: TreeNode, nested: NestedTreeSpecification, from: any): void {
+    const { container, options, permissionProcessor } = node;
+    new TreeHandler(nested as TreeConfig).assign(container, {}, { ...options, from }, permissionProcessor);
+}
+
+/**
+ * Apply a node's own pattern, then sync its static children, its repeat or its nested
+ * tree, all against `from`.
  */
 function bindContent(
     node: TreeNode,
     pattern: Pattern | undefined,
     childSpecs: ElementSpecification[],
     repeat: RepeatSpecification | undefined,
+    nested: NestedTreeSpecification | undefined,
     from: any
 ): void {
     const { element, children, options, permissionProcessor } = node;
@@ -485,6 +506,10 @@ function bindContent(
     node.appliedAka = aka;
     if (repeat) {
         bindRepeat(node, repeat, from);
+        return;
+    }
+    if (nested) {
+        bindNested(node, nested, from);
         return;
     }
     const { container } = node;
@@ -502,10 +527,10 @@ function bindContent(
 /** A manager's ctx.rebind(): re-apply the node's subtree against the manager instance. */
 function rebindNode(node: TreeNode): void {
     if (node.binding) return;
-    const [, , , pattern, childSpecs, repeat] = normalize(node.spec);
+    const [, , , pattern, childSpecs, repeat, nested] = normalize(node.spec);
     node.binding = true;
     try {
-        bindContent(node, pattern, childSpecs, repeat, (node.element as any).ish);
+        bindContent(node, pattern, childSpecs, repeat, nested, (node.element as any).ish);
     } finally {
         node.binding = false;
     }
@@ -523,15 +548,16 @@ function createNode(
         const variant = (options as any)[TREE_COMPILED] as CompiledVariant | undefined;
         if (variant) return cloneNodeFrom(template, variant, value, options, permissionProcessor);
     }
-    const [, tag, ish, pattern, childSpecs, repeat] = normalize(spec);
+    const [, tag, ish, pattern, childSpecs, repeat, nested] = normalize(spec);
     const element = document.createElement(tag);
     const node: TreeNode = {
         tag, ish, element, children: [], spec, options, permissionProcessor, binding: true, container: containerOf(element),
+        nested: nested !== undefined,
     };
     try {
         const from = ish === undefined ? value : attachManager(node, ish, value);
-        if (repeat) {
-            bindContent(node, pattern, childSpecs, repeat, from);
+        if (repeat || nested) {
+            bindContent(node, pattern, childSpecs, repeat, nested, from);
             return node;
         }
         applyPattern(element, pattern, from, options, permissionProcessor);
@@ -561,9 +587,9 @@ function syncNode(
     permissionProcessor?: PermissionProcessor,
     template?: CompiledTemplate
 ): TreeNode {
-    const [, tag, ish, pattern, childSpecs, repeat] = normalize(spec);
+    const [, tag, ish, pattern, childSpecs, repeat, nested] = normalize(spec);
     if (!node || node.tag !== tag || node.ish !== ish || node.children.length !== childSpecs.length
-        || !!node.repeat !== !!repeat) {
+        || !!node.repeat !== !!repeat || node.nested !== (nested !== undefined)) {
         return createNode(spec, value, options, permissionProcessor, template);
     }
     Object.assign(node, { spec, options, permissionProcessor });
@@ -575,7 +601,7 @@ function syncNode(
             element.ish = value;
             from = element.ish;
         }
-        bindContent(node, pattern, childSpecs, repeat, from);
+        bindContent(node, pattern, childSpecs, repeat, nested, from);
     } finally {
         node.binding = false;
     }
@@ -651,6 +677,7 @@ function pairNodes(compiled: CompiledNode, element: Element, options: AssignFrom
     const container = containerOf(element);
     const node: TreeNode = {
         tag, ish, element, children: [], spec, options, permissionProcessor, binding: true, container, compiled,
+        nested: compiled.nested !== undefined,
     };
     let child = (container as Element).firstElementChild;
     for (const childCompiled of compiled.children) {
@@ -663,7 +690,7 @@ function pairNodes(compiled: CompiledNode, element: Element, options: AssignFrom
 /** Bind a freshly cloned node and its subtree, as createNode does for a created one. */
 function bindCloned(node: TreeNode, value: any): void {
     const { compiled, element, ish, options, permissionProcessor } = node;
-    const { pattern, dynamic, repeat } = compiled!;
+    const { pattern, dynamic, repeat, nested } = compiled!;
     try {
         const from = ish === undefined ? value : attachManager(node, ish, value);
         applyPattern(element, dynamic, from, options, permissionProcessor);
@@ -672,6 +699,10 @@ function bindCloned(node: TreeNode, value: any): void {
         node.appliedAka = (options as any).aka;
         if (repeat) {
             bindRepeat(node, repeat.spec, from);
+            return;
+        }
+        if (nested) {
+            bindNested(node, nested, from);
             return;
         }
         const { children, container } = node;
@@ -759,7 +790,8 @@ export class TreeHandler implements AssignFromHandler {
             console.warn("builtIns.tree: 'compile' needs TreeHandler.prepare(config) to load the compiler first (assignFrom does this); not compiling");
         }
         const variant = compile && compiler ? compiledVariantFor(map, nestedOptions, from, permissionProcessor) : undefined;
-        if (variant) (nestedOptions as any)[TREE_COMPILED] = variant;
+        // Always set, so an enclosing tree's variant doesn't carry over into a nested one
+        (nestedOptions as any)[TREE_COMPILED] = variant;
 
         const [start, end] = findChildMarkers(lhsTarget, markerName) ?? createMarkers(lhsTarget, markerName);
         let nodes = treeStates.get(start);

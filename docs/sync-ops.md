@@ -139,7 +139,7 @@ assignFrom(p, {
 
 | | ` =&` sync op | ` =>` handler |
 |---|---|---|
-| Runs | Synchronously, inline | Asynchronously (fire-and-forget in `assignFrom`, awaited in `assignFromAsync`) |
+| Runs | Synchronously, inline, guaranteed | Synchronously when it can (handler loaded, no `resolve`, no promise from `prepare` / `assign`); otherwise asynchronously (fire-and-forget in `assignFrom`, awaited in `assignFromAsync`) |
 | Loaded | Static registry | Dynamically imported built-ins, or `options.handlers` |
 | Config resolution | `getValues` (sync) over the whole config | `get` (sync) / `resolve` (async, awaits protocols) maps |
 | Async values | Rejected with an error | Supported via `resolve` |

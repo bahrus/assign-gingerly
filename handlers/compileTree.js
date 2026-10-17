@@ -64,7 +64,7 @@ function compileTemplate(id, spec, sample, ctx) {
 }
 function compileNode(spec, sample, templateId, counter, ctx) {
     const index = counter.index++;
-    const [, tag, ish, pattern, childSpecs, repeat] = normalize(spec);
+    const [, tag, ish, pattern, childSpecs, repeat, nested] = normalize(spec);
     if (!TAG.test(tag))
         throw new Error(`compileTree: invalid tag name "${tag}"`);
     // A manager's subtree resolves against the manager instance, which a sample can't predict
@@ -75,10 +75,15 @@ function compileNode(spec, sample, templateId, counter, ctx) {
         node.ish = ish;
     if (pattern) {
         node.pattern = pattern;
-        const ownsContent = !repeat && childSpecs.length === 0;
+        const ownsContent = !repeat && !nested && childSpecs.length === 0;
         const dynamic = bakePattern(pattern, element, nodeSample, ownsContent, ctx);
         if (dynamic)
             node.dynamic = dynamic;
+    }
+    // A nested tree renders at bind time (into the element, between its own markers)
+    if (nested) {
+        node.nested = nested;
+        return [element, node];
     }
     if (repeat) {
         const base = `${templateId}>${index}`;
@@ -284,13 +289,15 @@ export function toHTML({ tag, attrs, content }) {
         html += typeof item === 'string' ? escapeText(item) : toHTML(item);
     return `${html}</${tag}>`;
 }
-/** The node tree's shape: tags, managers and repeat references. */
-function shapeOf({ tag, ish, children, repeat }) {
+/** The node tree's shape: tags, managers, repeat references and nested trees. */
+function shapeOf({ tag, ish, children, repeat, nested }) {
     let shape = tag;
     if (ish !== undefined)
         shape += `:${typeof ish === 'string' ? ish : ish.is ?? ish.name}`;
     if (repeat)
         return `${shape}{${repeat.each}|${repeat.empty ?? ''}}`;
+    if (nested)
+        return `${shape}{tree}`;
     return children.length > 0 ? `${shape}(${children.map(shapeOf).join(',')})` : shape;
 }
 /** 32-bit FNV-1a of the template's markup and node shape, as 8 hex digits. */

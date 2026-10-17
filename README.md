@@ -79,7 +79,7 @@ The third fundamental utility function is:
 
 `assignFrom` builds on assignGingerly by adding a resolution step: RHS values that are `?.`-prefixed path strings are resolved against a source object before assignment. This enables a declarative, data-driven pattern where a view model (or any source) feeds values into a target through path expressions — replacing imperative property lookups with a single configuration object.
 
-**`assignFrom` is synchronous** — it resolves paths, expands substitutions, handles spreads, processes `#[x]` refs, and runs inferred assignments all without yielding to the event loop. Handler commands (` =>`), `beVigilant`, and `enhance` are fire-and-forget (kicked off asynchronously in the background).
+**`assignFrom` is synchronous** — it resolves paths, expands substitutions, handles spreads, processes `#[x]` refs, and runs inferred assignments all without yielding to the event loop. Handler commands (` =>`), `beVigilant`, and `enhance` are fire-and-forget (kicked off asynchronously in the background). Exception: a ` =>` handler that's already loaded (or passed as a class), has no `resolve`, and whose `prepare` / `assign` return no promise, runs synchronously before `assignFrom` returns. That's why a nested `builtIns.tree` is synchronous. Only the parts that have to wait run in the background.
 
 **`assignFromAsync`** is the awaitable variant for when you need to:
 - Use async protocol handlers (e.g., `fetch`-based resolution — protocols are introduced just below, and covered in full in [Protocol Resolution](#protocol-resolution-in-getvalues-and-assignfrom) later in this doc)
@@ -3389,6 +3389,7 @@ Key points:
 - **Patterns resolve against the key's value**; children share their parent's value, and the whole VM is reachable as [`$parent` / `$root`](docs/root-references.md).
 - **Rebinding in place:** later calls re-apply patterns to the elements already created; only a changed structure is rebuilt.
 - **Arrays:** `['ul', {}, { each: ['li', { textContent: '?.name' }], key: '?.id', empty: ['li', { textContent: 'None' }] }]` stamps `each` per item, with keyed reuse across calls.
+- **Nested trees:** `['section', {}, { map: { name: ['h2', '?.'] } }]` renders a tree into the element with the element's value as its VM, synchronously. See [docs/tree.md](docs/tree.md#nested-trees).
 - **Formatting** via [pipes](docs/pipes.md), and **itemscope managers as view models** via `{ tag, ish }` headers.
 - **Authoring with markup:** the [`` tree`…` `` tagged template](#tree--element-specifications-from-markup) writes specifications as lit-like HTML, and produces the same notation.
 - **Compiling** (`compile: true`, opt-in): clones precompiled templates with static parts baked in, for large lists. See [docs/tree.md](docs/tree.md#compiling-compile-experimental).

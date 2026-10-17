@@ -24,7 +24,7 @@ import {IAssignGingerlyOptions} from './types/assign-gingerly/types.js';
 import assignGingerly from './assignGingerly.js';
 import type { PermissionProcessor, AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
 import {
-  assignFrom, expandSubstitutions, categorizeKeys, handleSpreads, isHandlerCommand, parseMultiInvokeCommand
+  assignFrom, expandSubstitutions, categorizeKeys, handleSpreads, isHandlerCommand, loadHandlerCommands, parseMultiInvokeCommand
 } from './assignFrom.js';
 
 export interface AssignFromOptions extends IAssignGingerlyOptions {
@@ -51,9 +51,6 @@ export interface AssignFromOptions extends IAssignGingerlyOptions {
 }
 
 export type { AssignFromHandler, AssignFromHandlerConstructor };
-
-// Module cache for processHandlerCommands — avoids await on dynamic import after first call
-let _processHandlerCommands: any;
 
 export async function assignFromAsync(
   target: any,
@@ -153,17 +150,18 @@ export async function assignFromAsync(
       }
     }
   }
-  // Process handler commands ( =>) — cached after first load to avoid await overhead
+  // Process handler commands ( =>) — the module is shared with (and cached by) the sync assignFrom
   if (handlerKeys.length > 0) {
-    
-    _processHandlerCommands ??= (await import('./processHandlerCommands.js')).processHandlerCommands;
-    await _processHandlerCommands(target, handlerKeys, expandedPattern, options, permissionProcessor);
+    const loaded = loadHandlerCommands();
+    const processHandlerCommands = typeof loaded === 'function' ? loaded : await loaded;
+    await processHandlerCommands(target, handlerKeys, expandedPattern, options, permissionProcessor);
   }
   // Process #[x] handler keys — resolve element, then pass to handler processing
   if (idRefHandlerKeys.length > 0 && (options.pin || options.at)) {
     const ids = { ...options.pin, ...options.at };
     const { resolveIdVariable, parseIdRef } = await import('./resolve/resolveIdRef.js');
-    _processHandlerCommands ??= (await import('./processHandlerCommands.js')).processHandlerCommands;
+    const loaded = loadHandlerCommands();
+    const processHandlerCommands = typeof loaded === 'function' ? loaded : await loaded;
 
     for (const key of idRefHandlerKeys) {
       const parsed = parseIdRef(key);
@@ -182,7 +180,7 @@ export async function assignFromAsync(
         [syntheticKey]: expandedPattern[key]
       };
 
-      await _processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissionProcessor);
+      await processHandlerCommands(el,[syntheticKey], syntheticPattern, options, permissionProcessor);
     }
   }
 

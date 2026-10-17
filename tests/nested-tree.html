@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nested builtIns.tree Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Nested builtIns.tree tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    // Only assignFromAsync / assignFrom from the package: nothing is loaded before Test 1,
+    // so it checks that assignFromAsync's first load of processHandlerCommands is shared
+    // with the sync assignFrom that a nested ' =>' tree goes through.
+    import { assignFrom, assignFromAsync, whenSettled } from '../index.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+    function assert(condition, message) {
+      results.push(`<div class="${condition ? 'pass' : 'fail'}">${condition ? '✓' : '✗'} ${message}</div>`);
+      condition ? passed++ : failed++;
+      if (!condition) console.error('Failed:', message);
+    }
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) console.error(`${message}\n  Expected: ${expected}\n  Actual:   ${actual}`);
+      assert(actual === expected, message);
+    }
+
+    const text = (root, selector) => [...root.querySelectorAll(selector)].map(el => el.textContent).join(',');
+
+    // A tree whose `person` element hosts a nested tree via a ' =>' in its pattern
+    const handlerNested = {
+      '?. =>': { do: 'builtIns.tree', map: {
+        person: ['section', { className: 'card', '?. =>': { do: 'builtIns.tree', map: {
+          name: ['h2', '?.'],
+          tags: ['ul', {}, { each: ['li', '?.'] }],
+        } } }],
+      } },
+    };
+
+    // The same tree with the nested-map shorthand in the children slot
+    const shorthandNested = {
+      '?. =>': { do: 'builtIns.tree', map: {
+        person: ['section', { className: 'card' }, { map: {
+          name: ['h2', '?.'],
+          tags: ['ul', {}, { each: ['li', '?.'] }],
+        } }],
+      } },
+    };
+
+    const vm1 = { person: { name: 'Ada', tags: ['math', 'engines'] } };
+    const vm2 = { person: { name: 'Grace', tags: ['cobol', 'compilers', 'navy'] } };
+
+    async function runTests() {
+      // Test 1: started by assignFromAsync on a fresh page — the nested tree is there once it resolves
+      {
+        const host = document.createElement('div');
+        await assignFromAsync(host, handlerNested, { from: vm1 });
+        assertEquals(text(host, 'h2'), 'Ada', "assignFromAsync (first use): the nested ' =>' tree is rendered when it resolves");
+        assertEquals(text(host, 'li'), 'math,engines', "assignFromAsync (first use): the nested tree's repeat is rendered too");
+      }
+
+      // Test 2: sync assignFrom, nested ' =>' tree — rendered before assignFrom returns, first call and rebind
+      {
+        const host = document.createElement('div');
+        assignFrom(host, handlerNested, { from: vm1 });
+        assertEquals(text(host, 'h2'), 'Ada', "sync assignFrom: the nested ' =>' tree is rendered before it returns (first call)");
+        assertEquals(text(host, 'li'), 'math,engines', "sync assignFrom: the nested tree's repeat is rendered before it returns");
+        const h2 = host.querySelector('h2');
+        assignFrom(host, handlerNested, { from: vm2 });
+        assertEquals(text(host, 'h2'), 'Grace', "sync assignFrom: the nested ' =>' tree is rebound before it returns");
+        assertEquals(text(host, 'li'), 'cobol,compilers,navy', "sync assignFrom: the nested repeat is rebound before it returns");
+        assert(host.querySelector('h2') === h2, "rebind: the nested tree's elements are reused");
+        let settled = false;
+        whenSettled(host).then(() => { settled = true; });
+        await Promise.resolve();
+        assert(settled, 'whenSettled: nothing pending after a fully synchronous run');
+      }
+
+      // Test 3: nested ' =>' tree two levels deep
+      {
+        const host = document.createElement('div');
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: {
+          a: ['div', { '?. =>': { do: 'builtIns.tree', map: {
+            b: ['div', { '?. =>': { do: 'builtIns.tree', map: { c: ['span', '?.'] } } }],
+          } } }],
+        } } };
+        assignFrom(host, cfg, { from: { a: { b: { c: 'deep' } } } });
+        assertEquals(text(host, 'span'), 'deep', "two levels of nested ' =>' trees render synchronously");
+        assignFrom(host, cfg, { from: { a: { b: { c: 'deeper' } } } });
+        assertEquals(text(host, 'span'), 'deeper', "two levels of nested ' =>' trees rebind synchronously");
+      }
+
+      // Test 4: nested-map shorthand — same output, synchronous, rebinds in place
+      {
+        const handlerHost = document.createElement('div');
+        const host = document.createElement('div');
+        assignFrom(handlerHost, handlerNested, { from: vm1 });
+        assignFrom(host, shorthandNested, { from: vm1 });
+        assertEquals(host.innerHTML, handlerHost.innerHTML, "shorthand: same markup as the nested ' =>' form");
+        const h2 = host.querySelector('h2');
+        assignFrom(host, shorthandNested, { from: vm2 });
+        assertEquals(text(host, 'h2'), 'Grace', 'shorthand: rebinds synchronously');
+        assertEquals(text(host, 'li'), 'cobol,compilers,navy', "shorthand: the nested tree's repeat rebinds");
+        assert(host.querySelector('h2') === h2, "shorthand: the nested tree's elements are reused");
+        assertEquals(host.querySelector('section').className, 'card', "shorthand: the element's own pattern still applies");
+      }
+
+      // Test 5: nested-map shorthand options — markerName, keepNullish, aka; `$parent` is the outer value
+      {
+        const host = document.createElement('div');
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: {
+          person: ['article', {}, {
+            markerName: 'inner', keepNullish: true, aka: { _: 'textContent' },
+            map: { name: ['b', { _: '?.' }], nick: ['i', { _: '?.' }], title: ['h3', { _: '$parent?.title' }] },
+          }],
+        } } };
+        assignFrom(host, cfg, { from: { title: 'Pioneers', person: { name: 'Ada', title: 'Countess' } } });
+        const article = host.querySelector('article');
+        assertEquals(article.firstChild?.data, '?start name="inner"', 'shorthand: markerName names the nested markers');
+        assertEquals(text(host, 'b'), 'Ada', "shorthand: config aka applies to the nested tree's patterns");
+        assert(article.querySelector('i') !== null, 'shorthand: keepNullish keeps the element for a missing value');
+        assertEquals(text(host, 'h3'), 'Countess', "shorthand: '$parent' inside the nested tree is the element's value");
+      }
+
+      // Test 6: nested-map shorthand inside a repeat's items
+      {
+        const host = document.createElement('div');
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: {
+          people: ['ul', {}, { key: '?.id', each: ['li', {}, { map: { name: ['b', '?.'], role: ['i', '?.'] } }] }],
+        } } };
+        assignFrom(host, cfg, { from: { people: [{ id: 1, name: 'Ada', role: 'math' }, { id: 2, name: 'Grace' }] } });
+        assertEquals(text(host, 'b'), 'Ada,Grace', 'shorthand in a repeat: one nested tree per item');
+        assertEquals(text(host, 'i'), 'math', "shorthand in a repeat: missing values are skipped, as in any tree");
+        const [ada] = host.querySelectorAll('li');
+        assignFrom(host, cfg, { from: { people: [{ id: 2, name: 'Grace', role: 'navy' }, { id: 1, name: 'Ada', role: 'engines' }] } });
+        assertEquals(text(host, 'b'), 'Grace,Ada', 'shorthand in a repeat: reordered by key');
+        assertEquals(text(host, 'i'), 'navy,engines', 'shorthand in a repeat: nested trees rebound');
+        assert(host.querySelectorAll('li')[1] === ada, "shorthand in a repeat: items' elements are reused by key");
+      }
+
+      // Test 7: switching a key's spec between static children and a nested tree rebuilds it
+      {
+        const host = document.createElement('div');
+        const nestedCfg = { '?. =>': { do: 'builtIns.tree', map: { x: ['div', {}, { map: { v: ['span', '?.'] } }] } } };
+        const staticCfg = { '?. =>': { do: 'builtIns.tree', map: { x: ['div', {}, []] } } };
+        assignFrom(host, nestedCfg, { from: { x: { v: 'one' } } });
+        assertEquals(text(host, 'span'), 'one', 'switch: nested tree rendered');
+        assignFrom(host, staticCfg, { from: { x: { v: 'one' } } });
+        assertEquals(host.querySelectorAll('span').length, 0, 'switch: static children → the nested tree is gone');
+        assignFrom(host, nestedCfg, { from: { x: { v: 'two' } } });
+        assertEquals(text(host, 'span'), 'two', 'switch: back to a nested tree');
+      }
+
+      // Test 8: invalid children slot is still rejected
+      {
+        let message = '';
+        try {
+          await assignFromAsync(document.createElement('div'), { '?. =>': { do: 'builtIns.tree', map: { x: ['div', {}, { nope: 1 }] } } }, { from: { x: {} } });
+        } catch (e) { message = e.message; }
+        assert(/nested tree \{ map/.test(message), 'a children slot that is neither array, repeat nor nested tree throws');
+      }
+
+      // Test 9: compile — the outer tree compiles; the shorthand's nested tree renders at bind time
+      {
+        const host = document.createElement('div');
+        const cfg = { '?. =>': { do: 'builtIns.tree', compile: true, map: {
+          person: ['section', { className: 'card' }, { map: {
+            name: ['h2', '?.'],
+            tags: ['ul', {}, { each: ['li', '?.'] }],
+          } }],
+        } } };
+        await assignFromAsync(host, cfg, { from: vm1 });
+        assertEquals(text(host, 'h2') + '|' + text(host, 'li'), 'Ada|math,engines', 'compile: the nested tree renders inside a cloned element');
+        assignFrom(host, cfg, { from: vm2 });
+        assertEquals(text(host, 'h2') + '|' + text(host, 'li'), 'Grace|cobol,compilers,navy', 'compile: the nested tree rebinds synchronously');
+        assertEquals(host.querySelector('section').className, 'card', 'compile: the baked className is kept');
+      }
+
+      document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
+      const done = document.getElementById('test-complete');
+      done.setAttribute('data-passed', passed);
+      done.setAttribute('data-failed', failed);
+      done.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
+    }
+
+    runTests().catch(e => {
+      console.error('Test error:', e);
+      document.getElementById('results').innerHTML += `<div class="fail">Test suite error: ${e.message}</div>`;
+      document.getElementById('test-complete').setAttribute('data-status', 'error');
+    });
+  </script>
+</body>
+</html>

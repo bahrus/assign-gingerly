@@ -1,7 +1,12 @@
 /**
  * processHandlerCommands - Handles ` =>` operator keys in assignFrom.
- * 
+ *
  * Dynamically imported only when ` =>` keys are detected in the pattern.
+ *
+ * Synchronous as far as possible: once a handler's class is at hand (loaded before, or
+ * given as a class in options.handlers), a handler with no `resolve`, no promise from
+ * `prepare` and a non-promise `assign` result runs to completion before this returns.
+ * That's what makes a nested builtIns.tree (a ` =>` inside a tree's pattern) synchronous.
  */
 
 import { resolveValues } from './resolve/resolveValues.js';
@@ -35,156 +40,243 @@ function handlerCriteria(proto: any): boolean {
 }
 
 /**
- * Cache for loaded built-in handler classes — avoids await on subsequent calls.
+ * Cache for loaded built-in handler classes — no promise on subsequent calls.
  */
 const handlerCache = new Map<string, AssignFromHandlerConstructor>();
 
 /**
- * Dynamically load a built-in handler by name.
- * Returns the handler constructor, or undefined if the name isn't a recognized built-in.
- * Cached after first load — subsequent calls are synchronous.
+ * Cache for handler classes loaded from import-path strings in options.handlers.
  */
-async function loadBuiltIn(name: string): Promise<AssignFromHandlerConstructor | undefined> {
+const pathCache = new Map<string, AssignFromHandlerConstructor>();
+
+/** Whether a value is a promise (or any thenable). */
+function isThenable(value: any): value is PromiseLike<any> {
+    return value != null && typeof value.then === 'function';
+}
+
+/**
+ * Load a built-in handler by name.
+ * Returns the handler constructor (synchronously once cached), a promise of it on first
+ * load, or undefined if the name isn't a recognized built-in.
+ */
+function loadBuiltIn(name: string): AssignFromHandlerConstructor | Promise<AssignFromHandlerConstructor> | undefined {
     const cached = handlerCache.get(name);
     if (cached) return cached;
     const path = BUILT_IN_MAP[name];
     if (!path) return undefined;
     // Resolve relative to this module — findClassPrototypeInPath's import() would
     // otherwise resolve it relative to utils/.
-    const cls = await findClassPrototypeInPath(new URL(path, import.meta.url).pathname, handlerCriteria);
-    handlerCache.set(name, cls);
-    return cls as AssignFromHandlerConstructor;
+    return findClassPrototypeInPath(new URL(path, import.meta.url).pathname, handlerCriteria).then(cls => {
+        handlerCache.set(name, cls as AssignFromHandlerConstructor);
+        return cls as AssignFromHandlerConstructor;
+    });
 }
 
 /**
- * Resolve a handler from options.handlers (class constructor or import path).
+ * Resolve a handler name: options.handlers (class constructor, built-in alias or import
+ * path) first, then the built-in map. Synchronous whenever the class is at hand or cached.
  */
-async function resolveFromHandlers(
+function resolveHandler(
     name: string,
     handlers: Record<string, AssignFromHandlerConstructor | string> | undefined
-): Promise<AssignFromHandlerConstructor | undefined> {
-    if (!handlers || !(name in handlers)) return undefined;
+): AssignFromHandlerConstructor | Promise<AssignFromHandlerConstructor | undefined> | undefined {
+    if (handlers && name in handlers) {
+        const entry = handlers[name];
 
-    const entry = handlers[name];
-
-    // Class constructor — use directly
-    if (typeof entry === 'function') {
-        return entry as AssignFromHandlerConstructor;
-    }
-
-    // String value — could be a built-in alias or an import path
-    if (typeof entry === 'string') {
-        // Built-in alias: redirect to built-in loader
-        if (entry.startsWith('builtIns.')) {
-            return loadBuiltIn(entry);
+        // Class constructor — use directly
+        if (typeof entry === 'function') {
+            return entry as AssignFromHandlerConstructor;
         }
 
-        // Import path string — validate and extract handler class via shared utility
-        const HandlerClass = await findClassPrototypeInPath(entry, handlerCriteria);
-        return HandlerClass as AssignFromHandlerConstructor;
+        // String value — could be a built-in alias or an import path
+        if (typeof entry === 'string') {
+            // Built-in alias: redirect to built-in loader
+            if (entry.startsWith('builtIns.')) {
+                return loadBuiltIn(entry);
+            }
+
+            // Import path string — validate and extract handler class via shared utility
+            const cached = pathCache.get(entry);
+            if (cached) return cached;
+            return findClassPrototypeInPath(entry, handlerCriteria).then(cls => {
+                pathCache.set(entry, cls as AssignFromHandlerConstructor);
+                return cls as AssignFromHandlerConstructor;
+            });
+        }
     }
 
+    // Fallback to built-in auto-load
+    if (name.startsWith('builtIns.')) {
+        return loadBuiltIn(name);
+    }
     return undefined;
 }
 
+/** A handler-command key's resolved LHS: lhsParent[lhsKey] === lhsTarget (the current value at the path). */
+type Lhs = ReturnType<typeof resolveLhsPath>;
+
 /**
  * Process all handler command keys (ending with ' =>') in a pattern.
- * 
+ *
+ * Runs synchronously until the first step that really has to wait (loading a module,
+ * `resolve`, an async `prepare` or `assign`); the rest then continues in the returned
+ * promise. Order is the same either way: keys, and the configs within a key, run
+ * strictly one after another.
+ *
  * @param target - The target object being assigned to
  * @param handlerKeys - Array of keys ending with ' =>'
  * @param pattern - The original pattern object
  * @param options - The assignFrom options
- * @param handlerRegistry - The registry of handler classes
+ * @param permissionProcessor - Optional permission processor
+ * @returns undefined when everything ran synchronously, otherwise a promise of the rest
  */
-export async function processHandlerCommands(
+export function processHandlerCommands(
     target: any,
     handlerKeys: string[],
     pattern: Record<string, any>,
     options: AssignFromOptions,
     permissionProcessor?: PermissionProcessor
-): Promise<void> {
-    for (const key of handlerKeys) {
+): Promise<void> | void {
+    return runKeys(target, handlerKeys, 0, pattern, options, permissionProcessor);
+}
+
+/** Run handler keys from `start` on, continuing asynchronously from the first one that waits. */
+function runKeys(
+    target: any,
+    handlerKeys: string[],
+    start: number,
+    pattern: Record<string, any>,
+    options: AssignFromOptions,
+    permissionProcessor?: PermissionProcessor
+): Promise<void> | void {
+    for (let i = start; i < handlerKeys.length; i++) {
+        const key = handlerKeys[i];
         const lhsPath = key.substring(0, key.length - 3); // Remove ' =>'
-        const rhs = pattern[key];
-
-        // Normalize RHS to an array of handler configs
-        const configs = Array.isArray(rhs) ? rhs : [rhs];
-
-        // Validate — no nested arrays
-        for (const config of configs) {
-            if (Array.isArray(config)) {
-                throw new Error(`assignFrom: handler command "${key}" does not support nested arrays`);
-            }
-            if (!config || typeof config !== 'object' || !config.do) {
-                throw new Error(`assignFrom: handler command "${key}" requires a config object with a "do" field`);
-            }
-        }
+        const configs = normalizeConfigs(key, pattern[key]);
 
         // Empty array — skip silently
         if (configs.length === 0) continue;
 
         // Resolve the LHS path, preserving parent + key for return-value assignment.
-        // lhsParent[lhsKey] === lhsTarget (the current value at the path)
-        const { lhsTarget, lhsParent, lhsKey } = resolveLhsPath(target, lhsPath, options);
+        const lhs = resolveLhsPath(target, lhsPath, options);
 
         // Execute handlers sequentially, sharing the same lhsTarget
-        for (const config of configs) {
-            //return; //1.3ms
-            // 1. Check options.handlers (local, per-call)
-            let HandlerClass = await resolveFromHandlers(config.do, options.handlers);
-            //return; // 1.4
-            // 2. Fallback to built-in auto-load
-            if (!HandlerClass && config.do.startsWith('builtIns.')) {
-                HandlerClass = await loadBuiltIn(config.do);
-            }
-            //return; //1.4
+        const pending = runConfigs(configs, 0, lhs, target, options, permissionProcessor);
+        if (pending) return pending.then(() => runKeys(target, handlerKeys, i + 1, pattern, options, permissionProcessor));
+    }
+}
 
-            if (!HandlerClass) {
-                throw new Error(`assignFrom: unknown handler "${config.do}". Provide it in options.handlers.`);
-            }
+/** Normalize a key's RHS to an array of handler configs, and validate them. */
+function normalizeConfigs(key: string, rhs: any): any[] {
+    const configs = Array.isArray(rhs) ? rhs : [rhs];
 
-            // Resolve 'get' map synchronously (no thread yield)
-            let resolvedParams: Record<string, any> = {};
-            if (config.get) {
-                resolvedParams = getValues(config.get, options.from, {
-                    withMethods: options.withMethods,
-                    aka: options.aka,
-                    substitutions: options.substitutions,
-                    protocols: options.protocols,
-                    root: target,
-                    fromStack: options.fromStack,
-                    pipes: options.pipes
-                });
-            }
-            // Resolve 'resolve' map asynchronously (yields to microtask queue)
-            if (config.resolve) {
-                const asyncResolved = await resolveValues(config.resolve, options.from, {
-                    withMethods: options.withMethods,
-                    aka: options.aka,
-                    substitutions: options.substitutions,
-                    protocols: options.protocols,
-                    root: target,
-                    fromStack: options.fromStack,
-                    pipes: options.pipes
-                });
-                Object.assign(resolvedParams, asyncResolved);
-            }
-
-            // Let the handler load what this config needs (awaited only when it returns a promise)
-            const preparing = HandlerClass.prepare?.(config);
-            if (preparing) await preparing;
-
-            // Instantiate and invoke the handler
-            const handler = new HandlerClass(config);
-            //return; //1.5ms
-            const result = await handler.assign(lhsTarget, resolvedParams, options, permissionProcessor);
-            //return; //1.5ms
-            // Return-value protocol: if handler returns a non-undefined value,
-            // assign it back to the LHS path
-            if (result !== undefined && lhsParent != null && lhsKey != null
-                && !permissionProcessor?.redirectRestrictedProp(lhsParent, lhsKey, result)) {
-                lhsParent[lhsKey] = result;
-            }
+    // Validate — no nested arrays
+    for (const config of configs) {
+        if (Array.isArray(config)) {
+            throw new Error(`assignFrom: handler command "${key}" does not support nested arrays`);
         }
+        if (!config || typeof config !== 'object' || !config.do) {
+            throw new Error(`assignFrom: handler command "${key}" requires a config object with a "do" field`);
+        }
+    }
+    return configs;
+}
+
+/** Run a key's configs from `start` on, continuing asynchronously from the first one that waits. */
+function runConfigs(
+    configs: any[],
+    start: number,
+    lhs: Lhs,
+    target: any,
+    options: AssignFromOptions,
+    permissionProcessor?: PermissionProcessor
+): Promise<void> | void {
+    for (let i = start; i < configs.length; i++) {
+        const pending = runConfig(configs[i], lhs, target, options, permissionProcessor);
+        if (pending) return pending.then(() => runConfigs(configs, i + 1, lhs, target, options, permissionProcessor));
+    }
+}
+
+/** Run one handler config: resolve the handler class (from options.handlers, else built-ins), then invoke it. */
+function runConfig(
+    config: any,
+    lhs: Lhs,
+    target: any,
+    options: AssignFromOptions,
+    permissionProcessor?: PermissionProcessor
+): Promise<void> | void {
+    const handlerClass = resolveHandler(config.do, options.handlers);
+    if (isThenable(handlerClass)) {
+        return handlerClass.then(cls => invokeHandler(cls, config, lhs, target, options, permissionProcessor));
+    }
+    return invokeHandler(handlerClass, config, lhs, target, options, permissionProcessor);
+}
+
+/** Resolve a config's params (`get` sync, `resolve` async), then prepare and run the handler. */
+function invokeHandler(
+    HandlerClass: AssignFromHandlerConstructor | undefined,
+    config: any,
+    lhs: Lhs,
+    target: any,
+    options: AssignFromOptions,
+    permissionProcessor?: PermissionProcessor
+): Promise<void> | void {
+    if (!HandlerClass) {
+        throw new Error(`assignFrom: unknown handler "${config.do}". Provide it in options.handlers.`);
+    }
+    const { get, resolve } = config;
+    if (!get && !resolve) return prepareAndAssign(HandlerClass, config, {}, lhs, options, permissionProcessor);
+
+    const { from, withMethods, aka, substitutions, protocols, fromStack, pipes } = options;
+    const resolveOptions = { withMethods, aka, substitutions, protocols, root: target, fromStack, pipes };
+    // Resolve 'get' map synchronously (no thread yield)
+    const resolvedParams: Record<string, any> = get ? getValues(get, from, resolveOptions) : {};
+    // Resolve 'resolve' map asynchronously (yields to microtask queue)
+    if (resolve) {
+        return resolveValues(resolve, from, resolveOptions).then(asyncResolved => {
+            Object.assign(resolvedParams, asyncResolved);
+            return prepareAndAssign(HandlerClass, config, resolvedParams, lhs, options, permissionProcessor);
+        });
+    }
+    return prepareAndAssign(HandlerClass, config, resolvedParams, lhs, options, permissionProcessor);
+}
+
+/** Let the handler load what this config needs (waited on only when it returns a promise), then assign. */
+function prepareAndAssign(
+    HandlerClass: AssignFromHandlerConstructor,
+    config: any,
+    resolvedParams: Record<string, any>,
+    lhs: Lhs,
+    options: AssignFromOptions,
+    permissionProcessor?: PermissionProcessor
+): Promise<void> | void {
+    const preparing = HandlerClass.prepare?.(config);
+    if (preparing) return preparing.then(() => assignWith(HandlerClass, config, resolvedParams, lhs, options, permissionProcessor));
+    return assignWith(HandlerClass, config, resolvedParams, lhs, options, permissionProcessor);
+}
+
+/** Instantiate and invoke the handler, then apply its return value (waited on only when it's a promise). */
+function assignWith(
+    HandlerClass: AssignFromHandlerConstructor,
+    config: any,
+    resolvedParams: Record<string, any>,
+    lhs: Lhs,
+    options: AssignFromOptions,
+    permissionProcessor?: PermissionProcessor
+): Promise<void> | void {
+    const handler = new HandlerClass(config);
+    const result: any = handler.assign(lhs.lhsTarget, resolvedParams, options, permissionProcessor);
+    if (isThenable(result)) return Promise.resolve(result).then(value => applyResult(lhs, value, permissionProcessor));
+    applyResult(lhs, result, permissionProcessor);
+}
+
+/**
+ * Return-value protocol: if a handler returns a non-undefined value,
+ * assign it back to the LHS path.
+ */
+function applyResult({ lhsParent, lhsKey }: Lhs, result: any, permissionProcessor?: PermissionProcessor): void {
+    if (result !== undefined && lhsParent != null && lhsKey != null
+        && !permissionProcessor?.redirectRestrictedProp(lhsParent, lhsKey, result)) {
+        lhsParent[lhsKey] = result;
     }
 }

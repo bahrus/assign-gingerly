@@ -21,9 +21,7 @@
  */
 import { resolveValues } from './resolve/resolveValues.js';
 import assignGingerly from './assignGingerly.js';
-import { assignFrom, expandSubstitutions, categorizeKeys, handleSpreads, parseMultiInvokeCommand } from './assignFrom.js';
-// Module cache for processHandlerCommands — avoids await on dynamic import after first call
-let _processHandlerCommands;
+import { assignFrom, expandSubstitutions, categorizeKeys, handleSpreads, loadHandlerCommands, parseMultiInvokeCommand } from './assignFrom.js';
 export async function assignFromAsync(target, pattern, options, permissionProcessor) {
     // First: expand looped substitution variables (${x}, ${y}, ${z})
     const expandedPattern = expandSubstitutions(pattern, options);
@@ -107,16 +105,18 @@ export async function assignFromAsync(target, pattern, options, permissionProces
             }
         }
     }
-    // Process handler commands ( =>) — cached after first load to avoid await overhead
+    // Process handler commands ( =>) — the module is shared with (and cached by) the sync assignFrom
     if (handlerKeys.length > 0) {
-        _processHandlerCommands ??= (await import('./processHandlerCommands.js')).processHandlerCommands;
-        await _processHandlerCommands(target, handlerKeys, expandedPattern, options, permissionProcessor);
+        const loaded = loadHandlerCommands();
+        const processHandlerCommands = typeof loaded === 'function' ? loaded : await loaded;
+        await processHandlerCommands(target, handlerKeys, expandedPattern, options, permissionProcessor);
     }
     // Process #[x] handler keys — resolve element, then pass to handler processing
     if (idRefHandlerKeys.length > 0 && (options.pin || options.at)) {
         const ids = { ...options.pin, ...options.at };
         const { resolveIdVariable, parseIdRef } = await import('./resolve/resolveIdRef.js');
-        _processHandlerCommands ??= (await import('./processHandlerCommands.js')).processHandlerCommands;
+        const loaded = loadHandlerCommands();
+        const processHandlerCommands = typeof loaded === 'function' ? loaded : await loaded;
         for (const key of idRefHandlerKeys) {
             const parsed = parseIdRef(key);
             if (!parsed)
@@ -132,7 +132,7 @@ export async function assignFromAsync(target, pattern, options, permissionProces
             const syntheticPattern = {
                 [syntheticKey]: expandedPattern[key]
             };
-            await _processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissionProcessor);
+            await processHandlerCommands(el, [syntheticKey], syntheticPattern, options, permissionProcessor);
         }
     }
     // Process inferred assignments — dynamically imported only when option is present

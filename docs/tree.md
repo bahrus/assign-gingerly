@@ -42,7 +42,7 @@ Result:
 </details>
 ```
 
-Use `assignFromAsync` when you need the tree to exist after the `await`. The sync `assignFrom` starts handlers fire-and-forget.
+Use `assignFromAsync` when you need the tree to exist after the `await`. The sync `assignFrom` starts handlers fire-and-forget. The first call has to load `tree.js`, so the tree appears just after `assignFrom` returns. Once `tree.js` is loaded, later calls render synchronously.
 
 The `🌲` emoji alias works too, when `builtInEmoji` is passed as `handlers`.
 
@@ -63,10 +63,11 @@ await assignFromAsync(this.shadowRoot, { '?. =>': { do: 'builtIns.tree', map: { 
 type ElementSpecification =
     | Header
     | [Header, Pattern | string]
-    | [Header, Pattern | string, ElementSpecification[] | Repeat];   // static children, or a repeat (see Arrays below)
+    | [Header, Pattern | string, ElementSpecification[] | Repeat | NestedTree];   // static children, a repeat (see Arrays) or a nested tree (see Nested Trees)
 
 type Header = tagName | { tag: tagName; ish?: string | ManagerClass };   // see Itemscope Managers below
 type Repeat = { each: ElementSpecification; of?: string; key?: string; empty?: ElementSpecification };
+type NestedTree = { map: Record<string, ElementSpecification>; markerName?: string; keepNullish?: boolean; aka?: Record<string, string>; compile?: boolean };
 ```
 
 - **The pattern** is an [assignFrom](./assignFrom.md) pattern applied to the created element, with `from` set to **the key's VM value**. So `'?.small'` above reads `vm.patch.small`.
@@ -274,6 +275,27 @@ Native arrays are the default. Delegating a list to [`builtIns.manageTemplateLis
 - **removed items should be hidden rather than discarded** (`forget: false`).
 
 The trade-off is that the handler runs asynchronously. Inside Tree it's fire-and-forget, so the list fills in just after the tree. [demos/tree-demo-with-managed-template-list.html](../demos/tree-demo-with-managed-template-list.html) shows that approach.
+
+## Nested Trees
+
+Put a **nested tree object**, a tree config without `do`, in the children slot. The element's value becomes the nested tree's VM:
+
+```JavaScript
+person: ['section', { className: 'card' }, {
+    map: {
+        name: ['h2', '?.'],                                  // vm.person.name
+        tags: ['ul', {}, { each: ['li', '?.'] }],            // vm.person.tags
+    },
+}],
+```
+
+- **Same as a nested ` =>`**: it renders what `['section', { className: 'card', '?. =>': { do: 'builtIns.tree', map } }]` would, but without the handler dispatch.
+- **Told apart from a repeat** by having `map` and no `each`. `markerName`, `keepNullish` and `aka` work as in a top-level config. `aka` is merged over the enclosing tree's.
+- **Inside the nested tree:** `?.` is each key's value, as at the top level. `$parent` is the element's value (`vm.person`), and the enclosing VMs are further up the stack.
+- **Keys missing from the element's value** are skipped, as in any tree. That differs from static children, which always render.
+- **Rebinding:** the nested tree keeps its own state, between its own markers inside the element, so later calls rebind it in place. Switching a key between static children, a repeat and a nested tree rebuilds the element.
+- **Synchronous**, always. A nested ` =>` builtIns.tree is synchronous too, once `tree.js` is loaded, which it always is while a tree is running. (` =>` handlers in general run synchronously when they can: see [sync ops](./sync-ops.md).)
+- **`compile`:** an enclosing `compile` tree clones the element and renders the nested tree at bind time. The nested tree's own `compile` only takes effect once the compiler is loaded, for example by an enclosing `compile` tree.
 
 ## Itemscope Managers as View Models
 
