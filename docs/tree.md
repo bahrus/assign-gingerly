@@ -2,7 +2,7 @@
 
 The tree handler enables inserting html into a node, based on the data from a view model.  It fundamentally rests on a terse, 100% declarative JSON syntax for rapid side-effect free parsing.  The DX experience, though, is a bit challenging, so a lit-like DX experience is provided.
 
-The handler that builds a tree of DOM elements from a view model, and rebinds it in place on later calls. Each `map` entry pairs a VM key with an **element specification**: a tag name, or a tuple of tag, assignFrom pattern, and static children.
+The handler not only builds a tree of DOM elements from a view model, it rebinds it in place on later calls. Each `map` entry pairs a VM key with an **element specification**: a tag name, or a tuple of tag, assignFrom pattern, and static children.
 
 Tree adds no microdata and doesn't adopt existing (server-rendered) markup. It aims at simple scenarios.
 
