@@ -248,6 +248,29 @@
         throws(() => tree`<ul ${each('?.x')}><li></li><li></li></ul>`, /exactly one child element/, 'each(…) with two children');
       }
 
+      // Test 14: itemscope on the element gives the values in its text props (microJoin { prop, val })
+      {
+        assertEquals(json(tree`<p itemscope>Launched ${p.date} by ${p.rocket}</p>`),
+          json(['p', { 'itemscope :=': true, '?. =&': { microJoin: ['Launched ', { prop: 'date', val: '?.date' }, ' by ', { prop: 'rocket', val: '?.rocket' }] } }]),
+          'itemscope: paths() values become { prop, val }, named after the path');
+        assertEquals(json(tree`<p itemscope>${'?.rocket?.name'} from ${'$parent?.site'}${'!!?.reused'}</p>`[1]['?. =&'].microJoin),
+          json([{ prop: 'name', val: '?.rocket?.name' }, ' from ', { prop: 'site', val: '$parent?.site' }, { prop: 'reused', val: '!!?.reused' }]),
+          "itemscope: '?.' strings too; the last segment names it, for $parent paths and negations as well");
+        assertEquals(json(tree`<b itemscope>${p.name}</b>`),
+          json(['b', { 'itemscope :=': true, '?. =&': { microJoin: [{ prop: 'name', val: '?.name' }] } }]),
+          'itemscope: a single value is a one-segment microJoin (textContent carries no prop)');
+        assertEquals(json(tree`<p itemscope>On ${{ prop: 'launched', val: p.date, text: '?.date?.longUtc' }} (${'note'}) ${'?.'}</p>`[1]['?. =&'].microJoin),
+          json(['On ', { prop: 'launched', val: '?.date', text: '?.date?.longUtc' }, ' (', 'note', ') ', '?.']),
+          'itemscope: explicit { prop, … } objects win; literal strings and a bare ?. stay as they are');
+        assertEquals(json(tree`<p itemscope>Static text</p>`), json(['p', { 'itemscope :=': true, textContent: 'Static text' }]),
+          'itemscope: literal-only text stays textContent');
+        assertEquals(json(tree`<p>Launched ${p.date}</p>`), json(['p', { '?. =&': { microJoin: ['Launched ', '?.date'] } }]),
+          'without itemscope: unchanged (no props)');
+        const host = await render({ launch: tree`<p itemscope>Launched ${p.date} by ${p.rocket}</p>` }, { launch: { date: 'Tuesday', rocket: 'Falcon 9' } });
+        assertEquals(host.querySelector('p').outerHTML, '<p itemscope="">Launched <span itemprop="date">Tuesday</span> by <span itemprop="rocket">Falcon 9</span></p>',
+          'itemscope: renders itemprop elements');
+      }
+
       document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
       const done = document.getElementById('test-complete');
       done.setAttribute('data-passed', passed);

@@ -16,6 +16,7 @@
  * | `${null / undefined / false / ''}`   | nothing, as content (e.g. an optional child)          |
  * | text only / one `${value}` as content | `textContent: …`                                     |
  * | text mixed with `${…}`               | `'?. =&': { microJoin: [...] }`                       |
+ * | `<p itemscope>…${p.date}…</p>`       | microJoin with `{ prop: 'date', val: '?.date' }`      |
  * | `${tree`…`}` as content              | a child element (composition)                         |
  * | `${choose(on, cases, fallback)}`     | a switch `{ switch, cases, default }` (one child)     |
  *
@@ -498,6 +499,8 @@ function toSpec(element: ParsedElement, ctx: Context): ElementSpecification {
         }
     }
 
+    // itemscope (HTML's "this has microdata"): the values in the element's text get props
+    const withProps = element.attrs.some(({ name }) => name === 'itemscope');
     const content = element.children.filter(node => !isBlankText(node));
     const header = ish === undefined ? tag : { tag, ish };
     let third: ElementSpecification[] | Record<string, any> | undefined;
@@ -534,7 +537,7 @@ function toSpec(element: ParsedElement, ctx: Context): ElementSpecification {
         third = { each: children[0], ...repeat };
     } else {
         const firstHole = textParts.findIndex(isHole);
-        applyText(ownText, children.length > 0, pattern, values, message => fail(message, textPositions[firstHole] ?? element.pos));
+        applyText(ownText, children.length > 0, pattern, values, withProps, message => fail(message, textPositions[firstHole] ?? element.pos));
         if (children.length > 0) third = children;
     }
 
@@ -566,8 +569,10 @@ function trimFormatting(parts: Part[]): Part[] {
  * An element's own text: literal text or one `${…}` → textContent; text mixed with `${…}` →
  * microJoin (so values become elements; groundwork for hydrating server-rendered markup).
  * With child elements, only a leading literal text is possible (as in tree notation).
+ * With `withProps` (the element has `itemscope`), each path value becomes a `{ prop, val }`
+ * segment, named after its last segment, so even a single value goes through microJoin.
  */
-function applyText(parts: Part[], hasChildren: boolean, pattern: Pattern, values: any[], fail: (message: string) => never): void {
+function applyText(parts: Part[], hasChildren: boolean, pattern: Pattern, values: any[], withProps: boolean, fail: (message: string) => never): void {
     if (parts.length === 0) return;
     const holes = parts.filter(isHole);
     if (hasChildren && holes.length > 0) fail('${…} text next to child elements isn\'t supported (wrap it in an element)');
@@ -575,23 +580,41 @@ function applyText(parts: Part[], hasChildren: boolean, pattern: Pattern, values
         pattern.textContent = (parts as string[]).join('');
         return;
     }
+    const segment = (hole: Hole) => {
+        const value = segmentOf(valueOf(values[hole.hole]));
+        return withProps ? withProp(value) : value;
+    };
     if (parts.length === 1) {
-        const value = valueOf(values[holes[0].hole]);
-        // A microJoin segment ({ prop, val }, e.g. from md) still needs microJoin
+        const value = segment(holes[0]);
+        // A microJoin segment ({ prop, val }, e.g. from md or itemscope) still needs microJoin
         if (value && typeof value === 'object' && 'prop' in value) {
-            pattern['?. =&'] = { microJoin: [segmentOf(value)] };
+            pattern['?. =&'] = { microJoin: [value] };
         } else {
             pattern.textContent = value;
         }
         return;
     }
-    pattern['?. =&'] = { microJoin: parts.map(part => (isHole(part) ? segmentOf(valueOf(values[part.hole])) : part)) };
+    pattern['?. =&'] = { microJoin: parts.map(part => (isHole(part) ? segment(part) : part)) };
 }
 
 /** A microJoin item: paths stay strings; { prop, val } segments get their val's path. */
 function segmentOf(value: any): any {
     if (value && typeof value === 'object' && 'prop' in value && pathOf(value.val)) return { ...value, val: pathOf(value.val) };
     return value;
+}
+
+/** A path (`?.a`, `$parent?.a`, `$root?.a`, `$0?.a`, optionally negated) and its last segment. */
+const PROP_PATH = /^!{0,2}(?:\$0|\$root|\$parent)?\?\.(?:.*\?\.)?([^?]+)$/;
+
+/**
+ * Under itemscope: a path value → `{ prop, val }`, the prop named after the path's last segment
+ * (`?.rocket?.name` → `name`, as md does). Anything else (literal text, an explicit `{ prop, … }`,
+ * a path with no segment like `?.`) is left as is.
+ */
+function withProp(value: any): any {
+    if (typeof value !== 'string') return value;
+    const match = PROP_PATH.exec(value);
+    return match ? { prop: match[1], val: value } : value;
 }
 
 // ── Caching ──────────────────────────────────────────────────────────────────

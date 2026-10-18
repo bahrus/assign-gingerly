@@ -173,6 +173,7 @@ The type can also come from elsewhere: `@typedef {import('./launch-api.js').Laun
 | `${each(of, { key, empty })}` in attribute position | the repeat; the element's single child is the item |
 | one `${value}`, or literal text, as content | `textContent` |
 | text mixed with `${…}` | a [`microJoin`](./sync-ops.md#microjoin) (an element per value) |
+| `<p itemscope>Launched ${p.date}</p>` | a `microJoin` whose values have props: `{ prop: 'date', val: '?.date' }` (see below) |
 | `` ${tree`…`} `` as content | a child element (composition) |
 | `${choose(on, cases, fallback)}` as content, or as a whole map value | a [switch](#switches) (`{ switch, cases, default }`) |
 | `${{ '_ ?=': […], … }}` in attribute position | merged into the pattern: for keys markup can't express (ternaries, handlers, sync ops) |
@@ -184,6 +185,18 @@ The type can also come from elsewhere: `@typedef {import('./launch-api.js').Laun
 - **`${…}` values** may be `?.` strings or `paths()` proxies; proxies become their path string.
 - **Whitespace:** whitespace-only text between elements is dropped, and an element's content is trimmed where the whitespace contains a line break (indentation).
 - **Text and elements:** an element holds text or child elements, not both. A leading literal text before the children is the exception, as in the tree notation.
+- **Microdata props (`itemscope`):** on an element with `itemscope`, each path value in its text becomes a `{ prop, val }` segment, so `microJoin` renders it with an `itemprop`:
+
+  ```JavaScript
+  tree`<p itemscope>Launched ${p.date} by ${p.rocket}</p>`
+  // → ['p', { 'itemscope :=': true, '?. =&': { microJoin: ['Launched ', { prop: 'date', val: '?.date' }, ' by ', { prop: 'rocket', val: '?.rocket' }] } }]
+  // renders <p itemscope>Launched <span itemprop="date">…</span> by <span itemprop="rocket">…</span></p>
+  ```
+
+  - **The prop is the path's last segment,** as with [`md`](./paths-dx.md): `?.rocket?.name` → `name`, `$parent?.site` → `site`, `!!?.reused` → `reused`. `?.` paths and `paths()` proxies work alike.
+  - **Formatted values:** a pipe at the end would name the prop after the pipe, so write those explicitly, keeping the raw value as `val`: `${{ prop: 'launched', val: p.date_utc, text: '?.date_utc?.parseDate?.longUtc' }}`. Explicit `{ prop, … }` objects are used as written, with or without `itemscope`.
+  - **A single value** becomes a one-segment `microJoin` rather than `textContent`, which can't carry a prop. Literal text, and literal-only content, are unchanged.
+  - **Without `itemscope`,** nothing changes: values in mixed text are bare paths (no `itemprop`).
 - **Attribute values:** each is a literal or a single `${…}`. Mixing them (`class="a ${x}"`) is an error.
 - **Caching:** results are cached per call site, so the same template with the same values returns the same spec object. Tree's spec identity (`compile`, literal skipping on rebind) holds across calls.
 - **Parser:** a small one of its own, not the browser's, so there's no `<tbody>` insertion or `<p>` auto-closing, and it runs on a server.

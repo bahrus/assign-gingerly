@@ -80,3 +80,41 @@ tree`<p itemscope>Launched ${p.date} by ${p.rocket}</p>`
 
 Sounds good.  Please implement.
 
+## Claude's Implementation Notes
+
+Done, as proposed:
+- **The trigger:** `itemscope` on the element.
+- **The prop name:** the path's last segment, including for `$parent?.x` / `$root?.x` / `$0?.x` and negations (`!!?.reused` → `reused`).
+- **Explicit `{ prop, val, text }` objects** are used as written.
+
+Nothing is committed.
+
+```JS
+tree`<p itemscope>Launched ${p.date} by ${p.rocket}</p>`
+// → ['p', { 'itemscope :=': true, '?. =&': { microJoin: ['Launched ', { prop: 'date', val: '?.date' }, ' by ', { prop: 'rocket', val: '?.rocket' }] } }]
+// renders <p itemscope="">Launched <span itemprop="date">Tuesday</span> by <span itemprop="rocket">Falcon 9</span></p>
+```
+
+**Results** (in the scratch copy, as before; your `.js` is untouched):
+
+| | |
+|---|---|
+| `tests/dx-tree.html` | **58 / 58** (7 new, in Test 14), in Chromium, Firefox and WebKit |
+| Full Playwright suite | **155 passed, 4 skipped** |
+| `tsc --noEmit` | clean |
+| gingerly-tree-analyzer | **30 / 30**, typecheck clean |
+
+**Changes:**
+- **`DX/tree.ts`:**
+  - **`toSpec`** notices `itemscope`, and `applyText` turns each path value (`?.…`, `$parent?.…`, `$root?.…`, `$0?.…`, optionally `!`/`!!`) into `{ prop, val }`.
+  - **A single value** becomes a one-segment `microJoin`, since `textContent` can't carry a prop.
+  - **Left as they are:** literal strings, a bare `?.` (no segment to name it after), explicit `{ prop, … }` objects and unknowns.
+  - **Without `itemscope`:** nothing changes.
+- **`docs/tree.md`:** a row in the DX table, and a *Microdata props (`itemscope`)* bullet under *Details*. The bullet covers naming, formatted values written as `{ prop, val, text }`, and single values.
+- **Gingerly Tree Analyzer:**
+  - **Hovering `itemscope`** explains the props.
+  - **Hovers on templates** show the `{ prop, val }` segments, since the analyzer bundles assign-gingerly from source.
+  - **A test** covers both, and its CHANGELOG has a line for it.
+
+**To do on your side:** run your build in assign-gingerly to get `DX/tree.js`.
+
