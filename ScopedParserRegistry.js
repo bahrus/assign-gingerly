@@ -6,6 +6,15 @@ export class ScopedParserRegistry {
     parsers = new Map();
     pendingWaits = new Map();
     /**
+     * @param parsers - Optional parsers to register right away, by name (same as `register` for each)
+     */
+    constructor(parsers) {
+        if (parsers) {
+            for (const name of Object.keys(parsers))
+                this.register(name, parsers[name]);
+        }
+    }
+    /**
      * Register a parser with a given name
      * Resolves any pending waiters for this parser
      * @param name - The name to register the parser under

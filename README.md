@@ -1264,6 +1264,10 @@ class YourEnhancement{
 }
 
 class EnhancementRegistry{
+    // Optional: the same as push(), for declaring a registry in one go
+    constructor(EnhancementConfig | EnhancementConfig[]){
+        ...
+    }
     push(EnhancementConfig | EnhancementConfig[]){
         ...
     }
@@ -1298,7 +1302,7 @@ const result = assignGingerly({}, {
     }
     
 }, {
-    registry: EnhancementRegistry
+    registry: { enhancementRegistry: EnhancementRegistry }
 });
 //result.set[isMellow] = false;
 ```
@@ -1359,7 +1363,7 @@ const element = document.createElement('div');
 element.customElementRegistry.enhancementRegistry.push(registryItem);
 
 // Use assignGingerly first
-assignGingerly(element, { [symbol1]: 'value1' }, { registry });
+assignGingerly(element, { [symbol1]: 'value1' }, { registry: { enhancementRegistry: registry } });
 const id1 = element.enh.myEnh.instanceId;
 
 // Use enh.set - gets the SAME instance
@@ -1395,8 +1399,8 @@ registry.push(registryItem);
 const target = {};
 
 // Both symbols use the SAME instance because they're in the same registry item
-assignGingerly(target, { [symbol1]: 'value1' }, { registry });
-assignGingerly(target, { [symbol2]: 'value2' }, { registry });
+assignGingerly(target, { [symbol1]: 'value1' }, { registry: { enhancementRegistry: registry } });
+assignGingerly(target, { [symbol2]: 'value2' }, { registry: { enhancementRegistry: registry } });
 
 // Both properties are set on the same instance
 console.log(target.set[symbol1] === target.set[symbol2]); // true
@@ -1420,7 +1424,7 @@ const result = assignGingerly({}, {
       mellowYellow?.madAboutFourteen': true
     }
 }, {
-    registry: EnhancementRegistry
+    registry: { enhancementRegistry: EnhancementRegistry }
 });
 ```
 </details>
@@ -1488,7 +1492,7 @@ In this way, we achieve dependency injection in harmony with scoped custom eleme
 <details>
   <summary>Automatic Registry Population</summary>
 
-When `assignGingerly` or `assignTentatively` is called on an Element instance without providing an explicit `registry` option, it automatically uses the registry from `element.customElementRegistry.enhancementRegistry`:
+When `assignGingerly` or `assignTentatively` is called as a method on an Element instance without `registry.enhancementRegistry` in its options, it automatically uses the registry from `element.customElementRegistry.enhancementRegistry`:
 
 ```TypeScript
 import 'assign-gingerly/object-extension.js';
@@ -1536,7 +1540,7 @@ console.log(registry1 === element1.customElementRegistry.enhancementRegistry); /
 <details>
   <summary>Explicit Registry Override</summary>
 
-You can still provide an explicit `registry` option to override the automatic behavior:
+You can still provide an explicit `registry.enhancementRegistry` to override the automatic behavior. The `registry` option is shaped like a `CustomElementRegistry`'s addenda, `{ enhancementRegistry?, itemscopeRegistry?, featuresRegistry? }`, so a scoped `customElementRegistry` can also be passed as is (see [docs/code-interjection.md](docs/code-interjection.md#the-registry-option)). Passing a bare `EnhancementRegistry`, as in earlier versions, throws:
 
 ```TypeScript
 const customRegistry = new EnhancementRegistry();
@@ -1544,7 +1548,7 @@ const customRegistry = new EnhancementRegistry();
 
 myElement.assignGingerly({
   [mySymbol]: 'value'
-}, { registry: customRegistry }); // Uses customRegistry instead of customElementRegistry.enhancementRegistry
+}, { registry: { enhancementRegistry: customRegistry } }); // Uses customRegistry instead of customElementRegistry.enhancementRegistry
 ```
 
 **Browser Support**: This feature requires Chrome 146+ with scoped custom element registry support. The implementation is designed as a polyfill for the web standards proposal and does not include fallback behavior for older browsers.
@@ -1948,7 +1952,7 @@ instance1.prop1 = 'from get()';
 element.enh.set.myEnh.prop2 = 'from set';
 
 // Use assignGingerly - still the SAME instance
-assignGingerly(element, { [mySymbol]: 'from assign' }, { registry });
+assignGingerly(element, { [mySymbol]: 'from assign' }, { registry: { enhancementRegistry: registry } });
 
 console.log(element.enh.myEnh.prop1); // 'from get()'
 console.log(element.enh.myEnh.prop2); // 'from set'
@@ -2567,12 +2571,12 @@ registry.push({
 
 // Plain object - will not spawn
 const plainObj = {};
-assignGingerly(plainObj, { [enhSymbol]: 'test' }, { registry });
+assignGingerly(plainObj, { [enhSymbol]: 'test' }, { registry: { enhancementRegistry: registry } });
 // No enhancement created
 
 // Element - will spawn
 const element = document.createElement('div');
-assignGingerly(element, { [enhSymbol]: 'test' }, { registry });
+assignGingerly(element, { [enhSymbol]: 'test' }, { registry: { enhancementRegistry: registry } });
 // Enhancement created and value set
 ```
 
@@ -4095,9 +4099,7 @@ class UserCardManager {
 }
 
 // Register the manager
-customElements.itemscopeRegistry.define('user-card', {
-  manager: UserCardManager
-});
+customElements.itemscopeRegistry.define('user-card', UserCardManager);   // shorthand for { manager: UserCardManager }
 
 // Use assignGingerly with the 'ish' property
 const element = document.querySelector('[itemscope="user-card"]');
@@ -4154,6 +4156,16 @@ registry.define('manager-name', {
   }
 });
 
+// A class alone is shorthand for { manager: Class }
+registry.define('other-name', OtherManagerClass);
+
+// A registry of your own (e.g. for the `registry` option), defined in one go:
+// each entry is a class or a full config, the same as calling define() for each
+const local = new ItemscopeRegistry({
+  'crew-member-view': CrewMemberView,
+  'stage-view': { manager: StageView, lifecycleKeys: { dispose: 'cleanup' } },
+});
+
 // Get a manager configuration
 const config = registry.get('manager-name');
 
@@ -4163,7 +4175,8 @@ await registry.whenDefined('manager-name');
 
 **Methods:**
 
-- `define(name, config)` - Register a manager configuration
+- `new ItemscopeRegistry(managers?)` - Optionally define managers right away: `{ name: Class | config }`, in order, as `define` would
+- `define(name, config)` - Register a manager configuration (a class alone is shorthand for `{ manager: Class }`)
   - Throws `Error: Already registered` if name already exists
   - Dispatches an event with the manager name when successful
   
@@ -4306,9 +4319,7 @@ ItemScope Managers integrate with scoped custom element registries. Each element
 const scopedRegistry = new CustomElementRegistry();
 
 // Define a manager in the scoped registry
-scopedRegistry.itemscopeRegistry.define('scoped-manager', {
-  manager: ScopedManager
-});
+scopedRegistry.itemscopeRegistry.define('scoped-manager', ScopedManager);
 
 // Attach the registry to an element
 const element = document.createElement('div');

@@ -1,6 +1,7 @@
 import assignGingerly, { EnhancementRegistry, ItemscopeRegistry, getInstanceMap } from './assignGingerly.js';
 import assignTentatively from './assignTentatively.js';
 import { parseWithAttrs } from './parseWithAttrs.js';
+import { registryOption } from './utils/resolveRegistry.js';
 /**
  * Normalizes lifecycleKeys to always return an object with dispose and resolved keys
  * @param lifecycleKeys - The lifecycleKeys from registry item (true or object)
@@ -422,11 +423,12 @@ if (typeof Element !== 'undefined') {
  */
 Object.defineProperty(Object.prototype, 'assignGingerly', {
     value: function (source, options) {
-        // Auto-populate registry from customElementRegistry if this is an Element
-        if (this instanceof Element && (!options || !options.registry)) {
-            if (!options)
-                options = {};
-            options.registry = this.customElementRegistry?.enhancementRegistry;
+        // Fill in the enhancement registry from the element's customElementRegistry, unless the call gives one
+        if (this instanceof Element && !registryOption(options)?.enhancementRegistry) {
+            const enhancementRegistry = this.customElementRegistry?.enhancementRegistry;
+            if (enhancementRegistry) {
+                options = { ...options, registry: { ...options?.registry, enhancementRegistry } };
+            }
         }
         assignGingerly(this, source, options);
         return this;

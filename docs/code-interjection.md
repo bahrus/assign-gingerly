@@ -18,7 +18,7 @@ assign-gingerly's patterns are data (JSON-friendly), so any behavior beyond plai
 | `withMethods` | (Names of) methods on the objects being navigated | A path segment that names a listed method | Call | [README: withMethods](../README.md#example-3c---method-calls-with-withmethods) |
 | `akaMethods` | Aliases for methods on the source object | A path segment that names the alias | Call | sugar for `withMethods` + `aka` |
 | `withAsyncMethods` | (Names of) async methods on navigated objects | A path segment that names a listed method (awaited) | Call | [README: withAsyncMethods](../README.md#withasyncmethods-in-assigngingerly) |
-| `registry` | An `EnhancementRegistry` (**enhancements only**) | Symbol keys / `enh` paths (`[isHappy]: true`, `'?.enh?.x'`) | Call (overrides the target's registry) | [README: dependency injection](../README.md#dependency-injection-based-on-a-registry-object-and-a-symbolic-reference-mapping) |
+| `registry` | `{ enhancementRegistry?, itemscopeRegistry?, featuresRegistry? }`, or a `CustomElementRegistry` | Symbol keys / `enh` paths; manager names (`ish`, Tree's `{ tag, ish: 'name' }`) | Call (each kind takes precedence over the target's registry) | [below](#the-registry-option) |
 | `enhance` | EMC JSON configs naming enhancement modules | The option itself (bulk: `{ emc, matching }`) | Call (the modules load globally) | [README: bulk enhancement](../README.md#bulk-enhancement-with-enhance-and-enhanceall) |
 
 Not code, for completeness: `aka`, `substitutions`, `where_x_in` / `_y_` / `_z_`, `pin` / `at`, `infer`, `signal` (it only cleans up `@eachTime`), `from` / `fromStack`.
@@ -36,11 +36,28 @@ Each one exists on the global `customElements`, and on any scoped registry (`sha
 | Registry | Supplies | Reached by | Local override in options? | Docs |
 |---|---|---|---|---|
 | `customElements` (native) | Custom element classes | Tag names | (n/a) | the platform |
-| `.enhancementRegistry` | Enhancement classes (`spawn`), with symlinks, `enhKey` and `withAttrs` | Symbol keys, `enh.*` paths, attributes | **Yes:** `registry` | [README: enhancement registry](../README.md#enhancement-registry-addendum-to-the-custom-element-registry) |
-| `.itemscopeRegistry` | Itemscope managers | The `ish` property; Tree's `{ tag, ish }` headers | **No** | [README: ItemscopeRegistry](../README.md#itemscoperegistry), [tree.md](./tree.md#itemscope-managers-as-view-models) |
-| `.featuresRegistry` | Custom element features, composed onto element classes | `assignFeatures` / `defineWithFeatures`; enhancements' `features` | **No** (`defineWithFeatures` takes a registry argument) | [README: custom element features](../README.md#custom-element-features) |
+| `.enhancementRegistry` | Enhancement classes (`spawn`), with symlinks, `enhKey` and `withAttrs` | Symbol keys, `enh.*` paths, attributes | **Yes:** `registry.enhancementRegistry` | [README: enhancement registry](../README.md#enhancement-registry-addendum-to-the-custom-element-registry) |
+| `.itemscopeRegistry` | Itemscope managers | The `ish` property; Tree's `{ tag, ish: 'name' }` headers | **Yes:** `registry.itemscopeRegistry` | [README: ItemscopeRegistry](../README.md#itemscoperegistry), [tree.md](./tree.md#itemscope-managers-as-view-models) |
+| `.featuresRegistry` | Custom element features, composed onto element classes | `assignFeatures` / `defineWithFeatures`; enhancements' `features` | Accepted as `registry.featuresRegistry`, but nothing consults it per call yet (features are composed when a class is defined; `defineWithFeatures` takes a registry argument) | [README: custom element features](../README.md#custom-element-features) |
 
-**Side effect to know about:** Tree's `{ tag, ish: SomeClass }` registers the class in the target's (or the global) `itemscopeRegistry` under `Class.is ?? Class.name`, so that name is taken from then on.
+**Tree and classes:** `{ tag, ish: SomeClass }` attaches the class directly and registers nothing. Only names go through a registry.
+
+### The `registry` option
+
+Registries for one call, with the same property names as the addenda on `CustomElementRegistry`:
+
+```JavaScript
+assignFrom(target, pattern, {
+    from: vm,
+    registry: { enhancementRegistry, itemscopeRegistry },   // any subset
+});
+assignFrom(target, pattern, { from: vm, registry: shadowRoot.customElementRegistry });   // a real registry works as is
+```
+
+- **Lookup, per kind:** `registry.X`, then the target's `customElementRegistry.X` (for Tree, the tree's target, then the element), then `customElements.X`. Kinds are independent, so a call can bring its own managers and inherit enhancements.
+- **No global footprint:** names defined only in `registry.itemscopeRegistry` work for that call (and the calls nested in it: Tree, repeats, handlers), and nowhere else.
+- **Former shape:** a bare `EnhancementRegistry` (or any other object that isn't the shape above) throws an error saying to use `{ enhancementRegistry: … }`.
+- **`assignGingerly` as a function** reads only `registry.enhancementRegistry`. Called as a method on an element (`el.assignGingerly(…)`), it fills that in from the element's registry when absent.
 
 ## 4. Parser registries (for `withAttrs`)
 

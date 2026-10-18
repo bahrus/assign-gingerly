@@ -129,7 +129,7 @@
                 '?.style?.height': '40px',
                 '?.enhancements?.mellowYellow?.madAboutFourteen': true
             }, {
-                registry: baseRegistry
+                registry: { enhancementRegistry: baseRegistry }
             });
             
             expect(result).toBeDefined();
@@ -151,7 +151,7 @@
                 spawn: YourEnhancement
             });
             
-            const result = assignGingerly({}, {}, { registry: baseRegistry });
+            const result = assignGingerly({}, {}, { registry: { enhancementRegistry: baseRegistry } });
             result.set[isMellow] = false;
             expect(result).toBeDefined();
         });
@@ -179,7 +179,7 @@
                 '?.database?.host': 'localhost',
                 '?.database?.port': 5432
             }, {
-                registry
+                registry: { enhancementRegistry: registry }
             });
             
             expect(target).toBeDefined();

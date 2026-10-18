@@ -353,6 +353,24 @@
         assertEquals(el.ish.applied.join(','), 'first,slow,after', 'async rejection is reported and the queue continues');
       }
 
+      // Test 24: the registry option — the manager name resolves in registry.itemscopeRegistry, nothing global
+      {
+        const itemscopeRegistry = new ItemscopeRegistry();
+        itemscopeRegistry.define('local-only-manager', {
+          manager: class LocalOnly { constructor(el, initVals) { this.local = true; Object.assign(this, initVals); } }
+        });
+        const el = document.createElement('div');
+        el.setAttribute('itemscope', 'local-only-manager');
+        assignGingerly(el, { ish: { a: 1 } }, { registry: { itemscopeRegistry } });
+        await itemscopeRegistry.whenDefined('local-only-manager');
+        await delay(0);
+        assert(el.ish?.local === true && el.ish.a === 1, 'registry option: the ish manager comes from registry.itemscopeRegistry');
+        assertEquals(customElements.itemscopeRegistry.get('local-only-manager'), undefined, 'registry option: nothing registered globally');
+        let error;
+        try { assignGingerly({}, { a: 1 }, { registry: new ItemscopeRegistry() }); } catch (e) { error = e; }
+        assert(error?.message.includes('registry.enhancementRegistry'), 'registry option: a bare registry (the former shape) throws a clear error');
+      }
+
       // Display results
       document.getElementById('results').innerHTML = results.join('');
       

@@ -8,7 +8,18 @@ import { ScopedParserRegistry } from './ScopedParserRegistry.js';
  */
 export class ParserRegistry {
   private parsers = new Map<string, ParserFunction | AttrParserConstructor>();
-  
+
+  /**
+   * @param parsers - Optional parsers to register right away, by name (same as `register` for each)
+   * @example
+   * new ParserRegistry({ csv: value => value.split(',') });
+   */
+  constructor(parsers?: Record<string, ParserFunction | AttrParserConstructor>) {
+    if (parsers) {
+      for (const name of Object.keys(parsers)) this.register(name, parsers[name]);
+    }
+  }
+
   /**
    * Register a parser with a given name
    * @param name - The name to register the parser under

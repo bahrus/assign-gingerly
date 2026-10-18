@@ -1,3 +1,4 @@
+import { resolveRegistry } from './utils/resolveRegistry.js';
 /**
  * Handle the 'ish' property assignment for HTMLElements with itemscope attributes.
  * This function validates the element, then defines or updates the 'ish' property.
@@ -33,9 +34,8 @@ export async function handleIshProperty(element, value, options, assignGingerlyF
  * @param assignGingerlyFn - Reference to the assignGingerly function for recursive calls
  */
 async function defineIshProperty(element, managerName, options, assignGingerlyFn) {
-    // Determine which registry to use
-    const registry = element.customElementRegistry?.itemscopeRegistry
-        ?? (typeof customElements !== 'undefined' ? customElements.itemscopeRegistry : undefined);
+    // The call's registry option first, then the element's (possibly scoped) registry, then the global one
+    const registry = resolveRegistry('itemscopeRegistry', options, element);
     if (!registry) {
         throw new Error('ItemscopeRegistry not available');
     }

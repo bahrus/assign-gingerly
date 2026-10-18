@@ -78,11 +78,11 @@
             });
             
             const target1 = {};
-            assignGingerly(target1, { [testSymbol]: 'test-value' }, { registry });
+            assignGingerly(target1, { [testSymbol]: 'test-value' }, { registry: { enhancementRegistry: registry } });
             expect(spawnAttempts).toBe(0);
             
             const target2 = { allowSpawn: true };
-            assignGingerly(target2, { [testSymbol]: 'test-value' }, { registry });
+            assignGingerly(target2, { [testSymbol]: 'test-value' }, { registry: { enhancementRegistry: registry } });
             expect(spawnAttempts).toBe(1);
         });
 
@@ -101,7 +101,7 @@
             });
             
             const target = {};
-            assignGingerly(target, { [testSymbol]: 'test-value' }, { registry });
+            assignGingerly(target, { [testSymbol]: 'test-value' }, { registry: { enhancementRegistry: registry } });
             expect('set' in target).toBe(true);
         });
 
@@ -119,7 +119,7 @@
             });
             
             const target = {};
-            assignGingerly(target, { [testSymbol]: 'test-value' }, { registry });
+            assignGingerly(target, { [testSymbol]: 'test-value' }, { registry: { enhancementRegistry: registry } });
             expect('set' in target).toBe(true);
         });
 
@@ -145,7 +145,7 @@
             });
             
             const target = { testProp: 'test' };
-            assignGingerly(target, { [testSymbol]: 'test-value' }, { registry });
+            assignGingerly(target, { [testSymbol]: 'test-value' }, { registry: { enhancementRegistry: registry } });
             
             expect(receivedObj).toEqual(target);
             if (receivedCtx === null || receivedCtx === undefined) {
@@ -177,12 +177,12 @@
             });
             
             const target1 = {};
-            const result1 = assignGingerly(target1, {}, { registry });
+            const result1 = assignGingerly(target1, {}, { registry: { enhancementRegistry: registry } });
             result1.set[testSymbol] = 'test-value';
             expect(spawnAttempts).toBe(0);
             
             const target2 = { allowSpawn: true };
-            const result2 = assignGingerly(target2, {}, { registry });
+            const result2 = assignGingerly(target2, {}, { registry: { enhancementRegistry: registry } });
             result2.set[testSymbol] = 'test-value';
             expect(spawnAttempts).toBe(1);
         });
@@ -204,11 +204,11 @@
             });
             
             const plainObj = {};
-            assignGingerly(plainObj, { [testSymbol]: 'test' }, { registry });
+            assignGingerly(plainObj, { [testSymbol]: 'test' }, { registry: { enhancementRegistry: registry } });
             expect(testSymbol in plainObj).toBe(false);
             
             const element = document.createElement('div');
-            assignGingerly(element, { [testSymbol]: 'test' }, { registry });
+            assignGingerly(element, { [testSymbol]: 'test' }, { registry: { enhancementRegistry: registry } });
             expect('set' in element).toBe(true);
         });
 
@@ -229,11 +229,11 @@
             });
             
             const normalObj = { type: 'normal' };
-            assignGingerly(normalObj, { [testSymbol]: 'test' }, { registry });
+            assignGingerly(normalObj, { [testSymbol]: 'test' }, { registry: { enhancementRegistry: registry } });
             expect(testSymbol in normalObj).toBe(false);
             
             const specialObj = { type: 'special' };
-            assignGingerly(specialObj, { [testSymbol]: 'test' }, { registry });
+            assignGingerly(specialObj, { [testSymbol]: 'test' }, { registry: { enhancementRegistry: registry } });
             expect('set' in specialObj).toBe(true);
         });
 
@@ -255,9 +255,9 @@
             });
             
             const target = {};
-            assignGingerly(target, { [testSymbol]: 'test1' }, { registry });
-            assignGingerly(target, { [testSymbol]: 'test2' }, { registry });
-            assignGingerly(target, { [testSymbol]: 'test3' }, { registry });
+            assignGingerly(target, { [testSymbol]: 'test1' }, { registry: { enhancementRegistry: registry } });
+            assignGingerly(target, { [testSymbol]: 'test2' }, { registry: { enhancementRegistry: registry } });
+            assignGingerly(target, { [testSymbol]: 'test3' }, { registry: { enhancementRegistry: registry } });
             
             expect(spawnAttempts).toBe(0);
         });
@@ -279,11 +279,11 @@
             });
             
             const target1 = { enabled: true, ready: false };
-            assignGingerly(target1, { [testSymbol]: 'test' }, { registry });
+            assignGingerly(target1, { [testSymbol]: 'test' }, { registry: { enhancementRegistry: registry } });
             expect(testSymbol in target1).toBe(false);
             
             const target2 = { enabled: true, ready: true };
-            assignGingerly(target2, { [testSymbol]: 'test' }, { registry });
+            assignGingerly(target2, { [testSymbol]: 'test' }, { registry: { enhancementRegistry: registry } });
             expect('set' in target2).toBe(true);
         });
 

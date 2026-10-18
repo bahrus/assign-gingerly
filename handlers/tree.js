@@ -29,8 +29,9 @@
  * (A ` =>` builtIns.tree in a pattern is also synchronous once tree.js is loaded, which
  * it is while a tree runs, but goes through the handler dispatch.)
  *
- * Itemscope managers: an object header `{ tag, ish }` attaches a manager (a registered
- * name, or a class that's auto-registered) to the element, without an `itemscope`
+ * Itemscope managers: an object header `{ tag, ish }` attaches a manager (a name, resolved
+ * through the `registry` option's itemscopeRegistry first, or a class, attached directly and
+ * registered nowhere) to the element, without an `itemscope`
  * attribute. Each call assigns the key's value to `el.ish`, and the element's own
  * pattern and its children's patterns resolve against the manager instance, so
  * computed values are just getters. The manager receives `ctx.rebind()` (constructor
@@ -67,6 +68,7 @@ import { checkSwitch, isLiteralString, isSwitch, normalize, WILDCARD, wildcardSp
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 import { placeNodes } from '../utils/placeNodes.js';
+import { resolveRegistry } from '../utils/resolveRegistry.js';
 const DEFAULT_MARKER_NAME = 'tree';
 /**
  * Options key carrying the tree's target (an Element, ShadowRoot or other DocumentFragment)
@@ -302,36 +304,27 @@ function sameAka(a, b) {
             return false;
     return true;
 }
+/** Configs for managers given as classes: attached directly, never registered. */
+const classManagerConfigs = new WeakMap();
 /**
- * Resolve a header's manager to its registered config. A class is registered under
- * `is ?? name` if needed; a name must already be registered.
+ * Resolve a header's manager to its config. A class is used directly, without registering
+ * it anywhere (no side effect). A name is looked up in the call's `registry` option, then
+ * the tree's target's registry (a shadow root may carry a scoped one), then the element's,
+ * then the global one.
  */
 function resolveManagerConfig(ish, element, options) {
-    // The tree's target first (a shadow root may carry a scoped registry), then the element, then the global one
-    const treeTarget = options[TREE_TARGET];
-    const registry = treeTarget?.customElementRegistry?.itemscopeRegistry
-        ?? element.customElementRegistry?.itemscopeRegistry
-        ?? (typeof customElements !== 'undefined' ? customElements.itemscopeRegistry : undefined);
-    if (!registry)
-        throw new Error('builtIns.tree: no itemscope registry is available');
-    if (typeof ish === 'string') {
-        const config = registry.get(ish);
+    if (typeof ish !== 'string') {
+        let config = classManagerConfigs.get(ish);
         if (!config)
-            throw new Error(`builtIns.tree: itemscope manager "${ish}" isn't registered`);
+            classManagerConfigs.set(ish, config = { manager: ish });
         return config;
     }
-    const name = ish.is ?? ish.name;
-    if (!name)
-        throw new Error('builtIns.tree: a manager class needs a name; declare static is = \'...\'');
-    const existing = registry.get(name);
-    if (existing) {
-        if (existing.manager !== ish) {
-            throw new Error(`builtIns.tree: itemscope name "${name}" is already registered to a different class`);
-        }
-        return existing;
-    }
-    const config = { manager: ish };
-    registry.define(name, config);
+    const registry = resolveRegistry('itemscopeRegistry', options, options[TREE_TARGET], element);
+    if (!registry)
+        throw new Error('builtIns.tree: no itemscope registry is available');
+    const config = registry.get(ish);
+    if (!config)
+        throw new Error(`builtIns.tree: itemscope manager "${ish}" isn't registered`);
     return config;
 }
 /**

@@ -4,6 +4,7 @@ import assignTentatively from './assignTentatively.js';
 import type { IAssignTentativelyOptions } from './types/assign-gingerly/types.js';
 import { EnhancementConfig, SpawnContext } from './types/assign-gingerly/types.js';
 import { parseWithAttrs } from './parseWithAttrs.js';
+import { registryOption } from './utils/resolveRegistry.js';
 
 /**
  * Normalizes lifecycleKeys to always return an object with dispose and resolved keys
@@ -568,10 +569,12 @@ Object.defineProperty(Object.prototype, 'assignGingerly', {
     source: Record<string | symbol, any>,
     options?: IAssignGingerlyOptions
   ): T {
-    // Auto-populate registry from customElementRegistry if this is an Element
-    if (this instanceof Element && (!options || !options.registry)) {
-      if (!options) options = {};
-      options.registry = (this as any).customElementRegistry?.enhancementRegistry;
+    // Fill in the enhancement registry from the element's customElementRegistry, unless the call gives one
+    if (this instanceof Element && !registryOption(options)?.enhancementRegistry) {
+      const enhancementRegistry = (this as any).customElementRegistry?.enhancementRegistry;
+      if (enhancementRegistry) {
+        options = { ...options, registry: { ...options?.registry, enhancementRegistry } };
+      }
     }
     assignGingerly(this, source, options);
     return this;

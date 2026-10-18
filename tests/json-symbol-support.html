@@ -76,7 +76,7 @@
             const target = {};
             assignGingerly(target, {
                 "[Symbol.for('test-json-symbol')]": 'json-value'
-            }, { registry });
+            }, { registry: { enhancementRegistry: registry } });
             
             expect(target).toBeDefined();
         });
@@ -103,7 +103,7 @@
             assignGingerly(target, {
                 "[Symbol.for('json-sym1')]": 'value1',
                 "[Symbol.for('json-sym2')]": 'value2'
-            }, { registry });
+            }, { registry: { enhancementRegistry: registry } });
             
             expect(target).toBeDefined();
         });
@@ -138,7 +138,7 @@
                 '?.style?.height': '40px',
                 '?.enhancements?.mellowYellow?.madAboutFourteen': true
             }, {
-                registry: baseRegistry
+                registry: { enhancementRegistry: baseRegistry }
             });
             
             expect(result).toBeDefined();
@@ -168,7 +168,7 @@
             assignGingerly(target, {
                 [actualSymbol]: 'actual-value',
                 "[Symbol.for('string-symbol')]": 'string-value'
-            }, { registry });
+            }, { registry: { enhancementRegistry: registry } });
             
             expect(target).toBeDefined();
         });
@@ -189,7 +189,7 @@
             const target = {};
             assignGingerly(target, {
                 '[Symbol.for("double-quote-test")]': 'double-quote-value'
-            }, { registry });
+            }, { registry: { enhancementRegistry: registry } });
             
             expect(target).toBeDefined();
         });
@@ -212,7 +212,7 @@
                 "[Symbol.for('combo-json-symbol')]": 'symbol-value',
                 '?.config?.setting': 'nested-value',
                 regularKey: 'regular-value'
-            }, { registry });
+            }, { registry: { enhancementRegistry: registry } });
             
             expect(target).toBeDefined();
             expect(target.config?.setting).toBe('nested-value');
@@ -253,7 +253,7 @@
             const parsedData = JSON.parse(jsonString);
             
             const target = {};
-            assignGingerly(target, parsedData, { registry });
+            assignGingerly(target, parsedData, { registry: { enhancementRegistry: registry } });
             
             expect(target).toBeDefined();
             expect(target.config?.name).toBe('MyApp');

@@ -10,7 +10,16 @@ export class ScopedParserRegistry {
     resolve: () => void;
     reject: (error: Error) => void;
   }>>();
-  
+
+  /**
+   * @param parsers - Optional parsers to register right away, by name (same as `register` for each)
+   */
+  constructor(parsers?: Record<string, ParserFunction | AttrParserConstructor>) {
+    if (parsers) {
+      for (const name of Object.keys(parsers)) this.register(name, parsers[name]);
+    }
+  }
+
   /**
    * Register a parser with a given name
    * Resolves any pending waiters for this parser

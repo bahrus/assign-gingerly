@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registry Constructor Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>Registry constructor tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    import { assignGingerly, assignFromAsync, EnhancementRegistry, ItemscopeRegistry, ParserRegistry } from '../index.js';
+    import { ScopedParserRegistry } from '../ScopedParserRegistry.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+    function assert(condition, message) {
+      results.push(`<div class="${condition ? 'pass' : 'fail'}">${condition ? '✓' : '✗'} ${message}</div>`);
+      condition ? passed++ : failed++;
+      if (!condition) console.error('Failed:', message);
+    }
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) console.error(`${message}\n  Expected: ${expected}\n  Actual:   ${actual}`);
+      assert(actual === expected, message);
+    }
+    const throws = (fn, pattern, message) => {
+      let error;
+      try { fn(); } catch (e) { error = e; }
+      assert(!!error && pattern.test(error.message), message);
+    };
+
+    async function runTests() {
+      // ItemscopeRegistry: { name: Class | config }
+      {
+        class CrewMemberView { constructor(el, v) { Object.assign(this, v); } get badge() { return `${this.name} (${this.role})`; } }
+        class StageView { constructor(el, v) { Object.assign(this, v); } }
+        const lifecycleKeys = { dispose: 'dispose' };
+        const registry = new ItemscopeRegistry({
+          'crew-member-view': CrewMemberView,
+          'stage-view': { manager: StageView, lifecycleKeys },
+        });
+        assertEquals(registry.get('crew-member-view')?.manager, CrewMemberView, 'ItemscopeRegistry: a class is shorthand for { manager: Class }');
+        assertEquals(registry.get('stage-view')?.lifecycleKeys, lifecycleKeys, 'ItemscopeRegistry: a full config is kept as is');
+        await registry.whenDefined('crew-member-view');
+        assert(true, 'ItemscopeRegistry: whenDefined resolves for constructor-defined names');
+        assertEquals(customElements.itemscopeRegistry.get('crew-member-view'), undefined, 'ItemscopeRegistry: nothing defined globally');
+        throws(() => new ItemscopeRegistry({ a: StageView }).define('a', StageView), /Already registered/, 'ItemscopeRegistry: a duplicate name still throws');
+        assert(new ItemscopeRegistry().get('x') === undefined, 'ItemscopeRegistry: no argument, as before');
+
+        const host = document.createElement('div');
+        await assignFromAsync(host, { '?. =>': { do: 'builtIns.tree', map: {
+          crew: ['ul', {}, { each: [{ tag: 'li', ish: 'crew-member-view' }, '?.badge'] }],
+        } } }, { from: { crew: [{ name: 'Avery', role: 'Commander' }] }, registry: { itemscopeRegistry: registry } });
+        assertEquals(host.querySelector('li')?.textContent, 'Avery (Commander)', 'ItemscopeRegistry: works as a local registry for Tree');
+      }
+
+      // ItemscopeRegistry.define(name, Class)
+      {
+        class Shorthand { constructor(el, v) { Object.assign(this, v); } }
+        const registry = new ItemscopeRegistry();
+        registry.define('shorthand-view', Shorthand);
+        assertEquals(registry.get('shorthand-view')?.manager, Shorthand, 'define: a class is shorthand for { manager: Class }');
+        registry.define('config-view', { manager: Shorthand });
+        assertEquals(registry.get('config-view')?.manager, Shorthand, 'define: a config still works');
+      }
+
+      // EnhancementRegistry: [config, …] or one config (same as push)
+      {
+        const isHappy = Symbol('isHappy');
+        const isMellow = Symbol('isMellow');
+        class Happy { isHappy = false; }
+        class Mellow { isMellow = false; }
+        const registry = new EnhancementRegistry([
+          { symlinks: { [isHappy]: 'isHappy' }, spawn: Happy },
+          { symlinks: { [isMellow]: 'isMellow' }, spawn: Mellow, enhKey: 'mellow' },
+        ]);
+        assertEquals(registry.getItems().length, 2, 'EnhancementRegistry: an array registers every config');
+        assert(registry.findByEnhKey('mellow')?.spawn === Mellow, 'EnhancementRegistry: … findable as with push');
+        const target = assignGingerly({}, { [isHappy]: true }, { registry: { enhancementRegistry: registry } });
+        assert(target !== undefined && registry.findBySymbol(isHappy)?.spawn === Happy, 'EnhancementRegistry: usable through the registry option');
+        assertEquals(new EnhancementRegistry({ symlinks: {}, spawn: Happy }).getItems().length, 1, 'EnhancementRegistry: a single config works too');
+        assertEquals(new EnhancementRegistry().getItems().length, 0, 'EnhancementRegistry: no argument, as before');
+      }
+
+      // ParserRegistry / ScopedParserRegistry: { name: parser }
+      {
+        const csv = value => value.split(',');
+        class Upper { parse(value) { return value.toUpperCase(); } }
+        const parsers = new ParserRegistry({ csv, upper: Upper });
+        assertEquals(parsers.get('csv'), csv, 'ParserRegistry: functions registered by name');
+        assertEquals(parsers.get('upper'), Upper, 'ParserRegistry: classes too');
+        assertEquals(new ParserRegistry().get('csv'), undefined, 'ParserRegistry: no argument, as before');
+        const scoped = new ScopedParserRegistry({ csv });
+        assertEquals(scoped.get('csv'), csv, 'ScopedParserRegistry: registered by name');
+      }
+
+      document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = failed === 0 ? 'success' : 'failure';
+    }
+
+    runTests().catch(error => {
+      console.error(error);
+      assert(false, `unexpected error: ${error.message}`);
+      document.getElementById('results').innerHTML = results.join('');
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = 'failure';
+    });
+  </script>
+</body>
+</html>

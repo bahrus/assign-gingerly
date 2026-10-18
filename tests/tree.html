@@ -17,7 +17,7 @@
   <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
 
   <script type="module">
-    import { assignFrom as baseAssignFrom, assignFromAsync as baseAssignFromAsync } from '../index.js';
+    import { assignFrom as baseAssignFrom, assignFromAsync as baseAssignFromAsync, ItemscopeRegistry, EnhancementRegistry } from '../index.js';
     import { builtInEmoji } from '../DX/emojis.js';
 
     // tree.html?compile runs every test with `compile: true` on every tree config, unchanged otherwise.
@@ -299,7 +299,7 @@
         const section = target.querySelector('section');
         assert(section?.ish instanceof RocketView, 'el.ish is the manager instance');
         assertEquals(section?.hasAttribute('itemscope'), false, 'no itemscope attribute');
-        assertEquals(customElements.itemscopeRegistry.get('tree-test-rocket-view')?.manager, RocketView, 'class auto-registered under static is');
+        assertEquals(customElements.itemscopeRegistry.get('tree-test-rocket-view'), undefined, 'a class is attached directly, not registered');
         assertEquals(section?.title, 'Rocket: Falcon 9', 'own pattern resolves against the manager');
         assertEquals(target.querySelector('h3')?.textContent, 'Rocket: Falcon 9', 'children resolve getters');
         assertEquals(target.querySelector('span')?.textContent, '70 m', 'getter reads merged value');
@@ -748,6 +748,32 @@
           assertEquals(customElements.itemscopeRegistry.get('tree-test-scoped-view'), undefined, 'not in the global registry');
           host.remove();
         }
+      }
+
+      // Test 39: the registry option — names resolve through registry.itemscopeRegistry first, nothing global
+      {
+        class LocalView { constructor(el, v) { Object.assign(this, v); } get label() { return `local:${this.name}`; } }
+        const itemscopeRegistry = new ItemscopeRegistry();
+        itemscopeRegistry.define('tree-test-local-view', { manager: LocalView });
+        const target = details();
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: {
+          rocket: [{ tag: 'p', ish: 'tree-test-local-view' }, '?.label'],
+          list: ['ul', {}, { each: [{ tag: 'li', ish: 'tree-test-local-view' }, '?.label'] }],
+        } } };
+        await assignFromAsync(target, cfg, { from: { rocket: { name: 'f9' }, list: [{ name: 'a' }, { name: 'b' }] }, registry: { itemscopeRegistry } });
+        assertEquals(target.querySelector('p')?.textContent, 'local:f9', 'registry option: a name resolves in registry.itemscopeRegistry');
+        assertEquals([...target.querySelectorAll('li')].map(li => li.textContent).join(','), 'local:a,local:b', 'registry option: … in repeats too (options flow down)');
+        assertEquals(customElements.itemscopeRegistry.get('tree-test-local-view'), undefined, 'registry option: nothing registered globally');
+        let error;
+        try {
+          await assignFromAsync(details(), cfg, { from: { rocket: { name: 'f9' } } });
+        } catch (e) { error = e; }
+        assert(error?.message.includes("isn't registered"), 'registry option: without it, the local name is unknown');
+        error = undefined;
+        try {
+          await assignFromAsync(details(), cfg, { from: { rocket: { name: 'f9' } }, registry: new EnhancementRegistry() });
+        } catch (e) { error = e; }
+        assert(error?.message.includes('registry.enhancementRegistry'), 'registry option: the former shape (a bare EnhancementRegistry) throws a clear error');
       }
 
       // Reordering a keyed repeat moves as few elements as possible

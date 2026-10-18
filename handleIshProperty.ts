@@ -1,4 +1,5 @@
 import type { IAssignGingerlyOptions, IshExtension, ItemscopeManagerConfig } from './types/assign-gingerly/types.js';
+import { resolveRegistry } from './utils/resolveRegistry.js';
 
 /**
  * Handle the 'ish' property assignment for HTMLElements with itemscope attributes.
@@ -48,9 +49,8 @@ async function defineIshProperty(
   options: IAssignGingerlyOptions | undefined,
   assignGingerlyFn: (target: any, source: any, options?: IAssignGingerlyOptions) => any
 ): Promise<void> {
-  // Determine which registry to use
-  const registry = (element as any).customElementRegistry?.itemscopeRegistry
-    ?? (typeof customElements !== 'undefined' ? customElements.itemscopeRegistry : undefined);
+  // The call's registry option first, then the element's (possibly scoped) registry, then the global one
+  const registry = resolveRegistry('itemscopeRegistry', options, element) as any;
 
   if (!registry) {
     throw new Error('ItemscopeRegistry not available');

@@ -4,6 +4,7 @@ import { EnhancementConfig, EnhKey } from "./types/assign-gingerly/types";
 import type { AssignFromOptions, FeatureConfigsMap, IAssignGingerlyOptions } from "./types/assign-gingerly/types";
 import type { PermissionProcessor } from './types/assign-gingerly/types.js';
 import { normalizeAliasOptions } from './resolve/getValues.js';
+import { registryOption, resolveRegistry } from './utils/resolveRegistry.js';
 
 const DEFAULT_ENHANCEMENT_KEY = Symbol('assign-gingerly.default-enhancement-setup');
 
@@ -75,6 +76,16 @@ export class EnhancementRegisteredEvent extends Event {
 export class EnhancementRegistry extends EventTarget {
   #items: Set<EnhancementConfig> = new Set();
   #pendingSetups = new Map<EnhKey, Promise<void>[]>();
+
+  /**
+   * @param items - Optional enhancement configs to register right away (same as `push`)
+   * @example
+   * new EnhancementRegistry([{ symlinks: { [isHappy]: 'isHappy' }, spawn: MyEnhancement }]);
+   */
+  constructor(items?: EnhancementConfig | EnhancementConfig[]) {
+    super();
+    if (items) this.push(items);
+  }
 
   push(items: EnhancementConfig | EnhancementConfig[]): void {
     if (Array.isArray(items)) {
@@ -194,12 +205,26 @@ export class ItemscopeRegistry extends EventTarget {
   #pendingSetups: Map<string, Promise<void>[]> = new Map();
 
   /**
+   * @param managers - Optional managers to define right away, by name: each a manager class
+   *   (shorthand for `{ manager: Class }`) or a full config. Same as calling `define` for each, in order.
+   * @example
+   * new ItemscopeRegistry({ 'crew-member-view': CrewMemberView, 'stage-view': { manager: StageView } });
+   */
+  constructor(managers?: Record<string, ItemscopeManager | ItemscopeManagerConfig>) {
+    super();
+    if (managers) {
+      for (const name of Object.keys(managers)) this.define(name, managers[name]);
+    }
+  }
+
+  /**
    * Define a new manager configuration
    * @param name - Manager name (matches itemscope attribute value)
-   * @param config - Manager configuration object
+   * @param config - Manager configuration object, or a manager class (shorthand for `{ manager: Class }`)
    * @throws Error if name is already registered
    */
-  define(name: string, config: ItemscopeManagerConfig): void {
+  define(name: string, config: ItemscopeManagerConfig | ItemscopeManager): void {
+    if (typeof config === 'function') config = { manager: config };
     if (this.#configs.has(name)) {
       throw new Error('Already registered');
     }
@@ -987,11 +1012,9 @@ export function assignGingerly(
       : new Set(options.withAsyncMethods)
     : undefined;
 
-  const registry = options?.registry instanceof EnhancementRegistry
-    ? options.registry
-    // : options?.registry
-    // ? new options.registry()
-    : undefined;
+  // Only the option: assignGingerly on an Element via the prototype method fills it from the element's registry
+  const enhancementRegistry = registryOption(options)?.enhancementRegistry;
+  const registry = enhancementRegistry instanceof EnhancementRegistry ? enhancementRegistry : undefined;
 
   // Convert Symbol.for string keys to actual symbols and apply aliases
   const processedSource: Record<string | symbol, any> = {};
@@ -1040,9 +1063,8 @@ export function assignGingerly(
       
       // Track the setup promise with the registry if we have an itemscope value
       if (itemscopeValue && typeof itemscopeValue === 'string' && itemscopeValue.length > 0) {
-        const registry = (target as any).customElementRegistry?.itemscopeRegistry
-          ?? (typeof customElements !== 'undefined' ? customElements.itemscopeRegistry : undefined);
-        
+        const registry = resolveRegistry('itemscopeRegistry', options, target) as any;
+
         if (registry && typeof registry._trackSetup === 'function') {
           registry._trackSetup(itemscopeValue, setupPromise);
         }

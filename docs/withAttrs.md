@@ -434,6 +434,8 @@ const json = JSON.stringify(config);
 const result = parseWithAttrs(element, config);
 ```
 
+A registry of your own (`ParserRegistry`, or a `ScopedParserRegistry` for a synthesizer element) can be declared in one go: `new ParserRegistry({ timestamp: v => …, 'my-splitter': MySplitParser })`, the same as calling `register` for each.
+
 #### **Built-in Named Parsers:**
 
 The following parsers are pre-registered in `globalParserRegistry`:

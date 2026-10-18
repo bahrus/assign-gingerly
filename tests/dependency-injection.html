@@ -125,7 +125,7 @@
             
             const result = assignGingerly({}, {
                 [isHappy]: true
-            }, { registry });
+            }, { registry: { enhancementRegistry: registry } });
             
             expect(result).toBeDefined();
         });
@@ -144,7 +144,7 @@
             });
             
             const target = {};
-            assignGingerly(target, { [mySymbol]: 'updated' }, { registry });
+            assignGingerly(target, { [mySymbol]: 'updated' }, { registry: { enhancementRegistry: registry } });
             
             expect(target).toBeDefined();
         });
@@ -166,8 +166,8 @@
             });
             
             const target = {};
-            assignGingerly(target, { [mySymbol]: 5 }, { registry });
-            assignGingerly(target, { [mySymbol]: 10 }, { registry });
+            assignGingerly(target, { [mySymbol]: 5 }, { registry: { enhancementRegistry: registry } });
+            assignGingerly(target, { [mySymbol]: 10 }, { registry: { enhancementRegistry: registry } });
             
             expect(target).toBeDefined();
         });
@@ -194,7 +194,7 @@
             assignGingerly(target, {
                 [sym1]: 'value1',
                 [sym2]: 'value2'
-            }, { registry });
+            }, { registry: { enhancementRegistry: registry } });
             
             expect(target).toBeDefined();
         });
@@ -216,7 +216,7 @@
             assignGingerly(target, {
                 [mySymbol]: 'symbol-value',
                 '?.config?.setting': 'nested-value'
-            }, { registry });
+            }, { registry: { enhancementRegistry: registry } });
             
             expect(target).toBeDefined();
         });
@@ -234,7 +234,7 @@
                 spawn: TestClass
             });
             
-            const target = assignGingerly({}, {}, { registry });
+            const target = assignGingerly({}, {}, { registry: { enhancementRegistry: registry } });
             
             expect('set' in target).toBe(true);
         });
@@ -252,7 +252,7 @@
                 spawn: TestClass
             });
             
-            const target = assignGingerly({}, {}, { registry });
+            const target = assignGingerly({}, {}, { registry: { enhancementRegistry: registry } });
             
             target.set[testSymbol] = 'proxy-value';
             

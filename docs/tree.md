@@ -391,7 +391,7 @@ class RocketManager {
     set metric(value) { this.#metric = value; this.#rebind(); }
     get heightLabel() { return this.#metric ? `${this.height.meters} m` : `${this.height.feet} ft`; }
 }
-customElements.itemscopeRegistry.define(RocketManager.is, { manager: RocketManager });
+customElements.itemscopeRegistry.define(RocketManager.is, RocketManager);   // shorthand for { manager: RocketManager }
 
 map: {
     rocket: [{ tag: 'section', ish: 'rocket-manager' }, { className: 'card' }, [
@@ -400,11 +400,57 @@ map: {
 }
 ```
 
-- **`ish`** is a **registered name** (keeps the config JSON) or a **class**. A class is registered automatically under `Class.is ?? Class.name`; a name registered to a different class throws, and so does an unregistered name.
+- **`ish`** is a **registered name** (keeps the config JSON) or a **class**.
+  - **A class** is attached directly and **registered nowhere**, so rendering has no side effect on any registry.
+  - **A name** is looked up in the call's [`registry.itemscopeRegistry`](./code-interjection.md#the-registry-option) first, then the tree's target's registry, then the global one. An unregistered name throws. Defining names only in `registry.itemscopeRegistry` keeps them local to the call: `assignFrom(host, pattern, { from: vm, registry: { itemscopeRegistry } })`.
 - **No `itemscope` attribute** is set. The manager is attached directly through the element's `ish` property.
 - **The manager is structure.** It's attached once, when the element is created. A different `ish` (like a different tag) rebuilds the element.
 - **Every call** assigns the key's value to `el.ish`, with the usual `ish` semantics: the first value constructs the manager, and later values merge into it (or go to a static `onAssigned`). The subtree is then re-applied against the instance.
 - **`$parent` / `$root`** inside the subtree still refer to the enclosing VM(s), not to the manager.
+
+### Local managers: `registry.itemscopeRegistry`
+
+A module can keep its managers to itself and still write its tree as plain JSON. It defines them in its own `ItemscopeRegistry` and passes that with each call, so nothing is added to `customElements.itemscopeRegistry`, and other code can't see the names or collide with them:
+
+```JavaScript
+import { assignFrom, ItemscopeRegistry } from 'assign-gingerly';
+
+// launch-card.js: managers private to this module
+class CrewMemberView {
+    constructor(element, initVals) { Object.assign(this, initVals); }
+    get badge() { return `${this.name} (${this.role})`; }
+}
+class StageView {
+    constructor(element, initVals) { Object.assign(this, initVals); }
+    get summary() { return `Stage ${this.number}: ${this.engines} engines`; }
+}
+
+// Each entry is a manager class (or a full config); the same as calling define() for each
+const itemscopeRegistry = new ItemscopeRegistry({
+    'crew-member-view': CrewMemberView,
+    'stage-view': StageView,
+});
+
+// Pure JSON: managers are referenced by name
+const pattern = {
+    '?. =>': {
+        do: 'builtIns.tree',
+        map: {
+            crew: ['ul', {}, { each: [{ tag: 'li', ish: 'crew-member-view' }, '?.badge'], key: '?.name' }],
+            stages: ['ol', {}, { each: [{ tag: 'li', ish: 'stage-view' }, '?.summary'] }],
+        },
+    },
+};
+
+export function renderLaunchCard(host, launch) {
+    assignFrom(host, pattern, { from: launch, registry: { itemscopeRegistry } });
+}
+```
+
+- **Names resolve only in the call's registry** when it gives one. There's no per-name fallback to the target's or the global registry, so a typo or a missing `define` fails here, instead of silently picking up a same-named manager from elsewhere.
+- **It flows down:** repeats (as above), nested trees and other handlers inside the tree all get the same `registry` option.
+- **Classes need none of this:** `{ tag: 'li', ish: CrewMemberView }` attaches the class directly, also with no global footprint. Use a local registry when you want the config to stay JSON (stored, sent, or generated) and still keep the names private.
+- **A scoped registry works the same way:** `registry: shadowRoot.customElementRegistry` uses that registry's `itemscopeRegistry` (and its `enhancementRegistry`). See [the `registry` option](./code-interjection.md#the-registry-option).
 
 ### `ctx.rebind()`
 
