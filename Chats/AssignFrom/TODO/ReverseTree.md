@@ -208,3 +208,41 @@ Together that's about the size of the `itemscope` microJoin change: a focused ch
 **Questions:**
 1. **Opt-in:** a static flag on the class (`static bindItemprops = true`), a registry config option (`{ manager, bind: 'itemprops' }`), or both?
 2. **Proceed with 1 and 2,** and take events up as the next query?
+
+## Bruce's Response
+
+You raise a good point I had forgotten about, that  the current message being that infer by itemprop stays out of donut holes.  I hesitant to break that "covenant".
+
+I'd like to walk through a few more scenarios before we commit any code changes (maybe I'm being overly ambitious in my ability to come up with such scenarios), so that we adopt a clear strategic approach.
+
+I am thinking that maybe we should keep the existing "covenant" and instead address this like this:
+
+```JS
+assignFrom(details, {
+    '#[rocketManager] =&': {
+        assign: {
+            //infers which one from the attribute
+            ish: true,
+            //if no attribute present or want to override it
+            //ish: rocket-manager
+            options: {
+                from: '?.rocket',
+                infer: { byItemprop: true },
+            }
+            
+        } 
+        
+    }
+}, {
+    from: vm,
+    pin: {
+        rocketManager: {qry: '[itemscope="rocket-manager"]'}
+    },
+    registry: {
+        itemscopeRegistry: new ItemscopeRegistry({
+            'rocket-manager', RocketManager
+        })
+    }
+})
+```
+
