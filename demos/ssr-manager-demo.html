@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server-rendered markup + an itemscope manager</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 860px; padding: 0 1rem; line-height: 1.45; color: #1d2330; }
+        .card { background: #f7f9fc; border: 1px solid #d9dee7; border-radius: 10px; padding: 0.75rem 1rem; }
+        .card h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+        .spec { display: flex; justify-content: space-between; gap: 1rem; border-top: 1px dashed #d9dee7; padding: 0.3rem 0; }
+        .spec .label { color: #5b6475; }
+        .spec .inc { font-size: 0.75rem; padding: 0.1rem 0.5rem; margin-right: auto; }
+        #checks li.ok::marker { content: "✓  "; color: #1f8a4c; }
+        #checks li.no::marker { content: "✗  "; color: #c0392b; }
+        #log { font-family: ui-monospace, monospace; font-size: 0.8rem; }
+        code { background: #eef1f6; padding: 0 0.25em; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>Server-rendered markup + an itemscope manager</h1>
+    <p>
+        The rocket card below is <strong>server-rendered</strong> (it's static HTML in this page), unlike in
+        <a href="./tree-demo.html">tree-demo.html</a>, where builtIns.tree creates it. This page attaches the same kind of
+        <code>RocketManager</code> to it with <code>assignFrom</code>, exactly as asked in
+        <a href="../Chats/AssignFrom/TODO/ReverseTree.md">Chats/AssignFrom/TODO/ReverseTree.md</a>, and checks what actually happens.
+    </p>
+
+    <!-- As server-rendered (the ask's markup, with </summary> closed: otherwise the parser keeps the section inside <summary>) -->
+    <details id="details" open>
+        <summary>Rocket</summary>
+        <section itemscope="rocket-manager" class="card rocket">
+            <h3>Rocket: Falcon 9</h3>
+            <div class="spec">
+                <span class="label">Height</span>
+                <button type="button" class="inc">Increase by one</button>
+                <span itemprop="heightLabel"></span>
+            </div>
+            <div class="spec">
+                <span class="label">Mass</span>
+                <span></span>
+            </div>
+            <div class="spec">
+                <span class="label">Engines</span>
+                <span></span>
+            </div>
+        </section>
+    </details>
+
+    <h2>What happened</h2>
+    <ul id="checks"></ul>
+    <h2>Log</h2>
+    <ol id="log"></ol>
+
+    <script type="module">
+        import { assignFromAsync, ItemscopeRegistry } from '../index.js';
+
+        const logEl = document.getElementById('log');
+        const log = (source, message) => {
+            const li = document.createElement('li');
+            li.textContent = `${source}: ${message}`;
+            logEl.append(li);
+        };
+        // Errors thrown asynchronously (handleIshProperty reports them that way) land here too
+        window.addEventListener('error', e => log('error', e.message));
+        window.addEventListener('unhandledrejection', e => log('rejection', e.reason?.message ?? e.reason));
+
+        const response = await (await fetch('./data/launch.json')).json();
+        const vm = response;
+
+        // The ask's RocketManager, unchanged
+        class RocketManager {
+            static is = 'rocket-manager';
+            #metric = true;
+            #extraMeters = 0;
+            #rebind;
+            constructor(element, initVals, { rebind }) {
+                Object.assign(this, initVals);
+                this.#rebind = rebind;
+            }
+            get metric() { return this.#metric; }
+            set metric(value) {
+                this.#metric = value;
+                this.#rebind();
+            }
+            increaseHeightByOne() {
+                this.#extraMeters++;
+                log('RocketManager.increaseHeightByOne', `+${this.#extraMeters} m → ctx.rebind()`);
+                this.#rebind();
+            }
+            get title() { return `Rocket: ${this.name}`; }
+            get heightLabel() {
+                const { meters, feet } = this.height;
+                const extra = this.#extraMeters;
+                return this.#metric ? `${meters + extra} m` : `${+(feet + extra * 3.28084).toFixed(1)} ft`;
+            }
+            get massLabel() {
+                return this.#metric ? `${this.mass.kg.toLocaleString()} kg` : `${this.mass.lb.toLocaleString()} lb`;
+            }
+            get enginesLabel() {
+                const { number, type, version, propellant_1, propellant_2 } = this.engines;
+                return `${number} × ${type} ${version} (${propellant_1} / ${propellant_2})`;
+            }
+        }
+
+        // The ask's call (the registry literal fixed: 'rocket-manager': RocketManager)
+        const details = document.getElementById('details');
+        const itemscopeRegistry = new ItemscopeRegistry({ 'rocket-manager': RocketManager });
+        try {
+            await assignFromAsync(details, {
+                '#[rocketManager]': {
+                    ish: '?.rocket'
+                }
+            }, {
+                from: vm,
+                pin: {
+                    rocketManager: { qry: '[itemscope="rocket-manager"]' }
+                },
+                infer: { byItemprop: true },
+                registry: { itemscopeRegistry },
+            });
+            log('assignFromAsync', 'resolved');
+        } catch (e) {
+            log('assignFromAsync', `threw: ${e.message}`);
+        }
+        await itemscopeRegistry.whenDefined('rocket-manager');
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        // What a developer would expect, checked
+        const section = details.querySelector('section');
+        const heightSpan = section.querySelector('[itemprop="heightLabel"]');
+        const checks = [
+            ['the section got a RocketManager (section.ish)', section.ish instanceof RocketManager],
+            ["the manager has the rocket's data (section.ish.name === 'Falcon 9')", section.ish?.name === 'Falcon 9'],
+            [`<span itemprop=heightLabel> shows the manager's heightLabel (it shows "${heightSpan.textContent}")`, heightSpan.textContent === '70 m'],
+            ['the button calls increaseHeightByOne', false],   // nothing in the call binds it; see the chat for why
+        ];
+        document.getElementById('checks').append(...checks.map(([label, ok]) => {
+            const li = document.createElement('li');
+            li.className = ok ? 'ok' : 'no';
+            li.textContent = label;
+            return li;
+        }));
+        document.body.dataset.done = 'true';
+    </script>
+</body>
+</html>
