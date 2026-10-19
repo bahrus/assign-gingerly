@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Server-rendered markup + an itemscope manager</title>
+    <title>Server-rendered markup + an itemscope manager (builtIns.scope)</title>
     <style>
         body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 860px; padding: 0 1rem; line-height: 1.45; color: #1d2330; }
         .card { background: #f7f9fc; border: 1px solid #d9dee7; border-radius: 10px; padding: 0.75rem 1rem; }
@@ -11,46 +11,57 @@
         .spec { display: flex; justify-content: space-between; gap: 1rem; border-top: 1px dashed #d9dee7; padding: 0.3rem 0; }
         .spec .label { color: #5b6475; }
         .spec .inc { font-size: 0.75rem; padding: 0.1rem 0.5rem; margin-right: auto; }
+        .controls { display: flex; gap: 0.5rem; margin: 1rem 0; }
         #checks li.ok::marker { content: "✓  "; color: #1f8a4c; }
         #checks li.no::marker { content: "✗  "; color: #c0392b; }
         #log { font-family: ui-monospace, monospace; font-size: 0.8rem; }
         code { background: #eef1f6; padding: 0 0.25em; border-radius: 3px; }
+        pre { font-size: 0.8rem; background: #f7f9fc; padding: 0.75rem; border-radius: 8px; overflow: auto; }
     </style>
 </head>
 <body>
     <h1>Server-rendered markup + an itemscope manager</h1>
     <p>
-        The rocket card below is <strong>server-rendered</strong> (it's static HTML in this page), unlike in
-        <a href="./tree-demo.html">tree-demo.html</a>, where builtIns.tree creates it. This page attaches the same kind of
-        <code>RocketManager</code> to it with <code>assignFrom</code>, exactly as asked in
-        <a href="../Chats/AssignFrom/TODO/ReverseTree.md">Chats/AssignFrom/TODO/ReverseTree.md</a>, and checks what actually happens.
+        The rocket card below is <strong>server-rendered</strong> (static HTML in this page), unlike in
+        <a href="./tree-demo.html">tree-demo.html</a>, where <code>builtIns.tree</code> creates it. Here,
+        <code>builtIns.scope</code> takes it over: it attaches the <code>RocketManager</code> named by the card's
+        <code>itemscope</code>, gives it the value named by its <code>itemprop</code> (<code>vm.rocket</code>), and binds the
+        card's itemprops and its button against the manager. The manager is the same kind as Tree's, <code>ctx.rebind()</code>
+        included. Discussion: <a href="../Chats/AssignFrom/TODO/ReverseTree.md">Chats/AssignFrom/TODO/ReverseTree.md</a>.
     </p>
 
-    <!-- As server-rendered (the ask's markup, with </summary> closed: otherwise the parser keeps the section inside <summary>) -->
+    <!-- As the server rendered it: the itemprops say where the manager's values go -->
     <details id="details" open>
         <summary>Rocket</summary>
-        <section itemscope="rocket-manager" class="card rocket">
-            <h3>Rocket: Falcon 9</h3>
+        <section itemprop="rocket" itemscope="rocket-manager" class="card rocket">
+            <h3 itemprop="title">Rocket: Falcon 9</h3>
             <div class="spec">
                 <span class="label">Height</span>
                 <button type="button" class="inc">Increase by one</button>
-                <span itemprop="heightLabel"></span>
+                <span itemprop="heightLabel">70 m</span>
             </div>
             <div class="spec">
                 <span class="label">Mass</span>
-                <span></span>
+                <span itemprop="massLabel">549,054 kg</span>
             </div>
             <div class="spec">
                 <span class="label">Engines</span>
-                <span></span>
+                <span itemprop="enginesLabel">9 × merlin 1D+ (liquid oxygen / RP-1 kerosene)</span>
             </div>
         </section>
     </details>
 
-    <h2>What happened</h2>
+    <div class="controls">
+        <button id="toggle-units">Toggle units</button>
+        <button id="run-again">Run again with new data</button>
+    </div>
+
+    <h2>Checks</h2>
     <ul id="checks"></ul>
     <h2>Log</h2>
     <ol id="log"></ol>
+    <h2>The call</h2>
+    <pre id="call"></pre>
 
     <script type="module">
         import { assignFromAsync, ItemscopeRegistry } from '../index.js';
@@ -61,16 +72,12 @@
             li.textContent = `${source}: ${message}`;
             logEl.append(li);
         };
-        // Errors thrown asynchronously (handleIshProperty reports them that way) land here too
         window.addEventListener('error', e => log('error', e.message));
-        window.addEventListener('unhandledrejection', e => log('rejection', e.reason?.message ?? e.reason));
 
-        const response = await (await fetch('./data/launch.json')).json();
-        const vm = response;
+        const vm = await (await fetch('./data/launch.json')).json();
 
-        // The ask's RocketManager, unchanged
+        // The same manager the tree demo uses: its constructor takes ctx.rebind, which builtIns.scope provides
         class RocketManager {
-            static is = 'rocket-manager';
             #metric = true;
             #extraMeters = 0;
             #rebind;
@@ -103,44 +110,72 @@
             }
         }
 
-        // The ask's call (the registry literal fixed: 'rocket-manager': RocketManager)
-        const details = document.getElementById('details');
+        // Local to this page: nothing is registered on customElements
         const itemscopeRegistry = new ItemscopeRegistry({ 'rocket-manager': RocketManager });
-        try {
-            await assignFromAsync(details, {
-                '#[rocketManager]': {
-                    ish: '?.rocket'
-                }
-            }, {
-                from: vm,
-                pin: {
-                    rocketManager: { qry: '[itemscope="rocket-manager"]' }
-                },
-                infer: { byItemprop: true },
-                registry: { itemscopeRegistry },
-            });
-            log('assignFromAsync', 'resolved');
-        } catch (e) {
-            log('assignFromAsync', `threw: ${e.message}`);
-        }
-        await itemscopeRegistry.whenDefined('rocket-manager');
-        await new Promise(resolve => setTimeout(resolve, 50));
 
-        // What a developer would expect, checked
+        const pattern = {
+            '#[rocketCard] =>': {
+                do: 'builtIns.scope',
+                // The manager comes from itemscope="rocket-manager", the value from itemprop="rocket"
+                bind: {
+                    infer: { byItemprop: true },
+                    pattern: { '?.querySelector?.button +=': { on: 'click', call: 'increaseHeightByOne' } },
+                    withMethods: ['querySelector'],
+                },
+            },
+        };
+        const options = data => ({
+            from: data,
+            pin: { rocketCard: { qry: '[itemscope="rocket-manager"]' } },
+            registry: { itemscopeRegistry },
+        });
+        document.getElementById('call').textContent = `assignFromAsync(details, ${JSON.stringify(pattern, null, 2)}, {
+    from: vm,
+    pin: { rocketCard: { qry: '[itemscope="rocket-manager"]' } },
+    registry: { itemscopeRegistry },   // new ItemscopeRegistry({ 'rocket-manager': RocketManager })
+});`;
+
+        const details = document.getElementById('details');
         const section = details.querySelector('section');
-        const heightSpan = section.querySelector('[itemprop="heightLabel"]');
-        const checks = [
-            ['the section got a RocketManager (section.ish)', section.ish instanceof RocketManager],
-            ["the manager has the rocket's data (section.ish.name === 'Falcon 9')", section.ish?.name === 'Falcon 9'],
-            [`<span itemprop=heightLabel> shows the manager's heightLabel (it shows "${heightSpan.textContent}")`, heightSpan.textContent === '70 m'],
-            ['the button calls increaseHeightByOne', false],   // nothing in the call binds it; see the chat for why
-        ];
+        const text = prop => section.querySelector(`[itemprop="${prop}"]`).textContent;
+
+        await assignFromAsync(details, pattern, options(vm));
+        log('builtIns.scope', 'bound the server-rendered card');
+        await new Promise(resolve => setTimeout(resolve, 50));   // event listeners attach once their module has loaded
+
+        // Checks: attach, bind, events, rebind, rerun in place
+        const checks = [];
+        const check = (label, ok) => checks.push([label, ok]);
+        const manager = section.ish;
+        check('the section got a RocketManager (section.ish)', manager instanceof RocketManager);
+        check(`<span itemprop=heightLabel> shows the manager's heightLabel ("${text('heightLabel')}")`, text('heightLabel') === '70 m');
+        section.querySelector('button').click();
+        check(`the button calls increaseHeightByOne, whose ctx.rebind() re-binds ("${text('heightLabel')}")`, text('heightLabel') === '71 m');
+        manager.metric = false;
+        check(`a setter calling ctx.rebind() updates the card ("${text('massLabel')}")`, text('massLabel').endsWith(' lb'));
+        manager.metric = true;
+        const rerun = structuredClone(vm);
+        rerun.rocket.name = 'Falcon 9 Block 5';
+        await assignFromAsync(details, pattern, options(rerun));
+        check(`running again rebinds in place, with the same manager ("${text('title')}")`, section.ish === manager && text('title') === 'Rocket: Falcon 9 Block 5');
+        check('nothing was registered on customElements.itemscopeRegistry', customElements.itemscopeRegistry?.get('rocket-manager') === undefined);
         document.getElementById('checks').append(...checks.map(([label, ok]) => {
             const li = document.createElement('li');
             li.className = ok ? 'ok' : 'no';
             li.textContent = label;
             return li;
         }));
+
+        document.getElementById('toggle-units').addEventListener('click', () => {
+            section.ish.metric = !section.ish.metric;
+            log('Toggle units', `metric = ${section.ish.metric} → ctx.rebind()`);
+        });
+        document.getElementById('run-again').addEventListener('click', async () => {
+            const data = structuredClone(vm);
+            data.rocket.name = `Falcon 9 (${new Date().toLocaleTimeString()})`;
+            await assignFromAsync(details, pattern, options(data));
+            log('Run again', `same manager: ${section.ish === manager}`);
+        });
         document.body.dataset.done = 'true';
     </script>
 </body>

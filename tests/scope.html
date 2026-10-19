@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>builtIns.scope Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>builtIns.scope tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    import { assignFrom, assignFromAsync, assignGingerly, ItemscopeRegistry } from '../index.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+    function assert(condition, message) {
+      results.push(`<div class="${condition ? 'pass' : 'fail'}">${condition ? '✓' : '✗'} ${message}</div>`);
+      condition ? passed++ : failed++;
+      if (!condition) console.error('Failed:', message);
+    }
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) console.error(`${message}\n  Expected: ${expected}\n  Actual:   ${actual}`);
+      assert(actual === expected, message);
+    }
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const html = markup => {
+      const div = document.createElement('div');
+      div.innerHTML = markup.trim();
+      document.body.append(div);
+      return div;
+    };
+
+    // The ReverseTree.md scenario: server-rendered card, manager by itemscope name, value by itemprop
+    const cardMarkup = `
+      <section itemprop="rocket" itemscope="rocket-manager" class="card rocket">
+        <h3 itemprop="title"></h3>
+        <div class="spec">
+          <span class="label">Height</span>
+          <button type="button" class="inc">Increase by one</button>
+          <span itemprop="heightLabel"></span>
+        </div>
+        <div class="spec"><span class="label">Mass</span><span itemprop="massLabel"></span></div>
+        <div itemprop="engines" itemscope><span itemprop="type"></span></div>
+        <span itemprop="site"></span>
+      </section>`;
+    let constructed = 0;
+    let ctxSeen;
+    class RocketManager {
+      #metric = true;
+      #extraMeters = 0;
+      #rebind;
+      constructor(element, initVals, { rebind }) {
+        constructed++;
+        ctxSeen = typeof rebind;
+        Object.assign(this, initVals);
+        this.#rebind = rebind;
+      }
+      get metric() { return this.#metric; }
+      set metric(value) { this.#metric = value; this.#rebind(); }
+      increaseHeightByOne() { this.#extraMeters++; this.#rebind(); }
+      get title() { return `Rocket: ${this.name}`; }
+      get heightLabel() { return this.#metric ? `${this.height.meters + this.#extraMeters} m` : `${this.height.feet} ft`; }
+      get massLabel() { return `${this.mass.kg} kg`; }
+    }
+    const rocketVm = () => ({ site: 'Pad 39A', rocket: { name: 'Falcon 9', height: { meters: 70, feet: 229.6 }, mass: { kg: 549054 }, engines: { type: 'merlin' } } });
+    const scopePattern = {
+      '?. =>': {
+        do: 'builtIns.scope',
+        bind: {
+          infer: { byItemprop: true },
+          pattern: { '?.querySelector?.button +=': { on: 'click', call: 'increaseHeightByOne' } },
+          withMethods: ['querySelector'],
+        },
+      },
+    };
+
+    async function runTests() {
+      // Test 1: manager from the itemscope attribute, value from the itemprop, getters bound, events, rebind
+      {
+        const itemscopeRegistry = new ItemscopeRegistry({ 'rocket-manager': RocketManager });
+        const host = html(cardMarkup);
+        const section = host.querySelector('section');
+        await assignFromAsync(section, scopePattern, { from: rocketVm(), registry: { itemscopeRegistry } });
+        assert(section.ish instanceof RocketManager, 'manager: attached from the itemscope attribute (via the registry option)');
+        assertEquals(ctxSeen, 'function', 'manager: ctx.rebind is passed outside Tree');
+        assertEquals(section.ish.name, 'Falcon 9', 'value: from[itemprop] (vm.rocket)');
+        assertEquals(section.querySelector('[itemprop=heightLabel]').textContent, '70 m', 'bind: infer reaches the manager getters');
+        assertEquals(section.querySelector('[itemprop=title]').textContent, 'Rocket: Falcon 9', 'bind: … every itemprop in the scope');
+        assertEquals(section.querySelector('[itemprop=type]').textContent, '', 'bind: infer still stops at a nested itemscope (the covenant)');
+        assertEquals(section.querySelector('[itemprop=site]').textContent, '', "bind: an itemprop the manager doesn't have is left alone");
+        await delay(20);   // event listeners attach once the += module has loaded
+        section.querySelector('button').click();
+        assertEquals(section.querySelector('[itemprop=heightLabel]').textContent, '71 m', 'events: the button calls the manager, whose ctx.rebind() re-binds');
+        section.ish.metric = false;
+        assertEquals(section.querySelector('[itemprop=heightLabel]').textContent, '229.6 ft', 'rebind: a setter calling ctx.rebind() updates the scope');
+
+        const vm2 = rocketVm();
+        vm2.rocket.name = 'Falcon Heavy';
+        await assignFromAsync(section, scopePattern, { from: vm2, registry: { itemscopeRegistry } });
+        assertEquals(constructed, 1, 'rerun: the manager is attached once');
+        assertEquals(section.querySelector('[itemprop=title]').textContent, 'Rocket: Falcon Heavy', 'rerun: the new value is merged and bound');
+        section.ish.metric = true;
+        await delay(20);
+        section.querySelector('button').click();
+        assertEquals(section.querySelector('[itemprop=heightLabel]').textContent, '72 m', 'rerun: the listener was replaced, not stacked (one increment per click)');
+        host.remove();
+      }
+
+      // Test 2: no manager (bare itemscope, or none): zoom in on a sub-object; $parent / $root
+      {
+        const host = html(`
+          <div itemprop="crew" itemscope>
+            <span itemprop="name"></span><span itemprop="role"></span><b></b><i></i>
+          </div>
+          <p itemprop="crew"><span itemprop="name"></span><b></b><i></i></p>`);
+        const vm = { site: 'Pad 39A', crew: { name: 'Avery', role: 'Commander' } };
+        const pattern = {
+          '?. =>': {
+            do: 'builtIns.scope',
+            bind: {
+              infer: { byItemprop: true },
+              pattern: { '?.querySelector?.b?.textContent': '$parent?.site', '?.querySelector?.i?.textContent': '$root?.site' },
+              withMethods: ['querySelector'],
+            },
+          },
+        };
+        const [scoped, plain] = host.children;
+        await assignFromAsync(scoped, pattern, { from: vm });
+        assert(!('ish' in scoped), 'no manager: a bare itemscope attaches none');
+        assertEquals(scoped.querySelector('[itemprop=name]').textContent + '/' + scoped.querySelector('[itemprop=role]').textContent, 'Avery/Commander', 'no manager: the value itself is the view model');
+        assertEquals(scoped.querySelector('b').textContent, 'Pad 39A', 'no manager: $parent is the outer from');
+        assertEquals(scoped.querySelector('i').textContent, 'Pad 39A', 'no manager: $root is the top-level from');
+        await assignFromAsync(plain, pattern, { from: vm });
+        assertEquals(plain.querySelector('[itemprop=name]').textContent, 'Avery', 'no itemscope at all: works the same');
+        host.remove();
+      }
+
+      // Test 3: get.value overrides the itemprop; '?.' takes the whole from; neither → a clear error
+      {
+        const host = html(`<div><span itemprop="name"></span></div>`);
+        const target = host.firstElementChild;
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.scope', get: { value: '?.pilot' }, bind: { infer: { byItemprop: true } } } }, { from: { pilot: { name: 'Rowan' } } });
+        assertEquals(target.querySelector('span').textContent, 'Rowan', 'get.value: an explicit path');
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.scope', get: { value: '?.' }, bind: { infer: { byItemprop: true } } } }, { from: { name: 'Whole' } });
+        assertEquals(target.querySelector('span').textContent, 'Whole', "get.value: '?.' scopes to the whole from");
+        let error;
+        try {
+          await assignFromAsync(target, { '?. =>': { do: 'builtIns.scope', bind: {} } }, { from: { name: 'x' } });
+        } catch (e) { error = e; }
+        assert(error?.message.includes("get: { value: '?.' }"), 'no itemprop and no get.value: an error that says what to do');
+        host.remove();
+      }
+
+      // Test 4: ish overrides the attribute (a class, registered nowhere); a lazily registered name is waited for
+      {
+        class ByClass { constructor(el, v) { Object.assign(this, v); } get label() { return `class:${this.n}`; } }
+        const host = html(`<div itemprop="item" itemscope="not-registered-anywhere"><span itemprop="label"></span></div>`);
+        const target = host.firstElementChild;
+        await assignFromAsync(target, { '?. =>': { do: 'builtIns.scope', ish: ByClass, bind: { infer: { byItemprop: true } } } }, { from: { item: { n: 1 } } });
+        assertEquals(target.querySelector('span').textContent, 'class:1', 'ish: a class overrides the attribute');
+        host.remove();
+
+        class Lazy { constructor(el, v) { Object.assign(this, v); } get label() { return `lazy:${this.n}`; } }
+        const itemscopeRegistry = new ItemscopeRegistry();
+        const host2 = html(`<div itemprop="item" itemscope="lazy-scope-manager"><span itemprop="label"></span></div>`);
+        const target2 = host2.firstElementChild;
+        const done = assignFromAsync(target2, { '?. =>': { do: 'builtIns.scope', bind: { infer: { byItemprop: true } } } }, { from: { item: { n: 2 } }, registry: { itemscopeRegistry } });
+        await delay(20);
+        assertEquals(target2.querySelector('span').textContent, '', 'lazy: waits while the manager is not registered');
+        itemscopeRegistry.define('lazy-scope-manager', Lazy);
+        await done;
+        assertEquals(target2.querySelector('span').textContent, 'lazy:2', 'lazy: binds once it is registered');
+        host2.remove();
+      }
+
+      // Test 5: an outer infer attaching the manager first, then scope binding the inside
+      {
+        const itemscopeRegistry = new ItemscopeRegistry({ 'rocket-manager': RocketManager });
+        const host = html(cardMarkup + '<span itemprop="site" class="outer"></span>');
+        constructed = 0;
+        await assignFromAsync(host, {
+          '?.querySelector?.section =>': scopePattern['?. =>'],
+        }, { from: rocketVm(), infer: { byItemprop: true }, withMethods: ['querySelector'], registry: { itemscopeRegistry } });
+        await itemscopeRegistry.whenDefined('rocket-manager');
+        await delay(0);
+        const section = host.querySelector('section');
+        assertEquals(constructed, 1, 'outer infer + scope: one manager');
+        assertEquals(host.querySelector('.outer').textContent, 'Pad 39A', "outer infer: binds the outer scope's own itemprops");
+        assertEquals(section.querySelector('[itemprop=site]').textContent, '', '… but not inside the section (the covenant)');
+        assertEquals(section.querySelector('[itemprop=heightLabel]').textContent, '70 m', 'scope: binds the inside');
+        await delay(20);
+        section.querySelector('button').click();
+        assertEquals(section.querySelector('[itemprop=heightLabel]').textContent, '71 m', 'scope: rebind works when infer attached the manager');
+        host.remove();
+      }
+
+      // Test 6: ctx.rebind is passed to managers attached by a bare ish (a no-op there), so they don't throw
+      {
+        class NeedsCtx { constructor(el, v, { rebind }) { this.ok = typeof rebind === 'function'; rebind(); } }
+        const itemscopeRegistry = new ItemscopeRegistry({ 'needs-ctx': NeedsCtx });
+        const el = document.createElement('div');
+        el.setAttribute('itemscope', 'needs-ctx');
+        assignGingerly(el, { ish: {} }, { registry: { itemscopeRegistry } });
+        await itemscopeRegistry.whenDefined('needs-ctx');
+        await delay(0);
+        assert(el.ish?.ok === true, 'bare ish: the constructor gets ctx.rebind (a no-op), instead of undefined');
+      }
+
+      // Test 7: infer byItemprop: true is element-driven; plain objects behave as before
+      {
+        const host = html(`<div><span itemprop="name"></span><span itemprop="toString"></span><span itemprop="missing"></span></div>`);
+        const target = host.firstElementChild;
+        assignFrom(target, {}, { from: { name: 'plain', extra: 1 }, infer: { byItemprop: true } });
+        assertEquals(target.children[0].textContent, 'plain', 'infer true: an own property is bound');
+        assertEquals(target.children[1].textContent, '', "infer true: a plain object's inherited members (toString) are not");
+        assertEquals(target.children[2].textContent, '', 'infer true: an itemprop the source lacks is left alone');
+        class Model { get name() { return 'getter'; } method() {} }
+        const host2 = html(`<div><span itemprop="name"></span><span itemprop="method"></span></div>`);
+        assignFrom(host2.firstElementChild, {}, { from: new Model(), infer: { byItemprop: true } });
+        assertEquals(host2.querySelector('[itemprop=name]').textContent, 'getter', 'infer true: a class instance getter is bound');
+        assertEquals(host2.querySelector('[itemprop=method]').textContent, '', 'infer true: … but not its methods');
+        host.remove();
+        host2.remove();
+      }
+
+      document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = failed === 0 ? 'success' : 'failure';
+    }
+
+    runTests().catch(error => {
+      console.error(error);
+      assert(false, `unexpected error: ${error.message}`);
+      document.getElementById('results').innerHTML = results.join('');
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = 'failure';
+    });
+  </script>
+</body>
+</html>

@@ -3415,6 +3415,27 @@ const map = {
 
 For the full reference, see [docs/tree.md](docs/tree.md), and [demos/tree-demo.html](demos/tree-demo.html) for a complete example.
 
+### Built-in handler: `builtIns.scope`
+
+Takes over an **existing** element's scope, typically server-rendered markup, where `builtIns.tree` creates one:
+- **The value** comes from the element's `itemprop` (`from[itemprop]`), or from `get: { value }`.
+- **The manager (optional)** is the one named by its `itemscope`, or `ish`. It becomes the scope's view model.
+- **`bind`** (an `assignFrom` call with `infer`, a `pattern`, events, …) binds the scope against the view model, and runs again on the manager's `ctx.rebind()`.
+
+```JavaScript
+// <section itemprop="rocket" itemscope="rocket-manager">…<span itemprop="heightLabel"></span>…</section>
+'?.querySelector?.section =>': {
+    do: 'builtIns.scope',
+    bind: {
+        infer: { byItemprop: true },
+        pattern: { '?.querySelector?.button +=': { on: 'click', call: 'increaseHeightByOne' } },
+        withMethods: ['querySelector'],
+    },
+}
+```
+
+See [docs/scope.md](docs/scope.md) and [demos/ssr-manager-demo.html](demos/ssr-manager-demo.html).
+
 ## Typed Path Authoring with `paths`, `sp`, `md`, and `tree`
 
 For JSON generated config files generated from TypeScript/`.mts`/`mjs` files during a build or server-side rendering, the `paths` utility provides compile-time autocomplete and type safety for `?.`-prefixed path strings. The `sp` tagged template literal ("split into parts") produces arrays suitable for the [`join` sync op](#sync-op-join). The `md` tagged template literal produces `{prop, val}` objects suitable for the [`microJoin` sync op](#sync-op-microjoin-).

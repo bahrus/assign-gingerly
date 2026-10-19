@@ -53,6 +53,7 @@ await assignFrom(card, {}, {
    - `<data>`, `<meter>`, `<progress>`, `<output>` → `value`
    - `<a>`, `<area>` → `href`
    - Element with non-empty `itemscope` attribute → `ish` (itemscope manager routing)
+   - Element with a **bare** `itemscope` → **left alone**: it's a nested scope with no manager, and setting its text would wipe its markup. Bind it with [`builtIns.scope`](./scope.md).
    - All other elements → `textContent`
 4. Sets `element[inferredProperty] = from[key]`
 
@@ -101,7 +102,7 @@ await assignFrom(container, {}, {
 
 ## Infer All Keys
 
-Pass `true` to automatically distribute all keys from the source object:
+Pass `true` to bind every itemprop in the target's scope that the source provides:
 
 ```TypeScript
 await assignFrom(card, {}, {
@@ -110,7 +111,11 @@ await assignFrom(card, {}, {
 });
 ```
 
-This iterates `Object.keys(from)` and attempts to find matching `[itemprop]` elements for each.
+It's **element-driven**: it collects the `[itemprop]` names in the target's own scope (the donut rule applies), and takes each one the source has:
+- **for a plain object,** its own properties (so an `itemprop="toString"` isn't filled from `Object.prototype`);
+- **for a class instance,** such as an itemscope manager, also inherited **getters**, but not methods.
+
+That's what lets [`builtIns.scope`](./scope.md) bind a scope against a manager whose values are getters.
 
 ## Multiple Elements Per Itemprop
 

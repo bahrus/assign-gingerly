@@ -24,6 +24,7 @@ const BUILT_IN_MAP = {
     'builtIns.lazyLoadSwitch': './handlers/lazyLoadSwitch.js',
     'builtIns.manageTemplateList': './handlers/manageTemplateList.js',
     'builtIns.rangeSelector': './handlers/rangeSelector.js',
+    'builtIns.scope': './handlers/scope.js',
     'builtIns.tree': './handlers/tree.js',
 };
 /**

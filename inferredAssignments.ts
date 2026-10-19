@@ -6,6 +6,7 @@
  */
 
 import { Infer } from './inferencer/inferencer.js';
+import { withScopePerimeter } from './inferencer/withScopePerimeter.js';
 
 /**
  * Configuration for inferred assignments.
@@ -16,7 +17,8 @@ export interface InferredAssignmentsConfig {
      * For each key, finds [itemprop="${key}"] elements within scope (respecting
      * itemscope boundaries) and sets the value using the inferred property.
      * 
-     * Pass `true` to infer all keys from the `from` source object.
+     * Pass `true` to take every itemprop in scope that the `from` source has: its own
+     * properties, and for class instances (e.g. itemscope managers) inherited getters too.
      */
     byItemprop?: string[] | true;
 
@@ -37,6 +39,26 @@ export interface InferredAssignmentsConfig {
 
     /** Concise alias for byName */
     '@'?: string[] | true | { props: string[] | true; outside: string };
+}
+
+/**
+ * For `byItemprop: true`: the itemprop names in the target's own scope (not inside a nested
+ * itemscope), in document order, that `from` provides. Element-driven rather than
+ * `Object.keys(from)`, so getters on a class instance (an itemscope manager) count. Inherited
+ * methods don't, and a plain object's inherited members (`toString`, …) don't either.
+ */
+function itempropsInScope(target: Element, from: any): string[] {
+    const plain = Object.getPrototypeOf(from) === Object.prototype || Object.getPrototypeOf(from) === null;
+    const names = new Set<string>();
+    for (const el of target.querySelectorAll('[itemprop]')) {
+        if (!withScopePerimeter(target, el, '[itemscope]')) continue;
+        if (el.getAttribute('itemscope') === '') continue;   // a bare nested scope (see below)
+        const name = el.getAttribute('itemprop')!;
+        if (names.has(name)) continue;
+        const provided = Object.hasOwn(from, name) || (!plain && name in from && typeof from[name] !== 'function');
+        if (provided) names.add(name);
+    }
+    return [...names];
 }
 
 /**
@@ -62,7 +84,7 @@ export function processInferredAssignments(
 
     if (effectiveByItemprop) {
         const keys = effectiveByItemprop === true
-            ? Object.keys(from)
+            ? itempropsInScope(target, from)
             : effectiveByItemprop;
 
         const infer = new Infer(target);
@@ -76,8 +98,13 @@ export function processInferredAssignments(
             const matches: Infer[] = infer['|'](key);
 
             for (const match of matches) {
-                // Infer sets the right property (textContent, value, checked, dateTime, ish)
-                match.value = value;
+                // A bare itemscope is a nested scope with no manager: setting its text would wipe its
+                // markup. It's bound by stepping into it (builtIns.scope), not from here.
+                if (match.enhancedElement.getAttribute('itemscope') === '') continue;
+                // Infer sets the right property (textContent, value, checked, dateTime, ish).
+                // A fresh Infer without a property name: the matches carry the itemprop as
+                // their propName, which Infer's value setter would take as the element property.
+                new Infer(match.enhancedElement).value = value;
             }
         }
     }
@@ -108,7 +135,7 @@ export function processInferredAssignments(
             const matches: Infer[] = infer['@'](key, scopeBoundary);
 
             for (const match of matches) {
-                match.value = value;
+                new Infer(match.enhancedElement).value = value;
             }
         }
     }

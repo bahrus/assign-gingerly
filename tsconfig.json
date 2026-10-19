@@ -17,6 +17,7 @@
 		"DX/IterableMixin.ts",
 		"DX/strictDefaultPermissions.ts",
 		"handlers/tree.ts",
+		"handlers/scope.ts",
 		"handlers/compileTree.ts",
 	],
 	"exclude":[

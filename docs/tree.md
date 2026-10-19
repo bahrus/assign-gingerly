@@ -9,6 +9,8 @@ The handler not only builds a tree of DOM elements from a view model, it rebinds
 The library can quite easily generate HTML in a node.js based server solution, but 
 the tree handler does not yet provide a way of hydrating server-rendered HTML markup (maybe with the help of microdata attributes).  That is a parked concept that is awaiting for a "no brainer" use case.
 
+Meanwhile, **[`builtIns.scope`](./scope.md)** takes over server-rendered markup scope by scope: it attaches the itemscope manager the markup names, and binds its itemprops (and events) against it, with the same manager classes Tree uses.
+
 ## Compiling to a template for optimum performance
 
 **For large lists,** see [Compiling (`compile`)](#compiling-compile-experimental): an opt-in mode that clones precompiled templates, with static parts baked in, instead of creating each element.

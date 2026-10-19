@@ -418,6 +418,100 @@ With the manager optional, **`adopt`** still fits: it adopts existing markup as 
 
 Or, if you have more scenarios to walk through first, the five in my previous response are still a good checklist. Nested managers and repeated items are the ones most likely to change the structure.
 
+## Bruce's Response III
+
+I think I'm going to go with all your recommendations exception possibly the name.
+
+I do want to make sure that if we use adopt/scope/something else, that even if there's no itemscope used, we can have binding expressions that can refer to $parent, $root, correct?
+
+I was going to originally name this document "wrap".  I think "scope" is closer to what we want, but I'm concerned it could imply that we need to use itemscope attribute, which I don't want to require.
+
+Maybe scope is the right term, but alternatives I was thinking about were "wrap", "cover", "domain", "drillDown".
+
+Should we go with scope?
+
+I guess let's please proceed with one handler, always pass ctx with a (no-op) rebind, which pulls from the get.value if provided, otherwise itemprop attribute value, otherwise I'm thinking throw?  I'm not sure it makes sense not to drill down and keep using from (or the parent).  Can you think of a good scenario where we would want to do that?
+
+## Claude's Implementation Notes
+
+### Your questions first
+
+- **`$parent` / `$root`:** yes, with or without `itemscope`. Inside `bind`, the outer `from` is pushed onto `fromStack`, so `$parent` is the outer `from` and `$root` is the top-level one. It's tested both ways.
+- **The name:** I went with **`scope`** (`do: 'builtIns.scope'`). The docs say up front that `itemscope` isn't required; with no manager it's simply "zoom in on a sub-value and bind it". If you settle on `wrap`, `cover` or another name, it's one line in `processHandlerCommands.ts` plus the docs.
+- **Throwing when there's no value:** agreed, and done. **The only scenario I found for keeping the whole `from`** is a page-level manager over the entire view model, e.g. `<main itemscope="page-manager">` with no `itemprop`. `get: { value: '?.' }` says that explicitly, so throwing costs nothing. The error message suggests it.
+
+### What's implemented
+
+| | Where |
+|---|---|
+| **`builtIns.scope`**: value from `get.value` → the `itemprop` → an error; manager from `ish` → the `itemscope` name → none; `bind` (an `assignFrom` with `pattern` and options, `from` = the manager or the value); waits for a lazily registered manager | new `handlers/scope.ts`, registered in `processHandlerCommands.ts`, **added to `tsconfig.json`'s `include`** (handlers are listed there, so without it there's no `scope.js`) |
+| **`ctx` always passed:** without Tree, `rebind` calls whatever `builtIns.scope` registered for the element, else nothing. An async `onAssigned` settling does the same. | `handleIshProperty.ts` (`setScopeBinder`) |
+| **`byItemprop: true` element-driven:** the itemprops in scope that the source has: own properties, plus getters on class instances, but not methods, and not a plain object's inherited members | `inferredAssignments.ts` |
+| **Event dedup keys** shared by Tree and scope | new `handlers/eventKeys.ts` (moved out of `tree.ts`) |
+| **Types:** `ScopeConfig`, `ScopeBinding` | `types/assign-gingerly/types.d.ts` (**submodule**) |
+
+### Results
+
+| | |
+|---|---|
+| New `tests/scope.html` | **34 / 34**, in Chromium, Firefox and WebKit |
+| Full suite | **161 passed, 4 skipped** |
+| `tsc --noEmit` | clean |
+| [`demos/ssr-manager-demo.html`](../../../demos/ssr-manager-demo.html), now using `builtIns.scope` | all 6 checks ✓ |
+
+**The demo's checks:**
+1. the manager is attached;
+2. `heightLabel` is filled;
+3. the button calls `increaseHeightByOne`, whose `ctx.rebind()` re-binds;
+4. a setter's rebind updates the card;
+5. running again rebinds in place, with the same manager;
+6. nothing is registered globally.
+
+It also has "Toggle units" and "Run again" buttons. **The manager class is the tree demo's, unchanged,** `{ rebind }` constructor included.
+
+**The tests cover** the scenarios we discussed:
+- the rocket card: manager from `itemscope`, value from `itemprop`, getters, the nested-scope covenant, events, rebind, a rerun in place, and no listener stacking;
+- no manager: a bare `itemscope`, and no `itemscope`, with `$parent` / `$root`;
+- `get.value`, `'?.'`, and the error;
+- `ish` as a class overriding the attribute;
+- a lazily registered manager;
+- an outer `infer` attaching the manager, with scope binding the inside;
+- a bare `el.ish` manager getting `ctx.rebind`;
+- the element-driven `byItemprop: true`.
+
+### Three things I found along the way
+
+1. **`infer` was broken. It set the wrong property** (fixed on our side; **your call on the inferencer**).
+   - **The bug:** `new Infer(target)['|']('heightLabel')` creates each match as `new Infer(el, 'heightLabel')`, with the itemprop as `propName`. Since the inferencer merge of **2026-09-01**, `Infer`'s `value` setter treats `#propName` as **the element property to write**. So `infer` was setting `span.heightLabel = …` instead of `span.textContent = …`, and `beVigilant` had the same problem.
+   - **Why nobody noticed:** assign-gingerly had **no `infer` tests at all**. `tests/scope.html` now covers it, including plain-object `byItemprop: true` (Test 7).
+   - **My workaround:** I didn't change the submodule. Instead, `inferredAssignments.ts` and `beVigilant.ts` set values through a fresh `new Infer(element)` (no `propName`), so the inferencer picks the property.
+   - **Your call:** in the inferencer itself, `#propName` now means two things: the VM key (for `setDisplay`) and the element property (for `value`). Fixing that properly belongs there, in its own repo.
+2. **A bare-`itemscope` itemprop got its `textContent` overwritten** (changed; **a judgment call, say if you disagree**).
+   - **The problem:** `<div itemprop="engines" itemscope>` holding an object got `textContent = '{"type":"merlin"}'`, wiping out its markup. A *named* itemscope is routed to `ish`, which is fine.
+   - **The change:** `infer` now leaves bare-itemscope elements alone, since they're nested scopes to bind with `builtIns.scope`. This applies to both `byItemprop: true` and explicit lists, and is documented in `inferred-assignments.md`.
+3. **Event listeners attach asynchronously.** That's existing behavior: the ` +=` module loads on demand. A test (or user) that clicks *immediately* after the call misses the first listener. The tests wait briefly, and `scope.md` says so. Making ` +=` synchronous once loaded, as handlers already are, could be a follow-up.
+
+### Docs
+
+- **New [`docs/scope.md`](../../../docs/scope.md):**
+  - an example;
+  - the config, with the defaults and overrides table;
+  - the binding, with `$parent` / `$root`, events and `infer`;
+  - the covenant, and how an outer `infer` and scope combine;
+  - rebinding and reruns.
+- **README:** a *Built-in handler: `builtIns.scope`* section after `builtIns.tree`.
+- **`tree.md`:** the *Server Side Rendering* note points to it.
+- **`inferred-assignments.md`:** `byItemprop: true` (element-driven, getters) and the bare-itemscope rule.
+
+### To do on your side
+
+1. **Build** (new: `handlers/scope.ts`, `handlers/eventKeys.ts`).
+2. **Commit the `types` submodule.**
+3. **`git add`** `handlers/scope.ts`, `handlers/eventKeys.ts`, `docs/scope.md` and `tests/scope.*`.
+4. **Decide** whether to fix `Infer`'s `#propName` in the inferencer repo.
+
+
+
 
 
 

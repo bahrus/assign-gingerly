@@ -1,6 +1,17 @@
 import type { IAssignGingerlyOptions, IshExtension, ItemscopeManagerConfig } from './types/assign-gingerly/types.js';
 import { resolveRegistry } from './utils/resolveRegistry.js';
 
+/** What re-binds an element's scope against its manager (registered by builtIns.scope). */
+const scopeBinders = new WeakMap<Element, () => void>();
+
+/**
+ * Register (or replace) the function that re-binds `element`'s scope. A manager attached to the
+ * element outside builtIns.tree calls it through `ctx.rebind()`, and after an async onAssigned settles.
+ */
+export function setScopeBinder(element: Element, binder: () => void): void {
+  scopeBinders.set(element, binder);
+}
+
 /**
  * Handle the 'ish' property assignment for HTMLElements with itemscope attributes.
  * This function validates the element, then defines or updates the 'ish' property.
@@ -123,7 +134,10 @@ export function defineIshCore(
 ): void {
   const { manager } = config;
   const { onAssigned } = manager;
-  const { ctx, onSettled } = extension ?? {};
+  // Managers always get a ctx with rebind(): Tree passes its own; otherwise it calls whatever
+  // binder is registered for the element (builtIns.scope), and is a no-op when there's none.
+  const rebindScope = () => scopeBinders.get(element)?.();
+  const { ctx = { rebind: rebindScope }, onSettled = rebindScope } = extension ?? {};
   let managerInstance: any = null;
   // Values that arrived while an async onAssigned was in flight
   const valueQueue: any[] = [];

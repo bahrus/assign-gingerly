@@ -65,9 +65,8 @@ function processElement(element, from, keys, scopeRoot) {
         return;
     if (!withScopePerimeter(scopeRoot, element, '[itemscope]'))
         return;
-    // Set value via inferencer
-    const infer = new Infer(element, itemprop);
-    infer.value = from[itemprop];
+    // Set value via inferencer (no property name: Infer would take it as the element property to set)
+    new Infer(element).value = from[itemprop];
     // Cache for future fast access
     registerInCache(scopeRoot, itemprop, element);
 }

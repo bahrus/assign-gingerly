@@ -64,7 +64,8 @@
 
 import { assignFrom, categorizeKeys, handleSpreads, SUBSTITUTION_VARS } from '../assignFrom.js';
 import { applyAttribute, assignGingerly, tryAssignTo } from '../assignGingerly.js';
-import { getValue, getValues, isEventBinding } from '../resolve/getValues.js';
+import { getValue, getValues } from '../resolve/getValues.js';
+import { withEventKeys } from './eventKeys.js';
 import { checkSwitch, isLiteralString, isSwitch, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
@@ -173,28 +174,6 @@ const treeStates = new WeakMap<Comment, Map<string, TreeNode>>();
 /** Whether a pattern only has plain keys, so it can skip assignFrom's key categorization. */
 const plainPatterns = new WeakMap<Pattern, boolean>();
 
-/** Patterns whose ` +=` event bindings got a default dedup key (identity when there were none). */
-const eventKeyedPatterns = new WeakMap<Pattern, Pattern>();
-
-/**
- * Give each ` +=` event binding without a `get.key` a default one, so re-applying the
- * pattern on a rerun replaces the element's listener instead of adding another (and the
- * listener's host is always the current `from`).
- */
-function withEventKeys(pattern: Pattern): Pattern {
-    let keyed = eventKeyedPatterns.get(pattern);
-    if (keyed) return keyed;
-    keyed = pattern;
-    for (const key of Object.keys(pattern)) {
-        const value = pattern[key];
-        if (isEventBinding(key, value) && value.get?.key === undefined) {
-            if (keyed === pattern) keyed = { ...pattern };
-            keyed[key] = { ...value, get: { ...value.get, key: `builtIns.tree:${key}` } };
-        }
-    }
-    eventKeyedPatterns.set(pattern, keyed);
-    return keyed;
-}
 
 /** Where an element's children go: a template's content, otherwise the element itself. */
 function containerOf(element: Element): ParentNode {
@@ -215,7 +194,7 @@ function applyPattern(
     skipLiterals = false
 ): void {
     if (!pattern) return;
-    pattern = withEventKeys(pattern);
+    pattern = withEventKeys(pattern, 'builtIns.tree');
     const fast = compileFastPattern(pattern);
     if (fast && fastPathAllowed(options, permissionProcessor) && applyFast(element, fast, from, options, skipLiterals)) return;
     const nodeOptions = { ...options, from };
