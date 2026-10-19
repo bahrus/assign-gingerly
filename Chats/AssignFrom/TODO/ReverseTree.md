@@ -209,9 +209,9 @@ Together that's about the size of the `itemscope` microJoin change: a focused ch
 1. **Opt-in:** a static flag on the class (`static bindItemprops = true`), a registry config option (`{ manager, bind: 'itemprops' }`), or both?
 2. **Proceed with 1 and 2,** and take events up as the next query?
 
-## Bruce's Response
+## Bruce's Response I
 
-You raise a good point I had forgotten about, that  the current message being that infer by itemprop stays out of donut holes.  I hesitant to break that "covenant".
+You raise a good point I had forgotten about, that  the current message is that infer by itemprop stays out of donut holes.  I'm hesitant to break that "covenant", so I'm thinking that's a good reason to explain why the example above shouldn't work.
 
 I'd like to walk through a few more scenarios before we commit any code changes (maybe I'm being overly ambitious in my ability to come up with such scenarios), so that we adopt a clear strategic approach.
 
@@ -245,4 +245,83 @@ assignFrom(details, {
     }
 })
 ```
+
+which seems better to you?
+
+I'm very open to suggestions if you think of a better name than "assign" and how it should be structured.
+
+## Claude's Response II
+
+**Yours is better.** It keeps the covenant: `infer` never enters a nested scope *on its own*. Instead, you **explicitly step into** the scope, by targeting the itemscope element itself and binding it against its manager. That's also more general than my per-class flag:
+- the choice is per call, not baked into the manager;
+- the same manager works under Tree, under this op, or bare.
+
+I'd drop my flag in favor of it.
+
+It also lines up with Tree nicely: **whoever knows how to bind a scope supplies `ctx.rebind()`**.
+- **Tree** knows it from the spec.
+- **This op** knows it from its own config (`infer`, and a pattern; see below). So its `rebind()` re-runs that.
+- **A bare `el.ish = …`** knows nothing, so its `rebind()` is a no-op.
+
+**One part of my proposal I'd still keep: always pass `ctx`** (with a no-op `rebind` when nothing binds). Then a manager written for Tree, with `constructor(el, initVals, { rebind })`, doesn't throw elsewhere, as it does in the demo now. It's a few lines, and it makes managers portable among all three.
+
+### Suggested structure
+
+Your sketch has `options.from: '?.rocket'` doing two jobs: it's what `el.ish` receives, **and** (implicitly) what `infer` binds against. Those need to be different objects. `heightLabel` is a getter on the **manager**, not a field of `vm.rocket`. So I'd separate *the value* from *the binding*:
+
+```JS
+'#[rocketManager] =>': {
+    do: 'builtIns.adopt',
+    ish: true,                 // the manager named by the itemscope attribute; or 'rocket-manager', or a class
+    get: { value: '?.rocket' },   // what el.ish receives (default: the whole `from`)
+    bind: {                    // applied to the element against the manager: now, after each value, and on ctx.rebind()
+        infer: { byItemprop: true },
+        pattern: {             // anything infer can't express, e.g. events (gap 3), host = the manager
+            '?.querySelector?.button.inc +=': { on: 'click', call: 'increaseHeightByOne' },
+        },
+        withMethods: ['querySelector'],
+    },
+}
+```
+
+- **`bind` is an `assignFrom` call on the element, with `from` set to the manager.** So it takes the familiar options (`infer`, `pin`, `withMethods`, `aka`, …) plus a `pattern`. That also **solves gap 3 (events)** with no new concept: a ` +=` in the pattern, whose host is the manager, exactly as in Tree.
+- **`infer` with `byItemprop: true` needs one fix to see getters.** Today it takes `Object.keys(from)`, which misses a manager's getters. I'd make `true` **element-driven** instead: collect the itemprops in scope, and take each one the source has (`prop in from`). For plain objects that gives the same results, and it still never crosses a nested itemscope, so the covenant is untouched.
+
+### A handler (` =>`) or a sync op (` =&`)?
+
+I'd make it a **handler, `builtIns.adopt`**, rather than a sync op:
+
+| | Handler (`do: 'builtIns.adopt'`) | Sync op (` =&`) |
+|---|---|---|
+| A manager **not registered yet** (lazy) | It can wait, as `ish` does today | It must already be registered (ops are strictly synchronous) |
+| Loading | On first use, like `builtIns.tree` (synchronous after that) | Imported statically into every page that uses ` =&` |
+| Fit | Structural work on the DOM, like `tree` and `manageTemplateList` | Ops compute content (`join`, `microJoin`) |
+| Resolving the value | The `get` map, as for every handler | The op's resolved arguments |
+
+If you prefer ` =&` for its synchronous guarantee, it can work too, with the "must be registered" limitation.
+
+### The name
+
+"assign" is too general: every key assigns. Some candidates:
+- **`adopt`** (my pick). The docs already say "Tree doesn't adopt existing markup", and this is exactly adopting it: the markup exists, and we attach its manager and bind its scope.
+- **`hydrate`.** It's familiar from SSR frameworks, but it suggests replacing or reconciling markup, which this doesn't do.
+- **`bindScope`.** Accurate, but plainer.
+- **`manage`.** It reads well (`manage: { ish: true }`), but it's vague about the binding.
+
+### Before any code: more scenarios
+
+Agreed. Here are ones I'd want this structure to survive, so we can check it against them:
+1. **Nested managers in server markup:** an item inside the rocket card with its own `itemscope=…`. Can `bind` on the outer adopt the inner (an `infer` that routes `ish`, or a nested `adopt` in the pattern)?
+2. **Repeated server-rendered items** (a list of crew cards, each `itemscope=crew-member-view`). Does one adopt call handle all of them, with a `qry` matching several, or does it need a repeat form?
+3. **Mixed:** Tree creates part of a page, and part is server-rendered. Can the same manager class and the same `bind` config serve both?
+4. **Re-running with new data:** the same call again with a new `vm`. It should rebind in place, never re-attach, as Tree does.
+5. **Values the server already rendered** (e.g. `<span itemprop=heightLabel>70 m</span>`). Should the first bind skip unchanged text (Tree's fast path already does), or should the manager read its initial state *from* the markup?
+
+Scenario 5 is the real "reverse tree" question, and maybe the next in your series.
+
+**Questions:**
+1. **The name:** `adopt`, or another?
+2. **Handler or sync op?**
+3. **`ctx` always passed,** with `rebind` a no-op when nothing binds?
+4. **`byItemprop: true` element-driven,** so getters work?
 
