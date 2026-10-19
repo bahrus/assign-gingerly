@@ -325,3 +325,103 @@ Scenario 5 is the real "reverse tree" question, and maybe the next in your serie
 3. **`ctx` always passed,** with `rebind` a no-op when nothing binds?
 4. **`byItemprop: true` element-driven,** so getters work?
 
+## Bruce's Response II
+
+You make good points about wanting to be able lazy load managers, hence the need for =>
+
+Your example of how to integrate the event listener is exactly what I was looking for.
+
+I'm wondering how wide the scope of builtIns.adopt should be?  Should it always be associated with an itemscope manager?
+
+If so, is:
+
+ish: true redundant?
+
+I'm thinking if the scope is limited to itemscope managers, throw an error if the attribute doesn't specify a name, nor does the ish value.
+
+Another shortcut:
+
+```html
+<section itemprop=rocket itemscope=rocket-manager class="card rocket">
+```
+
+Since itemprop is specified, we could avoid needing to specify:
+
+```JS
+get: { value: '?.rocket' }, 
+```
+
+Thoughts in my mind where something that resembles the same functionality but doesn't involve an itemscope manager:
+
+The desire to zoom in on a subobject of the vm (from), and simplify binding within that context.  I'm thinking maybe that could be a sync op?
+
+Supporting itemscope with no specified itemscope manager.
+
+## Claude's Response III
+
+### The zoom-in can't be a sync op, but it's the same thing as adopt without a manager
+
+**A sync op can't do it.** The *whole* ` =&` config is resolved against the outer `from` before the op runs ([sync-ops.md](../../../docs/sync-ops.md), "The whole config is resolved in one pass"). So a nested `pattern: { … '?.heightLabel' … }` would be resolved against `vm`, not against the zoomed-in object. Making an exception for one op would break the ` =&` rule.
+
+**Handlers don't have that problem.** Only their `get` / `resolve` maps are resolved, and the rest of the config is passed as written. That's exactly what a nested binding needs.
+
+**Your three wishes are one operation with an optional layer:**
+1. adopt a manager's scope;
+2. zoom in on a sub-object;
+3. `itemscope` with no manager name.
+
+All three are "**bind this element's scope against a value**". With a manager, the manager wraps the value and becomes the scope's view model. Without one, the value itself is the view model. So I'd recommend **one handler, with the manager optional**, rather than limiting it to managers and adding a second mechanism for the rest.
+
+### The structure, with your shortcuts
+
+```html
+<section itemprop=rocket itemscope=rocket-manager class="card rocket"> … </section>
+```
+
+```JS
+'#[rocketCard] =>': {
+    do: 'builtIns.adopt',
+    bind: {
+        infer: { byItemprop: true },
+        pattern: { '?.querySelector?.button.inc +=': { on: 'click', call: 'increaseHeightByOne' } },
+        withMethods: ['querySelector'],
+    },
+}
+```
+
+**Everything else comes from the markup:**
+
+| What | Default | Override |
+|---|---|---|
+| **The value** | `from[itemprop]` when the element has `itemprop` (your shortcut: `vm.rocket`), else the whole `from` | `get: { value: '?.whatever' }` |
+| **The manager** | The name in `itemscope="…"`, if any | `ish: 'name'` or `ish: SomeClass` |
+| **The scope's view model** (`from` for `bind`) | The manager instance, if there's a manager; else the value | (none) |
+
+- **`ish: true` becomes redundant,** as you suspected: the attribute already says it. `ish` remains only to override, for example when the server markup has a bare `itemscope`, or to use a class.
+- **Bare `itemscope`** (or no `itemscope` at all) simply means no manager: the zoom-in case.
+- **The error you suggested still has a place,** just narrower. An `ish` that names nothing registered fails, after waiting for lazy registration as `ish` does today. With a manager-only design, it would also throw when no name is found. I'd rather that case just means "no manager", since it covers your other two wishes for free.
+- **`fromStack`:** inside `bind`, `$parent` is the outer `from` (`vm`), as in Tree, so the scope can still reach the page-level data.
+- **Re-running** the same call with new data assigns the new value (to `el.ish`, or as the scope's `from`) and re-applies `bind` in place. The manager is attached once. A manager's `ctx.rebind()` re-applies `bind` against it.
+
+**A nice consequence of your itemprop shortcut:** with `itemprop=rocket itemscope=rocket-manager`, the *outer* `infer: { byItemprop: true }` on `details` **already** routes `vm.rocket` into `section.ish` today, because infer's ish routing stops *at* the scope rather than entering it. So for that markup, the outer infer attaches the manager, and `adopt` only needs to bind the inside. I'd make `adopt` tolerate that (assigning the same value again is a no-op merge) rather than require you to choose one. The docs would recommend one.
+
+### Name
+
+With the manager optional, **`adopt`** still fits: it adopts existing markup as a scope. `scope` is the runner-up, and maybe clearer now that managers are optional (`do: 'builtIns.scope'`). I lean `adopt`, since it pairs with Tree, which *creates* scopes where `adopt` takes over existing ones.
+
+### Questions
+
+1. **One handler with the manager optional** (recommended), or managers only, with an error?
+2. **The name:** `adopt` or `scope`?
+3. **The value's default:** `from[itemprop]`, then the whole `from`, overridable with `get.value`. Agreed?
+4. **Still open from before:** always pass `ctx` (with a no-op `rebind` when nothing binds), and make `byItemprop: true` element-driven so a manager's getters are found?
+
+Or, if you have more scenarios to walk through first, the five in my previous response are still a good checklist. Nested managers and repeated items are the ones most likely to change the structure.
+
+
+
+
+
+
+
+
