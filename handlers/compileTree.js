@@ -31,7 +31,7 @@
  * `CompiledSwitch` (in `switches`) instead of a template, and as a static child it's a
  * slot that the case is placed into at bind time.
  */
-import { getValue, getValues, isReferenceString } from '../resolve/getValues.js';
+import { getValue, getValues, isEventBinding, isReferenceString } from '../resolve/getValues.js';
 import { planMicroJoin } from '../syncOps/microJoin.js';
 import { checkSwitch, isLiteralString, isSwitch, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
@@ -178,10 +178,35 @@ function bakePattern(pattern, element, sample, ownsContent, ctx) {
         return undefined;
     return kept === keys.length ? pattern : dynamic;
 }
+/**
+ * Classify a pattern key, as compileTree does when deciding what to bake. Exported so that
+ * other renderers (e.g. a server-side stringifier) split keys the same way. Whether a value
+ * is literal is separate: see isLiteral.
+ */
+export function classifyPatternKey(key, value, aka = {}) {
+    if (IDENTIFIER.test(key)) {
+        const name = aka[key] ?? key;
+        if (name === 'textContent')
+            return { kind: 'text' };
+        if (name === 'ish')
+            return { kind: 'ish' };
+        return IDENTIFIER.test(name) ? { kind: 'property', name } : { kind: 'other' };
+    }
+    const attrMatch = ATTR_KEY.exec(key);
+    // An aliased attribute name resolves at runtime
+    if (attrMatch)
+        return aka[attrMatch[1]] === undefined ? { kind: 'attribute', name: attrMatch[1] } : { kind: 'other' };
+    if (isEventBinding(key, value))
+        return { kind: 'event' };
+    if (SELF_SYNC_OP_KEY.test(key))
+        return { kind: 'syncOp' };
+    return { kind: 'other' };
+}
 /** Bake one key if it's static. Returns whether the key is fully baked (so it's dropped per instance). */
 function bakeKey(key, value, element, sample, ownsContent, ctx) {
     const { aka, canBake } = ctx;
-    if (IDENTIFIER.test(key) && (aka[key] ?? key) === 'textContent') {
+    const classified = classifyPatternKey(key, value, aka);
+    if (classified.kind === 'text') {
         if (!isLiteral(value) || RAW_TEXT_TAGS.has(element.tag))
             return false;
         const text = value == null ? '' : String(value);
@@ -189,11 +214,10 @@ function bakeKey(key, value, element, sample, ownsContent, ctx) {
         element.content = text ? [text] : [];
         return true;
     }
-    const attrMatch = ATTR_KEY.exec(key);
-    if (attrMatch) {
-        const [, name] = attrMatch;
-        // on* is refused at runtime (with an error); aliased names resolve at runtime
-        if (/^on/i.test(name) || aka[name] !== undefined)
+    if (classified.kind === 'attribute') {
+        const { name } = classified;
+        // on* is refused at runtime (with an error)
+        if (/^on/i.test(name))
             return false;
         const items = Array.isArray(value) ? value : [value];
         if (!items.every(isLiteral))
@@ -207,19 +231,19 @@ function bakeKey(key, value, element, sample, ownsContent, ctx) {
         setAttr(element, attrName, text);
         return true;
     }
-    if (SELF_SYNC_OP_KEY.test(key))
+    if (classified.kind === 'syncOp')
         bakeMicroJoin(value, element, sample, ownsContent, ctx);
     // A microJoin key stays per instance either way: it fills in the baked shells
     return false;
 }
 /** A primitive literal: a non-reference string, number, bigint, boolean or nullish. */
-function isLiteral(value) {
+export function isLiteral(value) {
     if (typeof value === 'string')
         return isLiteralString(value);
     return value == null || typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean';
 }
 /** An attribute's text, as ` :=` computes it (null = absent; undefined = not an attribute value). */
-function attributeText(value) {
+export function attributeText(value) {
     if (value === true)
         return '';
     if (value === false || value == null)

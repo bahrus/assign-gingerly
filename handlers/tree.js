@@ -65,7 +65,7 @@ import { assignFrom, categorizeKeys, handleSpreads, SUBSTITUTION_VARS } from '..
 import { applyAttribute, assignGingerly, tryAssignTo } from '../assignGingerly.js';
 import { getValue, getValues } from '../resolve/getValues.js';
 import { withEventKeys } from './eventKeys.js';
-import { checkSwitch, isLiteralString, isSwitch, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
+import { chooseCase, DEFAULT_CASE, isLiteralString, isSwitch, mapEntries, normalize, repeatItems, WILDCARD } from './treeSpec.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 import { placeNodes } from '../utils/placeNodes.js';
@@ -83,8 +83,6 @@ const compiledMaps = new WeakMap();
 /** The compiler module, loaded by TreeHandler.prepare only for `compile` configs. */
 let compiler;
 let warnedNoCompiler = false;
-/** A switch's `default`, as a case key (can't collide with a `cases` key). */
-const DEFAULT_CASE = Symbol('builtIns.tree default case');
 /** The comment holding an empty switch's slot. */
 const SWITCH_PLACEHOLDER = '?switch';
 /** Created nodes per tree, keyed by the tree's start marker. */
@@ -221,6 +219,12 @@ function resolvePath(path, parts, from, options, element, fastAllowed, permissio
     }
     return value;
 }
+/** Resolve any RHS path: `?.` paths through resolvePath (fast when allowed), others through getValue. */
+function resolveAny(path, from, options, root, fastAllowed, permissionProcessor) {
+    return path.startsWith('?.')
+        ? resolvePath(path, splitPath(path), from, options, root, fastAllowed, permissionProcessor)
+        : getValue(path, from, { ...options, from, root, permissionProcessor });
+}
 /**
  * Resolve and assign fast entries, mirroring getValues + assignGingerly:
  * - aliases apply to keys (and attribute names);
@@ -328,44 +332,40 @@ function placeChildren(container, elements) {
  */
 function bindRepeat(node, repeat, from) {
     const { element, options, permissionProcessor } = node;
-    const { each, of = '?.', key, empty } = repeat;
+    const { each, of = '?.' } = repeat;
     const fastAllowed = fastPathAllowed(options, permissionProcessor);
-    const list = of.startsWith('?.')
-        ? resolvePath(of, splitPath(of), from, options, element, fastAllowed, permissionProcessor)
-        : getValue(of, from, { ...options, from, root: element, permissionProcessor });
-    const items = list != null && typeof list[Symbol.iterator] === 'function' ? Array.from(list) : [];
     // With the default `of`, the node's value is the array, and the stack's top is already its holder
     const itemOptions = of === '?.' ? options : { ...options, fromStack: [...(options.fromStack ?? []), from] };
-    const keyParts = key !== undefined && key.startsWith('?.') ? splitPath(key) : undefined;
     const keyFast = itemOptions === options ? fastAllowed : fastPathAllowed(itemOptions, permissionProcessor);
+    const resolve = (path, value, forItem) => forItem
+        ? resolveAny(path, value, itemOptions, element, keyFast, permissionProcessor)
+        : resolveAny(path, value, options, element, fastAllowed, permissionProcessor);
+    // What to stamp: decided by the shared, pure repeatItems (so other renderers decide the same)
+    const stamp = repeatItems(repeat, from, resolve);
+    const { items, keys, empty } = stamp;
     const { container } = node;
     const [eachTemplate, emptyTemplate] = repeatTemplates(node);
     const state = node.repeat ??= { items: new Map(), empty: undefined, warned: false };
+    if ('duplicate' in stamp && !state.warned) {
+        console.warn(`builtIns.tree: duplicate key ${JSON.stringify(stamp.duplicate)} in a repeat; falling back to the index for duplicates`);
+        state.warned = true;
+    }
     const next = new Map();
-    items.forEach((item, index) => {
-        let itemKey = key === undefined ? index
-            : keyParts ? resolvePath(key, keyParts, item, itemOptions, element, keyFast, permissionProcessor)
-                : getValue(key, item, { ...itemOptions, from: item, root: element, permissionProcessor });
-        if (next.has(itemKey)) {
-            if (!state.warned) {
-                console.warn(`builtIns.tree: duplicate key ${JSON.stringify(itemKey)} in a repeat; falling back to the index for duplicates`);
-                state.warned = true;
-            }
-            itemKey = Symbol.for(`builtIns.tree:index:${index}`);
-        }
+    for (let index = 0; index < items.length; index++) {
+        const itemKey = keys[index];
         let itemNode = state.items.get(itemKey);
         // Removed or moved by other code: rebuild
         if (itemNode && itemNode.element.parentNode !== container)
             itemNode = undefined;
-        next.set(itemKey, syncNode(itemNode, each, item, itemOptions, permissionProcessor, eachTemplate));
-    });
+        next.set(itemKey, syncNode(itemNode, each, items[index], itemOptions, permissionProcessor, eachTemplate));
+    }
     for (const [itemKey, itemNode] of state.items) {
         if (next.get(itemKey) !== itemNode && itemNode.element.parentNode === container)
             itemNode.element.remove();
     }
     state.items = next;
     let elements = [...next.values()].map(n => n.element);
-    if (items.length === 0 && empty !== undefined) {
+    if (empty !== undefined) {
         const current = state.empty?.element.parentNode === container ? state.empty : undefined;
         state.empty = syncNode(current, empty, from, options, permissionProcessor, emptyTemplate);
         elements = [state.empty.element];
@@ -449,15 +449,10 @@ function compiledEntry(options, id) {
  * caller keeps the same node and sees no structural change.
  */
 function syncSwitch(node, spec, value, options, permissionProcessor, compiled) {
-    checkSwitch(spec);
-    const { switch: on, cases, default: fallback } = spec;
     const root = options[TREE_TARGET];
-    const discriminant = on.startsWith('?.')
-        ? resolvePath(on, splitPath(on), value, options, root, fastPathAllowed(options, permissionProcessor), permissionProcessor)
-        : getValue(on, value, { ...options, from: value, root, permissionProcessor });
-    const caseName = discriminant == null ? undefined : String(discriminant);
-    const caseKey = caseName !== undefined && Object.hasOwn(cases, caseName) ? caseName : DEFAULT_CASE;
-    const chosen = caseKey === DEFAULT_CASE ? fallback : cases[caseKey];
+    const fastAllowed = fastPathAllowed(options, permissionProcessor);
+    // Which case: decided by the shared, pure chooseCase (so other renderers decide the same)
+    const { caseKey, spec: chosen } = chooseCase(spec, value, (path, from) => resolveAny(path, from, options, root, fastAllowed, permissionProcessor));
     const state = node?.switch;
     const compiledSwitch = compiled && 'cases' in compiled && compiled.spec === spec ? compiled : undefined;
     const caseEntry = compiledSwitch && compiledEntry(options, caseKey === DEFAULT_CASE ? compiledSwitch.default : compiledSwitch.cases[caseKey]);
@@ -680,22 +675,6 @@ function findChildMarkers(target, name) {
     }
     return undefined;
 }
-/** Map entries in order, followed by `'*'` entries for the VM keys the map doesn't name. */
-function getEntries(map, from) {
-    const entries = [];
-    for (const key of Object.keys(map)) {
-        if (key !== WILDCARD)
-            entries.push([key, map[key]]);
-    }
-    if (map[WILDCARD] === undefined || from === null || typeof from !== 'object')
-        return entries;
-    const wildcardSpec = wildcardSpecOf(map);
-    for (const key of Object.keys(from)) {
-        if (!(key in map))
-            entries.push([key, wildcardSpec]);
-    }
-    return entries;
-}
 /** Place elements in order right after `start`, moving only the ones that are out of place. */
 function placeInOrder(parent, elements, start) {
     placeNodes(parent, elements, start.nextSibling);
@@ -750,15 +729,13 @@ export class TreeHandler {
             warnUnmatchedKeys(map, from);
         }
         const next = new Map();
-        for (const [key, spec] of getEntries(map, from)) {
-            const value = from?.[key];
-            if (value == null && !keepNullish)
-                continue;
+        // Which keys render, in which order: decided by the shared, pure mapEntries
+        for (const { key, spec, value, templateKey } of mapEntries(map, from, keepNullish)) {
             let node = nodes.get(key);
             // Removed or moved by other code: rebuild
             if (node && node.element.parentNode !== lhsTarget)
                 node = undefined;
-            const template = compiledEntry(nestedOptions, key in map ? key : WILDCARD);
+            const template = compiledEntry(nestedOptions, templateKey);
             next.set(key, syncNode(node, spec, value, nestedOptions, permissionProcessor, template));
         }
         for (const [key, node] of nodes) {

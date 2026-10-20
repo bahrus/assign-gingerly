@@ -26,7 +26,8 @@
     "utils/**",
     "README.md",
     "LICENSE",
-    "types/assign-gingerly/types.d.ts"
+    "types/assign-gingerly/types.d.ts",
+    "types/assign-gingerly/treeTypes.d.ts"
   ],
   "exports": {
     ".": {
@@ -119,6 +120,13 @@
     "./handlers/compileTree.js": {
       "default": "./handlers/compileTree.js",
       "types": "./handlers/compileTree.ts"
+    },
+    "./handlers/treeSpec.js": {
+      "default": "./handlers/treeSpec.js",
+      "types": "./handlers/treeSpec.ts"
+    },
+    "./types/treeTypes.js": {
+      "types": "./types/assign-gingerly/treeTypes.d.ts"
     },
     "./handlers/manageTemplateList.js": {
       "default": "./handlers/manageTemplateList.js",

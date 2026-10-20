@@ -592,6 +592,26 @@ Compiling speeds up **creating** elements. Rebinding is unchanged, by design. Ho
 - **Layout and paint shrink the visible gain.** With rows rendered on screen, a large part of each total is the browser's work. The benchmark pages show both a **total** and a **script** time (until the rows are handed to the browser), and offer **`?cv`** (`content-visibility: auto` on rows), which removes most off-screen layout.
 - **Use it for large or frequently created lists with static markup.** For small trees the one-time compile isn't worth it.
 
+## Pure building blocks (for rendering elsewhere)
+
+Exporting a tree, for example **server-side rendering to an HTML string**, belongs in a separate package. This one is about bringing data into objects and elements. But the decisions such a package needs are exported here, DOM-free, and **builtIns.tree uses them itself**, so other renderers render what Tree would:
+
+| Export | From | Decides |
+|---|---|---|
+| `mapEntries(map, from, keepNullish?)` | `assign-gingerly/handlers/treeSpec.js` | which map keys render, in order (`'*'` included), with their spec and value |
+| `chooseCase(switchSpec, value, resolve)` | same | which case a switch picks (`DEFAULT_CASE` for `default`) |
+| `repeatItems(repeat, value, resolve)` | same | what a repeat stamps: items, keys (duplicates fall back to the index), `empty`, and whether items resolve one level down |
+| `normalize(spec)`, `isSwitch(spec)` | same | a specification's parts |
+| `classifyPatternKey(key, value, aka)`, `isLiteral`, `attributeText` | `assign-gingerly/handlers/compileTree.js` | what a pattern key does: text, attribute, property, `ish`, event, sync op, or other |
+| `getValue` / `getValues` | `assign-gingerly/resolve/getValues.js` | path resolution (pipes, `aka`, `$parent` / `$root`, sync protocols) |
+| `planMicroJoin` | `assign-gingerly/syncOps/microJoin.js` | `microJoin`'s elements |
+
+- **`resolve`** is `(path, value, forItem?) => any`, typically `getValue` with the renderer's options. For a repeat's keys, `forItem` is true, and the array's holder is on the stack (`$parent`).
+- **Types** are in `assign-gingerly/types/treeTypes.js`.
+- **A Node test** (`tests/pure-modules.spec.ts`) imports these with no DOM present, so they stay usable in Node, Deno, Bun and Workers.
+
+The client-side counterpart, finishing server-rendered markup, *is* this package's job: [`builtIns.scope`](./scope.md), and `assignFrom` with [`at`](../README.md#cached-element-resolution-with-x-and-pin) paths. `at` counts element children only, so markers and whitespace in server output don't shift it.
+
 ## Performance Notes
 
 - Everything inside the handler is synchronous.
