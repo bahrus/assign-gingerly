@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Hydration benchmark: HTML + JSON vs microdata</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 900px; padding: 0 1rem; color: #1d2330; line-height: 1.45; }
+        table { border-collapse: collapse; margin: 1rem 0; }
+        th, td { border: 1px solid #d9dee7; padding: 0.3rem 0.75rem; text-align: right; font-variant-numeric: tabular-nums; }
+        th:first-child, td:first-child { text-align: left; }
+        code { background: #eef1f6; padding: 0 0.25em; border-radius: 3px; }
+        .ok { color: #1f8a4c; font-weight: 600; }
+        .bad { color: #c0392b; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <h1>Hydration benchmark</h1>
+    <p>
+        Two vanilla-JS pages show the same launches, with the same text. Both time from a script at the top of
+        <code>&lt;head&gt;</code> to the end of their final script.
+    </p>
+    <ul>
+        <li><a href="./json.html">json.html</a>: plain markup (no attributes), then the data again as
+            <code>&lt;script type="application/json"&gt;</code>, parsed with <code>JSON.parse</code>.</li>
+        <li><a href="./microdata.html">microdata.html</a>: the same markup with <code>itemprop</code> attributes
+            (plus <code>&lt;data value&gt;</code>, <code>&lt;time datetime&gt;</code>, <code>&lt;meta content&gt;</code>), read back into
+            the same object from the DOM.</li>
+    </ul>
+    <p>
+        <strong>html</strong> is from the top script to the start of the final script: downloading and parsing the page
+        (including, for json.html, the JSON text). <strong>script</strong> is the final script: <code>JSON.parse</code>, or reading
+        the microdata. <strong>total</strong> is both. Rendering isn't included.
+    </p>
+    <p>
+        <strong>Run</strong> loads each page as a real, top-level page, alternating between them, then comes back here with
+        the medians. (Frames aren't used: Chromium parses a page in a frame several times more slowly, which distorted
+        an earlier version of this runner.) Regenerate the pages with <code>node demos/hydration-benchmark/generate.mjs [sections]</code>.
+    </p>
+    <p><button id="run">Run</button> <label>rounds <input id="rounds" type="number" value="15" min="1" max="100" style="width: 4em"></label></p>
+    <div id="out"></div>
+    <script>
+        const KEY = 'hydration-benchmark';
+        const pages = ['json.html', 'microdata.html'];
+        const out = document.getElementById('out');
+        const median = values => {
+            const sorted = [...values].sort((a, b) => a - b);
+            const mid = sorted.length >> 1;
+            return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+        };
+
+        function start(rounds) {
+            // Alternate the pages, so neither always loads first
+            const queue = [];
+            for (let i = 0; i < rounds; i++) {
+                for (const page of (i % 2 ? [...pages].reverse() : pages)) queue.push(`${page}?run&i=${i}`);
+            }
+            sessionStorage.setItem(KEY, JSON.stringify({ rounds, queue, samples: {}, results: {} }));
+            const run = JSON.parse(sessionStorage.getItem(KEY));
+            const first = run.queue.shift();
+            sessionStorage.setItem(KEY, JSON.stringify(run));
+            location.href = first;
+        }
+
+        async function show(run) {
+            const sizes = {};
+            for (const page of pages) sizes[page] = (await (await fetch(`./${page}`)).text()).length;
+            const same = run.results[pages[0]] === run.results[pages[1]];
+            const row = page => {
+                const samples = run.samples[page] ?? [];
+                const m = key => median(samples.map(t => t[key])).toFixed(1);
+                return `<tr><td><a href="./${page}">${page}</a></td><td>${(sizes[page] / 1024).toFixed(0)} KB</td><td>${m('html')}</td><td>${m('script')}</td><td>${m('total')}</td></tr>`;
+            };
+            const launches = run.samples[pages[0]]?.[0]?.launches;
+            out.innerHTML = `
+                <p>${launches} launches, ${run.rounds} loads of each page (medians, ms).
+                   Same object from both pages: <span class="${same ? 'ok' : 'bad'}">${same ? 'yes' : 'no'}</span></p>
+                <table>
+                    <tr><th>page</th><th>size</th><th>html</th><th>script</th><th>total</th></tr>
+                    ${pages.map(row).join('')}
+                </table>`;
+            window.benchmark = { same, sizes, samples: run.samples };
+            document.body.dataset.done = 'true';
+        }
+
+        document.getElementById('run').addEventListener('click', () => start(Number(document.getElementById('rounds').value) || 15));
+        const params = new URLSearchParams(location.search);
+        const run = JSON.parse(sessionStorage.getItem(KEY) || 'null');
+        if (params.has('results') && run) {
+            sessionStorage.removeItem(KEY);
+            show(run);
+        } else if (params.has('auto')) {
+            start(Number(params.get('rounds')) || 15);
+        }
+    </script>
+</body>
+</html>
