@@ -18,6 +18,9 @@
  * - **Rebinding:** every call assigns the value and binds again. A manager's `ctx.rebind()`,
  *   and the settling of an async `onAssigned`, bind again against the manager.
  *
+ * **Pending marks:** after its first bind, the element's `data-residue` mark (see applyResidue)
+ * is removed. Apply a server residue before taking a scope over, so its entry isn't skipped.
+ *
  * `infer` keeps its covenant: it never enters a nested itemscope by itself. builtIns.scope is
  * how you step into one, explicitly.
  *
@@ -38,6 +41,7 @@ import { defineIshCore, setScopeBinder } from '../handleIshProperty.js';
 import { resolveRegistry } from '../utils/resolveRegistry.js';
 import { waitForEvent } from '../utils/waitForEvent.js';
 import { withEventKeys } from './eventKeys.js';
+import { RESIDUE_ATTRIBUTE } from '../applyResidue.js';
 /** Outer options a scope's binding inherits (the rest come from `bind`). */
 const INHERITED_OPTIONS = ['pipes', 'protocols', 'registry', 'handlers', 'signal', 'aka'];
 /** Configs for managers given as classes: used directly, never registered. */
@@ -58,6 +62,8 @@ export class ScopeHandler {
         const managerRef = ish ?? managerName(element);
         if (managerRef === undefined) {
             bindScope(element, value, bind, options, permissionProcessor);
+            // Bound: no longer pending (see applyResidue)
+            element.removeAttribute(RESIDUE_ATTRIBUTE);
             return;
         }
         const config = managerConfig(managerRef, element, options);
@@ -113,6 +119,8 @@ function withManager(element, config, value, bind, options, permissionProcessor)
         defineIshCore(element, config, options, assignGingerly);
     element.ish = value;
     rebind();
+    // Bound against its manager: no longer pending (see applyResidue)
+    element.removeAttribute(RESIDUE_ATTRIBUTE);
 }
 /** Bind the element's scope: `bind.pattern` and options, with `from` set to the view model. */
 function bindScope(element, viewModel, bind = {}, options, permissionProcessor) {

@@ -16,17 +16,45 @@ const { html, residue, unrendered } = o2h(config, apiResponse, { pipes, managers
 ```
 
 - **`html`** is what builtIns.tree would build: elements, attributes, text and Tree's markers. o2h uses the [pure building blocks](#pure-building-blocks-for-rendering-elsewhere) Tree itself uses to decide what renders, so it can't drift from Tree's choices.
-- **`residue`** is what HTML can't carry: properties without an attribute, event bindings, and itemscope managers' values. The client finishes the page with one `assignFrom(container, residue.pattern, { at: residue.at, from: host })`.
+- **`residue`** is what HTML can't carry: properties without an attribute, event bindings, and itemscope managers' values. Each element still waiting for its entry is marked `data-residue="<name>"`, and the client finishes them with [`applyResidue`](#finishing-server-html-on-the-client-applyresidue).
 - **Managers:** given their classes, o2h renders a manager's subtree from its getters on the server. It also writes `itemscope="<name>"`, so the client can attach the manager.
 - **`unrendered`** lists anything o2h could neither render nor hand over.
 
 **Current state:**
-- o2h renders tree-demo's definition to the **same DOM** builtIns.tree builds (apart from that `itemscope`). An equivalence test checks this in Chromium, Firefox and WebKit.
+- o2h renders tree-demo's definition to the **same DOM** builtIns.tree builds (apart from that `itemscope`), once its residue is applied. An equivalence test checks this in Chromium, Firefox and WebKit.
 - **Not done yet:**
   - **Hydration:** the client Tree doesn't adopt o2h's markup. Running builtIns.tree on it rebuilds it rather than rebinding it in place.
-  - **Residue event bindings call the host you pass,** not a manager. So rebinding a manager's subtree on the client still has to be wired up through **[`builtIns.scope`](./scope.md)**, which takes over server-rendered markup scope by scope: it attaches the itemscope manager the markup names, and binds its itemprops (and events) against it, with the same manager classes Tree uses.
+  - **A manager's text isn't re-bound on the client.** Its events reach it, but when its `ctx.rebind()` runs, nothing re-applies the server-rendered subtree. **[`builtIns.scope`](./scope.md)** can do that: it takes over server-rendered markup scope by scope, attaching the itemscope manager the markup names and binding its itemprops (and events) against it, with the same manager classes Tree uses. Wiring o2h's output to it is the next step.
 
-Design discussion: [Stringify.md](../Chats/AssignFrom/Handlers/Tree/WorkerRendering/Stringify.md); o2h's own notes are in its repo.
+### Finishing server HTML on the client: `applyResidue`
+
+```js
+import { applyResidue } from 'assign-gingerly';
+
+await applyResidue(container, residue, { from: host, registry });
+```
+
+For each element marked `data-residue="<name>"` in `container`, `applyResidue`:
+1. **attaches its manager first,** if its entry has an `ish` value (by the element's `itemscope` name, through the `registry` option first);
+2. **applies the rest of its entry** with `assignFrom`;
+3. **waits until the element is ready:** its manager set up, its handlers settled (`whenSettled`), and its event listeners attached (`whenEventsBound`);
+4. **only then removes the mark.**
+
+Marks are removed per element, so each part shows as soon as it's ready. The mark comes off after anything the residue did to `class`.
+
+**Event hosts follow Tree:** inside an element with a manager, an event's `call` goes to that manager; elsewhere, to `from`.
+
+**CSS can hide the pending parts until then.** Do it only when scripts run, so crawlers and no-JS readers still see everything:
+
+```css
+@media (scripting: enabled) {
+    [data-residue] { visibility: hidden; }   /* keeps the layout: nothing jumps when a part appears */
+}
+```
+
+o2h emits this rule itself with `style: true`. The attribute name is exported as `RESIDUE_ATTRIBUTE`. [`builtIns.scope`](./scope.md) also removes an element's mark after its first bind, so apply a residue before taking a scope over.
+
+Design discussion: [Stringify.md](../Chats/AssignFrom/Handlers/Tree/WorkerRendering/Stringify.md) and [StylingIncompletelyRenderedElements.md](../Chats/AssignFrom/Handlers/Tree/WorkerRendering/StylingIncompletelyRenderedElements.md); o2h's own notes are in its repo.
 
 ## Compiling to a template for optimum performance
 

@@ -102,6 +102,12 @@ An outer `infer` and `builtIns.scope` combine naturally:
 - **The outer `infer`** fills the outer itemprops. For an element like `<section itemprop="rocket" itemscope="rocket-manager">`, it also routes `vm.rocket` into `section.ish`.
 - **`builtIns.scope`** then binds the inside. It reuses a manager that's already attached.
 
+## Pending marks (`data-residue`)
+
+Server-rendered markup (e.g. from [o2h](https://github.com/bahrus/o2h)) can mark elements still waiting for something with `data-residue`, which CSS can hide until then. `builtIns.scope` removes the element's mark after its first bind. So a manager's scope stays hidden until it's really bound against the manager.
+
+If the page also has a residue, apply it first with [`applyResidue`](./tree.md#finishing-server-html-on-the-client-applyresidue): once the mark is gone, `applyResidue` no longer finds the element.
+
 ## Rebinding and reruns
 
 | Event | What happens |

@@ -1,4 +1,4 @@
-export { assignGingerly } from './assignGingerly.js';
+export { assignGingerly, whenEventsBound } from './assignGingerly.js';
 export { assignTentatively } from './assignTentatively.js';
 export { EnhancementRegistry, ItemscopeRegistry, EnhancementRegisteredEvent } from './assignGingerly.js';
 export { waitForEvent } from './utils/waitForEvent.js';
@@ -11,6 +11,7 @@ export { resolveValues, resolveValue } from './resolve/resolveValues.js';
 export { getValues, getValue, hasProtocol, parseProtocolRef, isPlainObject } from './resolve/getValues.js';
 export { assignFromAsync } from './assignFromAsync.js';
 export { assignFrom, whenSettled } from './assignFrom.js';
+export { applyResidue, RESIDUE_ATTRIBUTE } from './applyResidue.js';
 export { assignFeatures, FeaturesRegistry, captureFeatureInitVals, PropertyBag, suggestFeatureInfo, getFeatureInfoSuggestions } from './assignFeatures.js';
 export { installForwarding } from './DX/installForwarding.js';
 export { defineWithFeatures } from './defineWithFeatures.js';

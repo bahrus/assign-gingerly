@@ -396,9 +396,27 @@ function isEventConfig(value: any): boolean {
  * The host is `options.from` (the view model), falling back to the target.
  */
 function bindEvent(lhs: Element, config: any, target: any, options: any, permissionProcessor?: PermissionProcessor): void {
-  import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
+  const attached = import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
     attachEventListener(lhs, config, target, options?.from ?? target, options ?? {}, permissionProcessor);
+  }).catch(error => {
+    // Still reported, as before (an uncaught error), while whenEventsBound just resolves
+    if (typeof reportError === 'function') reportError(error); else console.error(error);
   });
+  const previous = pendingEventBindings.get(lhs);
+  const all = previous ? Promise.all([previous, attached]).then(() => undefined) : attached;
+  pendingEventBindings.set(lhs, all);
+  all.then(() => { if (pendingEventBindings.get(lhs) === all) pendingEventBindings.delete(lhs); });
+}
+
+/** Event bindings still being attached, per element (their module loads on demand). */
+const pendingEventBindings = new WeakMap<Element, Promise<void>>();
+
+/**
+ * Resolves once the event listeners bound on `element` so far (` +=` with an `{ on, … }`
+ * config) are attached. Resolves immediately when none are pending. Never rejects.
+ */
+export function whenEventsBound(element: Element): Promise<void> {
+  return pendingEventBindings.get(element) ?? Promise.resolve();
 }
 
 /**

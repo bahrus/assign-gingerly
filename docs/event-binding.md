@@ -35,6 +35,8 @@ An empty LHS — `' +='` or `'?. +='` — binds the listener on the target (the 
 
 No `withMethods` entry is needed. A restricted method (per the permission processor) is skipped; a name that isn't a method on the host throws inside the listener.
 
+**Listeners attach asynchronously:** the event-binding module loads on demand, just after the call. To act once they're attached, await `whenEventsBound(element)` (exported from the package's index): it resolves when the listeners bound on that element so far are in place.
+
 ## Concepts
 
 | Term | Meaning |

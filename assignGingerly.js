@@ -337,9 +337,29 @@ function isEventConfig(value) {
  * The host is `options.from` (the view model), falling back to the target.
  */
 function bindEvent(lhs, config, target, options, permissionProcessor) {
-    import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
+    const attached = import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
         attachEventListener(lhs, config, target, options?.from ?? target, options ?? {}, permissionProcessor);
+    }).catch(error => {
+        // Still reported, as before (an uncaught error), while whenEventsBound just resolves
+        if (typeof reportError === 'function')
+            reportError(error);
+        else
+            console.error(error);
     });
+    const previous = pendingEventBindings.get(lhs);
+    const all = previous ? Promise.all([previous, attached]).then(() => undefined) : attached;
+    pendingEventBindings.set(lhs, all);
+    all.then(() => { if (pendingEventBindings.get(lhs) === all)
+        pendingEventBindings.delete(lhs); });
+}
+/** Event bindings still being attached, per element (their module loads on demand). */
+const pendingEventBindings = new WeakMap();
+/**
+ * Resolves once the event listeners bound on `element` so far (` +=` with an `{ on, … }`
+ * config) are attached. Resolves immediately when none are pending. Never rejects.
+ */
+export function whenEventsBound(element) {
+    return pendingEventBindings.get(element) ?? Promise.resolve();
 }
 /**
  * Helper function to parse an += command and extract the path
