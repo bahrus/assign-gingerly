@@ -26,7 +26,7 @@ const { html, residue, unrendered } = o2h(config, apiResponse, { pipes, managers
   - **Hydration:** the client Tree doesn't adopt o2h's markup. Running builtIns.tree on it rebuilds it rather than rebinding it in place.
   - **Residue event bindings call the host you pass,** not a manager. So rebinding a manager's subtree on the client still has to be wired up through **[`builtIns.scope`](./scope.md)**, which takes over server-rendered markup scope by scope: it attaches the itemscope manager the markup names, and binds its itemprops (and events) against it, with the same manager classes Tree uses.
 
-Design discussion: [Stringify.md](../Chats/AssignFrom/Handlers/Tree/Compile/TODO/Stringify.md); o2h's own notes are in its repo.
+Design discussion: [Stringify.md](../Chats/AssignFrom/Handlers/Tree/WorkerRendering/Stringify.md); o2h's own notes are in its repo.
 
 ## Compiling to a template for optimum performance
 
