@@ -4,12 +4,29 @@ The tree handler enables gingerly assigning dynamic HTML into a DOM node, based 
 
 The handler not only builds a tree of DOM elements from a view model, it rebinds it in place on later calls. Each `map` entry pairs a VM key with an **element specification**: a tag name, or a tuple of tag, assignFrom pattern, and static children.
 
-## Server Side Rendering [TODO]?
+## Server Side Rendering [WIP]
 
-The library can quite easily generate HTML in a node.js based server solution, but 
-the tree handler does not yet provide a way of hydrating server-rendered HTML markup (maybe with the help of microdata attributes).  That is a parked concept that is awaiting for a "no brainer" use case.
+Rendering a tree config to HTML on a server is a separate package, **[o2h](https://github.com/bahrus/o2h)**, since this one is about bringing data *into* objects and elements.
 
-Meanwhile, **[`builtIns.scope`](./scope.md)** takes over server-rendered markup scope by scope: it attaches the itemscope manager the markup names, and binds its itemprops (and events) against it, with the same manager classes Tree uses.
+```js
+import { o2h } from 'o2h';
+
+// On the server (e.g. a Cloudflare Worker), with the same config builtIns.tree takes (minus `do`)
+const { html, residue, unrendered } = o2h(config, apiResponse, { pipes, managers });
+```
+
+- **`html`** is what builtIns.tree would build: elements, attributes, text and Tree's markers. o2h uses the [pure building blocks](#pure-building-blocks-for-rendering-elsewhere) Tree itself uses to decide what renders, so it can't drift from Tree's choices.
+- **`residue`** is what HTML can't carry: properties without an attribute, event bindings, and itemscope managers' values. The client finishes the page with one `assignFrom(container, residue.pattern, { at: residue.at, from: host })`.
+- **Managers:** given their classes, o2h renders a manager's subtree from its getters on the server. It also writes `itemscope="<name>"`, so the client can attach the manager.
+- **`unrendered`** lists anything o2h could neither render nor hand over.
+
+**Current state:**
+- o2h renders tree-demo's definition to the **same DOM** builtIns.tree builds (apart from that `itemscope`). An equivalence test checks this in Chromium, Firefox and WebKit.
+- **Not done yet:**
+  - **Hydration:** the client Tree doesn't adopt o2h's markup. Running builtIns.tree on it rebuilds it rather than rebinding it in place.
+  - **Residue event bindings call the host you pass,** not a manager. So rebinding a manager's subtree on the client still has to be wired up through **[`builtIns.scope`](./scope.md)**, which takes over server-rendered markup scope by scope: it attaches the itemscope manager the markup names, and binds its itemprops (and events) against it, with the same manager classes Tree uses.
+
+Design discussion: [Stringify.md](../Chats/AssignFrom/Handlers/Tree/Compile/TODO/Stringify.md); o2h's own notes are in its repo.
 
 ## Compiling to a template for optimum performance
 

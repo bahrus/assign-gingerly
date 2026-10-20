@@ -201,7 +201,7 @@ and exercises them. Then a future change that touches `document` at import time 
 1. Go ahead with 1–4 as listed?
 2. For 2, do you agree that **Tree must use the extracted functions itself** (so they can't diverge), even though it's a refactor of working code?
 
-## Bruce's Response
+## Bruce's Response II
 
 Please refactor as recommended, and provide a sample implementation below of the stringify function that makes use of them, which I can then refer to in the separate pacage.
 
@@ -525,3 +525,22 @@ assignFrom(document.getElementById('api-response'), pattern, { at, from: host })
 **To do on your side:**
 1. **Build.**
 2. **`git add tests/pure-modules.spec.ts`.**
+
+## Bruce's Response III
+
+I modified line 7 of [tree.md](../../../../../../docs/tree.md) to say [WIP]
+
+Can you please modify the rest of that section to link to o2h and describe the current state?
+
+## Claude's Response III
+
+Done. The *Server Side Rendering [WIP]* section of [`docs/tree.md`](../../../../../../docs/tree.md) now:
+- **points to [o2h](https://github.com/bahrus/o2h)** as the separate package for rendering, with a short usage example;
+- **explains `html`, `residue`, managers and `unrendered`,** and that o2h uses the pure building blocks Tree itself uses;
+- **describes the current state:**
+  - **Done:** the same DOM as builtIns.tree for the tree-demo definition (apart from `itemscope="<name>"`), checked in three browsers.
+  - **Not done:**
+    - **No hydration:** builtIns.tree rebuilds o2h's markup rather than adopting it.
+    - **Residue events call the passed host, not a manager:** rebinding a manager's subtree on the client goes through `builtIns.scope`, which isn't wired up yet.
+
+The old "parked concept" paragraph is replaced. The `builtIns.scope` paragraph is kept, folded into the "not done" list.
