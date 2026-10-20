@@ -102,7 +102,7 @@ The `scripting` media feature is supported in current Chromium, Firefox and Safa
 
 ## Bruce's Response I
 
-I agree with all your recommendations, including the opt-in style option for o2h.  Please proceed, including updating the demo.  I recognize I will need to publish the new version of assign-gingerly to see it working.  Or feel free to add a package.json to the [root folder](../../../../../../) and install the spa-ssi folder and use spa-ssi's server side include to include [imports.html](../../../../../../o2h/imports.html) so it points to the peer folder, so we don't have to keep publishing.  Tat would be better if you are able to do that.
+I agree with all your recommendations, including the opt-in style option for o2h.  Please proceed, including updating the demo.  I recognize I will need to publish the new version of assign-gingerly to see it working.  Or feel free to add a package.json to the [root folder](../../../../../../) and install the spa-ssi folder and use spa-ssi's server side include to include [imports.html](../../../../../../o2h/imports.html) so it points to the peer folder, so we don't have to keep publishing.  That would be better if you are able to do that.
 
 ## Claude's Implementation Notes
 
@@ -179,3 +179,23 @@ The test navigates relative to `baseURL`, so it works either way.
    - in o2h: `imports.html`, if you haven't.
 2. **Commit `types/o2h/types.d.ts`** in o2h's `types` submodule.
 3. **Publish assign-gingerly** when convenient, then bump o2h to it.
+
+## Bruce's Response II
+
+I'm a little confused about one thing.  I thought originally the client side rendering was on the left and the server side on the right.  I remember testing the Increase By One button on the right after applying the residue and noticed it working.  At any rate, my strong impression is that the Increase by One button was working for the server side rendering,
+
+But now clearly the server side is on the left.  Even after clicking the apply residue button, the Increase By One button doesn't seem to do anything.  Should it be?  If so, can you please fix it?
+
+If not, that should probably be the next thing we tackle.  Maybe you mentioned what needs to happen for that to work, which should also be part of the next steps discussion, perhaps in a different document.
+
+## Claude's Response II
+
+**On left and right:** the o2h demo has always had **o2h (server) on the left** and **builtIns.tree (client) on the right**. So the button you saw working was the client one, where Tree binds the card to its `RocketManager` and re-renders it on `ctx.rebind()`.
+
+**On the left, it's the expected behavior for now, not a bug, though it does look broken.** After "Apply the residue", the click **does** reach the card's `RocketManager`:
+- the event log shows *RocketManager.increaseHeightByOne +1 m → ctx.rebind()*;
+- in my test, `rocket.ish.heightLabel` went from `70 m` to `71 m`.
+
+But nothing re-renders the server's card when the manager calls `ctx.rebind()`. On the client, Tree remembers which spec each element came from, so it can re-apply `'?.heightLabel'` to that `<span>`. For server-rendered markup, nobody knows that `<span>` shows `heightLabel`. The residue only carries what HTML can't (properties, events, the manager's value), not the *bindings*. So the manager's state changes, and the card stays as rendered. I mentioned this as "a manager's text isn't re-bound on the client", but the demo should say so where the button is. I'll fix that note when we take up the next step.
+
+**So yes, it should be the next thing.** I wrote up what it takes, with options and a recommendation, in a new document: [RebindingServerRenderedManagers.md](./RebindingServerRenderedManagers.md).
