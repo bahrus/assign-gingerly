@@ -287,3 +287,152 @@ The residue is gone from both repos, with no compatibility shims, and the mark i
 **The costs are low:** `handlers/scope.ts` is self-contained, it's loaded only when a config names it, and its test suite passes.
 
 **If you'd rather the story be "o2h + hydration only",** say so, and I'll remove it, along with scope.md, the demo, the tests and its builtIns entry.
+
+## Bruce's Response -- Possible Optimization
+
+Do you think it would be possible to add an option so that tree (and possibly other handlers) skip over nodes that don't contain any node with data-pending attribute?  Could this improve performance a bit?
+
+
+## Claude's Answer IV
+
+**Yes, for Tree's `adopt`, and it would help mostly content-heavy pages.** It's only worth it as an opt-in, though, because it changes what hydration guarantees.
+
+### What adoption does today
+
+The first run with `adopt` has two parts:
+
+1. **The adoption walk** (`adoptNode`) pairs the spec with the existing elements and builds Tree's records around them. It also resolves the repeats' `of` / `key` and the switches' discriminants, and attaches managers.
+2. **The ordinary bind** (`syncNode` → `bindContent`) then resolves every pattern key of every element. It writes only what differs, but it still resolves and compares everything.
+
+### What a skip could leave out
+
+**Only part 2, and only for elements whose subtree has no `data-pending`.** The walk can't be skipped: later runs and managers' `ctx.rebind()` need the records.
+
+**An element without the mark has nothing HTML lost.** Its pattern was text, attributes and reflected properties, and those are already in the markup. So its bind would rewrite nothing. Everything that does need the client (events, properties without an attribute, managers) is marked, so it would still be bound.
+
+**Finding the unmarked subtrees is cheap:** one `querySelectorAll('[data-pending]')` per tree, adding each mark's ancestors (up to the tree's target) to a Set. That costs about pending elements × depth, done once. `bindContent` would then skip any element not in the Set.
+
+**Nested trees:** a skipped element's nested tree wouldn't be adopted on the first run. It would adopt on the next one (the flag is carried down), or immediately if a mark is inside it, since its ancestors are in the Set.
+
+### How much it would save
+
+**I haven't measured it.** The walk and the bind are about the same kind of work (resolving paths per element), so for a page that's mostly static text in repeats, the skip could save up to roughly half of the adoption time.
+
+**For the tree-demo page, it's noise:** there, nearly everything interesting is pending anyway (the managers' sections, the buttons). The benchmark that would show it is a long list of mostly static items, which I'd add to `demos/hydration-benchmark/` as an "adopt" variant before deciding.
+
+### The catch: it trusts the server
+
+**The full bind also corrects.** Today, if the client's data or pipes produce something different from what the server rendered, the bind fixes it silently. With the skip, those elements keep the server's version until the next run touches them.
+
+**That's realistic, not hypothetical:**
+- **Locale and time zone:** the demo's `549,054 kg` and its date pipes format differently on a server in another locale or zone.
+- **Time:** "T-minus" countdowns and "verifying" states change between the server render and hydration.
+- **Data:** the client's copy can be newer than what the server rendered from.
+
+**So it shouldn't be the default.** Hydration's promise today is that "after adopt, the DOM is exactly what Tree would build". The skip weakens that to "exactly what the server built, plus what was pending".
+
+### Other handlers
+
+- **`join` / `microJoin` and the other sync ops** run inside Tree's patterns, so the skip covers them.
+- **`builtIns.scope`** binds a single element. Its markup is typically hand-written or from a CMS, so the absence of a mark there says nothing. I wouldn't apply the skip to it.
+
+### Proposal
+
+- **An option on adopt:** `adopt: 'pending'`, meaning "adopt, and bind only the pending parts on the first run". `adopt: true` would keep today's full bind.
+- **Measure before keeping it:** add an adopt variant to the hydration benchmark that times `adopt: true` against `adopt: 'pending'`.
+- **If the gain is small** (say under 20% on the list page), drop the option: the extra guarantee is worth more.
+
+### Questions
+
+1. **Go ahead:** benchmark first, then implement `adopt: 'pending'` if it pays?
+2. **The option's shape:** `adopt: 'pending'`, or a separate flag such as `trustServer: true`?
+
+## Bruce's Response -- Please benchmark first
+
+I think the example should be contrived to be one where there's quite a bit of static information, like a company's mission, address, CEO, number of employees, all of which are static, and the stock value, which is changing.
+
+You raised the issue of formatting as a major stumbling block.  This argues in favor of using something like [be-intl](https://github.com/bahrus/be-intl) to move the formatting away from the tree instructions.
+
+The rocket example, only one section is hidden, which makes me think it could help there?
+
+
+## Claude's Benchmark Notes
+
+To measure the skip, I prototyped it: **`adopt: 'pending'`** in `handlers/tree.ts`, experimental, and documented as such in `treeTypes.d.ts`. `adopt: true` is unchanged.
+
+### The benchmark
+
+[`o2h/demo/benchmark/adopt.html`](../../../../../../o2h/demo/benchmark/adopt.html) lives in o2h, since it needs both packages.
+
+**How it measures:**
+- o2h renders each scenario once, in the page as a server would.
+- The page then hydrates fresh copies of that HTML with `adopt: true` and with `adopt: 'pending'`, alternating the modes. It reports medians per hydration; the `innerHTML` parse isn't counted.
+- "Client render" (Tree building the same DOM from nothing) is timed too, for scale.
+
+**What it checks:** that `'pending'` gives the same DOM as `true`, that no marks are left, and that clicking the manager's button re-renders, in both modes.
+
+**The scenarios:**
+- **Company profile** ([`companyDefinition.js`](../../../../../../o2h/demo/benchmark/companyDefinition.js)), contrived as you suggested:
+  - static: name, tagline, mission, founded, industry, employees, website, address, the CEO with a quote, 6 leaders, 8 offices and 6 products;
+  - live: the stock quote, a `StockManager` with a Refresh button. That's the only `data-pending` element.
+- **Company directory:** 100 such profiles in one repeat.
+- **Rocket:** the tree-demo definition.
+
+### Results
+
+Medians of 31 samples. Each cell is `adopt: true` → `adopt: 'pending'`, with the share saved:
+
+| Scenario | Elements (bound by `'pending'`) | Chromium | Firefox | WebKit |
+|---|---|---|---|---|
+| Rocket | 65 (18) | 0.165 → 0.100 ms (39%) | 0.25 → 0.15 ms (40%) | 0.30 → 0.20 ms (33%) |
+| Company profile | 129 (6) | 0.125 → 0.070 ms (44%) | 0.20 → 0.10 ms (50%) | 0.20 → 0.10 ms (50%) |
+| Company directory | 12,901 (601) | 11.4 → 5.9 ms (48%) | 21 → 7 ms (67%) | 17 → 9 ms (47%) |
+
+Firefox and WebKit timers are coarse (0.1 ms or 1 ms), so their small-scenario numbers are rough. All checks passed in all three browsers.
+
+### What the numbers say
+
+- **On the rocket question: yes, proportionally.** Only the links bar and the rocket card are pending, so `'pending'` binds 18 of 65 elements and saves 33–40%. In absolute terms, though, that's under 0.1 ms. For a single page, hydration is already cheap either way.
+- **The company profile is the clearest case.** Only 6 of its 129 elements are bound, but the saving is "only" about half. The other half is the **adoption walk itself**, which `'pending'` can't skip.
+- **The saving matters at scale:** 5–14 ms on a 13,000-element page. That's real on a slow phone (multiply by 4–6) and on a page with many profiles.
+- **A surprise:** `adopt: true` costs about **the same CPU as a client render from scratch** (11.4 ms vs 11.0 ms in Chromium). Adoption's value so far is not rebuilding: no flash, focus and scroll kept, and no DOM churn. It isn't saving script time.
+
+  A Chromium profile names the biggest single cost of the walk: `slotsOf`, iterating each container's `childNodes` (whitespace text nodes included), at 9–13%. Then come `adoptNode` and `normalize`. So making the walk cheaper, e.g. walking `firstElementChild` / `nextElementSibling` and checking only comments for switch placeholders, would help **both** modes. It could make `adopt: true` cheaper than a client render.
+
+### On be-intl
+
+**Agreed: it removes most of the risk.**
+- **What changes:** if the server emits raw values (e.g. `<data value="549054">`) and [be-intl](https://github.com/bahrus/be-intl) formats them on the client, Tree's patterns no longer produce locale- or time-zone-dependent text. Then the server's text and the client's agree by construction.
+- **The skip doesn't interfere:** be-intl attaches on its own (via its enhancement), not through Tree's bind, so it works on skipped elements.
+- **What remains:** data freshness, i.e. the client's data being newer than the server's. With `'pending'`, an unmarked element keeps the server's version until a later run reaches it. For the company page, the only fast-changing value is the quote, which is a manager and so pending anyway.
+
+### Implementation
+
+`adopt: 'pending'`, in `handlers/tree.ts`:
+- **Before the walk,** Tree collects the marked elements in the region and their ancestors (`pendingScope`). The walk adds nested trees' hosts to that set, so nested trees still get adopted (`bindWithAncestors`).
+- **On the first run,** `syncNode` returns early for an adopted element that isn't in that set and isn't inside a mark. Its records exist from the walk, so later runs and `ctx.rebind()` work as usual. Its first full bind just happens on the next run.
+- **After the run,** the scope goes inactive, because nodes keep their options. The marks are removed as before.
+
+### Tests
+
+**Test 6 in `tests/tree-adopt.html`** checks that `'pending'`:
+- reuses every element;
+- leaves unmarked elements unbound on the first run (stale server text stays, where `adopt: true` corrects it);
+- binds the marked manager, its events and `ctx.rebind()`;
+- removes the marks;
+- binds everything on the next run, adopting a skipped nested tree in place.
+
+**The two Firefox flakes from earlier are fixed:** Test 1 in tree-adopt.html and three cases in scope.html wait with `whenEventsBound(button)` instead of fixed delays.
+
+**Full suite** (scratch copy, three browsers): 165 passed and 6 skipped.
+
+### Recommendation
+
+**Keep `adopt: 'pending'` (still experimental).** It halves hydration's script time, which pays at scale, and be-intl answers the formatting concern.
+
+**Next, if you agree:** speed up the adoption walk itself (`slotsOf` and friends). That benefits `adopt: true` too, and it's now the larger half of `'pending'`.
+
+### Questions
+
+1. **Keep `adopt: 'pending'`** as is (experimental), or rename it before it settles (e.g. `trustServer`)?
+2. **Go ahead with the walk optimization,** measured with the same benchmark?
