@@ -16,7 +16,7 @@
   <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
 
   <script type="module">
-    import { assignFrom, assignFromAsync, assignGingerly, ItemscopeRegistry } from '../index.js';
+    import { assignFrom, assignFromAsync, assignGingerly, ItemscopeRegistry, whenEventsBound } from '../index.js';
 
     const results = [];
     let passed = 0;
@@ -96,7 +96,7 @@
         assertEquals(section.querySelector('[itemprop=title]').textContent, 'Rocket: Falcon 9', 'bind: … every itemprop in the scope');
         assertEquals(section.querySelector('[itemprop=type]').textContent, '', 'bind: infer still stops at a nested itemscope (the covenant)');
         assertEquals(section.querySelector('[itemprop=site]').textContent, '', "bind: an itemprop the manager doesn't have is left alone");
-        await delay(20);   // event listeners attach once the += module has loaded
+        await whenEventsBound(section.querySelector('button'));   // event listeners attach once the += module has loaded
         section.querySelector('button').click();
         assertEquals(section.querySelector('[itemprop=heightLabel]').textContent, '71 m', 'events: the button calls the manager, whose ctx.rebind() re-binds');
         section.ish.metric = false;
@@ -108,7 +108,7 @@
         assertEquals(constructed, 1, 'rerun: the manager is attached once');
         assertEquals(section.querySelector('[itemprop=title]').textContent, 'Rocket: Falcon Heavy', 'rerun: the new value is merged and bound');
         section.ish.metric = true;
-        await delay(20);
+        await whenEventsBound(section.querySelector('button'));
         section.querySelector('button').click();
         assertEquals(section.querySelector('[itemprop=heightLabel]').textContent, '72 m', 'rerun: the listener was replaced, not stacked (one increment per click)');
         host.remove();
@@ -196,7 +196,7 @@
         assertEquals(host.querySelector('.outer').textContent, 'Pad 39A', "outer infer: binds the outer scope's own itemprops");
         assertEquals(section.querySelector('[itemprop=site]').textContent, '', '… but not inside the section (the covenant)');
         assertEquals(section.querySelector('[itemprop=heightLabel]').textContent, '70 m', 'scope: binds the inside');
-        await delay(20);
+        await whenEventsBound(section.querySelector('button'));
         section.querySelector('button').click();
         assertEquals(section.querySelector('[itemprop=heightLabel]').textContent, '71 m', 'scope: rebind works when infer attached the manager');
         host.remove();

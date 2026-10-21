@@ -436,3 +436,42 @@ Firefox and WebKit timers are coarse (0.1 ms or 1 ms), so their small-scenario n
 
 1. **Keep `adopt: 'pending'`** as is (experimental), or rename it before it settles (e.g. `trustServer`)?
 2. **Go ahead with the walk optimization,** measured with the same benchmark?
+
+## Bruce's Response - Yes to both
+
+Yes to both
+
+
+## Claude's Implementation Notes III
+
+**`adopt: 'pending'` stays** as it is, experimental.
+
+### The walk, faster (`handlers/tree.ts`)
+
+- **`slotsOf`** walks siblings directly (`firstChild` / `nextSibling`, up to an optional end node) instead of iterating a `childNodes` NodeList. For the tree's own region, it no longer copies the nodes between the markers into an array first.
+- **`adoptNode`** resolves `root` and `fastPathAllowed` only where they're used (switches and repeats), rather than for every element.
+
+### Results
+
+Same benchmark, medians of 31 samples; before → after:
+
+| Scenario | | Chromium | Firefox | WebKit |
+|---|---|---|---|---|
+| Company directory (12,901 elements) | `adopt: true` | 11.4 → 8.2 ms | 21 → 19 ms | 17 → 14 ms |
+| | `adopt: 'pending'` | 5.9 → 3.6 ms | 7 → 6 ms | 9 → 7 ms |
+| | client render (unchanged code, for noise) | 11.0 → 10.2 ms | 20 → 20 ms | 19 → 17 ms |
+| Company profile (129) | `true` → `'pending'` | 0.100 → 0.050 ms | 0.15 → 0.10 ms | 0.15 → 0.05 ms |
+| Rocket (65) | `true` → `'pending'` | 0.130 → 0.075 ms | 0.30 → 0.15 ms | 0.20 → 0.15 ms |
+
+The client render's code didn't change, so its drift (up to about 10%) is the noise level. Beyond that:
+
+- **Chromium gained the most:** `'pending'` is about 40% faster than before, and `adopt: true` about 25%.
+- **`adopt: true` now beats a client render** in all three browsers on the large page (8.2 vs 10.2 ms in Chromium). Before, the two cost the same.
+- **`adopt: 'pending'` costs a third of a client render** on the large page in Chromium and Firefox, and about 40% in WebKit.
+
+In the Chromium profile, `slotsOf` went from 9–13% of the time to 2–4%. What's left of the walk is spread thin: `adoptNode` itself at 5–6%, and `normalize` at 1–2.5%. Most of the remaining time is native: parsing, DOM calls and GC. I stopped there, since further gains in the walk would be small.
+
+### Tests
+
+- **assign-gingerly** (scratch copy, three browsers): 165 passed and 6 skipped.
+- **o2h:** 9 passed and 6 skipped.

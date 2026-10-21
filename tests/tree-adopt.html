@@ -15,7 +15,7 @@
   <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
 
   <script type="module">
-    import { assignFromAsync, ItemscopeRegistry } from '../index.js';
+    import { assignFromAsync, ItemscopeRegistry, whenEventsBound } from '../index.js';
     import { tree, each, choose } from '../DX/tree.js';
 
     const results = [];
@@ -90,7 +90,7 @@
         assertEquals(host.innerHTML, html, 'adopt: the markup is unchanged by binding');
         const card = host.querySelector('.card');
         assert(card.ish instanceof CardManager, 'adopt: the manager is attached');
-        await delay(20);   // event listeners attach once their module has loaded
+        await whenEventsBound(card.querySelector('button'));   // event listeners attach once their module has loaded
         card.querySelector('button').click();
         assertEquals(card.querySelector('.label').textContent, 'Falcon: 71 m', "adopt: an event reaches the manager, and its ctx.rebind() re-renders the adopted card");
         host.remove();
@@ -170,6 +170,37 @@
         await run(host2, vm());
         assert(host2.querySelector('h2') !== h2, 'without adopt: existing markup is rebuilt, as before');
         host2.remove();
+      }
+
+      // Test 6: adopt: 'pending' binds only what's marked (its contents and ancestors); the rest is trusted
+      {
+        const host = await serverMarkup();
+        host.querySelector('.card').setAttribute('data-pending', '');
+        // The server's text differs from the client's data: 'pending' leaves it, true corrects it
+        host.querySelector('h2').textContent = 'Stale';
+        const copy = host.cloneNode(true);
+        document.body.append(copy);
+        const before = elements(host);
+        await run(host, vm(), { adopt: 'pending' });
+        const after = elements(host);
+        assert(before.length === after.length && before.every((el, i) => el === after[i]), "adopt 'pending': every element is reused");
+        assertEquals(host.querySelector('h2').textContent, 'Stale', "adopt 'pending': an unmarked element isn't bound on the first run");
+        const card = host.querySelector('.card');
+        assert(card.ish instanceof CardManager, "adopt 'pending': the marked element's manager is attached");
+        await whenEventsBound(card.querySelector('button'));
+        card.querySelector('button').click();
+        assertEquals(card.querySelector('.label').textContent, 'Falcon: 71 m', "adopt 'pending': inside the mark, the event is bound and ctx.rebind() re-renders");
+        assertEquals(host.querySelectorAll('[data-pending]').length, 0, "adopt 'pending': the marks are removed");
+        const nestedB = host.querySelector('.nested b');
+        const data = vm();
+        data.nested.inner = 'deeper';
+        await run(host, data);
+        assertEquals(host.querySelector('h2').textContent, 'Demo', "adopt 'pending': the next run binds everything");
+        assert(host.querySelector('.nested b') === nestedB && nestedB.textContent === 'deeper', "adopt 'pending': a skipped nested tree is adopted on the next run");
+        await run(copy, vm(), { adopt: true });
+        assertEquals(copy.querySelector('h2').textContent, 'Demo', 'adopt true: the same markup is corrected on the first run');
+        host.remove();
+        copy.remove();
       }
 
       document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;

@@ -80,6 +80,8 @@ const TREE_TARGET = Symbol('builtIns.tree target');
 const TREE_COMPILED = Symbol('builtIns.tree compiled');
 /** Options key: adopt existing markup found between markers without state (`adopt`), carried down to nested trees. */
 const TREE_ADOPT = Symbol('builtIns.tree adopt');
+/** Options key: during an `adopt: 'pending'` tree's first run, what that run binds (see PendingScope). */
+const TREE_PENDING = Symbol('builtIns.tree pending');
 /** Compiled variants per map object (specs are treated as immutable: replace a map to change it). */
 const compiledMaps = new WeakMap();
 /** The compiler module, loaded by TreeHandler.prepare only for `compile` configs. */
@@ -526,6 +528,10 @@ function syncNode(node, spec, value, options, permissionProcessor, template) {
         return createNode(spec, value, options, permissionProcessor, template);
     }
     Object.assign(node, { spec, options, permissionProcessor });
+    // adopt: 'pending', first run: nothing pending in or around this element, so it's left as the server rendered it
+    const pending = options[TREE_PENDING];
+    if (pending?.active && !pending.bound.has(node.element) && !node.element.closest(`[${PENDING_ATTRIBUTE}]`))
+        return node;
     node.binding = true;
     try {
         let from = value;
@@ -669,14 +675,16 @@ function bindCloned(node, value) {
 /** Markup that doesn't match the spec. */
 class AdoptMismatch extends Error {
 }
-/** The child nodes that nodes occupy: elements, and the placeholders of switches rendering nothing. */
-function slotsOf(nodes) {
+/**
+ * The nodes that specs occupy, from `first` up to `end` (exclusive; default: the last sibling): elements,
+ * and the placeholders of switches rendering nothing. Walks siblings directly: the walk's hot loop.
+ */
+function slotsOf(first, end = null) {
     const slots = [];
-    for (const node of nodes) {
-        if (node.nodeType === Node.ELEMENT_NODE
-            || (node.nodeType === Node.COMMENT_NODE && node.data === SWITCH_PLACEHOLDER)) {
+    for (let node = first; node && node !== end; node = node.nextSibling) {
+        const { nodeType } = node;
+        if (nodeType === 1 || (nodeType === 8 && node.data === SWITCH_PLACEHOLDER))
             slots.push(node);
-        }
     }
     return slots;
 }
@@ -684,9 +692,9 @@ function slotsOf(nodes) {
 function adoptNode(slot, spec, value, options, permissionProcessor) {
     if (!slot)
         throw new AdoptMismatch('fewer elements than the spec');
-    const root = options[TREE_TARGET];
-    const fastAllowed = fastPathAllowed(options, permissionProcessor);
     if (isSwitch(spec)) {
+        const root = options[TREE_TARGET];
+        const fastAllowed = fastPathAllowed(options, permissionProcessor);
         const { caseKey, spec: chosen } = chooseCase(spec, value, (path, from) => resolveAny(path, from, options, root, fastAllowed, permissionProcessor));
         if (chosen == null) {
             if (slot.nodeType !== Node.COMMENT_NODE || slot.data !== SWITCH_PLACEHOLDER) {
@@ -717,18 +725,23 @@ function adoptNode(slot, spec, value, options, permissionProcessor) {
     };
     try {
         const from = ish === undefined ? value : attachManager(node, ish, value);
-        // A nested tree adopts its own markers when it's bound
-        if (nested)
+        // A nested tree adopts its own markers when it's bound (so with adopt: 'pending', its host is)
+        if (nested) {
+            const pending = options[TREE_PENDING];
+            if (pending?.active)
+                bindWithAncestors(pending, element);
             return node;
+        }
         const { container } = node;
         if (repeat) {
             const { of = '?.' } = repeat;
+            const fastAllowed = fastPathAllowed(options, permissionProcessor);
             const itemOptions = of === '?.' ? options : { ...options, fromStack: [...(options.fromStack ?? []), from] };
             const keyFast = itemOptions === options ? fastAllowed : fastPathAllowed(itemOptions, permissionProcessor);
             const stamp = repeatItems(repeat, from, (path, v, forItem) => forItem
                 ? resolveAny(path, v, itemOptions, element, keyFast, permissionProcessor)
                 : resolveAny(path, v, options, element, fastAllowed, permissionProcessor));
-            const slots = slotsOf(container.childNodes);
+            const slots = slotsOf(container.firstChild);
             const state = { items: new Map(), empty: undefined, warned: false };
             if (stamp.empty !== undefined) {
                 if (slots.length !== 1)
@@ -745,7 +758,7 @@ function adoptNode(slot, spec, value, options, permissionProcessor) {
         }
         // Without spec children, the element's content is its own (text, microJoin): nothing to pair
         if (childSpecs.length > 0) {
-            const slots = slotsOf(container.childNodes);
+            const slots = slotsOf(container.firstChild);
             if (slots.length !== childSpecs.length)
                 throw new AdoptMismatch(`<${tag}> has ${slots.length} child elements; the spec has ${childSpecs.length}`);
             node.children = childSpecs.map((childSpec, i) => adoptNode(slots[i], childSpec, from, options, permissionProcessor));
@@ -760,7 +773,7 @@ function adoptNode(slot, spec, value, options, permissionProcessor) {
 function adoptTree(map, from, keepNullish, start, end, options, permissionProcessor) {
     const nodes = new Map();
     try {
-        const slots = slotsOf(getNodesBetweenMarkers(start, end));
+        const slots = slotsOf(start.nextSibling, end);
         const entries = mapEntries(map, from, keepNullish);
         if (slots.length !== entries.length)
             throw new AdoptMismatch(`${slots.length} elements for ${entries.length} map keys`);
@@ -773,6 +786,26 @@ function adoptTree(map, from, keepNullish, start, end, options, permissionProces
         return undefined;
     }
     return nodes;
+}
+/** For `adopt: 'pending'`: the elements between the markers holding a data-pending mark, and their ancestors up to the target. */
+function pendingScope(start, end, target) {
+    const scope = { active: true, bound: new Set(), target };
+    for (const node of getNodesBetweenMarkers(start, end)) {
+        if (node.nodeType !== Node.ELEMENT_NODE)
+            continue;
+        if (node.hasAttribute(PENDING_ATTRIBUTE))
+            bindWithAncestors(scope, node);
+        for (const el of node.querySelectorAll(`[${PENDING_ATTRIBUTE}]`))
+            bindWithAncestors(scope, el);
+    }
+    return scope;
+}
+/** Add an element and its ancestors to what the run binds: up to the target, or to one already added (whose ancestors are too). */
+function bindWithAncestors(scope, el) {
+    const { bound, target } = scope;
+    for (let at = el; at && at !== target && at.nodeType === Node.ELEMENT_NODE && !bound.has(at); at = at.parentNode) {
+        bound.add(at);
+    }
 }
 /** Find the tree's markers among the target's direct children. */
 function findChildMarkers(target, name) {
@@ -815,7 +848,7 @@ export class TreeHandler {
         if (!(lhsTarget instanceof Element || lhsTarget instanceof DocumentFragment))
             return;
         const { map, markerName = DEFAULT_MARKER_NAME, keepNullish, aka, compile } = this.config;
-        const adopt = !!(this.config.adopt || options[TREE_ADOPT]);
+        const adopt = this.config.adopt || options[TREE_ADOPT] || false;
         if (!map || typeof map !== 'object') {
             throw new Error('builtIns.tree: a "map" of VM keys to element specifications is required');
         }
@@ -841,17 +874,25 @@ export class TreeHandler {
         const [start, end] = findChildMarkers(lhsTarget, markerName) ?? createMarkers(lhsTarget, markerName);
         let nodes = treeStates.get(start);
         let adopted = false;
+        let pending;
         if (!nodes) {
-            // Markers without state (cloned or server-rendered): adopt the markup if asked and it matches, else start fresh
+            // Markers without state (cloned or server-rendered): adopt the markup if asked and it matches, else start fresh.
+            // With adopt: 'pending', the scope exists before the walk, which adds nested trees' hosts to it.
+            pending = adopt === 'pending' ? pendingScope(start, end, lhsTarget) : undefined;
+            nestedOptions[TREE_PENDING] = pending;
             nodes = adopt ? adoptTree(map, from, keepNullish, start, end, nestedOptions, permissionProcessor) : undefined;
             adopted = !!nodes;
             if (!nodes) {
+                pending = nestedOptions[TREE_PENDING] = undefined;
                 for (const node of getNodesBetweenMarkers(start, end))
                     node.remove();
                 nodes = new Map();
                 warnUnmatchedKeys(map, from);
             }
         }
+        // Always set, so an enclosing tree's scope doesn't apply here
+        if (!pending)
+            nestedOptions[TREE_PENDING] = undefined;
         const next = new Map();
         // Which keys render, in which order: decided by the shared, pure mapEntries
         for (const { key, spec, value, templateKey } of mapEntries(map, from, keepNullish)) {
@@ -868,6 +909,8 @@ export class TreeHandler {
         }
         placeInOrder(lhsTarget, [...next.values()].map(n => n.element), start);
         treeStates.set(start, next);
+        if (pending)
+            pending.active = false;
         // Adopted and bound: what a server marked as pending (data-pending) is complete now
         if (adopted) {
             for (const node of getNodesBetweenMarkers(start, end)) {
