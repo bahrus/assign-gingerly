@@ -11,6 +11,15 @@
 export const MARKER_START_PREFIX = '?start name="';
 export const MARKER_END = '?end';
 /**
+ * Marks an element a server rendered without something HTML can't carry (an event binding, a
+ * property without an attribute, an itemscope manager): "hide this until the client restores it".
+ * builtIns.tree's `adopt` (hydration) and builtIns.scope remove it once they've bound the element.
+ * A page can hide pending parts until then, only when scripts run:
+ *     @media (scripting: enabled) { [data-pending] { visibility: hidden; } }
+ * (o2h emits that rule with its `style` option.)
+ */
+export const PENDING_ATTRIBUTE = 'data-pending';
+/**
  * Find existing start/end comment markers in a target element (TreeWalker approach).
  * Searches the subtree of `target` for matching comment nodes.
  *

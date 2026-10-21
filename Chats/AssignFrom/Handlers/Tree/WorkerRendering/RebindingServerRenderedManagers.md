@@ -127,3 +127,163 @@ One step that could make it feel better: **o2h emitting the data for the client*
 3. **`git add`:**
    - in assign-gingerly: `tests/tree-adopt.*`;
    - in o2h: `tests/hydration.html`.
+
+## Bruce's Query I
+
+Does the hydrate approach use the data-residue values at all?  Why is it that if I press the hydrate button and not the apply residue button, it removes the data-residue attributes?
+
+## Claude's Answer I
+
+**No, hydration doesn't use the residue at all,** neither the residue object nor the `data-residue="eN"` values. Hydration re-derives everything the residue would have carried, from the **config and the data**:
+- the properties without an attribute;
+- the event bindings;
+- the managers' values.
+
+The bind after adoption applies each element's whole pattern, exactly as when Tree builds the element itself. So the residue is redundant once a page hydrates. The server needn't even send it.
+
+**Why it still removes the marks:** a `data-residue` mark means "this element is still waiting for something HTML couldn't carry". After adoption and the bind, nothing is waiting any more: Tree has applied exactly those things. So the marks are stale, and leaving them would cause a real problem. With o2h's `style: true`, or any `[data-residue] { visibility: hidden }` rule, the rocket card and the links bar would **stay hidden forever** after hydrating, because only `applyResidue` (or `builtIns.scope`) would ever remove them. So Tree removes the marks of what it adopted. It reads only the mark itself, never its value.
+
+**In short:**
+
+| | Uses the residue object | Uses the `eN` values | Removes the marks |
+|---|---|---|---|
+| `applyResidue` | yes | yes: they say which entry belongs to which element | each one, once that element is ready |
+| Hydration (`adopt: true`) | no | no | all of them in what it adopted, once bound (they've become stale) |
+
+**A possible follow-up:** since a hydrating page ignores the residue, o2h could have an option to skip it, e.g. `residue: false`. That would drop both the residue object and the marks, so the HTML is a little smaller. The default style would then have nothing to hide, so the page would show everything at once and become live when hydration finishes. Want that?
+
+## Bruce's Response II
+
+I think there is value in saying "the server rendering of this section has lost some critical functionality that will need to be restored in the client.  Until it does, hide it".
+
+Maybe we should call the attribute something other than data-residue?
+
+## Claude's Answer II
+
+**Agreed on both counts.** The mark says something about the *element*: "the server couldn't render all of this; hide it until the client restores it". *How* it's restored is a separate matter: the residue, hydration, `builtIns.scope`, or the page's own code. So the name shouldn't say "residue".
+
+### What changes
+
+- **The mark is independent of the residue.** o2h always marks elements that lost something (properties, events, a manager), whichever way the page will finish them.
+  - **With a residue** (the default), the mark's **value** names the element's entry, as today: `data-…="e3"`.
+  - **Without one** (a new opt-out, e.g. `residue: false`, for hydrating pages), the mark is a **bare attribute**: `data-…`. It still hides the part until Tree adopts and binds it.
+- **Whatever finishes the element removes the mark,** as now: `applyResidue`, `adopt`, `builtIns.scope`.
+- **The exported constant** gets a neutral name too: `PENDING_ATTRIBUTE` (or whatever matches the name chosen), instead of `RESIDUE_ATTRIBUTE`.
+
+### Name candidates
+
+| Name | For | Against |
+|---|---|---|
+| **`data-pending`** | Short, neutral, reads well in CSS (`[data-pending] { visibility: hidden }`) | Generic: some apps already use it for loading states |
+| `data-incomplete` | Says exactly what it is | A little negative; longer |
+| `data-hydrate` | Familiar from frameworks | Implies one method (hydration), which is what we're moving away from |
+| `data-not-hydrated` | Your first idea | The same: it names one method, and negatives read awkwardly in CSS |
+| `data-ginger-pending` | Namespaced: won't clash with an app's own `data-pending` | Longer; ties the markup to the library's name |
+
+**My recommendation: `data-pending`.** Its clarity in CSS outweighs the small clash risk. It's only ever set by o2h and removed by these finishers, so a clash would mean an app styling `[data-pending]` for its own purpose. If you'd rather rule that out, `data-ginger-pending` is the safe choice.
+
+### Questions
+
+1. **The name:** `data-pending`, `data-ginger-pending`, or another?
+2. **o2h's `residue: false` option** (marks without values, no residue object), for hydrating pages?
+
+Once you've chosen, I'll rename it throughout:
+- **assign-gingerly:** `applyResidue`, Tree's `adopt`, `builtIns.scope`, the tests and the docs;
+- **o2h:** the output, `RESIDUE_STYLE`, the types, the tests, the demo and the README.
+
+I'll also add the opt-out.
+
+## Bruce's Query II
+
+You earlier raised the question of whether we should keep the applyResidue (residue: true) support?  I left it to you, and you kept it.  What are the selling points for keeping it?  I'm thinking it might be too subtle to know when it should be used, when it only gives a partial solution at best.
+
+## Claude's Answer III
+
+**The honest case for keeping the residue:**
+
+1. **The client never needs the data.** This is the only strong argument. Hydration requires the *whole* view model on the client. The residue carries only the leftovers, already resolved. That matters when the data **can't or shouldn't be shipped**:
+   - it's private, or includes fields the page must not expose;
+   - it came from an authenticated or rate-limited API;
+   - it's large, while only a sliver of it is interactive.
+2. **The client never needs the config, the pipes or the Tree handler.** It's a little less code to load, and nothing has to stay in sync between server and client. But the client still loads assign-gingerly, so the saving is modest.
+3. **It finishes each element independently,** so parts become usable one by one. Hydration finishes per tree.
+
+**Against it,** your point holds, and I'd add to it:
+- **It's partial in a way that's easy to miss.** Events and properties work, but **nothing re-renders**: a manager's state changes and the markup doesn't. That's exactly the surprise you hit with "Increase by one". The difference between "finished" and "live" is too subtle to be a good default.
+- **Two client paths** to explain, test and keep correct, plus o2h's residue machinery (leftover collection, entry names, the `unrendered` reporting for it).
+- **For o2h's main use case, a Worker rendering a *public* API, argument 1 rarely applies.** The data is public, and the [benchmark](../../../../../demos/hydration-benchmark/compare.html) shows shipping it is cheap to parse.
+
+### Recommendation: retire the residue; keep the marks
+
+**One path:** the server renders HTML and marks what lost functionality, and the client hydrates (`adopt: true`). Concretely:
+
+| | Becomes |
+|---|---|
+| **The marks** | Kept, renamed (Answer II), **bare** (no `eN` values): "hide until the client restores this" |
+| **Who removes them** | Tree's `adopt` (as now), and `builtIns.scope` (as now) |
+| **assign-gingerly `applyResidue` / `RESIDUE_ATTRIBUTE`** | Removed. The constant is renamed to the new name. `whenEventsBound` stays, since it's useful on its own. |
+| **o2h's `residue` output** | Removed. o2h still classifies what HTML can't carry, now only to decide what to **mark**. `unrendered` stays, for keys that can't be done on the server at all. |
+| **o2h `style: true`** | Kept, targeting the new name |
+| **o2h demo** | One "Hydrate" button; the "Apply the residue" button is gone |
+| **Optional, later** | o2h emitting the data as `<script type="application/json">` for the client to hydrate from (Claude's Implementation Notes, last section), so "server renders, client hydrates" is one call on each side |
+
+**The door stays open:** if a page with server-only data comes up, a residue-like mechanism can come back, narrowly scoped and clearly labeled "static". The marks and `whenEventsBound` would already be in place for it.
+
+### Questions
+
+1. **Retire `applyResidue` and o2h's residue,** keeping the (renamed) marks and hydration as the one path?
+2. **The mark's name** (from Answer II): `data-pending`, `data-ginger-pending`, or another?
+
+With both answers, I'll do the removal and the rename together, across both repos (code, tests, demo, docs). 
+
+## Bruce's Response - III
+
+Please completely remove the residue approach with no concern for backwards compatibility.  Please use data-pending.
+
+Also, do you see any benefit to the scope handler in assign-gingerly?  If not, please remove it.
+
+
+## Claude's Implementation Notes II
+
+The residue is gone from both repos, with no compatibility shims, and the mark is now `data-pending`.
+
+### assign-gingerly
+
+| | |
+|---|---|
+| **Removed** | `applyResidue.ts`, `RESIDUE_ATTRIBUTE`, the `./applyResidue.js` export in package.json, and `tests/apply-residue.html` / `.spec.ts` |
+| **Added** | `PENDING_ATTRIBUTE = 'data-pending'` in `markerUtils.ts`, exported from `index.ts` |
+| **Tree `adopt`, `builtIns.scope`** | Remove `data-pending` (instead of `data-residue`) once they've bound an element |
+| **Docs** | tree.md's SSR section is rewritten around hydration, plus a "Pending marks: `data-pending`" subsection with the CSS. scope.md's pending-marks section now points there. |
+
+`whenEventsBound` stays: it's useful on its own.
+
+### o2h
+
+| | |
+|---|---|
+| **o2h.ts** | Returns `{ html, unrendered }`. It still classifies what HTML can't carry (events, properties without an attribute, managers), but only to mark the element with a bare `data-pending`, with no `eN` value. The constants are now `PENDING_ATTRIBUTE` and `PENDING_STYLE`. |
+| **types.d.ts** | `O2HResidue` and `O2HResult.residue` are removed, and the constants renamed. This applies to both copies (o2h's and assign-gingerly's `types/o2h`). |
+| **Tests** | The marks test checks bare `data-pending` and `PENDING_STYLE`. The equivalence test compares o2h's raw HTML with Tree's DOM, ignoring the marks and the managers' `itemscope`; manager liveness is left to the hydration test. The hydration test checks that no `data-pending` remain. |
+| **Demo** | Only the Hydrate button remains: the residue button and panel are gone. |
+| **README** | "Finishing on the client: hydration" replaces the residue/hydration table. |
+
+### Results
+
+- **assign-gingerly** (tsc, then Playwright in a scratch copy): 163 passed, 2 failed and 6 skipped across the three browsers.
+  - **The 2 failures are Firefox flakes:** in the full run, the event cases of `scope` and `tree-adopt` failed under load: "the button calls the manager", and "an event reaches the manager". Both test listeners that attach once their module has loaded. The pending-mark cases passed. Run alone, both specs passed 3 of 3 times. If this recurs, a `whenEventsBound` wait in those two cases would settle it.
+- **o2h** (tsc, then Playwright in workspace mode, against the sibling assign-gingerly): 9 passed and 6 skipped.
+
+### For you
+
+- **Delete the stale `applyResidue.js`** (and `applyResidue.d.ts` / `.js.map`, if your build left them). It's build output, so I didn't touch it.
+- **Commit the submodules separately:** `assign-gingerly/types` (treeTypes.d.ts, o2h/types.d.ts) and `o2h/types` (o2h/types.d.ts).
+- **Your server on port 8000** (running since yesterday evening) answers the test specs' hardcoded `localhost:8000` URLs. I left it running and ran my copy on 8001.
+
+### On removing `builtIns.scope`
+
+**I'd keep it.** Its case is markup that **wasn't produced from a tree config**: hand-written HTML, a PHP/Razor/CMS template, or another framework's output, annotated with `itemprop` / `itemscope`. `adopt` can't help there, because it pairs a spec with the elements it rendered, and that markup has no spec. `builtIns.scope` is the one way to bind such markup against a manager (the original [ssr-manager-demo](../../../../../demos/ssr-manager-demo.html) scenario). It's also the small, Tree-free way to bind one sub-object (`$parent` / `$root` included) into an existing element.
+
+**The costs are low:** `handlers/scope.ts` is self-contained, it's loaded only when a config names it, and its test suite passes.
+
+**If you'd rather the story be "o2h + hydration only",** say so, and I'll remove it, along with scope.md, the demo, the tests and its builtIns entry.

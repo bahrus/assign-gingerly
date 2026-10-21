@@ -137,13 +137,13 @@
         host.remove();
       }
 
-      // Test 4: data-residue marks on adopted elements are removed
+      // Test 4: data-pending marks on adopted elements are removed
       {
         const host = await serverMarkup();
-        host.querySelector('.card').setAttribute('data-residue', 'e1');
-        host.querySelector('button').setAttribute('data-residue', 'e2');
+        host.querySelector('.card').setAttribute('data-pending', 'e1');
+        host.querySelector('button').setAttribute('data-pending', 'e2');
         await run(host, vm(), { adopt: true });
-        assertEquals(host.querySelectorAll('[data-residue]').length, 0, 'adopt: the data-residue marks are removed');
+        assertEquals(host.querySelectorAll('[data-pending]').length, 0, 'adopt: the data-pending marks are removed');
         host.remove();
       }
 

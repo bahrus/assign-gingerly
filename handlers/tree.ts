@@ -69,10 +69,9 @@ import { withEventKeys } from './eventKeys.js';
 import { chooseCase, DEFAULT_CASE, isLiteralString, isSwitch, mapEntries, normalize, repeatItems, WILDCARD } from './treeSpec.js';
 import type { TreePathResolver } from './treeSpec.js';
 import { defineIshCore } from '../handleIshProperty.js';
-import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
+import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END, PENDING_ATTRIBUTE } from '../markerUtils.js';
 import { placeNodes } from '../utils/placeNodes.js';
 import { resolveRegistry } from '../utils/resolveRegistry.js';
-import { RESIDUE_ATTRIBUTE } from '../applyResidue.js';
 import type {
     AssignFromHandler, AssignFromOptions, ItemscopeManagerConfig, ItemscopeRegistry, PermissionProcessor,
 } from '../types/assign-gingerly/types.js';
@@ -1000,12 +999,12 @@ export class TreeHandler implements AssignFromHandler {
         }
         placeInOrder(lhsTarget, [...next.values()].map(n => n.element), start);
         treeStates.set(start, next);
-        // Adopted and bound: whatever a server marked as pending (see applyResidue) is complete now
+        // Adopted and bound: what a server marked as pending (data-pending) is complete now
         if (adopted) {
             for (const node of getNodesBetweenMarkers(start, end)) {
                 if (node.nodeType !== Node.ELEMENT_NODE) continue;
-                (node as Element).removeAttribute(RESIDUE_ATTRIBUTE);
-                for (const el of (node as Element).querySelectorAll(`[${RESIDUE_ATTRIBUTE}]`)) el.removeAttribute(RESIDUE_ATTRIBUTE);
+                (node as Element).removeAttribute(PENDING_ATTRIBUTE);
+                for (const el of (node as Element).querySelectorAll(`[${PENDING_ATTRIBUTE}]`)) el.removeAttribute(PENDING_ATTRIBUTE);
             }
         }
     }

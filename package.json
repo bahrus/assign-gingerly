@@ -200,10 +200,6 @@
       "default": "./assignFromAsync.js",
       "types": "./assignFromAsync.ts"
     },
-    "./applyResidue.js": {
-      "default": "./applyResidue.js",
-      "types": "./applyResidue.ts"
-    },
     "./assignFrom.js": {
       "default": "./assignFrom.js",
       "types": "./assignFrom.ts"

@@ -6,25 +6,21 @@ The handler not only builds a tree of DOM elements from a view model, it rebinds
 
 ## Server Side Rendering [WIP]
 
-Rendering a tree config to HTML on a server is a separate package, **[o2h](https://github.com/bahrus/o2h)**, since this one is about bringing data *into* objects and elements.
+Rendering a tree config to HTML on a server is a separate package, **[o2h](https://github.com/bahrus/o2h)**, since this one is about bringing data *into* objects and elements. Making that HTML live on the client is this package's job: **hydration** (`adopt`, below).
 
 ```js
 import { o2h } from 'o2h';
 
 // On the server (e.g. a Cloudflare Worker), with the same config builtIns.tree takes (minus `do`)
-const { html, residue, unrendered } = o2h(config, apiResponse, { pipes, managers });
+const { html, unrendered } = o2h(config, apiResponse, { pipes, managers });
 ```
 
 - **`html`** is what builtIns.tree would build: elements, attributes, text and Tree's markers. o2h uses the [pure building blocks](#pure-building-blocks-for-rendering-elsewhere) Tree itself uses to decide what renders, so it can't drift from Tree's choices.
-- **`residue`** is what HTML can't carry: properties without an attribute, event bindings, and itemscope managers' values. Each element still waiting for its entry is marked `data-residue="<name>"`, and the client finishes them with [`applyResidue`](#finishing-server-html-on-the-client-applyresidue).
-- **Managers:** given their classes, o2h renders a manager's subtree from its getters on the server. It also writes `itemscope="<name>"`, so the client can attach the manager.
-- **`unrendered`** lists anything o2h could neither render nor hand over.
+- **Pending marks:** each element that lost something HTML can't carry (an event binding, a property without an attribute, a manager) is marked [`data-pending`](#pending-marks-data-pending): "hide this until the client restores it".
+- **Managers:** given their classes, o2h renders a manager's subtree from its getters on the server. It also writes `itemscope="<name>"`, which names the manager the element needs.
+- **`unrendered`** lists anything o2h couldn't render.
 
-**Current state:**
-- o2h renders tree-demo's definition to the **same DOM** builtIns.tree builds (apart from that `itemscope`), once its residue is applied. An equivalence test checks this in Chromium, Firefox and WebKit.
-- **Two ways to finish o2h's HTML on the client:**
-  - **The residue,** with [`applyResidue`](#finishing-server-html-on-the-client-applyresidue). No data is needed on the client, but nothing re-renders the markup: a manager's events reach it, but its `ctx.rebind()` has nothing to re-apply.
-  - **Hydration,** with [`adopt: true`](#hydration-adopt). The client runs the same tree config with the same data, and Tree **adopts** the server's elements instead of rebuilding them. Everything is then live: rebinding in place, managers re-rendering on `ctx.rebind()`, events, switches and repeats. A hydration test checks this for tree-demo's definition: all elements are reused, and the DOM is the same as Tree's own.
+**Current state:** o2h renders tree-demo's definition to the **same DOM** builtIns.tree builds (apart from the marks and that `itemscope`), and builtIns.tree **adopts** it. Tests check, in Chromium, Firefox and WebKit, that every element is reused, that the result is the same DOM as Tree's own, and that managers re-render on `ctx.rebind()`.
 
 ### Hydration: `adopt`
 
@@ -36,7 +32,7 @@ await assignFromAsync(container, { '?. =>': { do: 'builtIns.tree', adopt: true, 
 With `adopt`, markers found **without state** (server-rendered or cloned markup) aren't cleared on the first run:
 1. **Tree walks the spec and the existing elements together** (map keys in order, static children, repeat items by key, switch cases, nested trees) and builds its records around them. Managers are attached on the way.
 2. **The ordinary bind then runs:** patterns, events and properties. Text that's already right isn't rewritten, and `microJoin` updates its elements in place. So nothing is recreated.
-3. **`data-residue` marks** within what was adopted are removed. Hydration does everything the residue would.
+3. **`data-pending` marks** within what was adopted are removed: those parts are complete now.
 4. **Any mismatch** (a different tag, a different number of children or items, a missing switch placeholder) **falls back to the rebuild**, with one `console.debug` saying why. A page is never left half-adopted.
 
 Later runs, and managers' `ctx.rebind()`, then update the adopted elements in place, as for a tree Tree built itself. `adopt` is carried down to nested trees.
@@ -45,35 +41,21 @@ Later runs, and managers' `ctx.rebind()`, then update the adopted elements in pl
 
 **With `compile`:** adopted nodes aren't paired with compiled templates, so items added later are created with `createElement` rather than cloned.
 
-### Finishing server HTML on the client: `applyResidue`
+### Pending marks: `data-pending`
 
-```js
-import { applyResidue } from 'assign-gingerly';
-
-await applyResidue(container, residue, { from: host, registry });
-```
-
-For each element marked `data-residue="<name>"` in `container`, `applyResidue`:
-1. **attaches its manager first,** if its entry has an `ish` value (by the element's `itemscope` name, through the `registry` option first);
-2. **applies the rest of its entry** with `assignFrom`;
-3. **waits until the element is ready:** its manager set up, its handlers settled (`whenSettled`), and its event listeners attached (`whenEventsBound`);
-4. **only then removes the mark.**
-
-Marks are removed per element, so each part shows as soon as it's ready. The mark comes off after anything the residue did to `class`.
-
-**Event hosts follow Tree:** inside an element with a manager, an event's `call` goes to that manager; elsewhere, to `from`.
+A server marks an element `data-pending` when it rendered it without something HTML can't carry. The mark means "**hide this until the client restores it**", whatever does the restoring: Tree's `adopt` removes the marks of what it adopted, and [`builtIns.scope`](./scope.md) removes an element's mark after its first bind.
 
 **CSS can hide the pending parts until then.** Do it only when scripts run, so crawlers and no-JS readers still see everything:
 
 ```css
 @media (scripting: enabled) {
-    [data-residue] { visibility: hidden; }   /* keeps the layout: nothing jumps when a part appears */
+    [data-pending] { visibility: hidden; }   /* keeps the layout: nothing jumps when a part appears */
 }
 ```
 
-o2h emits this rule itself with `style: true`. The attribute name is exported as `RESIDUE_ATTRIBUTE`. [`builtIns.scope`](./scope.md) also removes an element's mark after its first bind, so apply a residue before taking a scope over.
+o2h emits this rule itself with `style: true`. The attribute name is exported as `PENDING_ATTRIBUTE`.
 
-Design discussion: [Stringify.md](../Chats/AssignFrom/Handlers/Tree/WorkerRendering/Stringify.md) and [StylingIncompletelyRenderedElements.md](../Chats/AssignFrom/Handlers/Tree/WorkerRendering/StylingIncompletelyRenderedElements.md); o2h's own notes are in its repo.
+Design discussion: [Stringify.md](../Chats/AssignFrom/Handlers/Tree/WorkerRendering/Stringify.md), [StylingIncompletelyRenderedElements.md](../Chats/AssignFrom/Handlers/Tree/WorkerRendering/StylingIncompletelyRenderedElements.md) and [RebindingServerRenderedManagers.md](../Chats/AssignFrom/Handlers/Tree/WorkerRendering/RebindingServerRenderedManagers.md); o2h's own notes are in its repo.
 
 ## Compiling to a template for optimum performance
 

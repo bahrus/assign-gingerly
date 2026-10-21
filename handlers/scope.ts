@@ -18,8 +18,8 @@
  * - **Rebinding:** every call assigns the value and binds again. A manager's `ctx.rebind()`,
  *   and the settling of an async `onAssigned`, bind again against the manager.
  *
- * **Pending marks:** after its first bind, the element's `data-residue` mark (see applyResidue)
- * is removed. Apply a server residue before taking a scope over, so its entry isn't skipped.
+ * **Pending marks:** after its first bind, the element's `data-pending` mark (a server's "hide
+ * this until the client restores it") is removed.
  *
  * `infer` keeps its covenant: it never enters a nested itemscope by itself. builtIns.scope is
  * how you step into one, explicitly.
@@ -42,7 +42,7 @@ import { defineIshCore, setScopeBinder } from '../handleIshProperty.js';
 import { resolveRegistry } from '../utils/resolveRegistry.js';
 import { waitForEvent } from '../utils/waitForEvent.js';
 import { withEventKeys } from './eventKeys.js';
-import { RESIDUE_ATTRIBUTE } from '../applyResidue.js';
+import { PENDING_ATTRIBUTE } from '../markerUtils.js';
 import type {
     AssignFromHandler, AssignFromOptions, ItemscopeManager, ItemscopeManagerConfig, ItemscopeRegistry,
     PermissionProcessor, ScopeBinding, ScopeConfig,
@@ -72,8 +72,8 @@ export class ScopeHandler implements AssignFromHandler {
         const managerRef = ish ?? managerName(element);
         if (managerRef === undefined) {
             bindScope(element, value, bind, options, permissionProcessor);
-            // Bound: no longer pending (see applyResidue)
-            element.removeAttribute(RESIDUE_ATTRIBUTE);
+            // Bound: no longer pending
+            element.removeAttribute(PENDING_ATTRIBUTE);
             return;
         }
         const config = managerConfig(managerRef, element, options);
@@ -131,8 +131,8 @@ function withManager(
     if (!('ish' in element)) defineIshCore(element as HTMLElement, config, options, assignGingerly);
     (element as any).ish = value;
     rebind();
-    // Bound against its manager: no longer pending (see applyResidue)
-    element.removeAttribute(RESIDUE_ATTRIBUTE);
+    // Bound against its manager: no longer pending
+    element.removeAttribute(PENDING_ATTRIBUTE);
 }
 
 /** Bind the element's scope: `bind.pattern` and options, with `from` set to the view model. */
