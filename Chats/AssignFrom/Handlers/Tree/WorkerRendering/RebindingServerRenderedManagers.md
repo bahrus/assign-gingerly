@@ -48,3 +48,82 @@ It's the general answer, and it's **Step 6** from the compile plan ([Step6-Adopt
 ## Bruce's Response I
 
 I'm not hugely excited about this approach, but I cn't put my finger on why, nor can I propose a better alternative.  Please proceed with A, and go with your instincts for the other questions.
+
+## Claude's Implementation Notes
+
+Done: **A, as `adopt: true` on the tree config.** Nothing is committed.
+
+**My calls on the other questions:**
+- **The data on the client:** left to the page. o2h doesn't embed it. The page can embed the JSON or fetch it. The [hydration benchmark](../../../../../demos/hydration-benchmark/compare.html) suggests embedding is cheap: `JSON.parse` takes under 1 ms for 420 KB.
+- **Opt-in:** `adopt: true`. Nothing changes for existing pages.
+- **The residue stays,** for pages that don't want to ship their data. A page uses one or the other; adoption removes the `data-residue` marks of what it adopted.
+
+### Results
+
+| | |
+|---|---|
+| assign-gingerly, new `tests/tree-adopt.html` | **17 / 17**, in Chromium, Firefox and WebKit |
+| assign-gingerly, full suite (scratch copy) | **168 passed, 6 skipped** |
+| o2h, `npm test` (workspace) | **9 passed, 6 skipped** (the new hydration test in all three browsers) |
+| o2h demo, "Hydrate" | **66 of 66** elements adopted (none rebuilt); the server card's "Increase by one" re-renders it (70 m → 71 m); the server's links bar switches to "verified" when its manager's async check settles; no console errors |
+
+### How it works (`handlers/tree.ts`)
+
+**Small by design.** Adoption **only builds Tree's records** (the `TreeNode`s) around the existing elements, and the **ordinary bind** does everything else. So there's no second binding code path to keep in sync.
+
+1. **Where it hooks in:** on the first run, Tree finds markers without state. With `adopt`, instead of clearing them, `adoptTree` walks the map entries (the shared `mapEntries`) alongside the elements between the markers, and `adoptNode` mirrors `createNode` without creating anything:
+   - **elements:** the tag is checked, then managers are attached (with Tree's `ctx.rebind`, which is what makes the card live);
+   - **static children:** paired by position;
+   - **repeats:** items paired via the shared `repeatItems`, keyed, with `empty` handled;
+   - **switches:** the case is re-chosen via the shared `chooseCase`; a case rendering nothing must be a `<!--?switch-->` placeholder;
+   - **nested trees:** they adopt their own markers when bound (`adopt` is carried down);
+   - **an element's own content** (text, `microJoin`) needs no pairing.
+2. **The normal sync then runs** on those nodes: patterns, events, properties.
+   - The fast path doesn't rewrite unchanged text, and `microJoin` updates in place, so **the markup isn't touched**. The test checks that `innerHTML` is identical after adoption.
+3. **`data-residue` marks** in the adopted region are removed.
+4. **Any mismatch** (tag, element count, item count, missing placeholder) **falls back to today's rebuild**, all of it, never half-adopted, with one `console.debug` saying why.
+
+**The tests** (`tests/tree-adopt.html`) render with Tree, serialize the result (markers included, like a server would send it), parse it into a new container and adopt it. They cover:
+- every element reused;
+- the manager attached;
+- an event reaching it, with its `ctx.rebind()` re-rendering the card;
+- later runs: a keyed repeat reordering adopted items, a switch, a nested tree, `microJoin` in place;
+- an empty repeat and an empty switch;
+- marks removed;
+- a tampered tag falling back to a rebuild, with the debug note;
+- without `adopt`, a rebuild as before.
+
+**Also:**
+- **Types:** `adopt?: boolean` on `TreeConfig` (`treeTypes.d.ts`, **the submodule**).
+- **Docs (`tree.md`):**
+  - a new *Hydration: `adopt`* subsection;
+  - *Server Side Rendering* now presents residue vs hydration;
+  - the Config block has `adopt`;
+  - the rebind note mentions it.
+- **One limit:** with `compile`, adopted nodes aren't paired with compiled templates, so items *added later* are created rather than cloned. It's documented.
+
+### o2h
+
+- **`tests/hydration.html`** (with a spec): o2h's HTML, adopted by builtIns.tree. It checks:
+  - every element reused;
+  - no marks left;
+  - **the same DOM** as Tree's own rendering (apart from the manager `itemscope`);
+  - the rocket card going 70 m → 71 m on "Increase by one", then to feet on `metric = false`.
+- **The demo** has a **Hydrate** button next to "Apply the residue". They're mutually exclusive: a page does one or the other. The log reports how many elements were adopted.
+- **README:** a *residue or hydration* table, and the new test.
+
+### On "not hugely excited"
+
+A few things that might be behind the feeling, for what they're worth:
+- **The server and the client must agree on more:** the config, the pipes, the manager classes and the same data, or adoption falls back to a rebuild. That's inherent to hydration in any framework, but here it's visible, because o2h and Tree are separate.
+- **The data is shipped twice** (as HTML and as JSON). The benchmark says that's cheap to *parse*, but it still adds bytes. Compression helps, since the JSON repeats the HTML's text.
+- **The fallback is all-or-nothing.** A small mismatch anywhere rebuilds the whole tree. Per-key fallback would be gentler, and I'd add it if mismatches turn out to happen in practice.
+
+One step that could make it feel better: **o2h emitting the data for the client** (opt-in, as a `<script type="application/json">` next to the HTML), with a tiny client helper that hydrates from it. Then "server renders, client hydrates" is one call on each side, with no plumbing in between.
+
+**To do on your side:**
+1. **Build** (your watch build already compiled `handlers/tree.js`; o2h's tests ran against it).
+2. **Commit the `types` submodule** (`adopt` on `TreeConfig`).
+3. **`git add`:**
+   - in assign-gingerly: `tests/tree-adopt.*`;
+   - in o2h: `tests/hydration.html`.
