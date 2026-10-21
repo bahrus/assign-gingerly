@@ -29,13 +29,68 @@ const { html, unrendered } = o2h(config, apiResponse, { pipes, managers });
 await assignFromAsync(container, { '?. =>': { do: 'builtIns.tree', adopt: true, ...config } }, { from: data, pipes, registry });
 ```
 
-With `adopt`, markers found **without state** (server-rendered or cloned markup) aren't cleared on the first run:
-1. **Tree walks the spec and the existing elements together** (map keys in order, static children, repeat items by key, switch cases, nested trees) and builds its records around them. Managers are attached on the way.
-2. **The ordinary bind then runs:** patterns, events and properties. Text that's already right isn't rewritten, and `microJoin` updates its elements in place. So nothing is recreated.
-3. **`data-pending` marks** within what was adopted are removed: those parts are complete now.
-4. **Any mismatch** (a different tag, a different number of children or items, a missing switch placeholder) **falls back to the rebuild**, with one `console.debug` saying why. A page is never left half-adopted.
+Without `adopt`, markers Tree finds **without state** (server-rendered or cloned markup) are cleared, and the tree is built fresh. With `adopt`, the first run takes the existing elements over instead:
+1. **The walk:** Tree walks the spec and the existing elements together, and builds its records (the same ones it keeps for a tree it built) around those elements. Managers are attached on the way.
+2. **The bind:** the ordinary bind then runs: patterns, events and properties. Text that's already right isn't rewritten, and `microJoin` updates its elements in place, so nothing is recreated.
+3. **The marks:** `data-pending` marks within what was adopted are removed, since those parts are complete now.
 
-Later runs, and managers' `ctx.rebind()`, then update the adopted elements in place, as for a tree Tree built itself. `adopt` is carried down to nested trees.
+**Any mismatch falls back to the rebuild**, with one `console.debug` saying why, so a page is never left half-adopted. Later runs, and managers' `ctx.rebind()`, then update the adopted elements in place, as for a tree Tree built itself. `adopt` is carried down to nested trees.
+
+#### How the walk pairs spec and markup
+
+**Slots:** the walk only looks at the nodes a spec can occupy, which it calls *slots*:
+- **elements;**
+- **`<!--?switch-->` placeholders**, which a switch rendering nothing leaves in its place.
+
+Text (including the whitespace between elements) and other comments are skipped. `slotsOf(first, end)` collects a level's slots by stepping through siblings (`firstChild` / `nextSibling`):
+- **for the tree's own level,** from the start marker to the end marker;
+- **for an element,** from its first child to its last (a `template`'s `.content`).
+
+This is the walk's innermost loop: it touches every child node once.
+
+**Pairing:** each level's slots are paired with the specs in order, using the same pure functions that decide what Tree (and o2h) renders. That way, the walk expects exactly what was rendered from that data:
+
+| Spec | What the walk expects | Mismatch |
+|---|---|---|
+| **The map** | One slot per rendered key, in `mapEntries` order (`keepNullish` and `'*'` included) | Another number of slots |
+| **An element** | An element with that tag. With `ish`, the manager is attached here, and its instance is what the subtree resolves against. | Another tag, or a placeholder |
+| **Static children** | One slot per child spec, in order | Another number of child slots |
+| **A repeat** | One slot per item from `repeatItems` (`of` and `key` resolved as when rendering), each recorded under its item's key. Or a single slot for `empty`. | Another number of slots |
+| **A switch** | The case `chooseCase` picks, adopted in the slot. Or, when nothing renders, the placeholder. | No placeholder where nothing renders |
+| **A nested tree** | Nothing at this point: its own run adopts its markers inside the element, when the element is bound | (the nested tree's own) |
+| **Own content** (text, `microJoin`) | Nothing: an element without spec children isn't paired inside | none |
+
+A mismatch anywhere aborts the whole walk for that tree, and Tree rebuilds it.
+
+**The cost** is one visit per element and per child node, plus the path resolution that repeats and switches need anyway. On the [adopt benchmark](https://github.com/bahrus/o2h/blob/baseline/demo/benchmark/adopt.html) (a directory of 100 company profiles, 12,901 elements), `adopt: true` takes about 8 ms in Chromium, against about 10 ms for building the same DOM from nothing. Parsing the HTML isn't counted in either.
+
+#### `adopt: 'pending'` (experimental): bind only what's pending
+
+`'pending'` adopts the same way (the same walk, the same fallback), but its first run binds only what the server couldn't complete:
+- **marked elements:** the elements marked [`data-pending`](#pending-marks-data-pending), and everything inside them;
+- **their ancestors**, so the bind can reach the marked elements;
+- **nested trees' hosts**, so nested trees are adopted on the first run too.
+
+Everything else keeps the server's markup as it is, unbound for now. Its records exist from the walk, so later runs and `ctx.rebind()` work as usual, and its first full bind happens on the next run.
+
+**How it works:**
+1. **Before the walk,** Tree collects the marked elements in its region and their ancestors.
+2. **During the walk,** each nested tree's host is added.
+3. **During the first run's bind,** an adopted element that isn't in that set, and isn't inside a mark, is skipped.
+4. **After that run,** the scope is dropped.
+
+**The trade-off:** it **trusts the server**. If the client's data or formatting would produce something different (a newer value, another locale or time zone), `adopt: true` corrects it on the first run. `'pending'` only corrects it when a later run reaches that element.
+
+Formatting differences go away if the server emits raw values and the client formats them, e.g. with [be-intl](https://github.com/bahrus/be-intl). Use `'pending'` when the server and the client render from the same data, and what changes on the client is behind a manager or an event, and so is marked anyway.
+
+**What it saves:** the bind of everything static. On the adopt benchmark (medians; the parse isn't counted):
+
+| Page | Elements (bound by `'pending'`) | Chromium | Firefox | WebKit |
+|---|---|---|---|---|
+| Company directory | 12,901 (601) | 8.2 → 3.6 ms | 19 → 6 ms | 14 → 7 ms |
+| Company profile | 129 (6) | 0.10 → 0.05 ms | 0.15 → 0.10 ms | 0.15 → 0.05 ms |
+
+Each cell is `adopt: true` → `adopt: 'pending'`. On a single page, either is well under a millisecond. The difference matters on large pages and slow devices. What's left in `'pending'` is mostly the walk.
 
 **What it needs:** the config and the data on the client, e.g. embedded by the page as JSON (see the [hydration benchmark](../demos/hydration-benchmark/compare.html): `JSON.parse` costs well under a millisecond for hundreds of KB), or fetched.
 

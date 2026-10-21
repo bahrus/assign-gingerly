@@ -475,3 +475,25 @@ In the Chromium profile, `slotsOf` went from 9–13% of the time to 2–4%. What
 
 - **assign-gingerly** (scratch copy, three browsers): 165 passed and 6 skipped.
 - **o2h:** 9 passed and 6 skipped.
+
+## Bruce-s Response -- Document
+
+I know it's still experimental, but can you update o2h's [readme](../../../../../../o2h/README.md) and/or [tree.md](../../../../../docs/tree.md) explaining how adopt: true and slotsOf work? 
+
+
+## Claude's Implementation Notes IV
+
+Documented in both places.
+
+- **[docs/tree.md](../../../../../docs/tree.md), "Hydration: `adopt`"** now has two subsections:
+  - **"How the walk pairs spec and markup":**
+    - what a slot is (elements and `<!--?switch-->` placeholders; text and other comments are skipped);
+    - how `slotsOf(first, end)` collects a level's slots;
+    - a table of what the walk expects for each kind of spec, and what counts as a mismatch;
+    - the cost, with the benchmark's numbers.
+  - **"`adopt: 'pending'` (experimental)":**
+    - what the first run binds (marked elements and their contents, their ancestors, nested trees' hosts);
+    - how it works, in four steps;
+    - the trade-off of trusting the server, and where be-intl fits;
+    - the benchmark table.
+- **[o2h's README](../../../../../../o2h/README.md), "Finishing on the client: hydration":** a short "How it works" (walk, bind, fallback), and a paragraph on `adopt: 'pending'`. Both link to the tree.md sections for details.
