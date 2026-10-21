@@ -70,6 +70,7 @@ import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 import { placeNodes } from '../utils/placeNodes.js';
 import { resolveRegistry } from '../utils/resolveRegistry.js';
+import { RESIDUE_ATTRIBUTE } from '../applyResidue.js';
 const DEFAULT_MARKER_NAME = 'tree';
 /**
  * Options key carrying the tree's target (an Element, ShadowRoot or other DocumentFragment)
@@ -78,6 +79,8 @@ const DEFAULT_MARKER_NAME = 'tree';
 const TREE_TARGET = Symbol('builtIns.tree target');
 /** Options key carrying the tree's compiled variant (with `compile`) down to repeats and rebinds. */
 const TREE_COMPILED = Symbol('builtIns.tree compiled');
+/** Options key: adopt existing markup found between markers without state (`adopt`), carried down to nested trees. */
+const TREE_ADOPT = Symbol('builtIns.tree adopt');
 /** Compiled variants per map object (specs are treated as immutable: replace a map to change it). */
 const compiledMaps = new WeakMap();
 /** The compiler module, loaded by TreeHandler.prepare only for `compile` configs. */
@@ -657,6 +660,121 @@ function bindCloned(node, value) {
         node.binding = false;
     }
 }
+// ── adopt: existing (e.g. server-rendered) markup ────────────────────────────
+//
+// With `adopt`, markers found without state aren't cleared: Tree walks the spec and the
+// existing elements in lockstep and builds its TreeNodes around them (attaching managers on
+// the way). The ordinary bind then does the rest (patterns, events, properties; unchanged text
+// isn't rewritten), so the markup becomes a normal Tree, rebinding in place. Any mismatch
+// (tag, count, switch placeholder) falls back to the rebuild.
+/** Markup that doesn't match the spec. */
+class AdoptMismatch extends Error {
+}
+/** The child nodes that nodes occupy: elements, and the placeholders of switches rendering nothing. */
+function slotsOf(nodes) {
+    const slots = [];
+    for (const node of nodes) {
+        if (node.nodeType === Node.ELEMENT_NODE
+            || (node.nodeType === Node.COMMENT_NODE && node.data === SWITCH_PLACEHOLDER)) {
+            slots.push(node);
+        }
+    }
+    return slots;
+}
+/** Adopt one existing node for a spec: a TreeNode around it (and its subtree), as createNode would have built. */
+function adoptNode(slot, spec, value, options, permissionProcessor) {
+    if (!slot)
+        throw new AdoptMismatch('fewer elements than the spec');
+    const root = options[TREE_TARGET];
+    const fastAllowed = fastPathAllowed(options, permissionProcessor);
+    if (isSwitch(spec)) {
+        const { caseKey, spec: chosen } = chooseCase(spec, value, (path, from) => resolveAny(path, from, options, root, fastAllowed, permissionProcessor));
+        if (chosen == null) {
+            if (slot.nodeType !== Node.COMMENT_NODE || slot.data !== SWITCH_PLACEHOLDER) {
+                throw new AdoptMismatch('a switch rendering nothing, but no placeholder');
+            }
+            const placeholder = slot;
+            const element = placeholder;
+            return {
+                tag: '', ish: undefined, element, children: [], spec, options, permissionProcessor, binding: false,
+                container: element, nested: false, switch: { caseKey, inner: undefined, placeholder },
+            };
+        }
+        const inner = adoptNode(slot, chosen, value, options, permissionProcessor);
+        return {
+            tag: '', ish: undefined, element: inner.element, children: [], spec, options, permissionProcessor, binding: false,
+            container: inner.element, nested: false, switch: { caseKey, inner, placeholder: undefined },
+        };
+    }
+    if (slot.nodeType !== Node.ELEMENT_NODE)
+        throw new AdoptMismatch('a placeholder where an element was expected');
+    const element = slot;
+    const [, tag, ish, , childSpecs, repeat, nested] = normalize(spec);
+    if (element.localName !== tag.toLowerCase())
+        throw new AdoptMismatch(`<${element.localName}> where <${tag}> was expected`);
+    const node = {
+        tag, ish, element, children: [], spec, options, permissionProcessor, binding: true, container: containerOf(element),
+        nested: nested !== undefined,
+    };
+    try {
+        const from = ish === undefined ? value : attachManager(node, ish, value);
+        // A nested tree adopts its own markers when it's bound
+        if (nested)
+            return node;
+        const { container } = node;
+        if (repeat) {
+            const { of = '?.' } = repeat;
+            const itemOptions = of === '?.' ? options : { ...options, fromStack: [...(options.fromStack ?? []), from] };
+            const keyFast = itemOptions === options ? fastAllowed : fastPathAllowed(itemOptions, permissionProcessor);
+            const stamp = repeatItems(repeat, from, (path, v, forItem) => forItem
+                ? resolveAny(path, v, itemOptions, element, keyFast, permissionProcessor)
+                : resolveAny(path, v, options, element, fastAllowed, permissionProcessor));
+            const slots = slotsOf(container.childNodes);
+            const state = { items: new Map(), empty: undefined, warned: false };
+            if (stamp.empty !== undefined) {
+                if (slots.length !== 1)
+                    throw new AdoptMismatch(`${slots.length} elements where a repeat's empty was expected`);
+                state.empty = adoptNode(slots[0], stamp.empty, from, options, permissionProcessor);
+            }
+            else {
+                if (slots.length !== stamp.items.length)
+                    throw new AdoptMismatch(`${slots.length} elements for ${stamp.items.length} repeat items`);
+                stamp.items.forEach((item, i) => state.items.set(stamp.keys[i], adoptNode(slots[i], repeat.each, item, itemOptions, permissionProcessor)));
+            }
+            node.repeat = state;
+            return node;
+        }
+        // Without spec children, the element's content is its own (text, microJoin): nothing to pair
+        if (childSpecs.length > 0) {
+            const slots = slotsOf(container.childNodes);
+            if (slots.length !== childSpecs.length)
+                throw new AdoptMismatch(`<${tag}> has ${slots.length} child elements; the spec has ${childSpecs.length}`);
+            node.children = childSpecs.map((childSpec, i) => adoptNode(slots[i], childSpec, from, options, permissionProcessor));
+        }
+    }
+    finally {
+        node.binding = false;
+    }
+    return node;
+}
+/** Adopt the markup between a tree's markers: its TreeNodes by key, or undefined (with a note) when it doesn't match. */
+function adoptTree(map, from, keepNullish, start, end, options, permissionProcessor) {
+    const nodes = new Map();
+    try {
+        const slots = slotsOf(getNodesBetweenMarkers(start, end));
+        const entries = mapEntries(map, from, keepNullish);
+        if (slots.length !== entries.length)
+            throw new AdoptMismatch(`${slots.length} elements for ${entries.length} map keys`);
+        entries.forEach(({ key, spec, value }, i) => nodes.set(key, adoptNode(slots[i], spec, value, options, permissionProcessor)));
+    }
+    catch (e) {
+        if (!(e instanceof AdoptMismatch))
+            throw e;
+        console.debug(`builtIns.tree: the existing markup doesn't match the spec (${e.message}); rebuilding`);
+        return undefined;
+    }
+    return nodes;
+}
 /** Find the tree's markers among the target's direct children. */
 function findChildMarkers(target, name) {
     const startText = `${MARKER_START_PREFIX}${name}"`;
@@ -698,6 +816,7 @@ export class TreeHandler {
         if (!(lhsTarget instanceof Element || lhsTarget instanceof DocumentFragment))
             return;
         const { map, markerName = DEFAULT_MARKER_NAME, keepNullish, aka, compile } = this.config;
+        const adopt = !!(this.config.adopt || options[TREE_ADOPT]);
         if (!map || typeof map !== 'object') {
             throw new Error('builtIns.tree: a "map" of VM keys to element specifications is required');
         }
@@ -719,14 +838,20 @@ export class TreeHandler {
         const variant = compile && compiler ? compiledVariantFor(map, nestedOptions, from, permissionProcessor) : undefined;
         // Always set, so an enclosing tree's variant doesn't carry over into a nested one
         nestedOptions[TREE_COMPILED] = variant;
+        nestedOptions[TREE_ADOPT] = adopt;
         const [start, end] = findChildMarkers(lhsTarget, markerName) ?? createMarkers(lhsTarget, markerName);
         let nodes = treeStates.get(start);
+        let adopted = false;
         if (!nodes) {
-            // Markers without state (cloned or server-rendered): Tree doesn't adopt markup, so start fresh
-            for (const node of getNodesBetweenMarkers(start, end))
-                node.remove();
-            nodes = new Map();
-            warnUnmatchedKeys(map, from);
+            // Markers without state (cloned or server-rendered): adopt the markup if asked and it matches, else start fresh
+            nodes = adopt ? adoptTree(map, from, keepNullish, start, end, nestedOptions, permissionProcessor) : undefined;
+            adopted = !!nodes;
+            if (!nodes) {
+                for (const node of getNodesBetweenMarkers(start, end))
+                    node.remove();
+                nodes = new Map();
+                warnUnmatchedKeys(map, from);
+            }
         }
         const next = new Map();
         // Which keys render, in which order: decided by the shared, pure mapEntries
@@ -744,6 +869,16 @@ export class TreeHandler {
         }
         placeInOrder(lhsTarget, [...next.values()].map(n => n.element), start);
         treeStates.set(start, next);
+        // Adopted and bound: whatever a server marked as pending (see applyResidue) is complete now
+        if (adopted) {
+            for (const node of getNodesBetweenMarkers(start, end)) {
+                if (node.nodeType !== Node.ELEMENT_NODE)
+                    continue;
+                node.removeAttribute(RESIDUE_ATTRIBUTE);
+                for (const el of node.querySelectorAll(`[${RESIDUE_ATTRIBUTE}]`))
+                    el.removeAttribute(RESIDUE_ATTRIBUTE);
+            }
+        }
     }
 }
 /** On a tree's first render, warn about map keys the VM doesn't have (likely typos). */

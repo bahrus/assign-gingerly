@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>builtIns.tree adopt Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>builtIns.tree adopt tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    import { assignFromAsync, ItemscopeRegistry } from '../index.js';
+    import { tree, each, choose } from '../DX/tree.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+    function assert(condition, message) {
+      results.push(`<div class="${condition ? 'pass' : 'fail'}">${condition ? '✓' : '✗'} ${message}</div>`);
+      condition ? passed++ : failed++;
+      if (!condition) console.error('Failed:', message);
+    }
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) console.error(`${message}\n  Expected: ${expected}\n  Actual:   ${actual}`);
+      assert(actual === expected, message);
+    }
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const elements = host => [...host.querySelectorAll('*')];
+
+    class CardManager {
+      #extra = 0;
+      #rebind;
+      constructor(el, initVals, { rebind }) { Object.assign(this, initVals); this.#rebind = rebind; }
+      bump() { this.#extra++; this.#rebind(); }
+      get label() { return `${this.name}: ${this.height + this.#extra} m`; }
+    }
+    const registry = () => ({ itemscopeRegistry: new ItemscopeRegistry({ 'card-manager': CardManager }) });
+
+    const config = {
+      aka: { _: 'textContent' },
+      map: {
+        title: tree`<h2 class="title">${'?.'}</h2>`,
+        card: tree`
+          <section ish="card-manager" class="card">
+            <span class="label">${'?.label'}</span>
+            <button type="button" @click=${{ call: 'bump' }}>Bump</button>
+          </section>`,
+        crew: tree`<ul ${each('?.', { key: '?.id', empty: tree`<li class="none">None</li>` })}><li>${'?.name'}</li></ul>`,
+        status: choose('?.phase', { hold: tree`<p class="hold">Hold: ${'?.reason'}</p>`, quiet: null }),
+        when: tree`<p>Launched ${'?.date'} with ${'?.count'} engines</p>`,
+        nested: ['div', { className: 'nested' }, { map: { inner: ['b', '?.'] } }],
+      },
+    };
+    const vm = () => ({
+      title: 'Demo',
+      card: { name: 'Falcon', height: 70 },
+      crew: [{ id: 1, name: 'Avery' }, { id: 2, name: 'Rowan' }],
+      status: { phase: 'hold', reason: 'Winds' },
+      when: { date: 'Tuesday', count: 9 },
+      nested: { inner: 'deep' },
+    });
+    const run = (host, data, extra = {}) =>
+      assignFromAsync(host, { '?. =>': { do: 'builtIns.tree', ...config, ...extra } }, { from: data, registry: registry() });
+
+    /** Markup as a server would send it: a Tree rendering, serialized (markers included), parsed into a new container. */
+    async function serverMarkup(data = vm()) {
+      const rendered = document.createElement('div');
+      await run(rendered, data);
+      const host = document.createElement('div');
+      host.innerHTML = rendered.innerHTML;
+      document.body.append(host);
+      return host;
+    }
+
+    async function runTests() {
+      // Test 1: adopt reuses the elements, and binds them (managers, events, rebind)
+      {
+        const host = await serverMarkup();
+        const before = elements(host);
+        const html = host.innerHTML;
+        await run(host, vm(), { adopt: true });
+        const after = elements(host);
+        assert(before.length === after.length && before.every((el, i) => el === after[i]), 'adopt: every element is reused (none rebuilt)');
+        assertEquals(host.innerHTML, html, 'adopt: the markup is unchanged by binding');
+        const card = host.querySelector('.card');
+        assert(card.ish instanceof CardManager, 'adopt: the manager is attached');
+        await delay(20);   // event listeners attach once their module has loaded
+        card.querySelector('button').click();
+        assertEquals(card.querySelector('.label').textContent, 'Falcon: 71 m', "adopt: an event reaches the manager, and its ctx.rebind() re-renders the adopted card");
+        host.remove();
+      }
+
+      // Test 2: later runs rebind in place (repeats move adopted items by key; switches; nested trees; microJoin)
+      {
+        const host = await serverMarkup();
+        await run(host, vm(), { adopt: true });
+        const [avery, rowan] = host.querySelectorAll('ul li');
+        const hold = host.querySelector('.hold');
+        const nestedB = host.querySelector('.nested b');
+        const whenSpan = host.querySelector('p:not(.hold) span');
+        const data = vm();
+        data.crew = [{ id: 2, name: 'Rowan K.' }, { id: 1, name: 'Avery' }];
+        data.status.reason = 'Range';
+        data.nested.inner = 'deeper';
+        data.when.date = 'Wednesday';
+        await run(host, data);
+        const items = host.querySelectorAll('ul li');
+        assert(items[0] === rowan && items[1] === avery, 'rerun: a repeat reorders its adopted items by key');
+        assertEquals(items[0].textContent, 'Rowan K.', 'rerun: … and rebinds them');
+        assert(host.querySelector('.hold') === hold && hold.textContent === 'Hold: Range', 'rerun: the adopted switch case is rebound in place');
+        assert(host.querySelector('.nested b') === nestedB && nestedB.textContent === 'deeper', 'rerun: the nested tree was adopted too');
+        assert(host.querySelector('p:not(.hold) span') === whenSpan && whenSpan.textContent === 'Wednesday', 'rerun: microJoin updates its adopted elements in place');
+        data.crew = [];
+        await run(host, data);
+        assertEquals(host.querySelector('ul').innerHTML, '<li class="none">None</li>', 'rerun: empty, as usual');
+        host.remove();
+      }
+
+      // Test 3: adopting an empty repeat and a switch that renders nothing (its placeholder)
+      {
+        const data = vm();
+        data.crew = [];
+        data.status.phase = 'quiet';
+        const host = await serverMarkup(data);
+        const none = host.querySelector('.none');
+        await run(host, data, { adopt: true });
+        assert(host.querySelector('.none') === none, "adopt: a repeat's empty element");
+        data.status.phase = 'hold';
+        await run(host, data);
+        assertEquals(host.querySelector('.hold')?.textContent, 'Hold: Winds', "adopt: a switch's placeholder, then its case on a later run");
+        host.remove();
+      }
+
+      // Test 4: data-residue marks on adopted elements are removed
+      {
+        const host = await serverMarkup();
+        host.querySelector('.card').setAttribute('data-residue', 'e1');
+        host.querySelector('button').setAttribute('data-residue', 'e2');
+        await run(host, vm(), { adopt: true });
+        assertEquals(host.querySelectorAll('[data-residue]').length, 0, 'adopt: the data-residue marks are removed');
+        host.remove();
+      }
+
+      // Test 5: markup that doesn't match falls back to a rebuild; without adopt, it's always rebuilt
+      {
+        const host = await serverMarkup();
+        host.querySelector('h2').outerHTML = '<h3 class="title">Demo</h3>';
+        const crewList = host.querySelector('ul');
+        const debug = console.debug;
+        const notes = [];
+        console.debug = (...args) => notes.push(args.join(' '));
+        try {
+          await run(host, vm(), { adopt: true });
+        } finally {
+          console.debug = debug;
+        }
+        assert(host.querySelector('h2.title') && !host.querySelector('h3'), 'mismatch: rebuilt from the spec');
+        assert(host.querySelector('ul') !== crewList, 'mismatch: … all of it (no partial adoption)');
+        assert(notes.some(n => n.includes("doesn't match the spec")), 'mismatch: one debug note says why');
+        host.remove();
+
+        const host2 = await serverMarkup();
+        const h2 = host2.querySelector('h2');
+        await run(host2, vm());
+        assert(host2.querySelector('h2') !== h2, 'without adopt: existing markup is rebuilt, as before');
+        host2.remove();
+      }
+
+      document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = failed === 0 ? 'success' : 'failure';
+    }
+
+    runTests().catch(error => {
+      console.error(error);
+      assert(false, `unexpected error: ${error.message}`);
+      document.getElementById('results').innerHTML = results.join('');
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = 'failure';
+    });
+  </script>
+</body>
+</html>

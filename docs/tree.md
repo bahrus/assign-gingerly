@@ -22,9 +22,28 @@ const { html, residue, unrendered } = o2h(config, apiResponse, { pipes, managers
 
 **Current state:**
 - o2h renders tree-demo's definition to the **same DOM** builtIns.tree builds (apart from that `itemscope`), once its residue is applied. An equivalence test checks this in Chromium, Firefox and WebKit.
-- **Not done yet:**
-  - **Hydration:** the client Tree doesn't adopt o2h's markup. Running builtIns.tree on it rebuilds it rather than rebinding it in place.
-  - **A manager's text isn't re-bound on the client.** Its events reach it, but when its `ctx.rebind()` runs, nothing re-applies the server-rendered subtree. **[`builtIns.scope`](./scope.md)** can do that: it takes over server-rendered markup scope by scope, attaching the itemscope manager the markup names and binding its itemprops (and events) against it, with the same manager classes Tree uses. Wiring o2h's output to it is the next step.
+- **Two ways to finish o2h's HTML on the client:**
+  - **The residue,** with [`applyResidue`](#finishing-server-html-on-the-client-applyresidue). No data is needed on the client, but nothing re-renders the markup: a manager's events reach it, but its `ctx.rebind()` has nothing to re-apply.
+  - **Hydration,** with [`adopt: true`](#hydration-adopt). The client runs the same tree config with the same data, and Tree **adopts** the server's elements instead of rebuilding them. Everything is then live: rebinding in place, managers re-rendering on `ctx.rebind()`, events, switches and repeats. A hydration test checks this for tree-demo's definition: all elements are reused, and the DOM is the same as Tree's own.
+
+### Hydration: `adopt`
+
+```js
+// The client, with the same config and the same data the server rendered from
+await assignFromAsync(container, { '?. =>': { do: 'builtIns.tree', adopt: true, ...config } }, { from: data, pipes, registry });
+```
+
+With `adopt`, markers found **without state** (server-rendered or cloned markup) aren't cleared on the first run:
+1. **Tree walks the spec and the existing elements together** (map keys in order, static children, repeat items by key, switch cases, nested trees) and builds its records around them. Managers are attached on the way.
+2. **The ordinary bind then runs:** patterns, events and properties. Text that's already right isn't rewritten, and `microJoin` updates its elements in place. So nothing is recreated.
+3. **`data-residue` marks** within what was adopted are removed. Hydration does everything the residue would.
+4. **Any mismatch** (a different tag, a different number of children or items, a missing switch placeholder) **falls back to the rebuild**, with one `console.debug` saying why. A page is never left half-adopted.
+
+Later runs, and managers' `ctx.rebind()`, then update the adopted elements in place, as for a tree Tree built itself. `adopt` is carried down to nested trees.
+
+**What it needs:** the config and the data on the client, e.g. embedded by the page as JSON (see the [hydration benchmark](../demos/hydration-benchmark/compare.html): `JSON.parse` costs well under a millisecond for hundreds of KB), or fetched.
+
+**With `compile`:** adopted nodes aren't paired with compiled templates, so items added later are created with `createElement` rather than cloned.
 
 ### Finishing server HTML on the client: `applyResidue`
 
@@ -555,7 +574,7 @@ Tree remembers the elements it created, keyed by its start marker. On later call
 - A key whose **structure** changed (a different tag, or a different number of children) is rebuilt; the rest stay untouched. Structure is compared structurally, so a config written inline (new objects on every call) still rebinds in place.
 - A key whose value **appears or disappears** is created or removed, in map order.
 - An element **removed or moved by other code** is rebuilt.
-- Markers found **without remembered state** (cloned or server-rendered markup) are cleared and the tree is rebuilt. Tree doesn't adopt existing markup.
+- Markers found **without remembered state** (cloned or server-rendered markup) are cleared and the tree is rebuilt, unless the config has [`adopt: true`](#hydration-adopt): then Tree adopts the existing elements when they match the spec.
 
 ### Several trees in one target
 
@@ -575,6 +594,7 @@ interface TreeConfig extends HandlerConfig {
     keepNullish?: boolean;  // default false
     aka?: Record<string, string>;  // aliases for this tree's patterns, merged over options.aka
     compile?: boolean | string;    // experimental: clone compiled templates (see below)
+    adopt?: boolean;               // adopt existing (e.g. server-rendered) markup on the first run (see Hydration)
 }
 ```
 

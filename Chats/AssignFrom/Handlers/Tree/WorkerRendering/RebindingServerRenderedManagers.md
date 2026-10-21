@@ -44,3 +44,7 @@ It's the general answer, and it's **Step 6** from the compile plan ([Step6-Adopt
 2. **The data on the client:** embedded by o2h (an option), fetched by the page, or left to the page entirely?
 3. **Adoption opt-in (`adopt: true`) at first,** or the default for markers found without state?
 4. **The residue once hydration exists:** keep both (residue for pages that don't ship data), or plan to retire it?
+
+## Bruce's Response I
+
+I'm not hugely excited about this approach, but I cn't put my finger on why, nor can I propose a better alternative.  Please proceed with A, and go with your instincts for the other questions.
