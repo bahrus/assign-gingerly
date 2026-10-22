@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>builtIns.tree snippet Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>builtIns.tree snippet tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    import { assignFromAsync } from '../index.js';
+    import { tree, each, choose, snippet } from '../DX/tree.js';
+    import { PermissionProcessor } from '../assignPermissions/PermissionProcessor.js';
+    import { strictDefaultPermissions } from '../DX/strictDefaultPermissions.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+    function assert(condition, message) {
+      results.push(`<div class="${condition ? 'pass' : 'fail'}">${condition ? '✓' : '✗'} ${message}</div>`);
+      condition ? passed++ : failed++;
+      if (!condition) console.error('Failed:', message);
+    }
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) console.error(`${message}\n  Expected: ${expected}\n  Actual:   ${actual}`);
+      assert(actual === expected, message);
+    }
+    const SVG = 'http://www.w3.org/2000/svg';
+    const snippets = {
+      logo: String.raw`<svg class="logo" viewBox="0 0 24 24"><path d="M2 2 L22 22"/></svg>`,
+      banner: String.raw`
+        <header class="banner"><strong>Example</strong></header>
+        <p class="tagline">Static, <em>never</em> rebound</p>
+      `,
+      dot: String.raw`<span class="dot">•</span> <span class="sep">|</span>`,
+    };
+    const run = (host, config, from, options = {}, permissionProcessor) =>
+      assignFromAsync(host, { '?. =>': { do: 'builtIns.tree', ...config } }, { from, snippets, ...options }, permissionProcessor);
+    const host = () => { const el = document.createElement('div'); document.body.append(el); return el; };
+    const elementsOf = el => [...el.children];
+    async function rejects(promise) {
+      try { await promise; return ''; } catch (e) { return e.message; }
+    }
+
+    const card = {
+      map: {
+        banner: snippet('banner'),
+        card: tree`<article class="card">${snippet('logo')}<h3>${'?.title'}</h3></article>`,
+      },
+    };
+
+    async function runTests() {
+      // Test 1: several roots at the map level, and a static child; SVG parsed into its namespace
+      {
+        const el = host();
+        await run(el, card, { banner: 1, card: { title: 'One' } });
+        assertEquals(elementsOf(el).map(e => e.localName).join(','), 'header,p,article', 'roots: both of the banner\'s root elements, in order, then the card');
+        const svg = el.querySelector('svg');
+        assertEquals(svg.namespaceURI, SVG, 'svg: in the SVG namespace');
+        assertEquals(svg.querySelector('path').namespaceURI, SVG, 'svg: … its contents too');
+        assertEquals(el.querySelector('article').firstElementChild, svg, 'static child: the snippet comes first in the article');
+
+        // Rerun: the snippet is never visited (other code's changes stay); the rest rebinds
+        svg.setAttribute('data-touched', '');
+        const before = [...el.querySelectorAll('*')];
+        await run(el, card, { banner: 1, card: { title: 'Two' } });
+        assertEquals(el.querySelector('h3').textContent, 'Two', 'rerun: the dynamic part rebinds');
+        const after = [...el.querySelectorAll('*')];
+        assert(before.length === after.length && before.every((e, i) => e === after[i]), 'rerun: no element rebuilt');
+        assert(svg.hasAttribute('data-touched'), 'rerun: the snippet was left alone');
+
+        // Removed by a key going nullish: all its nodes go
+        await run(el, card, { card: { title: 'Two' } });
+        assertEquals(elementsOf(el).map(e => e.localName).join(','), 'article', 'nullish key: all of the snippet\'s roots are removed');
+        el.remove();
+      }
+
+      // Test 2: a snippet with two roots as a repeat's each: placed, reordered and removed as a unit
+      {
+        const config = { map: { list: tree`<div class="list" ${each('?.', { key: '?.id' })}>${snippet('dot')}</div>` } };
+        const el = host();
+        await run(el, config, { list: [{ id: 1 }, { id: 2 }, { id: 3 }] });
+        const list = el.querySelector('.list');
+        assertEquals(list.children.length, 6, 'repeat: two roots per item');
+        assertEquals(list.textContent, '• |• |• |', 'repeat: the whitespace between a snippet\'s roots is kept');
+        const [d1, s1, d2, s2, d3, s3] = list.children;
+        await run(el, config, { list: [{ id: 3 }, { id: 1 }] });
+        const now = [...list.children];
+        assert(now.length === 4 && now[0] === d3 && now[1] === s3 && now[2] === d1 && now[3] === s1, 'repeat: items move and are removed with all their nodes');
+        assert(!d2.isConnected && !s2.isConnected, 'repeat: the removed item\'s nodes are gone');
+        el.remove();
+      }
+
+      // Test 3: a switch between a two-root snippet, an element and nothing
+      {
+        const config = { map: { mode: choose('?.', { a: snippet('banner'), b: tree`<p class="b">B</p>`, none: null }) } };
+        const el = host();
+        await run(el, config, { mode: 'a' });
+        assertEquals(elementsOf(el).map(e => e.className).join(','), 'banner,tagline', 'switch: the snippet case');
+        await run(el, config, { mode: 'b' });
+        assertEquals(elementsOf(el).map(e => e.className).join(','), 'b', 'switch: replaced by an element, both roots gone');
+        await run(el, config, { mode: 'none' });
+        assertEquals(el.children.length, 0, 'switch: nothing');
+        await run(el, config, { mode: 'a' });
+        assertEquals(elementsOf(el).map(e => e.className).join(','), 'banner,tagline', 'switch: back to the snippet');
+        el.remove();
+      }
+
+      // Test 4: another string for the same name, on a later run, replaces the instance
+      {
+        const el = host();
+        await run(el, { map: { x: snippet('logo') } }, { x: 1 });
+        const first = el.querySelector('svg');
+        await run(el, { map: { x: snippet('logo') } }, { x: 1 }, { snippets: { logo: '<b>new</b>' } });
+        assert(!first.isConnected && el.querySelector('b')?.textContent === 'new', 'source change: rebuilt from the new string');
+        el.remove();
+      }
+
+      // Test 5: refused snippets throw, naming the snippet
+      {
+        const bad = async (html, permissionProcessor) =>
+          rejects(run(host(), { map: { x: snippet('bad') } }, { x: 1 }, { snippets: { bad: html } }, permissionProcessor));
+        assert((await bad('<div><script>alert(1)<\/script></div>')).includes('<script>'), 'refused: a <script>');
+        assert((await bad('<button onclick="alert(1)">x</button>')).includes('onclick'), 'refused: an event handler attribute');
+        assert((await bad('<a href=" JavaScript:alert(1)">x</a>')).includes('javascript:'), 'refused: a javascript: URL');
+        assert((await bad('<template><img src="x" onerror="alert(1)"></template>')).includes('onerror'), 'refused: … inside a nested <template> too');
+        assert((await bad('Hello <b>there</b>')).includes('text at its top level'), 'refused: text at the top level');
+        assert((await bad('<b>a</b><!-- c -->')).includes('comment at its top level'), 'refused: a comment at the top level');
+        const missing = await rejects(run(host(), { map: { x: snippet('nope') } }, { x: 1 }));
+        assert(missing.includes('"nope"'), 'refused: a name the snippets option doesn\'t have');
+        const pp = new PermissionProcessor(strictDefaultPermissions);
+        const warn = console.warn;
+        console.warn = () => {};
+        try {
+          assert((await bad('<a href="https://elsewhere.example/">x</a>', pp)).includes('permission profile'), 'refused: what the permission profile blocks');
+          assertEquals(await bad('<a href="/page">x</a>', pp), '', '… and allowed: what it allows');
+        } finally {
+          console.warn = warn;
+        }
+        for (const el of document.querySelectorAll('body > div:not(#results):not(#test-complete)')) el.remove();
+      }
+
+      // Test 6: compile gives the same DOM, and keeps the snippet on reruns
+      {
+        const config = {
+          map: {
+            banner: snippet('banner'),
+            card: tree`<article class="card">${snippet('logo')}<h3>${'?.title'}</h3></article>`,
+            list: tree`<div class="list" ${each('?.', { key: '?.id' })}><p>${snippet('dot')}<b>${'?.id'}</b></p></div>`,
+          },
+        };
+        const vm = { banner: 1, card: { title: 'One' }, list: [{ id: 1 }, { id: 2 }] };
+        const plain = host();
+        const compiled = host();
+        await run(plain, config, vm);
+        await run(compiled, { ...config, compile: true }, vm);
+        assert(plain.isEqualNode(compiled), 'compile: the same DOM as without compile');
+        const svg = compiled.querySelector('svg');
+        await run(compiled, { ...config, compile: true }, { ...vm, card: { title: 'Two' }, list: [{ id: 2 }, { id: 1 }, { id: 3 }] });
+        assert(compiled.querySelector('svg') === svg && compiled.querySelector('h3').textContent === 'Two', 'compile: rerun keeps the snippet, rebinds the rest');
+        assertEquals([...compiled.querySelectorAll('.list b')].map(b => b.textContent).join(','), '2,1,3', 'compile: repeat items with a snippet inside');
+        assertEquals(compiled.querySelectorAll('.list .dot').length, 3, 'compile: … each with its snippet');
+        plain.remove();
+        compiled.remove();
+      }
+
+      // Test 7: adopt server markup with snippets (several roots, in a repeat, as a static child)
+      {
+        const config = {
+          map: {
+            banner: snippet('banner'),
+            card: tree`<article class="card">${snippet('logo')}<h3>${'?.title'}</h3></article>`,
+            list: tree`<div class="list" ${each('?.', { key: '?.id' })}>${snippet('dot')}</div>`,
+          },
+        };
+        const vm = { banner: 1, card: { title: 'One' }, list: [{ id: 1 }, { id: 2 }] };
+        const rendered = host();
+        await run(rendered, config, vm);
+        const server = host();
+        server.innerHTML = rendered.innerHTML;
+        const before = [...server.querySelectorAll('*')];
+        await run(server, { ...config, adopt: true }, vm);
+        const after = [...server.querySelectorAll('*')];
+        assert(before.length === after.length && before.every((e, i) => e === after[i]), 'adopt: every element is reused, snippets included');
+        assert(server.isEqualNode(rendered), 'adopt: the same DOM as builtIns.tree builds');
+        await run(server, config, { ...vm, card: { title: 'Two' }, list: [{ id: 2 }, { id: 1 }] });
+        assertEquals(server.querySelector('h3').textContent, 'Two', 'adopt: later runs rebind the rest');
+        assertEquals(server.querySelector('.list').children.length, 4, 'adopt: adopted snippet items reorder as units');
+
+        // A snippet whose roots don't match the server's elements: rebuilt, with a note
+        const mismatched = host();
+        mismatched.innerHTML = rendered.innerHTML.replace('<header class="banner">', '<div class="banner">').replace('</header>', '</div>');
+        const debug = console.debug;
+        const notes = [];
+        console.debug = (...args) => notes.push(args.join(' '));
+        try {
+          await run(mismatched, { ...config, adopt: true }, vm);
+        } finally {
+          console.debug = debug;
+        }
+        assert(notes.some(n => n.includes('snippet "banner"')), 'adopt: a snippet mismatch is noted, naming the snippet');
+        assert(mismatched.querySelector('header.banner') && !mismatched.querySelector('div.banner'), 'adopt: … and the tree is rebuilt');
+        rendered.remove();
+        server.remove();
+        mismatched.remove();
+      }
+
+      document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = failed === 0 ? 'success' : 'failure';
+    }
+
+    runTests().catch(e => {
+      console.error(e);
+      assert(false, `error: ${e.message}`);
+      document.getElementById('results').innerHTML = results.join('');
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = 'failure';
+    });
+  </script>
+</body>
+</html>

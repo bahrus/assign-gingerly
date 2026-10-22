@@ -32,10 +32,23 @@ function textPattern(text) {
     }
     return pattern;
 }
+/** Whether a specification is a snippet (`{ snippet: 'name' }`): static HTML from the `snippets` option. */
+export function isSnippet(spec) {
+    return !!spec && typeof spec === 'object' && !Array.isArray(spec) && 'snippet' in spec;
+}
+/** A snippet's HTML from the `snippets` option, trimmed (as both builtIns.tree and o2h use it); throws when it's missing. */
+export function snippetSource(spec, snippets) {
+    const html = snippets?.[spec.snippet];
+    if (typeof html !== 'string')
+        throw new Error(`builtIns.tree: snippet "${spec.snippet}" isn't in the snippets option`);
+    return html.trim();
+}
 export function normalize(spec) {
-    // Switches are resolved to a case before anything normalizes them
+    // Switches are resolved to a case, and snippets are cloned, before anything normalizes them
     if (isSwitch(spec))
         throw new Error('builtIns.tree: a switch has no element of its own to normalize');
+    if (isSnippet(spec))
+        throw new Error('builtIns.tree: a snippet has no element of its own to normalize');
     const [header, patternOrText, third] = Array.isArray(spec) ? spec : [spec];
     const pattern = typeof patternOrText === 'string' ? textPattern(patternOrText) : patternOrText;
     // The children slot: an array of static children, a repeat object ({ each, … }) or a nested tree ({ map, … })
@@ -79,8 +92,8 @@ const wildcardSpecs = new WeakMap();
  */
 export function wildcardSpecOf(map) {
     const source = map[WILDCARD];
-    // A switch keeps its cases as written (the default pattern is for a bare element)
-    if (isSwitch(source))
+    // A switch keeps its cases as written, and a snippet is static (the default pattern is for a bare element)
+    if (isSwitch(source) || isSnippet(source))
         return source;
     const cached = wildcardSpecs.get(map);
     if (cached?.source === source)

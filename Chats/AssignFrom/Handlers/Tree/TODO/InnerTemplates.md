@@ -280,3 +280,73 @@ On drop vs throw, let's go with your recommendation -- throw.
 Let's only do simple plain snippet/snippets, but where it makes sense to "prep" for holes, do so.  I want to think further about what you are proposing, but it is looking quite promising.  Go ahead and start another todo item for step 2 (holes).
 
 Please add your implementation notes below.
+
+
+## Claude's Implementation Notes
+
+Plain snippets are in, named **`snippet` / `snippets`**: the spec `{ snippet: 'name' }`, the option `snippets`, and the helper `snippet(name)` in `tree`…``. A refused snippet throws. Holes have their own TODO: [SnippetHoles.md](./SnippetHoles.md).
+
+### assign-gingerly
+
+**New:**
+
+| File | What |
+|---|---|
+| **`handlers/snippets.ts`** | Parses each distinct string once into a `<template>`, checks it, caches it (per permission processor), and clones it. |
+| **`tests/tree-snippets.html` / `.spec.ts`** | 36 cases: see Tests below. |
+
+**`handlers/snippets.ts` in detail:**
+- **Top level:** elements, and whitespace between them. Text or a comment there throws ("wrap it in an element"). This rule is what lets a snippet take exactly its root elements' slots, on the client and in server markup alike.
+- **Refused, with a throw naming the snippet and what was refused:**
+  - `<script>`, `on*` attributes, and `javascript:` URLs, including inside nested `<template>`s;
+  - with a permission processor, any attribute it blocks.
+
+**Changed:**
+
+| File | What |
+|---|---|
+| **`handlers/treeSpec.ts`** | `isSnippet`, and `snippetSource` (the trimmed HTML, shared with o2h; throws when the name is missing). `normalize` refuses snippets, as it does switches. |
+| **`handlers/tree.ts`** | Details below. |
+| **`handlers/compileTree.ts`** | A snippet gets no template of its own. Among static children it's a slot (`CompiledNode.snippet`), cloned in by `pairNodes`. The shape signature includes it. |
+| **`DX/tree.ts`** | `snippet(name)`, one spec object per name, so spec identity holds. |
+| **Types** (submodule) | `SnippetSpecification` in the `ElementSpecification` union; `CompiledNode.snippet`; `AssignFromOptions.snippets`. |
+| **`docs/tree.md`** | A "Snippets: static HTML" section, the type in "Element Specifications", and a row in the `tree`…`` table. |
+
+**`handlers/tree.ts` in detail:**
+- **A snippet's instance is one record** (`SnippetState`: the option string it came from, plus its nodes). `syncNode` returns it untouched while the option still holds the same string; another string replaces it.
+- **Several roots:** records used to have exactly one element. Small helpers (`nodesOf`, `pushNodes`, `inPlace`, `removeNode`) now place, check and remove all of a snippet's nodes, including through switch slots. They're used in the map, repeats, static children, the compile path, and switch replacement.
+- **Adoption** now walks with a **slot cursor**, so a snippet takes one slot per root element, checked by tag. The mismatch messages are much as before, plus one naming the snippet.
+- **Rebinding** never visits a snippet, including through a manager's `ctx.rebind()`.
+
+### o2h
+
+**Changes:**
+- **`o2h.ts`:** writes a snippet's HTML as is, trimmed the same way Tree trims it, from its own `snippets` option. Without a parser it doesn't count the roots, so the paths of later siblings in `unrendered` may be off (noted in the code).
+- **Types:** `O2HOptions.snippets`, in both copies.
+- **The demo definition now has a snippet:** an SVG rocket icon in the rocket card, which has a manager. So the equivalence and hydration tests, the demo and the benchmark cover a snippet inside a manager's subtree: `ctx.rebind()` re-renders the card and leaves the icon alone. They all pass `snippets` now.
+- **`tests/o2h.spec.ts`:** a new Node test, checking that the HTML is written as is and trimmed, and that a missing name throws. The demo test also checks that the icon is there.
+- **README:** a row in the options table.
+
+### Tests
+
+- **assign-gingerly** (scratch copy, three browsers): 168 passed and 6 skipped. That's the 165 from before, plus `tree-snippets` in each browser. Its 36 cases cover:
+  - several roots, at the map level and as a static child;
+  - SVG in its namespace;
+  - reruns that don't touch the snippet;
+  - a nullish key removing all of a snippet's roots;
+  - a two-root snippet as a repeat's `each`, reordered and removed as a unit;
+  - a switch between a snippet, an element and nothing;
+  - a changed source rebuilding;
+  - every refusal, and the permission profile (refusing an off-domain `href`, allowing `/page`);
+  - `compile` giving the same DOM;
+  - `adopt` reusing every element, and a mismatch naming the snippet.
+- **o2h, browser tests** (workspace mode, against the sibling): 6 passed.
+- **o2h, Node tests:** 4 passed, run in a scratch copy whose `node_modules/assign-gingerly` points at the new build.
+
+### For you
+
+- **o2h's Node tests need the new assign-gingerly.** o2h's own `node_modules/assign-gingerly` is still the earlier 0.0.102, without `snippet` / `isSnippet`. Its Node tests and its `tsc` fail until a new version is published and installed: bump the version, publish, then update o2h's dependency. The browser tests are fine in the workspace.
+- **New files to add:**
+  - `handlers/snippets.ts`, `tests/tree-snippets.html`, `tests/tree-snippets.spec.ts`;
+  - `Chats/AssignFrom/Handlers/Tree/TODO/SnippetHoles.md` (and `AdoptSignatureCheck.md` from earlier).
+- **The types submodules** (both repos) need their own commits.

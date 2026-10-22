@@ -174,12 +174,14 @@ type ElementSpecification =
     | Header
     | [Header, Pattern | string]
     | [Header, Pattern | string, ElementSpecification[] | Repeat | NestedTree]   // static children, a repeat (see Arrays) or a nested tree (see Nested Trees)
-    | Switch;                                                                      // one of several specifications, picked by the data (see Switches)
+    | Switch                                                                       // one of several specifications, picked by the data (see Switches)
+    | Snippet;                                                                     // static HTML from the snippets option (see Snippets)
 
 type Header = tagName | { tag: tagName; ish?: string | ManagerClass };   // see Itemscope Managers below
 type Repeat = { each: ElementSpecification; of?: string; key?: string; empty?: ElementSpecification };
 type NestedTree = { map: Record<string, ElementSpecification>; markerName?: string; keepNullish?: boolean; aka?: Record<string, string>; compile?: boolean };
 type Switch = { switch: string; cases: Record<string, ElementSpecification | null>; default?: ElementSpecification | null };
+type Snippet = { snippet: string };
 ```
 
 - **The pattern** is an [assignFrom](./assignFrom.md) pattern applied to the created element, with `from` set to **the key's VM value**. So `'?.small'` above reads `vm.patch.small`.
@@ -279,6 +281,7 @@ The type can also come from elsewhere: `@typedef {import('./launch-api.js').Laun
 | `<p itemscope>Launched ${p.date}</p>` | a `microJoin` whose values have props: `{ prop: 'date', val: '?.date' }` (see below) |
 | `` ${tree`…`} `` as content | a child element (composition) |
 | `${choose(on, cases, fallback)}` as content, or as a whole map value | a [switch](#switches) (`{ switch, cases, default }`) |
+| `${snippet(name)}` as content, or as a whole map value | a [snippet](#snippets-static-html) (`{ snippet: name }`) |
 | `${{ '_ ?=': […], … }}` in attribute position | merged into the pattern: for keys markup can't express (ternaries, handlers, sync ops) |
 | `${null}`, `${undefined}`, `${false}`, `${''}` as content | nothing (e.g. an optional child) |
 
@@ -476,6 +479,58 @@ person: ['section', { className: 'card' }, {
 - **Rebinding:** the nested tree keeps its own state, between its own markers inside the element, so later calls rebind it in place. Switching a key between static children, a repeat and a nested tree rebuilds the element.
 - **Synchronous**, always. A nested ` =>` builtIns.tree is synchronous too, once `tree.js` is loaded, which it always is while a tree is running. (` =>` handlers in general run synchronously when they can: see [sync ops](./sync-ops.md).)
 - **`compile`:** an enclosing `compile` tree clones the element and renders the nested tree at bind time. The nested tree's own `compile` only takes effect once the compiler is loaded, for example by an enclosing `compile` tree.
+
+## Snippets: static HTML
+
+A **snippet** is a piece of static HTML: an SVG icon, a legal footer, a static table header. The config names it, and the `snippets` option supplies the HTML:
+
+```JavaScript
+await assignFromAsync(container, {
+    '?. =>': {
+        do: 'builtIns.tree',
+        map: {
+            banner: { snippet: 'banner' },                       // a whole map value
+            card: ['article', {}, [
+                { snippet: 'logo' },                             // a static child
+                ['h3', '?.title'],
+            ]],
+        },
+    },
+}, {
+    from: vm,
+    snippets: {
+        logo: String.raw`<svg viewBox="0 0 24 24"><path d="M2 2 L22 22"/></svg>`,
+        banner: String.raw`
+            <header class="banner"><strong>Example</strong></header>
+            <p class="tagline">Two root elements are fine</p>`,
+    },
+});
+```
+
+With `` tree`…` ``, use **`snippet(name)`**, as content or as a whole map value:
+
+```JavaScript
+card: tree`<article>${snippet('logo')}<h3>${'?.title'}</h3></article>`,
+```
+
+**Where it goes:** `{ snippet: 'name' }` goes anywhere an element specification goes: a map value, a static child, a repeat's `each` or `empty`, or a switch case.
+
+**What happens:**
+- **Parsed once** per distinct string, by the browser's HTML parser, into a `<template>`, then **cloned** for each instance. Because the browser parses it, **SVG and MathML get their namespaces**. Tree's own `createElement` doesn't do that yet.
+- **One record per instance,** holding all its nodes, and **never visited again**. Later runs skip it, so other code may change it freely. If the `snippets` option holds another string under that name on a later run, the instance is replaced.
+- **Several root elements** are fine. The top level may only hold elements and the whitespace between them: no text, no comments. Wrap text in an element.
+- **Checked when parsed,** and a refused snippet **throws**, naming it:
+  - no `<script>`, no `on*` event handler attributes, and no `javascript:` URLs, including inside nested `<template>`s;
+  - with a permission processor, every attribute must pass it, as Tree's own attribute writes do.
+- **Missing names** throw on first render.
+
+**Why the HTML is in the options, not the config:** the config may be JSON loaded from elsewhere, and the data comes from an API. Markup only comes from the page's own code. Snippets are author content, never data.
+
+**`compile`:** a snippet is a template already. Among static children, it's cloned into its parent's clone when that's created.
+
+**Hydration (`adopt`):** a snippet's root elements are matched by tag, in order, and adopted without descending into them. o2h writes the snippet's HTML as is, trimmed, from its own `snippets` option.
+
+**Next:** *holes*, dynamic parts inside a snippet, are planned (see [Chats/AssignFrom/Handlers/Tree/TODO/SnippetHoles.md](../Chats/AssignFrom/Handlers/Tree/TODO/SnippetHoles.md)).
 
 ## Itemscope Managers as View Models
 

@@ -43,6 +43,10 @@
  * different case replaces the previous one in its slot. When nothing renders, a placeholder
  * comment keeps the slot, so the switch's siblings and parent aren't rebuilt.
  *
+ * Snippets: `{ snippet: 'name' }` anywhere a specification goes renders static HTML from the
+ * `snippets` option (see handlers/snippets.ts): parsed and checked once per string, cloned per
+ * instance, possibly several root elements, held by one node that later calls never visit.
+ *
  * Experimental `compile` option: elements are created by cloning templates compiled from
  * the map (static parts baked in) instead of createElement; see "compile: clone-and-bind" below.
  *
@@ -65,7 +69,8 @@ import { assignFrom, categorizeKeys, handleSpreads, SUBSTITUTION_VARS } from '..
 import { applyAttribute, assignGingerly, tryAssignTo } from '../assignGingerly.js';
 import { getValue, getValues } from '../resolve/getValues.js';
 import { withEventKeys } from './eventKeys.js';
-import { chooseCase, DEFAULT_CASE, isLiteralString, isSwitch, mapEntries, normalize, repeatItems, WILDCARD } from './treeSpec.js';
+import { chooseCase, DEFAULT_CASE, isLiteralString, isSnippet, isSwitch, mapEntries, normalize, repeatItems, WILDCARD } from './treeSpec.js';
+import { cloneSnippet, parsedSnippet } from './snippets.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END, PENDING_ATTRIBUTE } from '../markerUtils.js';
 import { placeNodes } from '../utils/placeNodes.js';
@@ -89,6 +94,43 @@ let compiler;
 let warnedNoCompiler = false;
 /** The comment holding an empty switch's slot. */
 const SWITCH_PLACEHOLDER = '?switch';
+// ── A node's DOM nodes: its element, or a snippet's several (also through switch slots) ──
+/** A snippet's nodes, when the node is (or a switch slot currently renders) a snippet. */
+function snippetNodes(node) {
+    for (let at = node; at; at = at.switch?.inner) {
+        if (at.snippet)
+            return at.snippet.nodes;
+    }
+    return undefined;
+}
+/** Append a node's DOM nodes to `out`. */
+function pushNodes(node, out) {
+    const nodes = snippetNodes(node);
+    if (nodes)
+        out.push(...nodes);
+    else
+        out.push(node.element);
+}
+/** A node's DOM nodes. */
+function nodesOf(node) {
+    const out = [];
+    pushNodes(node, out);
+    return out;
+}
+/** Whether all of a node's DOM nodes are still children of `parent` (not removed or moved by other code). */
+function inPlace(node, parent) {
+    const nodes = snippetNodes(node);
+    return nodes ? nodes.every(n => n.parentNode === parent) : node.element.parentNode === parent;
+}
+/** Remove a node's DOM nodes. */
+function removeNode(node) {
+    const nodes = snippetNodes(node);
+    if (nodes)
+        for (const n of nodes)
+            n.remove();
+    else
+        node.element.remove();
+}
 /** Created nodes per tree, keyed by the tree's start marker. */
 const treeStates = new WeakMap();
 /** Whether a pattern only has plain keys, so it can skip assignFrom's key categorization. */
@@ -325,7 +367,7 @@ function attachManager(node, ish, value) {
     element.ish = value;
     return element.ish;
 }
-/** Place elements as the container's first children, in order, moving only the ones out of place. */
+/** Place nodes as the container's first children, in order, moving only the ones out of place. */
 function placeChildren(container, elements) {
     placeNodes(container, elements, container.firstChild);
 }
@@ -359,23 +401,25 @@ function bindRepeat(node, repeat, from) {
         const itemKey = keys[index];
         let itemNode = state.items.get(itemKey);
         // Removed or moved by other code: rebuild
-        if (itemNode && itemNode.element.parentNode !== container)
+        if (itemNode && !inPlace(itemNode, container))
             itemNode = undefined;
         next.set(itemKey, syncNode(itemNode, each, items[index], itemOptions, permissionProcessor, eachTemplate));
     }
     for (const [itemKey, itemNode] of state.items) {
         if (next.get(itemKey) !== itemNode && itemNode.element.parentNode === container)
-            itemNode.element.remove();
+            removeNode(itemNode);
     }
     state.items = next;
-    let elements = [...next.values()].map(n => n.element);
+    let elements = [];
+    for (const itemNode of next.values())
+        pushNodes(itemNode, elements);
     if (empty !== undefined) {
-        const current = state.empty?.element.parentNode === container ? state.empty : undefined;
+        const current = state.empty && inPlace(state.empty, container) ? state.empty : undefined;
         state.empty = syncNode(current, empty, from, options, permissionProcessor, emptyTemplate);
-        elements = [state.empty.element];
+        elements = nodesOf(state.empty);
     }
     else if (state.empty) {
-        state.empty.element.remove();
+        removeNode(state.empty);
         state.empty = undefined;
     }
     placeChildren(container, elements);
@@ -416,14 +460,14 @@ function bindContent(node, pattern, childSpecs, repeat, nested, from) {
     node.children = childSpecs.map((childSpec, i) => {
         const child = syncNode(children[i], childSpec, from, options, permissionProcessor);
         if (child !== children[i])
-            children[i].element.remove();
-        if (child.element.parentNode !== container)
+            removeNode(children[i]);
+        if (!inPlace(child, container))
             misplaced = true;
         return child;
     });
     // A rebuilt child, or a pattern that replaced the element's content (e.g. textContent)
     if (misplaced)
-        container.append(...node.children.map(c => c.element));
+        container.append(...node.children.flatMap(nodesOf));
 }
 /** A manager's ctx.rebind(): re-apply the node's subtree against the manager instance. */
 function rebindNode(node) {
@@ -471,10 +515,16 @@ function syncSwitch(node, spec, value, options, permissionProcessor, compiled) {
             container: element, nested: false, switch: { caseKey, inner, placeholder },
         };
     }
-    // Another case (or a rebuilt one) takes the previous element's place
-    const { element: old } = node;
-    if (old !== element && old.parentNode)
-        old.replaceWith(element);
+    // Another case (or a rebuilt one) takes the previous one's place (all of a snippet's nodes, either way).
+    // The state still holds the previous case here, so nodesOf(node) is what's in the DOM now.
+    const oldNodes = nodesOf(node);
+    const newNodes = inner ? nodesOf(inner) : [placeholder];
+    if (oldNodes[0] !== newNodes[0] && oldNodes[0].parentNode) {
+        oldNodes[0].before(...newNodes);
+        for (const old of oldNodes)
+            if (!newNodes.includes(old))
+                old.remove();
+    }
     Object.assign(node, { element, container: element, spec, options, permissionProcessor });
     Object.assign(state, { caseKey, inner, placeholder });
     return node;
@@ -482,6 +532,8 @@ function syncSwitch(node, spec, value, options, permissionProcessor, compiled) {
 function createNode(spec, value, options, permissionProcessor, template) {
     if (isSwitch(spec))
         return syncSwitch(undefined, spec, value, options, permissionProcessor, template);
+    if (isSnippet(spec))
+        return createSnippet(spec, options, permissionProcessor);
     // With `compile`: clone the template, as long as it was compiled from this very spec
     if (template && 'node' in template && template.node.spec === spec) {
         const variant = options[TREE_COMPILED];
@@ -506,7 +558,10 @@ function createNode(spec, value, options, permissionProcessor, template) {
         const { container } = node;
         node.children = childSpecs.map(childSpec => {
             const child = createNode(childSpec, from, options, permissionProcessor);
-            container.appendChild(child.element);
+            if (child.snippet)
+                container.append(...child.snippet.nodes);
+            else
+                container.appendChild(child.element);
             return child;
         });
     }
@@ -515,6 +570,21 @@ function createNode(spec, value, options, permissionProcessor, template) {
     }
     return node;
 }
+/** A snippet's instance: its template (parsed and checked once per string) cloned, held by one node that's never bound. */
+function createSnippet(spec, options, permissionProcessor) {
+    const target = options[TREE_TARGET];
+    const doc = target?.ownerDocument ?? document;
+    const parsed = parsedSnippet(spec, options, permissionProcessor, doc);
+    return snippetNode(spec, cloneSnippet(parsed, doc), options, permissionProcessor);
+}
+/** The node holding a snippet's nodes (cloned, or adopted from server markup). */
+function snippetNode(spec, nodes, options, permissionProcessor) {
+    const element = nodes.find(n => n.nodeType === Node.ELEMENT_NODE);
+    return {
+        tag: '', ish: undefined, element, children: [], spec, options, permissionProcessor, binding: false,
+        container: element, nested: false, snippet: { source: options.snippets[spec.snippet], nodes },
+    };
+}
 /**
  * Rebind an existing node in place, or create it when there's none or its
  * structure (tag, manager, child count) no longer matches the spec.
@@ -522,8 +592,14 @@ function createNode(spec, value, options, permissionProcessor, template) {
 function syncNode(node, spec, value, options, permissionProcessor, template) {
     if (isSwitch(spec))
         return syncSwitch(node?.switch ? node : undefined, spec, value, options, permissionProcessor, template);
+    if (isSnippet(spec)) {
+        // Static: the same source stays as it is (never visited); another one replaces it
+        if (node?.snippet && node.snippet.source === options.snippets?.[spec.snippet])
+            return node;
+        return createSnippet(spec, options, permissionProcessor);
+    }
     const [, tag, ish, pattern, childSpecs, repeat, nested] = normalize(spec);
-    if (!node || node.switch || node.tag !== tag || node.ish !== ish || node.children.length !== childSpecs.length
+    if (!node || node.switch || node.snippet || node.tag !== tag || node.ish !== ish || node.children.length !== childSpecs.length
         || !!node.repeat !== !!repeat || node.nested !== (nested !== undefined)) {
         return createNode(spec, value, options, permissionProcessor, template);
     }
@@ -613,6 +689,15 @@ function pairNodes(compiled, element, options, permissionProcessor) {
     };
     let child = container.firstElementChild;
     for (const childCompiled of compiled.children) {
+        if (childCompiled.snippet !== undefined) {
+            // A snippet has no element in the template: its own template is cloned in here
+            const snippet = createSnippet(childCompiled.spec, options, permissionProcessor);
+            for (const n of snippet.snippet.nodes)
+                container.insertBefore(n, child);
+            snippet.compiled = childCompiled;
+            node.children.push(snippet);
+            continue;
+        }
         if (childCompiled.switch) {
             // A switch has no element in the template: hold its slot with a placeholder until it's bound
             const placeholder = element.ownerDocument.createComment(SWITCH_PLACEHOLDER);
@@ -633,6 +718,9 @@ function pairNodes(compiled, element, options, permissionProcessor) {
 /** Bind a freshly cloned node and its subtree, as createNode does for a created one. */
 function bindCloned(node, value) {
     const { compiled, element, ish, options, permissionProcessor } = node;
+    // A snippet is static: nothing to bind
+    if (node.snippet)
+        return;
     if (compiled.switch) {
         // Renders its case in place of the placeholder (cloned from the case's own template)
         syncSwitch(node, compiled.switch.spec, value, options, permissionProcessor, compiled.switch);
@@ -657,8 +745,8 @@ function bindCloned(node, value) {
         for (const child of children)
             bindCloned(child, from);
         // A dynamic pattern that replaced the element's content (e.g. textContent): put the children back after it
-        if (children.some(child => child.element.parentNode !== container)) {
-            container.append(...children.map(child => child.element));
+        if (children.some(child => !inPlace(child, container))) {
+            container.append(...children.flatMap(nodesOf));
         }
     }
     finally {
@@ -688,10 +776,42 @@ function slotsOf(first, end = null) {
     }
     return slots;
 }
-/** Adopt one existing node for a spec: a TreeNode around it (and its subtree), as createNode would have built. */
-function adoptNode(slot, spec, value, options, permissionProcessor) {
-    if (!slot)
+/** Check that a level's specs took all its slots (taking more than there are throws in adoptNode). */
+function allTaken({ slots, at }, what) {
+    if (at !== slots.length)
+        throw new AdoptMismatch(`${slots.length} elements for ${what}`);
+}
+/**
+ * Adopt the existing node(s) at the cursor for a spec: a TreeNode around them (and their
+ * subtree), as createNode would have built, advancing the cursor past them.
+ */
+function adoptNode(cursor, spec, value, options, permissionProcessor) {
+    const { slots } = cursor;
+    if (cursor.at >= slots.length)
         throw new AdoptMismatch('fewer elements than the spec');
+    if (isSnippet(spec)) {
+        // Its root elements, by tag, in the next slots (and the whitespace between them); never bound
+        const { tags } = parsedSnippet(spec, options, permissionProcessor, slots[cursor.at].ownerDocument);
+        const first = cursor.at;
+        tags.forEach((tag, k) => {
+            const slot = slots[first + k];
+            if (!slot)
+                throw new AdoptMismatch('fewer elements than the spec');
+            const found = slot.nodeType === Node.ELEMENT_NODE ? slot.localName : 'a placeholder';
+            if (found !== tag)
+                throw new AdoptMismatch(`<${found}> where snippet "${spec.snippet}" has <${tag}>`);
+        });
+        cursor.at += tags.length;
+        const last = slots[cursor.at - 1];
+        const nodes = [];
+        for (let n = slots[first]; n; n = n.nextSibling) {
+            nodes.push(n);
+            if (n === last)
+                break;
+        }
+        return snippetNode(spec, nodes, options, permissionProcessor);
+    }
+    const slot = slots[cursor.at];
     if (isSwitch(spec)) {
         const root = options[TREE_TARGET];
         const fastAllowed = fastPathAllowed(options, permissionProcessor);
@@ -700,6 +820,7 @@ function adoptNode(slot, spec, value, options, permissionProcessor) {
             if (slot.nodeType !== Node.COMMENT_NODE || slot.data !== SWITCH_PLACEHOLDER) {
                 throw new AdoptMismatch('a switch rendering nothing, but no placeholder');
             }
+            cursor.at++;
             const placeholder = slot;
             const element = placeholder;
             return {
@@ -707,7 +828,7 @@ function adoptNode(slot, spec, value, options, permissionProcessor) {
                 container: element, nested: false, switch: { caseKey, inner: undefined, placeholder },
             };
         }
-        const inner = adoptNode(slot, chosen, value, options, permissionProcessor);
+        const inner = adoptNode(cursor, chosen, value, options, permissionProcessor);
         return {
             tag: '', ish: undefined, element: inner.element, children: [], spec, options, permissionProcessor, binding: false,
             container: inner.element, nested: false, switch: { caseKey, inner, placeholder: undefined },
@@ -715,6 +836,7 @@ function adoptNode(slot, spec, value, options, permissionProcessor) {
     }
     if (slot.nodeType !== Node.ELEMENT_NODE)
         throw new AdoptMismatch('a placeholder where an element was expected');
+    cursor.at++;
     const element = slot;
     const [, tag, ish, , childSpecs, repeat, nested] = normalize(spec);
     if (element.localName !== tag.toLowerCase())
@@ -741,27 +863,24 @@ function adoptNode(slot, spec, value, options, permissionProcessor) {
             const stamp = repeatItems(repeat, from, (path, v, forItem) => forItem
                 ? resolveAny(path, v, itemOptions, element, keyFast, permissionProcessor)
                 : resolveAny(path, v, options, element, fastAllowed, permissionProcessor));
-            const slots = slotsOf(container.firstChild);
+            const inner = { slots: slotsOf(container.firstChild), at: 0 };
             const state = { items: new Map(), empty: undefined, warned: false };
             if (stamp.empty !== undefined) {
-                if (slots.length !== 1)
-                    throw new AdoptMismatch(`${slots.length} elements where a repeat's empty was expected`);
-                state.empty = adoptNode(slots[0], stamp.empty, from, options, permissionProcessor);
+                state.empty = adoptNode(inner, stamp.empty, from, options, permissionProcessor);
+                allTaken(inner, "a repeat's empty");
             }
             else {
-                if (slots.length !== stamp.items.length)
-                    throw new AdoptMismatch(`${slots.length} elements for ${stamp.items.length} repeat items`);
-                stamp.items.forEach((item, i) => state.items.set(stamp.keys[i], adoptNode(slots[i], repeat.each, item, itemOptions, permissionProcessor)));
+                stamp.items.forEach((item, i) => state.items.set(stamp.keys[i], adoptNode(inner, repeat.each, item, itemOptions, permissionProcessor)));
+                allTaken(inner, `${stamp.items.length} repeat items`);
             }
             node.repeat = state;
             return node;
         }
         // Without spec children, the element's content is its own (text, microJoin): nothing to pair
         if (childSpecs.length > 0) {
-            const slots = slotsOf(container.firstChild);
-            if (slots.length !== childSpecs.length)
-                throw new AdoptMismatch(`<${tag}> has ${slots.length} child elements; the spec has ${childSpecs.length}`);
-            node.children = childSpecs.map((childSpec, i) => adoptNode(slots[i], childSpec, from, options, permissionProcessor));
+            const inner = { slots: slotsOf(container.firstChild), at: 0 };
+            node.children = childSpecs.map(childSpec => adoptNode(inner, childSpec, from, options, permissionProcessor));
+            allTaken(inner, `<${tag}>'s ${childSpecs.length} child specs`);
         }
     }
     finally {
@@ -773,11 +892,11 @@ function adoptNode(slot, spec, value, options, permissionProcessor) {
 function adoptTree(map, from, keepNullish, start, end, options, permissionProcessor) {
     const nodes = new Map();
     try {
-        const slots = slotsOf(start.nextSibling, end);
+        const cursor = { slots: slotsOf(start.nextSibling, end), at: 0 };
         const entries = mapEntries(map, from, keepNullish);
-        if (slots.length !== entries.length)
-            throw new AdoptMismatch(`${slots.length} elements for ${entries.length} map keys`);
-        entries.forEach(({ key, spec, value }, i) => nodes.set(key, adoptNode(slots[i], spec, value, options, permissionProcessor)));
+        for (const { key, spec, value } of entries)
+            nodes.set(key, adoptNode(cursor, spec, value, options, permissionProcessor));
+        allTaken(cursor, `${entries.length} map keys`);
     }
     catch (e) {
         if (!(e instanceof AdoptMismatch))
@@ -898,16 +1017,19 @@ export class TreeHandler {
         for (const { key, spec, value, templateKey } of mapEntries(map, from, keepNullish)) {
             let node = nodes.get(key);
             // Removed or moved by other code: rebuild
-            if (node && node.element.parentNode !== lhsTarget)
+            if (node && !inPlace(node, lhsTarget))
                 node = undefined;
             const template = compiledEntry(nestedOptions, templateKey);
             next.set(key, syncNode(node, spec, value, nestedOptions, permissionProcessor, template));
         }
         for (const [key, node] of nodes) {
             if (next.get(key) !== node && node.element.parentNode === lhsTarget)
-                node.element.remove();
+                removeNode(node);
         }
-        placeInOrder(lhsTarget, [...next.values()].map(n => n.element), start);
+        const placed = [];
+        for (const node of next.values())
+            pushNodes(node, placed);
+        placeInOrder(lhsTarget, placed, start);
         treeStates.set(start, next);
         if (pending)
             pending.active = false;

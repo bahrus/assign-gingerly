@@ -19,6 +19,7 @@
  * | `<p itemscope>…${p.date}…</p>`       | microJoin with `{ prop: 'date', val: '?.date' }`      |
  * | `${tree`…`}` as content              | a child element (composition)                         |
  * | `${choose(on, cases, fallback)}`     | a switch `{ switch, cases, default }` (one child)     |
+ * | `${snippet('name')}`                | a snippet `{ snippet: 'name' }` (static HTML)         |
  *
  * `${…}` values may be `?.` strings or `paths()` proxies (converted to their path).
  * Whitespace-only text between elements is dropped, and an element's content is trimmed
@@ -47,7 +48,7 @@
 
 import { pathOf } from './paths.js';
 import type {
-    ChooseCases, EachDirective, EachOptions, ElementSpecification, Pattern, SwitchSpecification, TreeTemplateLocation,
+    ChooseCases, EachDirective, EachOptions, ElementSpecification, Pattern, SnippetSpecification, SwitchSpecification, TreeTemplateLocation,
     TreeAnalysis, TreeTemplateElement, TreeTemplateStrings,
 } from '../types/assign-gingerly/treeTypes.js';
 
@@ -140,6 +141,22 @@ export function choose(on: any, cases: ChooseCases, fallback?: ElementSpecificat
         list.unshift(spec);
         list.length = Math.min(list.length, CHOOSE_CACHE_SIZE);
         chooseCache.set(path, list);
+    }
+    return spec;
+}
+
+/** One snippet spec per name, so the same name returns the same object (as tree`…` does). */
+const snippetSpecs = new Map<string, SnippetSpecification>();
+
+/**
+ * Static HTML, by name, as content: `${snippet('logo')}`, or as a whole map value. Produces
+ * `{ snippet: 'logo' }`; the HTML comes from the `snippets` option (see builtIns.tree).
+ */
+export function snippet(name: string): SnippetSpecification {
+    let spec = snippetSpecs.get(name);
+    if (!spec) {
+        snippetSpecs.set(name, spec = { snippet: name });
+        treeResults.add(spec);
     }
     return spec;
 }

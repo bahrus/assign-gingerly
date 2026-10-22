@@ -34,7 +34,7 @@
 
 import { getValue, getValues, isEventBinding, isReferenceString } from '../resolve/getValues.js';
 import { planMicroJoin } from '../syncOps/microJoin.js';
-import { checkSwitch, isLiteralString, isSwitch, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
+import { checkSwitch, isLiteralString, isSnippet, isSwitch, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
 import type { GetValuesOptions } from '../types/assign-gingerly/types.js';
 import type {
     CompiledNode, CompiledSwitch, CompiledTemplate, CompiledTree, CompileTreeOptions, ElementSpecification, Pattern,
@@ -84,6 +84,8 @@ export function compileTree(config: Pick<TreeConfig, 'map' | 'aka'>, options: Co
 }
 
 function compileTemplate(id: string, spec: ElementSpecification, sample: Sample, ctx: CompileContext): void {
+    // A snippet is its own template already (parsed once from its HTML, at runtime): no template here
+    if (isSnippet(spec)) return;
     if (isSwitch(spec)) {
         ctx.switches[id] = compileSwitch(id, spec, sample, ctx);
         return;
@@ -127,6 +129,11 @@ function compileNode(
         return [element, node];
     }
     for (const childSpec of childSpecs) {
+        if (isSnippet(childSpec)) {
+            // No element in this template: the snippet's own template is cloned in when this one is
+            node.children.push({ spec: childSpec, tag: '', children: [], snippet: childSpec.snippet });
+            continue;
+        }
         if (isSwitch(childSpec)) {
             // No element in this template: a slot, with each case in its own template
             const compiledSwitch = compileSwitch(`${templateId}>${counter.index++}`, childSpec, nodeSample, ctx);
@@ -358,7 +365,8 @@ export function toHTML({ tag, attrs, content }: TemplateElement): string {
 }
 
 /** The node tree's shape: tags, managers, repeat references and nested trees. */
-function shapeOf({ tag, ish, children, repeat, nested, switch: compiledSwitch }: CompiledNode): string {
+function shapeOf({ tag, ish, children, repeat, nested, switch: compiledSwitch, snippet }: CompiledNode): string {
+    if (snippet !== undefined) return `{snippet:${snippet}}`;
     if (compiledSwitch) return `{switch:${Object.values(compiledSwitch.cases).join('|')}|${compiledSwitch.default ?? ''}}`;
     let shape = tag;
     if (ish !== undefined) shape += `:${typeof ish === 'string' ? ish : ish.is ?? ish.name}`;
