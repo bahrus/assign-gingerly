@@ -217,3 +217,194 @@ export function repeatItems(repeat: RepeatSpecification, value: any, resolve: Tr
     if (items.length === 0 && empty !== undefined) result.empty = empty;
     return result;
 }
+
+// ── Snippet holes without a DOM (for server rendering) ───────────────────────
+
+/**
+ * A hole found by snippetParts: the `data-hole` element, with its other attributes (values
+ * decoded), and its parts as written, so an unfilled hole can be written back unchanged
+ * (without `data-hole`, as builtIns.tree's clone has it).
+ */
+export interface SnippetHolePart {
+    hole: string;
+    /** The tag name, as written */
+    tag: string;
+    /** Its attributes other than data-hole, in order, values decoded */
+    attrs: [string, string][];
+    /** Its start tag, without data-hole */
+    open: string;
+    /** Its content: the fallback, kept unless the hole is filled with content */
+    fallback: string;
+    /** Its end tag ('' for a void or self-closed element) */
+    close: string;
+}
+
+/** A snippet split at its holes: static HTML (as written), and holes. */
+export type SnippetPart = string | SnippetHolePart;
+
+const HOLE = 'data-hole';
+const VOID_ELEMENTS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+const RAW_TEXT_ELEMENTS = new Set(['script', 'style', 'textarea', 'title']);
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+const TAG_NAME = /[A-Za-z][^\s/>]*/y;
+const ATTR_NAME = /[^\s/>=]+/y;
+const UNQUOTED = /[^\s>]*/y;
+
+/** Decode the character references attribute values commonly hold (numeric, and a few named ones). */
+function decodeEntities(text: string): string {
+    return text.replace(/&(#[xX][0-9a-fA-F]+|#\d+|[A-Za-z]+);/g, (whole, ref: string) => {
+        if (ref[0] !== '#') return ENTITIES[ref] ?? whole;
+        return String.fromCodePoint(ref[1] === 'x' || ref[1] === 'X' ? parseInt(ref.slice(2), 16) : parseInt(ref.slice(1), 10));
+    });
+}
+
+interface Token {
+    kind: 'start' | 'end';
+    name: string;
+    start: number;
+    end: number;
+    /** With the whitespace before each attribute, so one can be cut out */
+    attrs: { name: string; value: string; start: number; end: number }[];
+    /** A void element, or `/>` */
+    closed: boolean;
+}
+
+const match = (re: RegExp, text: string, at: number) => {
+    re.lastIndex = at;
+    return re.exec(text)?.[0];
+};
+
+/** Start and end tags, in order, skipping comments, doctypes and raw text (style, textarea, title). */
+function* tokens(html: string): Generator<Token> {
+    let i = 0;
+    while (true) {
+        const lt = html.indexOf('<', i);
+        if (lt < 0) return;
+        if (html.startsWith('<!--', lt)) {
+            const e = html.indexOf('-->', lt + 4);
+            i = e < 0 ? html.length : e + 3;
+            continue;
+        }
+        if (html[lt + 1] === '!' || html[lt + 1] === '?') {
+            const e = html.indexOf('>', lt);
+            i = e < 0 ? html.length : e + 1;
+            continue;
+        }
+        const isEnd = html[lt + 1] === '/';
+        const nameAt = lt + (isEnd ? 2 : 1);
+        const name = match(TAG_NAME, html, nameAt);
+        if (!name) {
+            // A '<' in text
+            i = lt + 1;
+            continue;
+        }
+        let p = nameAt + name.length;
+        if (isEnd) {
+            const e = html.indexOf('>', p);
+            i = e < 0 ? html.length : e + 1;
+            yield { kind: 'end', name, start: lt, end: i, attrs: [], closed: false };
+            continue;
+        }
+        const attrs: Token['attrs'] = [];
+        let selfClosed = false;
+        while (p < html.length) {
+            const before = p;
+            while (p < html.length && /\s/.test(html[p])) p++;
+            if (html[p] === '>') { p++; break; }
+            if (html.startsWith('/>', p)) { selfClosed = true; p += 2; break; }
+            if (html[p] === '/') { p++; continue; }
+            const attrName = match(ATTR_NAME, html, p);
+            if (!attrName) { p++; continue; }
+            p += attrName.length;
+            let value = '';
+            let q = p;
+            while (q < html.length && /\s/.test(html[q])) q++;
+            if (html[q] === '=') {
+                q++;
+                while (q < html.length && /\s/.test(html[q])) q++;
+                const quote = html[q];
+                if (quote === '"' || quote === "'") {
+                    const e = html.indexOf(quote, q + 1);
+                    value = html.slice(q + 1, e < 0 ? html.length : e);
+                    p = e < 0 ? html.length : e + 1;
+                } else {
+                    value = match(UNQUOTED, html, q) ?? '';
+                    p = q + value.length;
+                }
+            }
+            attrs.push({ name: attrName, value: decodeEntities(value), start: before, end: p });
+        }
+        i = p;
+        const lower = name.toLowerCase();
+        yield { kind: 'start', name, start: lt, end: i, attrs, closed: selfClosed || VOID_ELEMENTS.has(lower) };
+        if (RAW_TEXT_ELEMENTS.has(lower) && !selfClosed) {
+            const e = html.toLowerCase().indexOf(`</${lower}`, i);
+            i = e < 0 ? html.length : e;
+        }
+    }
+}
+
+/**
+ * Split a snippet at its holes, without a DOM, for server rendering (o2h): what builtIns.tree finds
+ * with the browser's parser, for **well-formed author markup**: quoted or unquoted attributes,
+ * explicit end tags for holes and their contents (no implied end tags, e.g. an unclosed `<p>` or
+ * `<li>`), and `/>` only on void elements or inside SVG / MathML. Refuses, as builtIns.tree does: a
+ * hole inside another hole, a hole inside a `<template>`, and two holes with the same name.
+ */
+export function snippetParts(html: string): SnippetPart[] {
+    const parts: SnippetPart[] = [];
+    const open: string[] = [];
+    const names = new Set<string>();
+    let textStart = 0;
+    const it = tokens(html);
+    for (let next = it.next(); !next.done; next = it.next()) {
+        const token = next.value;
+        if (token.kind === 'end') {
+            const k = open.lastIndexOf(token.name.toLowerCase());
+            if (k >= 0) open.length = k;
+            continue;
+        }
+        const holeAttr = token.attrs.find(a => a.name.toLowerCase() === HOLE);
+        if (!holeAttr) {
+            if (!token.closed) open.push(token.name.toLowerCase());
+            continue;
+        }
+        const hole = holeAttr.value;
+        if (names.has(hole)) throw new Error(`snippet: two holes named "${hole}"`);
+        names.add(hole);
+        if (open.includes('template')) throw new Error(`snippet: a hole ("${hole}") inside a <template>, which isn't supported (yet)`);
+        // Its end tag: each element opened inside it must be closed by name first
+        let close: Token | undefined;
+        if (!token.closed) {
+            const inside: string[] = [];
+            for (let inner = it.next(); !inner.done; inner = it.next()) {
+                const t = inner.value;
+                const name = t.name.toLowerCase();
+                if (t.kind === 'start') {
+                    if (t.attrs.some(a => a.name.toLowerCase() === HOLE)) throw new Error(`snippet: a hole inside the hole "${hole}", which isn't supported`);
+                    if (!t.closed) inside.push(name);
+                } else if (inside.length > 0 && inside[inside.length - 1] === name) {
+                    inside.pop();
+                } else if (inside.length === 0 && name === token.name.toLowerCase()) {
+                    close = t;
+                    break;
+                } else {
+                    throw new Error(`snippet: </${t.name}> in the hole "${hole}" where ${inside.length > 0 ? `<${inside[inside.length - 1]}>` : `<${token.name}>`} is open: holes and their contents must be well-formed (explicit end tags)`);
+                }
+            }
+            if (!close) throw new Error(`snippet: the hole "${hole}" (<${token.name}>) has no end tag`);
+        }
+        if (token.start > textStart) parts.push(html.slice(textStart, token.start));
+        parts.push({
+            hole,
+            tag: token.name,
+            attrs: token.attrs.filter(a => a !== holeAttr).map(a => [a.name, a.value]),
+            open: html.slice(token.start, holeAttr.start) + html.slice(holeAttr.end, token.end),
+            fallback: close ? html.slice(token.end, close.start) : '',
+            close: close ? html.slice(close.start, close.end) : '',
+        });
+        textStart = close ? close.end : token.end;
+    }
+    if (textStart < html.length) parts.push(html.slice(textStart));
+    return parts;
+}

@@ -23,7 +23,21 @@ export interface ParsedSnippet {
     template: HTMLTemplateElement;
     /** The root elements' local names, in order (what `adopt` checks server markup against) */
     tags: string[];
-    // Holes (Tree/TODO/SnippetHoles.md) would add their paths here, computed once per string.
+    /**
+     * The holes (`data-hole="name"` elements, attribute removed), by name: each one's path, the
+     * index of its root element and then element-child indices. Found once per string.
+     */
+    holes: Map<string, number[]>;
+}
+
+/** The attribute marking a snippet's holes: elements whose attributes and content a tree can fill. */
+export const HOLE_ATTRIBUTE = 'data-hole';
+
+/** A hole's element in an instance's root elements, by its path (undefined when markup lacks it, e.g. server markup that doesn't match). */
+export function holeAt(roots: Element[], path: number[]): Element | undefined {
+    let el: Element | undefined = roots[path[0]];
+    for (let i = 1; i < path.length && el; i++) el = el.children[path[i]];
+    return el;
 }
 
 /** Attributes holding URLs, where `javascript:` is refused. */
@@ -67,7 +81,32 @@ function parseSnippet(name: string, html: string, permissionProcessor: Permissio
     }
     if (tags.length === 0) throw new Error(`builtIns.tree: snippet "${name}" has no element`);
     checkContent(name, template.content, permissionProcessor);
-    return { html, template, tags };
+    return { html, template, tags, holes: findHoles(name, template.content) };
+}
+
+/**
+ * Record each hole's path and remove its attribute (so the DOM matches what o2h writes).
+ * Not supported (yet), so refused rather than silently ignored: a hole inside another hole
+ * (its fallback content), and duplicate names. (Holes inside a nested <template> are refused by checkContent.)
+ */
+function findHoles(name: string, content: DocumentFragment): Map<string, number[]> {
+    const holes = new Map<string, number[]>();
+    for (const el of content.querySelectorAll(`[${HOLE_ATTRIBUTE}]`)) {
+        const hole = el.getAttribute(HOLE_ATTRIBUTE)!;
+        if (holes.has(hole)) throw new Error(`builtIns.tree: snippet "${name}" has two holes named "${hole}"`);
+        if (el.parentElement?.closest(`[${HOLE_ATTRIBUTE}]`)) {
+            throw new Error(`builtIns.tree: snippet "${name}" has a hole ("${hole}") inside another hole, which isn't supported`);
+        }
+        const path: number[] = [];
+        for (let at: Element = el; ; at = at.parentElement!) {
+            const parent = at.parentElement;
+            path.unshift([...(parent ?? content).children].indexOf(at));
+            if (!parent) break;
+        }
+        holes.set(hole, path);
+    }
+    for (const el of content.querySelectorAll(`[${HOLE_ATTRIBUTE}]`)) el.removeAttribute(HOLE_ATTRIBUTE);
+    return holes;
 }
 
 /** Refuse what Tree wouldn't write itself: scripts, event handler attributes, javascript: URLs, and what the permission processor blocks. */
@@ -86,6 +125,12 @@ function checkContent(name: string, root: ParentNode, permissionProcessor: Permi
             }
         }
         // A nested <template>'s content isn't in the main tree: check it too
-        if (localName === 'template') checkContent(name, (el as HTMLTemplateElement).content, permissionProcessor);
+        if (localName === 'template') {
+            const { content } = el as HTMLTemplateElement;
+            if (content.querySelector(`[${HOLE_ATTRIBUTE}]`)) {
+                throw new Error(`builtIns.tree: snippet "${name}" has a hole inside a nested <template>, which isn't supported (yet)`);
+            }
+            checkContent(name, content, permissionProcessor);
+        }
     }
 }

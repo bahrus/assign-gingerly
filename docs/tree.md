@@ -181,7 +181,8 @@ type Header = tagName | { tag: tagName; ish?: string | ManagerClass };   // see 
 type Repeat = { each: ElementSpecification; of?: string; key?: string; empty?: ElementSpecification };
 type NestedTree = { map: Record<string, ElementSpecification>; markerName?: string; keepNullish?: boolean; aka?: Record<string, string>; compile?: boolean };
 type Switch = { switch: string; cases: Record<string, ElementSpecification | null>; default?: ElementSpecification | null };
-type Snippet = { snippet: string };
+type Snippet = { snippet: string; holes?: Record<string, Hole> };   // see Snippets
+type Hole = Pattern | string | [Pattern | string, (ElementSpecification[] | Repeat | NestedTree)?];
 ```
 
 - **The pattern** is an [assignFrom](./assignFrom.md) pattern applied to the created element, with `from` set to **the key's VM value**. So `'?.small'` above reads `vm.patch.small`.
@@ -517,7 +518,7 @@ card: tree`<article>${snippet('logo')}<h3>${'?.title'}</h3></article>`,
 
 **What happens:**
 - **Parsed once** per distinct string, by the browser's HTML parser, into a `<template>`, then **cloned** for each instance. Because the browser parses it, **SVG and MathML get their namespaces**. Tree's own `createElement` doesn't do that yet.
-- **One record per instance,** holding all its nodes, and **never visited again**. Later runs skip it, so other code may change it freely. If the `snippets` option holds another string under that name on a later run, the instance is replaced.
+- **One record per instance,** holding all its nodes, and **never visited again**, apart from its [holes](#holes-dynamic-parts-inside-a-snippet). Later runs skip its static parts, so other code may change them freely. If the `snippets` option holds another string under that name on a later run, the instance is replaced.
 - **Several root elements** are fine. The top level may only hold elements and the whitespace between them: no text, no comments. Wrap text in an element.
 - **Checked when parsed,** and a refused snippet **throws**, naming it:
   - no `<script>`, no `on*` event handler attributes, and no `javascript:` URLs, including inside nested `<template>`s;
@@ -530,7 +531,54 @@ card: tree`<article>${snippet('logo')}<h3>${'?.title'}</h3></article>`,
 
 **Hydration (`adopt`):** a snippet's root elements are matched by tag, in order, and adopted without descending into them. o2h writes the snippet's HTML as is, trimmed, from its own `snippets` option.
 
-**Next:** *holes*, dynamic parts inside a snippet, are planned (see [Chats/AssignFrom/Handlers/Tree/TODO/SnippetHoles.md](../Chats/AssignFrom/Handlers/Tree/TODO/SnippetHoles.md)).
+### Holes: dynamic parts inside a snippet
+
+Mark elements in a snippet with **`data-hole="name"`**, and fill them from the spec's **`holes`**:
+
+```JavaScript
+snippets: {
+    card: String.raw`
+        <header class="card-head">
+            <svg class="icon" viewBox="0 0 24 24"><path d="…"/></svg>
+            <h3 data-hole="title">Untitled</h3>
+        </header>
+        <ul class="specs" data-hole="specs"><li>No specs</li></ul>
+        <p class="note" data-hole="note">Fallback note</p>`,
+},
+```
+
+```JavaScript
+card: { snippet: 'card', holes: {
+    title: '?.name',                                            // text
+    specs: [{}, { each: ['li', '?.'], of: '?.specs' }],         // a pattern, then children (here a repeat)
+    note: { 'data-state :=': '?.state' },                       // a pattern alone: binds the element, keeps its fallback
+} },
+```
+
+With `` tree`…` ``: `${snippet('card', { title: '?.name' })}`.
+
+**A hole's value** is an element tuple **without its header**, since the snippet supplies the element:
+- **text** (a string, as in tuples);
+- **a pattern** for the hole element;
+- **`[pattern, children]`**, where the children are static children, a repeat or a nested tree.
+
+Everything inside a hole is ordinary Tree, including other snippets. Holes resolve against the same value as the snippet's position.
+
+**Fallback content:** what a hole holds in the snippet is its fallback.
+- **Replaced** when the hole is filled with content (text or children).
+- **Kept** with a pattern alone, and kept in a hole the spec doesn't name. Unnamed holes are left exactly as written.
+- **Ignored:** a name in `holes` that the snippet doesn't have.
+
+**Later runs** visit only the filled holes. If the spec fills a different set of holes, or changes a hole's structure, the instance is replaced, so a hole no longer filled gets its fallback back.
+
+**Not supported (yet), and refused** with a throw, so supporting them later changes nothing that works today:
+- a hole inside another hole;
+- a hole inside a nested `<template>`;
+- two holes with one name.
+
+**`data-hole` is removed** from the DOM. o2h fills holes the same way, with a small tokenizer (`snippetParts` in `handlers/treeSpec.ts`). It needs **well-formed** hole markup: explicit end tags inside holes, and `/>` only on void elements or in SVG/MathML.
+
+**SVG holes:** a hole can be an SVG element, and text and attributes work. But elements Tree *creates* inside a hole are HTML elements, so SVG children need namespace support, which Tree doesn't have yet.
 
 ## Itemscope Managers as View Models
 

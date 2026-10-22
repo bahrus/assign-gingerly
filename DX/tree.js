@@ -117,8 +117,15 @@ const snippetSpecs = new Map();
 /**
  * Static HTML, by name, as content: `${snippet('logo')}`, or as a whole map value. Produces
  * `{ snippet: 'logo' }`; the HTML comes from the `snippets` option (see builtIns.tree).
+ * With holes: `${snippet('card', { title: '?.name', specs: [{}, { each: …, of: '?.specs' }] })}`
+ * fills the snippet's `data-hole` elements (a new object per call, unlike a bare name's).
  */
-export function snippet(name) {
+export function snippet(name, holes) {
+    if (holes) {
+        const spec = { snippet: name, holes };
+        treeResults.add(spec);
+        return spec;
+    }
     let spec = snippetSpecs.get(name);
     if (!spec) {
         snippetSpecs.set(name, spec = { snippet: name });

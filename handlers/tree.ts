@@ -72,7 +72,8 @@ import { getValue, getValues } from '../resolve/getValues.js';
 import { withEventKeys } from './eventKeys.js';
 import { chooseCase, DEFAULT_CASE, isLiteralString, isSnippet, isSwitch, mapEntries, normalize, repeatItems, WILDCARD } from './treeSpec.js';
 import type { TreePathResolver } from './treeSpec.js';
-import { cloneSnippet, parsedSnippet } from './snippets.js';
+import { cloneSnippet, holeAt, parsedSnippet } from './snippets.js';
+import type { ParsedSnippet } from './snippets.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END, PENDING_ATTRIBUTE } from '../markerUtils.js';
 import { placeNodes } from '../utils/placeNodes.js';
@@ -81,7 +82,7 @@ import type {
     AssignFromHandler, AssignFromOptions, ItemscopeManagerConfig, ItemscopeRegistry, PermissionProcessor,
 } from '../types/assign-gingerly/types.js';
 import type {
-    CompiledNode, CompiledSwitch, CompiledTemplate, CompiledTree, ElementSpecification, ManagerRef, NestedTreeSpecification,
+    CompiledNode, CompiledSwitch, CompiledTemplate, CompiledTree, ElementSpecification, HoleSpecification, ManagerRef, NestedTreeSpecification,
     Pattern, RepeatSpecification, SnippetSpecification, SwitchSpecification, TreeConfig,
 } from '../types/assign-gingerly/treeTypes.js';
 
@@ -177,6 +178,9 @@ interface SnippetState {
     /** The string from the `snippets` option: another string for the name, on a later run, replaces the instance */
     source: string;
     nodes: ChildNode[];
+    parsed: ParsedSnippet;
+    /** The holes the spec fills, by name: ordinary nodes around the hole elements (the only parts later runs visit) */
+    holes: Map<string, TreeNode>;
 }
 
 /** A switch slot: which case it rendered, that case's node, and its placeholder for rendering nothing. */
@@ -673,7 +677,7 @@ function createNode(
     template?: CompiledEntry
 ): TreeNode {
     if (isSwitch(spec)) return syncSwitch(undefined, spec, value, options, permissionProcessor, template);
-    if (isSnippet(spec)) return createSnippet(spec, options, permissionProcessor);
+    if (isSnippet(spec)) return createSnippet(spec, value, options, permissionProcessor);
     // With `compile`: clone the template, as long as it was compiled from this very spec
     if (template && 'node' in template && template.node.spec === spec) {
         const variant = (options as any)[TREE_COMPILED] as CompiledVariant | undefined;
@@ -687,40 +691,136 @@ function createNode(
     };
     try {
         const from = ish === undefined ? value : attachManager(node, ish, value);
-        if (repeat || nested) {
-            bindContent(node, pattern, childSpecs, repeat, nested, from);
-            return node;
-        }
-        applyPattern(element, pattern, from, options, permissionProcessor);
-        node.appliedPattern = pattern;
-        node.appliedAka = (options as any).aka;
-        const { container } = node;
-        node.children = childSpecs.map(childSpec => {
-            const child = createNode(childSpec, from, options, permissionProcessor);
-            if (child.snippet) container.append(...child.snippet.nodes); else container.appendChild(child.element);
-            return child;
-        });
+        fillNode(node, pattern, childSpecs, repeat, nested, from);
     } finally {
         node.binding = false;
     }
     return node;
 }
 
-/** A snippet's instance: its template (parsed and checked once per string) cloned, held by one node that's never bound. */
-function createSnippet(spec: SnippetSpecification, options: AssignFromOptions, permissionProcessor?: PermissionProcessor): TreeNode {
+/** Apply a new node's pattern and create its children, repeat or nested tree (its element exists, and is empty of children). */
+function fillNode(
+    node: TreeNode, pattern: Pattern | undefined, childSpecs: ElementSpecification[],
+    repeat: RepeatSpecification | undefined, nested: NestedTreeSpecification | undefined, from: any
+): void {
+    const { element, options, permissionProcessor, container } = node;
+    if (repeat || nested) {
+        bindContent(node, pattern, childSpecs, repeat, nested, from);
+        return;
+    }
+    applyPattern(element, pattern, from, options, permissionProcessor);
+    node.appliedPattern = pattern;
+    node.appliedAka = (options as any).aka;
+    node.children = childSpecs.map(childSpec => {
+        const child = createNode(childSpec, from, options, permissionProcessor);
+        if (child.snippet) container.append(...child.snippet.nodes); else container.appendChild(child.element);
+        return child;
+    });
+}
+
+/** Whether a node still has the structure a normalized spec describes (else it's rebuilt). */
+function sameStructure(
+    node: TreeNode, tag: string, ish: ManagerRef | undefined, childSpecs: ElementSpecification[],
+    repeat: RepeatSpecification | undefined, nested: NestedTreeSpecification | undefined
+): boolean {
+    return !node.switch && !node.snippet && node.tag === tag && node.ish === ish && node.children.length === childSpecs.length
+        && !!node.repeat === !!repeat && node.nested === (nested !== undefined);
+}
+
+/** A snippet's instance, with the holes its spec names filled against `value`. */
+function createSnippet(spec: SnippetSpecification, value: any, options: AssignFromOptions, permissionProcessor?: PermissionProcessor): TreeNode {
+    const node = instantiateSnippet(spec, options, permissionProcessor);
+    fillHoles(node, value);
+    return node;
+}
+
+/** A snippet's template (parsed and checked once per string), cloned, held by one node; its holes aren't filled yet. */
+function instantiateSnippet(spec: SnippetSpecification, options: AssignFromOptions, permissionProcessor?: PermissionProcessor): TreeNode {
     const target = (options as any)[TREE_TARGET] as Node | undefined;
     const doc = target?.ownerDocument ?? document;
     const parsed = parsedSnippet(spec, options, permissionProcessor, doc);
-    return snippetNode(spec, cloneSnippet(parsed, doc), options, permissionProcessor);
+    return snippetNode(spec, parsed, cloneSnippet(parsed, doc), options, permissionProcessor);
 }
 
 /** The node holding a snippet's nodes (cloned, or adopted from server markup). */
-function snippetNode(spec: SnippetSpecification, nodes: ChildNode[], options: AssignFromOptions, permissionProcessor?: PermissionProcessor): TreeNode {
+function snippetNode(
+    spec: SnippetSpecification, parsed: ParsedSnippet, nodes: ChildNode[], options: AssignFromOptions, permissionProcessor?: PermissionProcessor
+): TreeNode {
     const element = nodes.find(n => n.nodeType === Node.ELEMENT_NODE) as Element;
     return {
         tag: '', ish: undefined, element, children: [], spec, options, permissionProcessor, binding: false,
-        container: element, nested: false, snippet: { source: options.snippets![spec.snippet], nodes },
+        container: element, nested: false, snippet: { source: options.snippets![spec.snippet], nodes, parsed, holes: new Map() },
     };
+}
+
+// ── Snippet holes: data-hole elements a snippet spec fills (its other parts stay static) ──
+
+/** The spec of the element a hole value fills: the hole's tag as the header. */
+function holeSpecOf(tag: string, hole: HoleSpecification): ElementSpecification {
+    return (Array.isArray(hole) ? [tag, ...hole] : [tag, hole]) as ElementSpecification;
+}
+
+/** A snippet's holes the spec names, with each hole's tag (from the template, so server markup is checked against it). */
+function* namedHoles(state: SnippetState, spec: SnippetSpecification): Generator<[string, number[], string, HoleSpecification]> {
+    const { holes } = spec;
+    if (!holes) return;
+    const templateRoots = [...state.parsed.template.content.children];
+    for (const [name, path] of state.parsed.holes) {
+        const hole = holes[name];
+        if (hole !== undefined) yield [name, path, holeAt(templateRoots, path)!.localName, hole];
+    }
+}
+
+/** The root elements of a snippet's instance. */
+function rootsOf({ nodes }: SnippetState): Element[] {
+    return nodes.filter(n => n.nodeType === Node.ELEMENT_NODE) as Element[];
+}
+
+/**
+ * Fill a new instance's holes that its spec names: each becomes an ordinary node around the hole
+ * element. Content (text or children) replaces the hole's fallback content; a pattern alone keeps it.
+ */
+function fillHoles(node: TreeNode, value: any): void {
+    const state = node.snippet!;
+    const { options, permissionProcessor } = node;
+    const roots = rootsOf(state);
+    for (const [name, path, holeTag, hole] of namedHoles(state, node.spec as SnippetSpecification)) {
+        const element = holeAt(roots, path)!;
+        const holeSpec = holeSpecOf(holeTag, hole);
+        const [, tag, , pattern, childSpecs, repeat, nested] = normalize(holeSpec);
+        const holeNode: TreeNode = {
+            tag, ish: undefined, element, children: [], spec: holeSpec, options, permissionProcessor, binding: true,
+            container: containerOf(element), nested: nested !== undefined,
+        };
+        if (childSpecs.length > 0 || repeat || nested) (holeNode.container as Element).replaceChildren();
+        try {
+            fillNode(holeNode, pattern, childSpecs, repeat, nested, value);
+        } finally {
+            holeNode.binding = false;
+        }
+        state.holes.set(name, holeNode);
+    }
+}
+
+/** Whether an instance's filled holes still match the spec: the same holes filled, each with the same structure. */
+function sameHoles(state: SnippetState, spec: SnippetSpecification): boolean {
+    let named = 0;
+    for (const [name, , holeTag, hole] of namedHoles(state, spec)) {
+        named++;
+        const holeNode = state.holes.get(name);
+        if (!holeNode) return false;
+        const [, tag, ish, , childSpecs, repeat, nested] = normalize(holeSpecOf(holeTag, hole));
+        if (!sameStructure(holeNode, tag, ish, childSpecs, repeat, nested)) return false;
+    }
+    return named === state.holes.size;
+}
+
+/** Rebind an instance's filled holes (sameHoles checked their structure). */
+function syncHoles(node: TreeNode, spec: SnippetSpecification, value: any): void {
+    const state = node.snippet!;
+    for (const [name, , holeTag, hole] of namedHoles(state, spec)) {
+        syncNode(state.holes.get(name), holeSpecOf(holeTag, hole), value, node.options, node.permissionProcessor);
+    }
 }
 
 /**
@@ -737,13 +837,17 @@ function syncNode(
 ): TreeNode {
     if (isSwitch(spec)) return syncSwitch(node?.switch ? node : undefined, spec, value, options, permissionProcessor, template);
     if (isSnippet(spec)) {
-        // Static: the same source stays as it is (never visited); another one replaces it
-        if (node?.snippet && node.snippet.source === options.snippets?.[spec.snippet]) return node;
-        return createSnippet(spec, options, permissionProcessor);
+        // Static apart from its holes: the same source, with the same holes filled the same way, is kept (only its holes
+        // are visited); otherwise it's replaced (so a hole no longer filled gets its fallback back)
+        if (node?.snippet && node.snippet.source === options.snippets?.[spec.snippet] && sameHoles(node.snippet, spec)) {
+            Object.assign(node, { spec, options, permissionProcessor });
+            syncHoles(node, spec, value);
+            return node;
+        }
+        return createSnippet(spec, value, options, permissionProcessor);
     }
     const [, tag, ish, pattern, childSpecs, repeat, nested] = normalize(spec);
-    if (!node || node.switch || node.snippet || node.tag !== tag || node.ish !== ish || node.children.length !== childSpecs.length
-        || !!node.repeat !== !!repeat || node.nested !== (nested !== undefined)) {
+    if (!node || !sameStructure(node, tag, ish, childSpecs, repeat, nested)) {
         return createNode(spec, value, options, permissionProcessor, template);
     }
     Object.assign(node, { spec, options, permissionProcessor });
@@ -839,7 +943,7 @@ function pairNodes(compiled: CompiledNode, element: Element, options: AssignFrom
     for (const childCompiled of compiled.children) {
         if (childCompiled.snippet !== undefined) {
             // A snippet has no element in the template: its own template is cloned in here
-            const snippet = createSnippet(childCompiled.spec as SnippetSpecification, options, permissionProcessor);
+            const snippet = instantiateSnippet(childCompiled.spec as SnippetSpecification, options, permissionProcessor);
             for (const n of snippet.snippet!.nodes) container.insertBefore(n, child);
             snippet.compiled = childCompiled;
             node.children.push(snippet);
@@ -866,8 +970,11 @@ function pairNodes(compiled: CompiledNode, element: Element, options: AssignFrom
 /** Bind a freshly cloned node and its subtree, as createNode does for a created one. */
 function bindCloned(node: TreeNode, value: any): void {
     const { compiled, element, ish, options, permissionProcessor } = node;
-    // A snippet is static: nothing to bind
-    if (node.snippet) return;
+    // A snippet is static, apart from its holes
+    if (node.snippet) {
+        fillHoles(node, value);
+        return;
+    }
     if (compiled!.switch) {
         // Renders its case in place of the placeholder (cloned from the case's own template)
         syncSwitch(node, compiled!.switch.spec, value, options, permissionProcessor, compiled!.switch);
@@ -945,7 +1052,8 @@ function adoptNode(
     if (cursor.at >= slots.length) throw new AdoptMismatch('fewer elements than the spec');
     if (isSnippet(spec)) {
         // Its root elements, by tag, in the next slots (and the whitespace between them); never bound
-        const { tags } = parsedSnippet(spec, options, permissionProcessor, slots[cursor.at].ownerDocument!);
+        const parsed = parsedSnippet(spec, options, permissionProcessor, slots[cursor.at].ownerDocument!);
+        const { tags } = parsed;
         const first = cursor.at;
         tags.forEach((tag, k) => {
             const slot = slots[first + k];
@@ -960,7 +1068,16 @@ function adoptNode(
             nodes.push(n);
             if (n === last) break;
         }
-        return snippetNode(spec, nodes, options, permissionProcessor);
+        const node = snippetNode(spec, parsed, nodes, options, permissionProcessor);
+        // Its holes: found by path, and adopted (then bound) like any element
+        const state = node.snippet!;
+        const roots = rootsOf(state);
+        for (const [name, path, holeTag, hole] of namedHoles(state, spec)) {
+            const element = holeAt(roots, path);
+            if (!element) throw new AdoptMismatch(`snippet "${spec.snippet}" has no hole "${name}" in the markup`);
+            state.holes.set(name, adoptNode({ slots: [element], at: 0 }, holeSpecOf(holeTag, hole), value, options, permissionProcessor));
+        }
+        return node;
     }
     const slot = slots[cursor.at];
     if (isSwitch(spec)) {
@@ -990,7 +1107,8 @@ function adoptNode(
     cursor.at++;
     const element = slot as Element;
     const [, tag, ish, , childSpecs, repeat, nested] = normalize(spec);
-    if (element.localName !== tag.toLowerCase()) throw new AdoptMismatch(`<${element.localName}> where <${tag}> was expected`);
+    // (SVG keeps camelCase local names, e.g. foreignObject)
+    if (element.localName !== tag && element.localName !== tag.toLowerCase()) throw new AdoptMismatch(`<${element.localName}> where <${tag}> was expected`);
     const node: TreeNode = {
         tag, ish, element, children: [], spec, options, permissionProcessor, binding: true, container: containerOf(element),
         nested: nested !== undefined,

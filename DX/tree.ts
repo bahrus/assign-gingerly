@@ -48,7 +48,7 @@
 
 import { pathOf } from './paths.js';
 import type {
-    ChooseCases, EachDirective, EachOptions, ElementSpecification, Pattern, SnippetSpecification, SwitchSpecification, TreeTemplateLocation,
+    ChooseCases, EachDirective, EachOptions, ElementSpecification, HoleSpecification, Pattern, SnippetSpecification, SwitchSpecification, TreeTemplateLocation,
     TreeAnalysis, TreeTemplateElement, TreeTemplateStrings,
 } from '../types/assign-gingerly/treeTypes.js';
 
@@ -151,8 +151,15 @@ const snippetSpecs = new Map<string, SnippetSpecification>();
 /**
  * Static HTML, by name, as content: `${snippet('logo')}`, or as a whole map value. Produces
  * `{ snippet: 'logo' }`; the HTML comes from the `snippets` option (see builtIns.tree).
+ * With holes: `${snippet('card', { title: '?.name', specs: [{}, { each: …, of: '?.specs' }] })}`
+ * fills the snippet's `data-hole` elements (a new object per call, unlike a bare name's).
  */
-export function snippet(name: string): SnippetSpecification {
+export function snippet(name: string, holes?: Record<string, HoleSpecification>): SnippetSpecification {
+    if (holes) {
+        const spec = { snippet: name, holes };
+        treeResults.add(spec);
+        return spec;
+    }
     let spec = snippetSpecs.get(name);
     if (!spec) {
         snippetSpecs.set(name, spec = { snippet: name });

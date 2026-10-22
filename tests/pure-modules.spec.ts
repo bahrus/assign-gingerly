@@ -60,4 +60,33 @@ test.describe('pure modules (no DOM)', () => {
     const plan = planMicroJoin(['Launched ', 7], ['Launched ', '?.n']);
     expect(plan.complete).toBe(true);
   });
+  test('snippetParts: holes found without a DOM', async ({ browserName }) => {
+    test.skip(browserName !== 'chromium', 'Node-side check; once is enough');
+    const url = (path: string) => new URL(`../${path}`, import.meta.url).href;
+    const { snippetParts } = await import(url('handlers/treeSpec.js'));
+    const html = '<header class="head"><svg viewBox="0 0 2 2"><path d="M0 0"/></svg>'
+      + '<h3 class="t" data-hole="title" title="a &amp; b">Fallback <em>text</em></h3></header>'
+      + '<!-- <b data-hole="not-a-hole"> --><style>p > b { color: red }</style>'
+      + '<ul data-hole=specs><li>One</li><li><ul><li>Nested</li></ul></li></ul><img data-hole="pic" alt=x>';
+    const parts = snippetParts(html);
+    expect(parts.length).toBe(5);
+    expect(parts[0]).toBe('<header class="head"><svg viewBox="0 0 2 2"><path d="M0 0"/></svg>');
+    expect(parts[1]).toEqual({
+      hole: 'title', tag: 'h3', attrs: [['class', 't'], ['title', 'a & b']],
+      open: '<h3 class="t" title="a &amp; b">', fallback: 'Fallback <em>text</em>', close: '</h3>',
+    });
+    expect(parts[2]).toBe('</header><!-- <b data-hole="not-a-hole"> --><style>p > b { color: red }</style>');
+    expect(parts[3]).toMatchObject({ hole: 'specs', tag: 'ul', open: '<ul>', fallback: '<li>One</li><li><ul><li>Nested</li></ul></li>', close: '</ul>' });
+    expect(parts[4]).toMatchObject({ hole: 'pic', tag: 'img', attrs: [['alt', 'x']], open: '<img alt=x>', fallback: '', close: '' });
+    // Written back unfilled, the holes are what builtIns.tree's clone has: the same markup without data-hole
+    const unfilled = parts.map((p: any) => typeof p === 'string' ? p : p.open + p.fallback + p.close).join('');
+    expect(unfilled).toBe(html.replace(/ data-hole=("[^"]*"|\w+)/g, '').replace('<!-- <b> -->', '<!-- <b data-hole="not-a-hole"> -->'));
+    expect(snippetParts('<p>No holes</p>')).toEqual(['<p>No holes</p>']);
+    // Refused, as builtIns.tree refuses them
+    expect(() => snippetParts('<b data-hole="a"></b><i data-hole="a"></i>')).toThrow(/two holes named "a"/);
+    expect(() => snippetParts('<div data-hole="a"><b data-hole="b"></b></div>')).toThrow(/inside the hole "a"/);
+    expect(() => snippetParts('<template><b data-hole="a"></b></template>')).toThrow(/inside a <template>/);
+    expect(() => snippetParts('<div data-hole="a"><p>unclosed</div>')).toThrow(/well-formed/);
+    expect(() => snippetParts('<div data-hole="a">never closed')).toThrow(/no end tag/);
+  });
 });

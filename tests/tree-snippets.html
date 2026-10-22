@@ -212,6 +212,116 @@
         mismatched.remove();
       }
 
+      // ── Holes ──
+      const holeSnippets = {
+        ...snippets,
+        card: String.raw`
+          <header class="card-head"><svg class="icon" viewBox="0 0 24 24"><path d="M2 2 L22 22"/></svg><h3 data-hole="title">Untitled</h3></header>
+          <ul class="specs" data-hole="specs"><li>No specs</li></ul>
+          <p class="note" data-hole="note">Fallback note</p>
+          <footer>Static footer</footer>`,
+        row: String.raw`<li class="row"><span class="bullet">•</span><b data-hole="label">?</b></li>`,
+      };
+      const runHoles = (el, config, from, extra = {}) => run(el, config, from, { snippets: holeSnippets, ...extra });
+      const cardHoles = {
+        title: '?.name',
+        specs: [{}, { each: ['li', '?.'], of: '?.specs' }],
+        note: { 'data-state :=': '?.state' },
+        missing: '?.name',   // a hole the snippet doesn't have: ignored
+      };
+      const cardVm = (name, specs, state = 'ok') => ({ card: { name, specs, state } });
+
+      // Test 8: filling holes: text, a repeat, a pattern alone (fallback kept); the rest stays static
+      {
+        const el = host();
+        const config = { map: { card: { snippet: 'card', holes: cardHoles } } };
+        await runHoles(el, config, cardVm('Falcon', ['70 m', '549 t']));
+        assertEquals(el.querySelector('h3').textContent, 'Falcon', 'holes: text replaces the fallback');
+        assertEquals([...el.querySelectorAll('.specs li')].map(li => li.textContent).join(','), '70 m,549 t', 'holes: a repeat replaces the fallback');
+        const note = el.querySelector('.note');
+        assert(note.textContent === 'Fallback note' && note.getAttribute('data-state') === 'ok', 'holes: a pattern alone binds the element and keeps its fallback');
+        assertEquals(el.querySelectorAll('[data-hole]').length, 0, 'holes: no data-hole attributes in the DOM');
+        assertEquals(elementsOf(el).map(e => e.localName).join(','), 'header,ul,p,footer', 'holes: all four roots');
+
+        const svg = el.querySelector('svg');
+        const h3 = el.querySelector('h3');
+        const ul = el.querySelector('.specs');
+        svg.setAttribute('data-touched', '');
+        await runHoles(el, config, cardVm('Starship', ['121 m'], 'busy'));
+        assert(el.querySelector('h3') === h3 && h3.textContent === 'Starship', 'rerun: the hole element is kept and rebound');
+        assert(el.querySelector('.specs') === ul && ul.children.length === 1 && ul.textContent === '121 m', 'rerun: the repeat hole reconciles in place');
+        assertEquals(note.getAttribute('data-state'), 'busy', 'rerun: the pattern hole rebinds');
+        assert(el.querySelector('svg') === svg && svg.hasAttribute('data-touched'), 'rerun: the static parts are left alone');
+
+        // A hole no longer filled: the instance is replaced, so it gets its fallback back
+        const { specs, ...fewer } = cardHoles;
+        await runHoles(el, { map: { card: { snippet: 'card', holes: fewer } } }, cardVm('Starship', ['121 m']));
+        assertEquals(el.querySelector('.specs').textContent, 'No specs', 'unfilled: a hole no longer filled shows its fallback again');
+        assert(!svg.isConnected, '… because the instance was replaced');
+        el.remove();
+      }
+
+      // Test 9: holes in a repeat's each, with tree`…`, and static children in a hole
+      {
+        const el = host();
+        const config = {
+          map: {
+            list: tree`<ul class="list" ${each('?.', { key: '?.id' })}>${snippet('row', { label: '?.name' })}</ul>`,
+            card: tree`<div class="wrap">${snippet('card', { title: [{ className: 'title' }, [['b', '?.first'], ['i', '?.last']]] })}</div>`,
+          },
+        };
+        await runHoles(el, config, { list: [{ id: 1, name: 'A' }, { id: 2, name: 'B' }], card: { first: 'F', last: 'L' } });
+        assertEquals([...el.querySelectorAll('.list b')].map(b => b.textContent).join(','), 'A,B', 'repeat: each item fills its hole');
+        const [rowA, rowB] = el.querySelectorAll('.list .row');
+        await runHoles(el, config, { list: [{ id: 2, name: 'B2' }, { id: 1, name: 'A' }], card: { first: 'F', last: 'L2' } });
+        const rows = el.querySelectorAll('.list .row');
+        assert(rows[0] === rowB && rows[1] === rowA && rowB.querySelector('b').textContent === 'B2', 'repeat: items move by key, and their holes rebind');
+        const title = el.querySelector('.wrap h3');
+        assert(title.className === 'title' && title.innerHTML === '<b>F</b><i>L2</i>', 'static children in a hole (tree`…` snippet(name, holes))');
+        el.remove();
+      }
+
+      // Test 10: refused hole markup
+      {
+        const bad = async html => rejects(runHoles(host(), { map: { x: { snippet: 'bad', holes: {} } } }, { x: 1 }, { snippets: { bad: html } }));
+        assert((await bad('<div data-hole="a"><b data-hole="b"></b></div>')).includes('inside another hole'), 'refused: a hole inside a hole');
+        assert((await bad('<b data-hole="a"></b><i data-hole="a"></i>')).includes('two holes named "a"'), 'refused: two holes with one name');
+        assert((await bad('<div><template><b data-hole="a"></b></template></div>')).includes('nested <template>'), 'refused: a hole inside a nested <template>');
+        for (const el of document.querySelectorAll('body > div:not(#results):not(#test-complete)')) el.remove();
+      }
+
+      // Test 11: compile and adopt with holes
+      {
+        const config = {
+          map: {
+            card: { snippet: 'card', holes: cardHoles },
+            wrap: tree`<section class="wrap">${snippet('row', { label: '?.name' })}<p>${'?.name'}</p></section>`,
+          },
+        };
+        const vm = { ...cardVm('Falcon', ['70 m', '549 t']), wrap: { name: 'W' } };
+        const plain = host();
+        const compiled = host();
+        await runHoles(plain, config, vm);
+        await runHoles(compiled, { ...config, compile: true }, vm);
+        assert(plain.isEqualNode(compiled), 'compile: the same DOM with holes');
+        await runHoles(compiled, { ...config, compile: true }, { ...vm, wrap: { name: 'W2' } });
+        assertEquals(compiled.querySelector('.wrap b').textContent, 'W2', 'compile: a snippet among static children rebinds its holes');
+
+        const server = host();
+        server.innerHTML = plain.innerHTML;
+        const before = [...server.querySelectorAll('*')];
+        await runHoles(server, { ...config, adopt: true }, vm);
+        const after = [...server.querySelectorAll('*')];
+        assert(before.length === after.length && before.every((e, i) => e === after[i]), 'adopt: every element is reused, holes included');
+        assert(server.isEqualNode(plain), 'adopt: the same DOM');
+        await runHoles(server, config, { ...cardVm('Starship', ['121 m']), wrap: { name: 'W3' } });
+        assert(server.querySelector('h3').textContent === 'Starship' && server.querySelectorAll('.specs li').length === 1
+          && server.querySelector('.wrap b').textContent === 'W3', 'adopt: later runs rebind the adopted holes');
+        plain.remove();
+        compiled.remove();
+        server.remove();
+      }
+
       document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
       const complete = document.getElementById('test-complete');
       complete.dataset.passed = passed;
