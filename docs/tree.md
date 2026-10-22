@@ -287,6 +287,7 @@ links: [{ tag: 'nav', ish: 'links-manager' }, {}, [
 - **The repeating element owns its content.** Its own pattern still applies (resolving against its value, e.g. `title: '?.length'`), but it can't also have static children.
 - **Reconciliation on later calls:** items whose key is still present are rebound in place (and moved if needed), new keys are created, missing keys are removed, and `empty` comes and goes as the array empties and fills.
 - **Synchronous**, like the rest of Tree, so the lists are rendered as soon as `assignFromAsync` resolves.
+- **Large lists:** see [Compiling](#compiling-compile-experimental), which clones precompiled templates instead of creating each element.
 
 ### When `manageTemplateList` is still the better fit
 
