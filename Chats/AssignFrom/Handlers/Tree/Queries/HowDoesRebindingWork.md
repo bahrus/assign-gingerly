@@ -148,3 +148,95 @@ Do you have any idea if this resembles how preact works?  Or other libraries?
 | **Vue** | The previous vnode tree, with patch flags | Dynamic props only | Fragile | Warn, patch |
 
 **One idea worth taking from Lit:** check the compiled template's `signature` during `adopt`, as a cheap "this markup came from this spec" test before walking it.
+
+## Bruce's Response
+
+> **One idea worth taking from Lit:** check the compiled template's `signature` during `adopt`, as a cheap "this markup came from this spec" test before walking it.
+
+Noted.  Can you create a TODO item for this in [Tree/TODO](../TODO/)?
+
+Two things we are missing, I think, might be:
+
+1. The ability to insert a "blob" of static HTML into the tree, that needs no nodes to track it.
+
+Solutions to this might be a mixture of:
+
+a.  Locally scoped "dumb" or maybe not so dumb custom elements.  One could argue that the machinery and naming burden of custom elements for "dumb" static content is overkill?  Or maybe not?  Maybe we could define a static dumb custom element on the fly in the tree?
+b.  A template Reference
+c.  A tree subdefinition that is marked static in some way, that contains no dynamic content.  Maybe it gets automatically compiled into a template.
+
+2.  As I mentioned in some earlier thread, the ability to have a template "blob" of static content, inside of which is a slot where dynamic node gets inserted.
+
+I'm happy to try to think up some good examples of these, unless you have some obvious examples?  An SVG is the first example that comes to my mind.
+
+Let's focus first on the simpler 1 scenario.  What are your thoughts on this?
+
+
+## Claude's Answer III
+
+**The TODO item:** [Tree/TODO/AdoptSignatureCheck.md](../TODO/AdoptSignatureCheck.md).
+
+### Scenario 1: static blobs
+
+#### What static content costs today
+
+Content with no bindings (literal text, literal attributes) still goes through the full machinery:
+- **one record per element;**
+- **a visit on every run:** cheap, since `skipLiterals` skips re-applying an unchanged pattern, but it's still a visit;
+- **a pairing step per element** in `adopt`'s walk.
+
+With `compile`, the literals are baked into templates and cloned, but the records and visits remain.
+
+**And one gap matters for your SVG example: Tree can't render SVG today.** It creates elements with `document.createElement(tag)`. In an HTML document, that makes `<circle>` an unknown *HTML* element, not an SVG one, so nothing draws. Neither `tree.ts` nor `compileTree.ts` has any `createElementNS`. So SVG isn't only a static-blob example; it's currently unsupported. A static blob parsed as HTML would fix it for static SVG, because the HTML parser puts `<svg>` content in the SVG namespace.
+
+#### The three options
+
+**(a) Custom elements for static content.** I'd agree that it's overkill for "dumb" content:
+- **The machinery:** a class per blob, a name (and its collision risk), registration (global, or scoped once scoped registries land), and an upgrade step. All that buys behavior and lifecycle, which static content doesn't have.
+- **Defining one on the fly in the tree:** possible, but it adds all that machinery to save writing a template.
+- **When it does earn its place:** when the blob is reused across pages and wants encapsulated styles via shadow DOM. At that point it's a component, not a blob, and nothing stops a tree from using one today, as an ordinary tag.
+
+**(b) A template reference,** e.g. `{ template: '#logo' }`, cloning `document.querySelector('#logo').content`:
+- **Good for:** content that already lives in the page (a server include, a design-system sprite), large SVGs you don't want in JS, and sharing one blob across trees.
+- **Weak on the server:** o2h has no document, so it can't resolve `#logo`. It would need the HTML handed to it (a `templates` option), or it would have to emit the reference and leave it to the client. The latter loses the content for crawlers and no-JS readers, and makes the markup not match.
+
+**(c) A static subdefinition, compiled into a template.** I think this is the core, in two forms:
+1. **Explicit:** a spec form holding the blob's HTML, e.g. `{ html: '<svg …>…</svg>' }` anywhere an element spec goes.
+   - **On the client:** parsed once into a `<template>` (cached by the string), then cloned per instance.
+   - **On the server:** o2h writes the string verbatim.
+   - **One record, never visited again:** the spec is static by definition. `adopt` checks the root's tag and doesn't descend.
+2. **Automatic:** `tree`…`` (or `normalize` / `compileTree`) **detects** a subtree with nothing dynamic in it. That means no `${…}`, no `ish`, no events, no repeats, switches or nested trees, and only literal keys (`isLiteral` / `classifyPatternKey` already exist). It then turns that subtree into form 1. Authors write ordinary markup and get the optimization for free, like Vue's static hoisting.
+
+**(b) on top of (c):** a template reference is then just another way to supply form 1's HTML, from the page rather than from the spec, with o2h needing the HTML handed to it.
+
+#### Design points for (c)
+
+- **One root element per blob.** Map values and children are single elements today, and `adopt`'s slot counting relies on that. A blob with several roots could be wrapped, or allowed later as a "fragment slot".
+- **Permissions.** Raw HTML would bypass Tree's attribute checks (e.g. refusing `on*` attributes under a permission profile). So when a blob's template is built, it has to pass the same check, the way `compile`'s `canBake` does today: reject `on*` attributes and `<script>`, or run each attribute through the permission processor. Blobs are author content (from the spec, never from data), which keeps this tractable.
+- **Identity:** a blob's elements are never touched after insertion. Other code (an animation library, an icon sprite swap) can then modify them freely, which is a nice property.
+- **How much it saves:** the gain is in large static subtrees: an SVG icon or logo with dozens of paths, a legal footer, long help text, a static table header. A single `<h3>Mission</h3>` leaf saves almost nothing. It's one record either way.
+
+#### Examples
+
+- **An SVG logo or icon set** in a header, or a status icon per row in a repeat (a repeat stamping a static icon would clone it per item).
+- **A static `<thead>`** above a repeated `<tbody>`.
+- **A legal or contact footer** with fixed links.
+- **Instructions or help text** in a form: long, formatted, and fixed.
+- **Decorative structure:** an SVG frame or illustration around dynamic content. That's scenario 2's blob with a slot, so a good bridge example.
+
+#### On scenario 2 (later)
+
+If form 1 exists, a slot becomes **a marker inside the blob**, e.g. an element with `data-slot="name"`, or a `<slot name>`. Tree records only those slots and renders dynamic specs into them. The blob stays one cloned template, and only the slots get records. Choosing form 1's shape now with that in mind keeps the path open.
+
+### Proposal
+
+1. **Form 1 (`{ html }`) first,** in builtIns.tree and o2h. Parse once, clone, one record, permission-checked, and handled by `adopt`.
+2. **Then automatic detection** in `tree`…``, turning static subtrees into form 1.
+3. **SVG namespace support for dynamic SVG,** as its own TODO: create elements with `createElementNS` inside `<svg>` (and `<math>`). Form 1 covers static SVG, but a chart whose `<circle>` attributes are bound needs this.
+4. **Template references (b)** only if a page-provided blob comes up, with o2h taking the HTML by id.
+
+### Questions
+
+1. **Form 1's notation:** `{ html: '…' }`, or something else (`{ static: '…' }`)? And in `tree`…``, an explicit marker (`<svg static>…</svg>`) in addition to, or instead of, automatic detection?
+2. **One root element per blob,** for now?
+3. **Should I file the SVG namespace gap** as its own TODO now?
