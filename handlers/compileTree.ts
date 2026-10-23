@@ -34,7 +34,7 @@
 
 import { getValue, getValues, isEventBinding, isReferenceString } from '../resolve/getValues.js';
 import { planMicroJoin } from '../syncOps/microJoin.js';
-import { checkSwitch, isLiteralString, isSnippet, isSwitch, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
+import { checkSwitch, isLiteralString, isSnippet, isSwitch, mapKeyName, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
 import type { GetValuesOptions } from '../types/assign-gingerly/types.js';
 import type {
     CompiledNode, CompiledSwitch, CompiledTemplate, CompiledTree, CompileTreeOptions, ElementSpecification, Pattern,
@@ -76,7 +76,8 @@ export function compileTree(config: Pick<TreeConfig, 'map' | 'aka'>, options: Co
             // The same spec object builtIns.tree uses for unmatched keys. Any key may use it, so no sample.
             compileTemplate(key, wildcardSpecOf(map), undefined, ctx);
         } else {
-            const keySample = sample != null && typeof sample === 'object' && key in sample ? { value: sample[key] } : undefined;
+            const name = mapKeyName(key);
+            const keySample = sample != null && typeof sample === 'object' && name in sample ? { value: sample[name] } : undefined;
             compileTemplate(key, map[key], keySample, ctx);
         }
     }

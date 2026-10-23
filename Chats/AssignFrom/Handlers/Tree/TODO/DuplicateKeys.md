@@ -109,3 +109,60 @@ Some of this already has dedicated forms: arrays of handler configs (`'… =>': 
 2. **A commented key counts as naming its VM key** for `'*'`?
 3. **Tree only for now,** or the same rule for pattern keys in general (later)?
 4. **Should I implement it** (Tree and o2h through `mapEntries`, docs and tests)?
+
+## Bruce's Response I
+
+> 1. **Option A,** with a trailing comment only, and descriptive comments encouraged?
+
+Yes, with trimming so can have surrounding space
+
+> 2. **A commented key counts as naming its VM key** for `'*'`?
+
+Yes
+
+>  3. **Tree only for now,** or the same rule for pattern keys in general (later)?
+
+Yes, that's fine, but I think it is likely to be used more generally later
+
+> 4. **Should I implement it** (Tree and o2h through `mapEntries`, docs and tests)?
+
+Yes, please, and add your implementation notes below.
+
+
+## Claude's Implementation Notes
+
+As agreed: a map key may end with one `/* … */` comment, trimmed on both sides. A commented key counts as naming its VM key for `'*'`. It's Tree only for now.
+
+### Code
+
+| Where | What |
+|---|---|
+| **`handlers/treeSpec.ts`** | **`mapKeyName(key)`:** the VM key a map key names, cached per key string. Without a comment, the key is used as is: plain keys aren't trimmed, so existing VM keys with spaces still work. With a comment, it's the part before the comment, trimmed. A comment anywhere but the end, two comments, or a key that's only a comment throws, naming the key. |
+| | **`mapEntries`:** looks values up by that name. `TreeMapEntry` gains `name`, while `key` stays as written: it's the entry's identity for Tree's records, compile's template ids, and o2h. `'*'` skips VM keys any map key names, commented or not. |
+| **`handlers/tree.ts`** | The first-render typo warning checks the VM key (`'rokcet /* summary */'` still warns), and names the key as written. |
+| **`handlers/compileTree.ts`** | A commented key's compile-time sample comes from its VM key. |
+| **o2h** | No code change: it gets keys and values from `mapEntries`. |
+| **Docs** | tree.md's Keys section gets a table row and a subsection, "The same VM key more than once: a comment in the key". `mapKeyName` is added to the pure building blocks table. |
+
+**Since it's likely to be used more generally later,** `mapKeyName` is written to be the rule itself: one trailing comment, trimmed, errors otherwise. Pattern keys could later use the same function (or one shared with it), once `categorizeKeys` takes it on.
+
+### Tests
+
+- **`tests/tree-map-keys.html` / `.spec.ts`,** with 9 cases:
+  - your example, with a summary entry after `success`;
+  - reruns rebinding each entry in place;
+  - nullish removing both entries;
+  - `'*'` not rendering the commented key's VM key again;
+  - `compile` giving the same DOM;
+  - the typo warning;
+  - a misplaced comment throwing;
+  - `adopt` reusing every element.
+- **`tests/pure-modules.spec.ts`:** a Node-side test of `mapKeyName` (trimming, plain keys untouched, five malformed forms) and of `mapEntries` (two entries, identity, `'*'`, nullish, `keepNullish`).
+- **o2h `tests/o2h.spec.ts`:** a Node test rendering a commented key.
+- **Results:**
+  - **assign-gingerly** (scratch copy, three browsers): 176 passed and 10 skipped;
+  - **o2h:** its browser tests pass (9), and its Node tests (5) pass in the scratch copy linked to the new build.
+
+### For you
+
+**New files:** `tests/tree-map-keys.html` and `tests/tree-map-keys.spec.ts`.

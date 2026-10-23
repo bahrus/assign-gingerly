@@ -89,4 +89,28 @@ test.describe('pure modules (no DOM)', () => {
     expect(() => snippetParts('<div data-hole="a"><p>unclosed</div>')).toThrow(/well-formed/);
     expect(() => snippetParts('<div data-hole="a">never closed')).toThrow(/no end tag/);
   });
+  test('map keys with a trailing comment name the VM key before it', async ({ browserName }) => {
+    test.skip(browserName !== 'chromium', 'Node-side check; once is enough');
+    const url = (path: string) => new URL(`../${path}`, import.meta.url).href;
+    const { mapKeyName, mapEntries } = await import(url('handlers/treeSpec.js'));
+    expect(mapKeyName('rocket')).toBe('rocket');
+    expect(mapKeyName('rocket/*2*/')).toBe('rocket');
+    expect(mapKeyName('  rocket   /* summary */  ')).toBe('rocket');
+    expect(mapKeyName(' spaced ')).toBe(' spaced ');   // no comment: the key as is
+    for (const bad of ['rocket /* a */ b', '/* only */', 'a */', 'a /* b /* c */', 'a /* b */ /* c */']) {
+      expect(() => mapKeyName(bad)).toThrow(/builtIns\.tree: map key/);
+    }
+    // Two entries for one VM key, each with its own identity, in map order; '*' counts the commented key as named
+    const map = { rocket: 'h3', success: 'span', 'rocket /* summary */': 'div', '*': 'i' };
+    const entries = mapEntries(map, { rocket: { n: 1 }, success: true, extra: 'x' });
+    expect(entries.map((e: any) => `${e.key}|${e.name}|${e.templateKey}`)).toEqual([
+      'rocket|rocket|rocket', 'success|success|success', 'rocket /* summary */|rocket|rocket /* summary */', 'extra|extra|*',
+    ]);
+    expect(entries[2].value).toBe(entries[0].value);
+    const onlyCommented = mapEntries({ 'rocket /* summary */': 'div', '*': 'i' }, { rocket: 1 });
+    expect(onlyCommented.map((e: any) => e.key)).toEqual(['rocket /* summary */']);
+    // Nullish: skipped by the VM key's value, unless keepNullish
+    expect(mapEntries({ 'gone /* x */': 'p' }, { gone: null })).toEqual([]);
+    expect(mapEntries({ 'gone /* x */': 'p' }, { gone: null }, true).length).toBe(1);
+  });
 });

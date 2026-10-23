@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>builtIns.tree map key comment Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>builtIns.tree map key comment tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    import { assignFromAsync } from '../index.js';
+    import { tree } from '../DX/tree.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+    function assert(condition, message) {
+      results.push(`<div class="${condition ? 'pass' : 'fail'}">${condition ? '✓' : '✗'} ${message}</div>`);
+      condition ? passed++ : failed++;
+      if (!condition) console.error('Failed:', message);
+    }
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) console.error(`${message}\n  Expected: ${expected}\n  Actual:   ${actual}`);
+      assert(actual === expected, message);
+    }
+    const strip = html => html.replace(/<!--[^>]*-->/g, '');
+    const map = {
+      name: ['h2', '?.'],
+      rocket: ['section', { 'class :=': 'card' }, [['h3', '?.name'], ['p', '?.type']]],
+      success: ['span', { 'class :=': 'badge', textContent: 'Success' }],
+      'rocket /* summary */': tree`<div class="summary">${'?.name'} (${'?.type'})</div>`,
+    };
+    const vm = (name = 'Falcon 9') => ({ name: 'Demo Mission 7', rocket: { name, type: 'rocket' }, success: true });
+    const run = (host, config, from) => assignFromAsync(host, { '?. =>': { do: 'builtIns.tree', ...config } }, { from });
+
+    async function runTests() {
+      // Test 1: the same VM key twice, in map order
+      {
+        const host = document.createElement('div');
+        await run(host, { map }, vm());
+        assertEquals(strip(host.innerHTML),
+          '<h2>Demo Mission 7</h2><section class="card"><h3>Falcon 9</h3><p>rocket</p></section><span class="badge">Success</span>'
+          + '<div class="summary"><span>Falcon 9</span> (<span>rocket</span>)</div>', 'a commented key renders the VM key again, after success');
+
+        // Rerun: each entry rebinds its own element
+        const [section, summary] = [host.querySelector('section'), host.querySelector('.summary')];
+        await run(host, { map }, vm('Starship'));
+        assert(host.querySelector('section') === section && section.querySelector('h3').textContent === 'Starship', 'rerun: the first entry rebinds in place');
+        assert(host.querySelector('.summary') === summary && summary.textContent === 'Starship (rocket)', 'rerun: the commented entry rebinds in place');
+
+        // Nullish: both entries go, as the VM key's value does
+        const gone = vm();
+        gone.rocket = null;
+        await run(host, { map }, gone);
+        assert(!host.querySelector('section') && !host.querySelector('.summary'), 'nullish: both entries for the VM key are removed');
+      }
+
+      // Test 2: '*' counts the commented key as naming its VM key
+      {
+        const host = document.createElement('div');
+        await run(host, { map: { 'rocket /* summary */': ['b', '?.name'], '*': 'i' } }, { rocket: { name: 'F' }, extra: 'x' });
+        assertEquals(strip(host.innerHTML), '<b>F</b><i>x</i>', "'*': the commented key's VM key isn't rendered again");
+      }
+
+      // Test 3: compile gives the same DOM; the typo warning uses the VM key
+      {
+        const plain = document.createElement('div');
+        const compiled = document.createElement('div');
+        await run(plain, { map }, vm());
+        await run(compiled, { map, compile: true }, vm());
+        assert(plain.isEqualNode(compiled), 'compile: the same DOM');
+        const warn = console.warn;
+        const warnings = [];
+        console.warn = (...args) => warnings.push(args.join(' '));
+        try {
+          await run(document.createElement('div'), { map: { 'rokcet /* summary */': 'b', 'rocket /* ok */': 'i' } }, { rocket: 1 });
+        } finally {
+          console.warn = warn;
+        }
+        assert(warnings.length === 1 && warnings[0].includes('rokcet /* summary */'), 'typo warning: by the VM key, naming the key as written');
+      }
+
+      // Test 4: a misplaced comment is an error
+      {
+        let message = '';
+        try { await run(document.createElement('div'), { map: { 'roc /* x */ ket': 'b' } }, { rocket: 1 }); } catch (e) { message = e.message; }
+        assert(message.includes('goes at its end'), 'a comment that isn\'t at the end throws');
+      }
+
+      // Test 5: adopt markup with a commented key
+      {
+        const rendered = document.createElement('div');
+        await run(rendered, { map }, vm());
+        const server = document.createElement('div');
+        server.innerHTML = rendered.innerHTML;
+        const before = [...server.querySelectorAll('*')];
+        await run(server, { map, adopt: true }, vm());
+        const after = [...server.querySelectorAll('*')];
+        assert(before.length === after.length && before.every((el, i) => el === after[i]), 'adopt: every element reused');
+      }
+
+      document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = failed === 0 ? 'success' : 'failure';
+    }
+
+    runTests().catch(e => {
+      console.error(e);
+      assert(false, `error: ${e.message}`);
+      document.getElementById('results').innerHTML = results.join('');
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = 'failure';
+    });
+  </script>
+</body>
+</html>

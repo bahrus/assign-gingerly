@@ -144,6 +144,31 @@ Bare class headers and `$:` headers are reserved for a later phase and throw for
 | Order | Map order, then `'*'` keys (below) in VM key order |
 | Value is `null` / `undefined` | Skipped (an existing element is removed), unless `keepNullish: true` |
 | Map key missing from the VM | Skipped as above, with a `console.warn` on the tree's first render (likely a typo) |
+| The same VM key more than once | Add a trailing comment to the extra keys: `'rocket /* summary */'` (see below) |
+
+### The same VM key more than once: a comment in the key
+
+A map key can end with a `/* … */` comment. The comment is ignored when looking up the VM key, so a map can render one VM key in several places:
+
+```JavaScript
+map: {
+    name: ['h2', '?.'],
+    rocket: ['section', { 'class :=': 'card' }, [['h3', '?.name'], ['p', '?.type']]],
+    success: ['span', { 'class :=': 'badge', textContent: 'Success' }],
+    'rocket /* summary */': ['p', { 'class :=': 'summary', textContent: '?.name' }],   // vm.rocket again, after success
+}
+```
+
+- **Each key is its own entry,** with its own element, rebound on its own. The key *as written* is the entry's identity, so `rocket` and `'rocket /* summary */'` don't interfere.
+- **Spaces around the comment are trimmed:** `'rocket/*summary*/'` and `'rocket   /* summary */'` both name `rocket`.
+- **Prefer descriptive comments** (`/* summary */`) over numbers (`/*2*/`): they say why the entry exists.
+- **The other key rules use the VM key:**
+  - nullish values skip every entry for that key;
+  - `'*'` treats a commented key as naming its VM key, so it isn't rendered again;
+  - the typo warning checks the VM key, and names the key as written.
+- **One comment, at the end:** a comment anywhere else (`'roc /* x */ ket'`), two comments, or a key that's only a comment throws.
+- **o2h** renders commented keys the same way (they share `mapEntries`). A VM key that really contains `/*` can't be named in a map; shape the VM instead.
+
 
 ### Default specification: `'*'`
 
@@ -793,6 +818,7 @@ Exporting a tree, for example **server-side rendering to an HTML string**, belon
 | Export | From | Decides |
 |---|---|---|
 | `mapEntries(map, from, keepNullish?)` | `assign-gingerly/handlers/treeSpec.js` | which map keys render, in order (`'*'` included), with their spec and value |
+| `mapKeyName(key)` | same | the VM key a map key names (without its trailing comment) |
 | `chooseCase(switchSpec, value, resolve)` | same | which case a switch picks (`DEFAULT_CASE` for `default`) |
 | `repeatItems(repeat, value, resolve)` | same | what a repeat stamps: items, keys (duplicates fall back to the index), `empty`, and whether items resolve one level down |
 | `normalize(spec)`, `isSwitch(spec)`, `isSnippet(spec)` | same | a specification's parts |

@@ -33,7 +33,7 @@
  */
 import { getValue, getValues, isEventBinding, isReferenceString } from '../resolve/getValues.js';
 import { planMicroJoin } from '../syncOps/microJoin.js';
-import { checkSwitch, isLiteralString, isSnippet, isSwitch, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
+import { checkSwitch, isLiteralString, isSnippet, isSwitch, mapKeyName, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 /** A ` :=` key with a plain attribute name (no path): `'aria-label :='` → `aria-label`. */
 const ATTR_KEY = /^([A-Za-z_:][\w:.-]*) :=$/;
@@ -58,7 +58,8 @@ export function compileTree(config, options = {}) {
             compileTemplate(key, wildcardSpecOf(map), undefined, ctx);
         }
         else {
-            const keySample = sample != null && typeof sample === 'object' && key in sample ? { value: sample[key] } : undefined;
+            const name = mapKeyName(key);
+            const keySample = sample != null && typeof sample === 'object' && name in sample ? { value: sample[name] } : undefined;
             compileTemplate(key, map[key], keySample, ctx);
         }
     }

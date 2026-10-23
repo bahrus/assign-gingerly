@@ -108,29 +108,60 @@ export function isLiteralString(value) {
     return !(value.startsWith('?.') || value.startsWith('$0') || isFromStackReference(value)
         || value.startsWith('!') || value.includes('://'));
 }
+/** Map keys' VM key names (see mapKeyName), by key. */
+const keyNames = new Map();
+/**
+ * The VM key a map key names: the key itself, or, for a key with a trailing comment
+ * (`'rocket /* summary *\/'`), the part before it, trimmed. A comment lets a map render the same VM key
+ * more than once: each key is its own entry (its own element), while the comment is ignored for the
+ * lookup. Only one comment, only at the end: anything else is an error.
+ */
+export function mapKeyName(key) {
+    let name = keyNames.get(key);
+    if (name !== undefined)
+        return name;
+    name = key;
+    if (key.includes('/*') || key.includes('*/')) {
+        const trimmed = key.trimEnd();
+        const open = trimmed.indexOf('/*');
+        if (open < 0 || !trimmed.endsWith('*/') || trimmed.indexOf('*/') !== trimmed.length - 2 || trimmed.indexOf('/*', open + 2) >= 0) {
+            throw new Error(`builtIns.tree: map key "${key}": a comment in a map key goes at its end, once (e.g. 'rocket /* summary */')`);
+        }
+        name = trimmed.slice(0, open).trim();
+        if (name === '')
+            throw new Error(`builtIns.tree: map key "${key}" is only a comment; put the VM key before it`);
+    }
+    keyNames.set(key, name);
+    return name;
+}
 /**
  * The map's entries that render, in render order: map order, then `'*'` for the VM keys
  * the map doesn't name (in VM key order). Keys whose value is null / undefined are left
- * out, unless `keepNullish`.
+ * out, unless `keepNullish`. A key with a trailing comment names the VM key before it
+ * (see mapKeyName), for `'*'` too.
  */
 export function mapEntries(map, from, keepNullish = false) {
     const entries = [];
-    const push = (key, spec, templateKey) => {
-        const value = from?.[key];
+    const push = (key, name, spec, templateKey) => {
+        const value = from?.[name];
         if (value == null && !keepNullish)
             return;
-        entries.push({ key, spec, value, templateKey });
+        entries.push({ key, name, spec, value, templateKey });
     };
+    const named = new Set();
     for (const key of Object.keys(map)) {
-        if (key !== WILDCARD)
-            push(key, map[key], key);
+        if (key === WILDCARD)
+            continue;
+        const name = mapKeyName(key);
+        named.add(name);
+        push(key, name, map[key], key);
     }
     if (map[WILDCARD] === undefined || from === null || typeof from !== 'object')
         return entries;
     const wildcardSpec = wildcardSpecOf(map);
     for (const key of Object.keys(from)) {
-        if (!(key in map))
-            push(key, wildcardSpec, WILDCARD);
+        if (!named.has(key))
+            push(key, key, wildcardSpec, WILDCARD);
     }
     return entries;
 }
