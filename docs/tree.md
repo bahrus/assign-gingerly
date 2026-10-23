@@ -625,9 +625,9 @@ Give each config its own `markerName` (default `'tree'`):
 ## Config
 
 ```TypeScript
-interface TreeConfig extends HandlerConfig {
+interface TreeConfig<T = any> extends HandlerConfig {
     do: 'builtIns.tree';
-    map: Record<string, ElementSpecification>;
+    map: TreeMap<T>;        // T: the VM's type, optional (see "Key suggestions" below)
     markerName?: string;    // default 'tree'
     keepNullish?: boolean;  // default false
     aka?: Record<string, string>;  // aliases for this tree's patterns, merged over options.aka
@@ -637,6 +637,28 @@ interface TreeConfig extends HandlerConfig {
 ```
 
 The types live in `types/assign-gingerly/treeTypes.d.ts`.
+
+### Key suggestions in editors: `TreeMap<T>`
+
+Given the VM's type, editors **suggest the map's keys** (the VM's keys, and `'*'`), **without requiring any of them**. Any other key is still allowed, e.g. a [commented key](#the-same-vm-key-more-than-once-a-comment-in-the-key):
+
+```TypeScript
+import type { TreeConfig, TreeMap } from 'assign-gingerly/types/treeTypes.js';
+
+interface Launch { name: string; rocket: { name: string; type: string }; success: boolean }
+
+const map = {
+    name: ['h2', '?.'],                     // suggested: name, rocket, success, '*'
+    'rocket /* summary */': ['p', '?.type'],
+} satisfies TreeMap<Launch>;
+
+const config: TreeConfig<Launch> = { do: 'builtIns.tree', map };   // or annotate the config
+```
+
+- **The map needs its type where it's written.** A map written inline inside an `assignFrom` call gets no suggestions, because `assignFrom`'s pattern isn't typed by the VM. Use `satisfies TreeMap<T>`, or an annotated `TreeConfig<T>`, then pass that to `assignFrom`.
+- **In JavaScript,** a JSDoc annotation does the same: `/** @type {import('assign-gingerly/types/treeTypes.js').TreeMap<Launch>} */`.
+- **Without `T`** (`TreeConfig`, `TreeMap`), the map takes any string keys, as before.
+- **Values aren't checked against the VM.** Use `` tree`…` `` with [`paths<T>()`](#authoring-with-tree-optional) for that.
 
 ## Compiling (`compile`, experimental)
 
