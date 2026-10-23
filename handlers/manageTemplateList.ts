@@ -32,6 +32,7 @@ import { resolveValue } from '../resolve/resolveValues.js';
 import { assignFrom } from '../assignFrom.js';
 import { processInferredAssignments } from '../inferredAssignments.js';
 import { placeNodes } from '../utils/placeNodes.js';
+import { snippetNameOf } from './snippets.js';
 import type { PermissionProcessor } from '../types/assign-gingerly/types.js';
 
 /**
@@ -318,7 +319,8 @@ export class ManageTemplateListHandler implements AssignFromHandler {
  */
 function getMarkerName(templateEl: any): string | undefined {
     if (templateEl instanceof HTMLTemplateElement) {
-        return templateEl.id || undefined;
+        // A snippets:// template is named after its snippet
+        return templateEl.id || snippetNameOf(templateEl) || undefined;
     }
     return undefined;
 }

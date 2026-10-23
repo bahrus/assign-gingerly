@@ -66,7 +66,7 @@ await assignFromAsync(document.getElementById('rankings-body') /** this is the t
     // List-level parameters (resolved against options.from)
     resolve: {
         forEach: '?.path.to.iterable',     // The iterable to loop over
-        instantiate: 'globalThis://templateId',  // Template to clone
+        instantiate: 'globalThis://templateId',  // Template to clone (or 'snippets://name': a snippet from options.snippets)
         method: 'appendChild',              // 'appendChild' | 'prepend' | 'after'
         forget: false,                      // Remove (true) or hide (false) deleted items
         markerName: 'myList',              // Override auto-derived marker name

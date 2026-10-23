@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>snippets:// protocol Tests</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>snippets:// protocol tests</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <script type="module">
+    import { assignFrom, assignFromAsync } from '../index.js';
+    import { withSnippetProtocol } from '../handlers/snippets.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+    function assert(condition, message) {
+      results.push(`<div class="${condition ? 'pass' : 'fail'}">${condition ? '✓' : '✗'} ${message}</div>`);
+      condition ? passed++ : failed++;
+      if (!condition) console.error('Failed:', message);
+    }
+    function assertEquals(actual, expected, message) {
+      if (actual !== expected) console.error(`${message}\n  Expected: ${expected}\n  Actual:   ${actual}`);
+      assert(actual === expected, message);
+    }
+    async function rejects(promise) {
+      try { await promise; return ''; } catch (e) { return e.message; }
+    }
+    const SVG = 'http://www.w3.org/2000/svg';
+    const snippets = {
+      banner: String.raw`
+        <header class="banner"><strong>Example</strong></header>
+        <p class="tagline">Two roots</p>`,
+      logo: String.raw`<svg class="logo" viewBox="0 0 2 2"><path d="M0 0"/></svg>`,
+      home: String.raw`<section class="home">Home</section>`,
+      settings: String.raw`<section class="settings">Settings</section>`,
+      row: String.raw`<li class="row"></li>`,
+    };
+    const host = () => { const el = document.createElement('div'); document.body.append(el); return el; };
+    const markerNames = el => [...el.childNodes].filter(n => n.nodeType === Node.COMMENT_NODE).map(n => n.data).filter(d => d.startsWith('?start')).join(',');
+
+    async function runTests() {
+      // Test 1: lazyLoad instantiates a snippet, named after it; no protocol to register
+      {
+        const el = host();
+        await assignFromAsync(el, { '?. =>': { do: 'builtIns.lazyLoad', resolve: { if: '?.show', instantiate: 'snippets://banner' } } },
+          { from: { show: true }, snippets });
+        assertEquals([...el.children].map(c => c.className).join(','), 'banner,tagline', 'lazyLoad: both of the snippet\'s roots are instantiated');
+        assertEquals(markerNames(el), '?start name="banner"', 'lazyLoad: the markers are named after the snippet');
+        el.remove();
+      }
+
+      // Test 2: SVG gets its namespace; each instance is its own copy, and the shared template is untouched
+      {
+        const a = host();
+        const b = host();
+        const pattern = { '?. =>': { do: 'builtIns.lazyLoad', resolve: { if: '?.show', instantiate: 'snippets://logo' } } };
+        await assignFromAsync(a, pattern, { from: { show: true }, snippets });
+        await assignFromAsync(b, pattern, { from: { show: true }, snippets });
+        const [svgA, svgB] = [a.querySelector('svg'), b.querySelector('svg')];
+        assert(svgA && svgB && svgA !== svgB, 'copies: each instance gets its own nodes');
+        assertEquals(svgA.namespaceURI, SVG, 'svg: in the SVG namespace');
+        const template = withSnippetProtocol({ from: {}, snippets }).protocols.snippets('logo');
+        assert(template instanceof HTMLTemplateElement && template.content.querySelector('svg'), 'the template keeps its content (handlers clone it)');
+        a.remove();
+        b.remove();
+      }
+
+      // Test 3: lazyLoadSwitch: one snippet per case
+      {
+        const el = host();
+        const pattern = { '?. =>': [
+          { do: 'builtIns.lazyLoadSwitch', resolve: { lhs: '?.route', rhs: 'home', instantiate: 'snippets://home' } },
+          { do: 'builtIns.lazyLoadSwitch', resolve: { lhs: '?.route', rhs: 'settings', instantiate: 'snippets://settings' } },
+        ] };
+        await assignFromAsync(el, pattern, { from: { route: 'home' }, snippets });
+        assert(el.querySelector('.home') && !el.querySelector('.settings'), 'lazyLoadSwitch: the matching case\'s snippet');
+        await assignFromAsync(el, pattern, { from: { route: 'settings' }, snippets });
+        assert(el.querySelector('.settings'), 'lazyLoadSwitch: another case\'s snippet once the route changes');
+        assert(markerNames(el).includes('name="home"') && markerNames(el).includes('name="settings"'), 'lazyLoadSwitch: each case\'s markers are named after its snippet');
+        el.remove();
+      }
+
+      // Test 4: manageTemplateList: a snippet per item
+      {
+        const el = document.createElement('ul');
+        document.body.append(el);
+        const pattern = { '?. =>': {
+          do: 'builtIns.manageTemplateList',
+          resolve: { forEach: '?.list', instantiate: 'snippets://row', forget: true },
+          fromEachItem: { textContent: '?.name', resolve: { key: '?.id' } },
+        } };
+        await assignFromAsync(el, pattern, { from: { list: [{ id: 1, name: 'A' }, { id: 2, name: 'B' }, { id: 3, name: 'C' }] }, snippets });
+        assertEquals([...el.querySelectorAll('li.row')].map(li => li.textContent).join(','), 'A,B,C', 'manageTemplateList: one snippet copy per item');
+        assertEquals(markerNames(el), '?start name="row"', 'manageTemplateList: the markers are named after the snippet');
+        el.remove();
+      }
+
+      // Test 5: refused and missing snippets throw, naming them
+      {
+        const run = (name, extra = {}) => rejects(assignFromAsync(host(), { '?. =>': { do: 'builtIns.lazyLoad', resolve: { if: '?.show', instantiate: `snippets://${name}` } } },
+          { from: { show: true }, snippets: { ...snippets, bad: '<button onclick="x()">x</button>', ...extra } }));
+        assert((await run('bad')).includes('onclick'), 'refused: an event handler attribute');
+        assert((await run('nope')).includes('"nope"'), 'refused: a name the snippets option doesn\'t have');
+        for (const el of document.querySelectorAll('body > div:not(#results):not(#test-complete)')) el.remove();
+      }
+
+      // Test 6: a snippets protocol of the page's own wins; other :// strings are unaffected
+      {
+        const own = document.createElement('template');
+        own.innerHTML = '<i class="own">mine</i>';
+        const el = host();
+        await assignFromAsync(el, { '?. =>': { do: 'builtIns.lazyLoad', resolve: { if: '?.show', instantiate: 'snippets://banner' } } },
+          { from: { show: true }, snippets, protocols: { snippets: () => own } });
+        assert(el.querySelector('.own') && !el.querySelector('.banner'), 'override: options.protocols.snippets wins over the built-in');
+        el.remove();
+        const target = {};
+        assignFrom(target, { url: 'https://example.com/a', mail: 'mailto:x@example.com' }, { from: {}, snippets });
+        assert(target.url === 'https://example.com/a' && target.mail === 'mailto:x@example.com', 'literals: other :// strings stay literal');
+      }
+
+      // Test 7: the built-in protocol follows the options it was made for
+      {
+        const first = withSnippetProtocol({ from: {}, snippets });
+        assert(withSnippetProtocol(first) === first, 'reuse: the same options are returned as is');
+        const other = withSnippetProtocol({ ...first, snippets: { banner: '<b class="other">B</b>' } });
+        assert(other !== first && other.protocols.snippets('banner').content.querySelector('.other'), 'nested: other snippets get their own protocol');
+        assert(withSnippetProtocol({ from: {} }).protocols === undefined, 'no snippets: nothing added');
+      }
+
+      document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = failed === 0 ? 'success' : 'failure';
+    }
+
+    runTests().catch(e => {
+      console.error(e);
+      assert(false, `error: ${e.message}`);
+      document.getElementById('results').innerHTML = results.join('');
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = 'failure';
+    });
+  </script>
+</body>
+</html>

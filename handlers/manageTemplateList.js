@@ -29,6 +29,7 @@ import { resolveValue } from '../resolve/resolveValues.js';
 import { assignFrom } from '../assignFrom.js';
 import { processInferredAssignments } from '../inferredAssignments.js';
 import { placeNodes } from '../utils/placeNodes.js';
+import { snippetNameOf } from './snippets.js';
 /**
  * Reserved keys in fromEachItem config — not treated as shorthand patterns.
  */
@@ -276,7 +277,8 @@ export class ManageTemplateListHandler {
  */
 function getMarkerName(templateEl) {
     if (templateEl instanceof HTMLTemplateElement) {
-        return templateEl.id || undefined;
+        // A snippets:// template is named after its snippet
+        return templateEl.id || snippetNameOf(templateEl) || undefined;
     }
     return undefined;
 }

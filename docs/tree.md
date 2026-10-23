@@ -521,6 +521,8 @@ card: tree`<article>${snippet('logo')}<h3>${'?.title'}</h3></article>`,
   - with a permission processor, every attribute must pass it, as Tree's own attribute writes do.
 - **Missing names** throw on first render.
 
+**Other handlers can use snippets too:** `snippets://name` resolves to a snippet's template wherever a handler takes one, e.g. `instantiate` in `builtIns.lazyLoad` and `builtIns.manageTemplateList` (see [the README](../README.md#built-in-handler-builtinslazyload)).
+
 **Why the HTML is in the options, not the config:** the config may be JSON loaded from elsewhere, and the data comes from an API. Markup only comes from the page's own code. Snippets are author content, never data.
 
 **`compile`:** a snippet is a template already. Among static children, it's cloned into its parent's clone when that's created.

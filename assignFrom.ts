@@ -18,6 +18,7 @@ import { resolveIdVariable, parseIdRef } from './resolve/resolveIdRef.js';
 import { processInferredAssignments } from './inferredAssignments.js';
 import { resolveLhsPath } from './utils/resolveLhsPath.js';
 import { SYNC_OPS } from './syncOps/registry.js';
+import { withSnippetProtocol } from './handlers/snippets.js';
 import type { PermissionProcessor, AssignFromOptions, AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
 
 // Re-export types for consumers
@@ -521,6 +522,8 @@ export function assignFrom(
   options: AssignFromOptions,
   permissionProcessor?: PermissionProcessor
 ): any {
+  // The built-in snippets:// protocol, when the options have snippets
+  options = withSnippetProtocol(options, permissionProcessor);
   // Expand looped substitution variables
   const expandedPattern = expandSubstitutions(pattern, options);
 

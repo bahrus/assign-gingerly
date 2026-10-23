@@ -120,3 +120,67 @@ The handlers clone the template's content (they already do), and must never modi
 2. **Built in** when `snippets` is in the options (as above), or an explicit helper to register, e.g. `protocols: { snippets: snippetTemplates(snippets) }`? Built in is less boilerplate; explicit is more visible.
 3. **Marker names** defaulting to the snippet's name?
 4. **Should I implement it,** with tests for lazyLoad, lazyLoadSwitch and manageTemplateList?
+
+## Bruce's Response I
+
+1. **`snippets://`** as the name (or `snippet://`)?
+
+That's a tough one.  I think snippets.
+
+2. **Built in** when `snippets`
+
+Yes, built in, no explicit protocol should be required.
+
+3. **Marker names** defaulting to the snippet's name?
+
+Yes, I think we should document that an effort should be made to make it somewhat unique.
+
+4. **Should I implement it,** with tests for lazyLoad, lazyLoadSwitch and manageTemplateList?
+
+Yes, please.
+
+
+## Claude's Implementation Notes
+
+`snippets://name` is built in, as agreed. It works whenever `snippets` is in the options, and markers are named after the snippet.
+
+### Code
+
+| Where | What |
+|---|---|
+| **`handlers/snippets.ts`** | `withSnippetProtocol(options, permissionProcessor)`: when the options have `snippets` and no `snippets` protocol of their own, it returns them with a built-in one added. `snippets://name` resolves to the snippet's parsed, checked `<template>`, from the same cache builtIns.tree uses. It's synchronous. `snippetNameOf(template)` gives back the name a template was resolved under, for marker names. |
+| **`assignFrom.ts`, `assignFromAsync.ts`** | Call `withSnippetProtocol` first, so every handler (and nested call) gets the protocol through its options. Nothing is added to the pure `resolve/getValues.ts`. |
+| **`handlers/lazyLoad.ts`** (so `lazyLoadSwitch` too) **and `handlers/manageTemplateList.ts`** | `getMarkerName`: a template's `id`, then its snippet name, then the old fallback. |
+| **Docs** | The README's lazyLoad section has a "Templates from snippets" block, with the uniqueness advice you asked for. Plus the `instantiate` row, a line in tree.md's Snippets section, the manage-template-list.md config comment, and the `snippets` option's doc comment in the types (submodule). |
+
+**The built-in protocol remembers the snippets it was made for.** A nested call with the same options keeps it. A call with different `snippets` (or another permission processor) gets its own. A page's own `options.protocols.snippets` always wins.
+
+**Other `://` strings are unaffected:** a literal `https://…` was already treated as a possible protocol reference, and it resolves to itself when no protocol matches. The test checks that.
+
+### One build issue to know about
+
+**`handlers/lazyLoad.ts` wasn't being compiled.** It isn't in tsconfig's `include`, and nothing imports it statically, because it's loaded by path when a config names it. So `handlers/lazyLoad.js` was stale, last built on October 3, and neither `tsc -p .` nor your watcher would have picked up this change.
+
+**I added `handlers/lazyLoad.ts` to `include`.** Compiling it reproduces the committed `lazyLoad.js` exactly, apart from this change. So nothing else in it had drifted.
+
+**`handlers/lazyLoadSwitch.ts` has an existing type error,** which is why I didn't add it as well. Its `assign` takes `LazyLoadSwitchResolvedParams` where the base class takes `LazyLoadResolvedParams`. Its `.js` doesn't need rebuilding for this change, since it imports `./lazyLoad.js`. But it is in the same "not compiled" state, so say if you'd like me to fix the type and include it too.
+
+**Other handlers might be in the same situation:** loaded by path, and not in `include`. manageTemplateList is compiled, because something imports it.
+
+### Tests
+
+**`tests/snippet-protocol.html` / `.spec.ts`,** with 17 cases:
+- **lazyLoad:** a snippet with two roots, markers named after it, SVG in its namespace, and separate copies per instance with the shared template left intact;
+- **lazyLoadSwitch:** one snippet per case, switching between them, and per-case marker names. Before the naming change, the two cases shared "anonymous" markers, and the second case hid the first;
+- **manageTemplateList:** a snippet per item, and the marker name;
+- **refusals:** a refused or missing snippet throws, naming it;
+- **precedence and literals:** a page's own protocol wins, and other `://` literals stay literal;
+- **reuse:** the protocol is reused with the same options, and replaced for other snippets.
+
+**Full suite** (scratch copy, three browsers): 172 passed and 8 skipped.
+
+### For you
+
+- **New files:** `tests/snippet-protocol.html` and `tests/snippet-protocol.spec.ts`.
+- **`tsconfig.json` changed:** it now includes `handlers/lazyLoad.ts`, so your watcher rebuilds `lazyLoad.js`.
+- **The types submodule** needs its own commit.

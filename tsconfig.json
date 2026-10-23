@@ -19,6 +19,7 @@
 		"handlers/tree.ts",
 		"handlers/scope.ts",
 		"handlers/compileTree.ts",
+		"handlers/lazyLoad.ts",
 	],
 	"exclude":[
 		"node_modules/*"

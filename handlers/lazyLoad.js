@@ -21,12 +21,14 @@
 import { withTransition, ensureHideStyle, DEFAULT_HIDE_CLASS } from '../transitionHelper.js';
 import { findMarkers, createMarkers, getNodesBetweenMarkers, findMarkersSibling, createMarkersSibling } from '../markerUtils.js';
 import { assignFrom } from '../assignFrom.js';
+import { snippetNameOf } from './snippets.js';
 /**
  * Get the marker name from a template element (uses its id).
  */
 function getMarkerName(templateEl) {
     if (templateEl instanceof HTMLTemplateElement) {
-        return templateEl.id || 'anonymous';
+        // A snippets:// template is named after its snippet
+        return templateEl.id || snippetNameOf(templateEl) || 'anonymous';
     }
     if (typeof templateEl === 'string') {
         return templateEl;

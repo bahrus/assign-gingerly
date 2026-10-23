@@ -40,6 +40,37 @@ export function parsedSnippet(spec, options, permissionProcessor, doc) {
     }
     return parsed;
 }
+// ── The built-in `snippets://name` protocol: a snippet's template, for any handler parameter taking one ──
+/** The snippet names templates were last resolved under, so handlers can name their markers after them. */
+const templateNames = new WeakMap();
+/** The snippet name a template was resolved under through `snippets://` (for marker names), if any. */
+export function snippetNameOf(template) {
+    return templateNames.get(template);
+}
+/** Marks the built-in protocol handler with the options it reads, so a call with other snippets gets its own. */
+const BUILT_IN = Symbol('snippets protocol');
+/**
+ * Options with the built-in `snippets://` protocol added, when the options have `snippets` and
+ * no `snippets` protocol of their own: `snippets://name` resolves to that snippet's parsed,
+ * checked `<template>` (shared, cached per string: clone its content, don't modify it).
+ * Synchronous. Returns the options unchanged when there's nothing to add.
+ */
+export function withSnippetProtocol(options, permissionProcessor) {
+    const snippets = options?.snippets;
+    if (!snippets)
+        return options;
+    const existing = options.protocols?.snippets;
+    if (existing && !(existing[BUILT_IN] && (existing[BUILT_IN].snippets !== snippets || existing[BUILT_IN].permissionProcessor !== permissionProcessor))) {
+        return options;
+    }
+    const handler = (name) => {
+        const { template } = parsedSnippet({ snippet: name }, options, permissionProcessor, document);
+        templateNames.set(template, name);
+        return template;
+    };
+    handler[BUILT_IN] = { snippets, permissionProcessor };
+    return { ...options, protocols: { ...options.protocols, snippets: handler } };
+}
 /** A fresh copy of a snippet's nodes, imported into `doc` (so custom elements in it upgrade). */
 export function cloneSnippet({ template }, doc) {
     return [...doc.importNode(template.content, true).childNodes];

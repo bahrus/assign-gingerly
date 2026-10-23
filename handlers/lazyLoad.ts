@@ -24,6 +24,7 @@ import type { LazyLoadResolvedParams, LazyLoadInstantiatedContext, PermissionPro
 import { withTransition, ensureHideStyle, DEFAULT_HIDE_CLASS } from '../transitionHelper.js';
 import { findMarkers, createMarkers, getNodesBetweenMarkers, findMarkersSibling, createMarkersSibling, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
 import { assignFrom } from '../assignFrom.js';
+import { snippetNameOf } from './snippets.js';
 
 
 export type { LazyLoadResolvedParams, LazyLoadInstantiatedContext };
@@ -33,7 +34,8 @@ export type { LazyLoadResolvedParams, LazyLoadInstantiatedContext };
  */
 function getMarkerName(templateEl: any): string {
     if (templateEl instanceof HTMLTemplateElement) {
-        return templateEl.id || 'anonymous';
+        // A snippets:// template is named after its snippet
+        return templateEl.id || snippetNameOf(templateEl) || 'anonymous';
     }
     if (typeof templateEl === 'string') {
         return templateEl;

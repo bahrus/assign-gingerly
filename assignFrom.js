@@ -17,6 +17,7 @@ import { resolveIdVariable, parseIdRef } from './resolve/resolveIdRef.js';
 import { processInferredAssignments } from './inferredAssignments.js';
 import { resolveLhsPath } from './utils/resolveLhsPath.js';
 import { SYNC_OPS } from './syncOps/registry.js';
+import { withSnippetProtocol } from './handlers/snippets.js';
 /**
  * Supported substitution variables and their option keys.
  */
@@ -497,6 +498,8 @@ function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, option
  * @returns The target object after merging
  */
 export function assignFrom(target, pattern, options, permissionProcessor) {
+    // The built-in snippets:// protocol, when the options have snippets
+    options = withSnippetProtocol(options, permissionProcessor);
     // Expand looped substitution variables
     const expandedPattern = expandSubstitutions(pattern, options);
     // Categorize keys

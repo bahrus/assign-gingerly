@@ -2902,7 +2902,7 @@ await assignFromAsync(document.body, {
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `if` | boolean | Show content when truthy, hide/remove when falsy |
-| `instantiate` | HTMLTemplateElement | The template to clone (typically resolved via globalThis protocol) |
+| `instantiate` | HTMLTemplateElement | The template to clone (typically resolved via a protocol: `globalThis://id`, or [`snippets://name`](#built-in-handler-builtinslazyload) for a snippet) |
 | `method` | string | `'appendChild'` (default) or `'prepend'` — where to place markers |
 | `forget` | boolean | If true, removes nodes entirely when `if` is false (default: hides with `hidden` attribute) |
 | `placeholder` | string | Name of a pre-existing marker pair whose content is removed on first activation |
@@ -2916,6 +2916,32 @@ await assignFromAsync(document.body, {
 - **Remove (`if` = false, `forget` = true):** Removes nodes between markers entirely. Markers persist for re-insertion if `if` becomes true again.
 
 This is useful for conditional rendering, routing, and lazy-loading views.
+
+**Templates from snippets (`snippets://`):** instead of a `<template>` in the page, a template parameter can name a snippet. That's static HTML in the `snippets` option, the same option [builtIns.tree's snippets](docs/tree.md#snippets-static-html) use. No protocol has to be registered:
+
+```JavaScript
+await assignFromAsync(document.body, {
+    '?.querySelector?..mainView =>': {
+        do: 'builtIns.lazyLoad',
+        get: {
+            if: '?.isVisible',
+            instantiate: 'snippets://mainView',
+        }
+    }
+}, {
+    withMethods: ['querySelector'],
+    from: myVM,
+    snippets: {
+        mainView: String.raw`<section class="main-view">…</section>`,
+    },
+});
+```
+
+- **Any template parameter:** `snippets://name` works wherever a handler takes a template: `instantiate` in `builtIns.lazyLoad`, `builtIns.lazyLoadSwitch` and `builtIns.manageTemplateList`, and any handler that resolves its parameters the same way. It resolves to the snippet's parsed `<template>`.
+- **Parsed and checked once:** each distinct string is parsed once (SVG and MathML get their namespaces), and the template is shared. It's checked as builtIns.tree checks snippets: no `<script>`, no `on*` attributes, no `javascript:` URLs, and the permission profile. A refused or missing snippet throws, naming it.
+- **Marker names:** markers are named after the snippet (`<!--?start name="mainView"-->`), as they're named after a `<template>`'s `id`. Markers are found by name, so **make snippet names fairly unique**. Two lazyLoads in one target whose snippets share a name would share markers; `markerName` overrides the name when needed.
+- **Your own `snippets` protocol** in `options.protocols` takes precedence over the built-in one.
+- **Holes** (`data-hole`) are a builtIns.tree feature. Here they're left as written, fallback content included.
 
 **Placeholder content (SSR/streaming):**
 

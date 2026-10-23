@@ -20,9 +20,12 @@
  * // target is now { color: 'red', text: 'Hello' }
  */
 import { resolveValues } from './resolve/resolveValues.js';
+import { withSnippetProtocol } from './handlers/snippets.js';
 import assignGingerly from './assignGingerly.js';
 import { assignFrom, expandSubstitutions, categorizeKeys, handleSpreads, loadHandlerCommands, parseMultiInvokeCommand } from './assignFrom.js';
 export async function assignFromAsync(target, pattern, options, permissionProcessor) {
+    // The built-in snippets:// protocol, when the options have snippets
+    options = withSnippetProtocol(options, permissionProcessor);
     // First: expand looped substitution variables (${x}, ${y}, ${z})
     const expandedPattern = expandSubstitutions(pattern, options);
     // Categorize keys
