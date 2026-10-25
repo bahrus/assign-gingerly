@@ -755,6 +755,8 @@ Without `adopt`, markers Tree finds **without state** (server-rendered or cloned
 2. **The bind:** the ordinary bind then runs: patterns, events and properties. Text that's already right isn't rewritten, and `microJoin` updates its elements in place, so nothing is recreated.
 3. **The marks:** `data-pending` marks within what was adopted are removed, since those parts are complete now.
 
+**Pending structure:** server markup can leave a switch or a repeat undecided, when deciding it needs code the server didn't have (see o2h's service worker). A switch then leaves `<!--?switch pending-->`, and a repeat's container is marked `data-pending` and left empty. `adopt` takes those as they are, and the bind renders that one switch case, or those items, fresh, while everything around them is still adopted (with `'pending'` too).
+
 **Any mismatch falls back to the rebuild**, with one `console.debug` saying why, so a page is never left half-adopted. Later runs, and managers' `ctx.rebind()`, then update the adopted elements in place, as for a tree Tree built itself. `adopt` is carried down to nested trees.
 
 #### How the walk pairs spec and markup

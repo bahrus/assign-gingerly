@@ -94,6 +94,11 @@ let compiler;
 let warnedNoCompiler = false;
 /** The comment holding an empty switch's slot. */
 const SWITCH_PLACEHOLDER = '?switch';
+/**
+ * In server markup: a switch the server couldn't decide (e.g. its discriminant needs a pipe the server didn't
+ * have; see o2h). `adopt` adopts it as undecided, so the bind renders the case fresh on the client.
+ */
+const SWITCH_PENDING_PLACEHOLDER = '?switch pending';
 // ── A node's DOM nodes: its element, or a snippet's several (also through switch slots) ──
 /** A snippet's nodes, when the node is (or a switch slot currently renders) a snippet. */
 function snippetNodes(node) {
@@ -852,15 +857,19 @@ function bindCloned(node, value) {
 /** Markup that doesn't match the spec. */
 class AdoptMismatch extends Error {
 }
+/** A switch's placeholder: rendering nothing, or (in server markup) undecided. */
+function isSwitchPlaceholder(data) {
+    return data === SWITCH_PLACEHOLDER || data === SWITCH_PENDING_PLACEHOLDER;
+}
 /**
  * The nodes that specs occupy, from `first` up to `end` (exclusive; default: the last sibling): elements,
- * and the placeholders of switches rendering nothing. Walks siblings directly: the walk's hot loop.
+ * and the placeholders of switches (rendering nothing, or pending). Walks siblings directly: the walk's hot loop.
  */
 function slotsOf(first, end = null) {
     const slots = [];
     for (let node = first; node && node !== end; node = node.nextSibling) {
         const { nodeType } = node;
-        if (nodeType === 1 || (nodeType === 8 && node.data === SWITCH_PLACEHOLDER))
+        if (nodeType === 1 || (nodeType === 8 && isSwitchPlaceholder(node.data)))
             slots.push(node);
     }
     return slots;
@@ -912,6 +921,21 @@ function adoptNode(cursor, spec, value, options, permissionProcessor) {
         return node;
     }
     const slot = slots[cursor.at];
+    if (isSwitch(spec) && slot.nodeType === Node.COMMENT_NODE && slot.data === SWITCH_PENDING_PLACEHOLDER) {
+        // Undecided on the server: adopted as a switch with no case yet, so the bind renders its case fresh
+        cursor.at++;
+        const placeholder = slot;
+        placeholder.data = SWITCH_PLACEHOLDER;
+        const element = placeholder;
+        // With adopt: 'pending', the bind has to reach it
+        const pending = options[TREE_PENDING];
+        if (pending?.active && placeholder.parentElement)
+            bindWithAncestors(pending, placeholder.parentElement);
+        return {
+            tag: '', ish: undefined, element, children: [], spec, options, permissionProcessor, binding: false,
+            container: element, nested: false, switch: { caseKey: undefined, inner: undefined, placeholder },
+        };
+    }
     if (isSwitch(spec)) {
         const root = options[TREE_TARGET];
         const fastAllowed = fastPathAllowed(options, permissionProcessor);
@@ -966,6 +990,11 @@ function adoptNode(cursor, spec, value, options, permissionProcessor) {
                 : resolveAny(path, v, options, element, fastAllowed, permissionProcessor));
             const inner = { slots: slotsOf(container.firstChild), at: 0 };
             const state = { items: new Map(), empty: undefined, warned: false };
+            if (inner.slots.length === 0 && element.hasAttribute(PENDING_ATTRIBUTE) && (stamp.items.length > 0 || stamp.empty !== undefined)) {
+                // Left empty by the server, which couldn't decide the items (marked pending): the bind renders them fresh
+                node.repeat = state;
+                return node;
+            }
             if (stamp.empty !== undefined) {
                 state.empty = adoptNode(inner, stamp.empty, from, options, permissionProcessor);
                 allTaken(inner, "a repeat's empty");

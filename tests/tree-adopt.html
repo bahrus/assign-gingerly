@@ -203,6 +203,34 @@
         copy.remove();
       }
 
+      // Test 7: pending structure from the server (an undecided switch, a repeat left empty): rendered fresh, the rest adopted
+      for (const mode of [true, 'pending']) {
+        const reference = document.createElement('div');
+        await run(reference, vm());   // what Tree builds on its own
+        const host = await serverMarkup();
+        host.querySelector('.hold').replaceWith(document.createComment('?switch pending'));
+        const crewList = host.querySelector('ul');
+        crewList.replaceChildren();
+        crewList.setAttribute('data-pending', '');
+        const [title, card] = [host.querySelector('h2'), host.querySelector('.card')];
+        const debug = console.debug;
+        const notes = [];
+        console.debug = (...args) => notes.push(args.join(' '));
+        try {
+          await run(host, vm(), { adopt: mode });
+        } finally {
+          console.debug = debug;
+        }
+        assertEquals(notes.length, 0, `pending structure (${mode}): no mismatch, so no rebuild`);
+        assert(host.querySelector('h2') === title && host.querySelector('.card') === card && host.querySelector('ul') === crewList,
+          `pending structure (${mode}): the rest is adopted`);
+        assertEquals(host.querySelector('.hold')?.textContent, 'Hold: Winds', `pending structure (${mode}): the switch's case is rendered fresh`);
+        assertEquals([...crewList.children].map(li => li.textContent).join(','), 'Avery,Rowan', `pending structure (${mode}): the repeat's items are rendered fresh`);
+        const strip = el => el.innerHTML.replace(/<!--[^>]*-->/g, '');
+        assertEquals(strip(host), strip(reference), `pending structure (${mode}): the same DOM as Tree's own`);
+        host.remove();
+      }
+
       document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
       const complete = document.getElementById('test-complete');
       complete.dataset.passed = passed;
