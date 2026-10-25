@@ -80,7 +80,7 @@ See [demos/tree-demo.html](../demos/tree-demo.html) for all of these together.
 
 ## Data Pipes (opt-in): pipes described as data
 
-Pipes are functions, and functions can't be stored (IndexedDB, `postMessage`, `structuredClone`). That matters when a config travels: for example, to [o2h's service worker](https://github.com/bahrus/o2h#service-worker-phase-i-json-fetches-rendered-as-html), which renders it off the main thread. **Data pipes** are pipes described by small objects instead, which survive the trip.
+Pipes are functions, and functions can't be stored (IndexedDB, `postMessage`, `structuredClone`). That matters when a config travels: for example, to [o2h's service worker](https://github.com/bahrus/o2h#service-worker-first-paint), which renders it off the main thread. **Data pipes** are pipes described by small objects instead, which survive the trip.
 
 ```js
 import { dataPipes } from 'assign-gingerly/pipes/dataPipes.js';
