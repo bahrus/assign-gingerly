@@ -21,6 +21,7 @@
     "assignPermissions/**",
     "handlers/**",
     "inferencer/**",
+    "pipes/**",
     "resolve/**",
     "syncOps/**",
     "utils/**",
@@ -120,6 +121,10 @@
     "./handlers/compileTree.js": {
       "default": "./handlers/compileTree.js",
       "types": "./handlers/compileTree.ts"
+    },
+    "./pipes/dataPipes.js": {
+      "default": "./pipes/dataPipes.js",
+      "types": "./pipes/dataPipes.ts"
     },
     "./handlers/treeSpec.js": {
       "default": "./handlers/treeSpec.js",

@@ -113,4 +113,57 @@ test.describe('pure modules (no DOM)', () => {
     expect(mapEntries({ 'gone /* x */': 'p' }, { gone: null })).toEqual([]);
     expect(mapEntries({ 'gone /* x */': 'p' }, { gone: null }, true).length).toBe(1);
   });
+  test('dataPipes: descriptors become pipes (intl, map, use, chain); functions pass through', async ({ browserName }) => {
+    test.skip(browserName !== 'chromium', 'Node-side check; once is enough');
+    const url = (path: string) => new URL(`../${path}`, import.meta.url).href;
+    const { dataPipes, pipeDescriptorOf, PIPE_DESCRIPTOR } = await import(url('pipes/dataPipes.js'));
+    const { getValue } = await import(url('resolve/getValues.js'));
+    const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    const descriptors = {
+      longUtc: { intl: 'DateTimeFormat', locale: 'en-US', options: { dateStyle: 'long', timeZone: 'UTC' } },
+      kg: { intl: 'NumberFormat', locale: 'en-US', options: { style: 'unit', unit: 'kilogram' } },
+      ago: { intl: 'RelativeTimeFormat', locale: 'en-US', unit: 'day' },
+      crew: { intl: 'PluralRules', locale: 'en-US', cases: { one: 'one astronaut', other: 'astronauts' } },
+      names: { intl: 'ListFormat', locale: 'en-US' },
+      phase: { map: { hold: 'On hold', go: 'Go' }, default: 'Unknown' },
+      price: { use: 'toFixed', args: [2] },
+      shout: { use: 'upper' },
+      when: { chain: ['parseDate', 'longUtc'] },        // a built-in, then a pipe of this object
+      timer: { chain: ['number', 'clock'] },            // … reaching a plain function pipe
+    };
+    const pipes = dataPipes({ ...descriptors, clock });
+    const resolve = (path: string, from: any) => getValue(path, from, { pipes });
+    expect(resolve('?.d?.longUtc', { d: '2026-10-25T12:00:00Z' })).toBe('October 25, 2026');
+    expect(resolve('?.m?.kg', { m: 549054 })).toBe('549,054 kg');
+    expect(resolve('?.n?.ago', { n: -1 })).toBe('1 day ago');
+    expect(resolve('?.c?.crew', { c: 1 })).toBe('one astronaut');
+    expect(resolve('?.c?.crew', { c: 4 })).toBe('astronauts');
+    expect(resolve('?.l?.names', { l: ['Avery', 'Rowan', 'Kai'] })).toBe('Avery, Rowan, and Kai');
+    expect(resolve('?.p?.phase', { p: 'hold' })).toBe('On hold');
+    expect(resolve('?.p?.phase', { p: 'other' })).toBe('Unknown');
+    expect(resolve('?.x?.price', { x: 3.14159 })).toBe('3.14');
+    expect(resolve('?.s?.shout', { s: 'go' })).toBe('GO');
+    expect(resolve('?.w?.when', { w: '2026-10-25T12:00:00Z' })).toBe('October 25, 2026');
+    expect(resolve('?.t?.timer', { t: '125' })).toBe('2:05');
+    // Functions pass through; made pipes carry their descriptor (under a registered symbol)
+    expect(pipes.clock).toBe(clock);
+    expect(pipeDescriptorOf(pipes.phase)).toBe(descriptors.phase);
+    expect(pipes.when[Symbol.for('assign-gingerly.pipeDescriptor')]).toBe(descriptors.when);
+    expect(PIPE_DESCRIPTOR).toBe(Symbol.for('assign-gingerly.pipeDescriptor'));
+    expect(pipeDescriptorOf(clock)).toBeUndefined();
+    // Descriptors survive structuredClone, and make the same pipes again
+    const again = dataPipes({ ...structuredClone(descriptors), clock });
+    expect(again.when('2026-10-25T12:00:00Z')).toBe('October 25, 2026');
+    // Chains stop at null, as paths do
+    expect(pipes.when(null)).toBeNull();
+    // Errors at dataPipes(), not on first use
+    expect(() => dataPipes({ x: { use: 'nope' } })).toThrow(/unknown built-in "nope"/);
+    expect(() => dataPipes({ x: { intl: 'Collator' } })).toThrow(/unknown Intl kind/);
+    expect(() => dataPipes({ x: { chain: ['missing'] } })).toThrow(/chains "missing"/);
+    expect(() => dataPipes({ x: { what: 1 } })).toThrow(/neither a function nor a pipe descriptor/);
+    // A chain naming itself fails clearly
+    const loop = dataPipes({ a: { chain: ['b'] }, b: { chain: ['a'] } });
+    expect(() => loop.a(1)).toThrow(/nests more than 32 deep/);
+    expect(() => loop.a(1)).toThrow(/nests more than 32 deep/);   // and again: the depth didn't leak
+  });
 });

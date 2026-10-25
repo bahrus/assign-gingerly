@@ -77,3 +77,35 @@ pipes: { linkList: links => Object.entries(links).filter(([, href]) => href).map
 ```
 
 See [demos/tree-demo.html](../demos/tree-demo.html) for all of these together.
+
+## Data Pipes (opt-in): pipes described as data
+
+Pipes are functions, and functions can't be stored (IndexedDB, `postMessage`, `structuredClone`). That matters when a config travels: for example, to [o2h's service worker](https://github.com/bahrus/o2h#service-worker-phase-i-json-fetches-rendered-as-html), which renders it off the main thread. **Data pipes** are pipes described by small objects instead, which survive the trip.
+
+```js
+import { dataPipes } from 'assign-gingerly/pipes/dataPipes.js';
+
+const pipes = dataPipes({
+    longUtc: { intl: 'DateTimeFormat', locale: 'en-US', options: { dateStyle: 'long', timeZone: 'UTC' } },
+    kg:      { intl: 'NumberFormat', locale: 'en-US', options: { style: 'unit', unit: 'kilogram' } },
+    phase:   { map: { hold: 'On hold', go: 'Go for launch' }, default: 'Unknown' },
+    price:   { use: 'toFixed', args: [2] },
+    when:    { chain: ['parseDate', 'longUtc'] },
+    clock:   s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`,   // functions pass through
+});
+// '?.date_utc?.when', '?.mass?.kg', '?.status?.phase' …
+```
+
+**`dataPipes(entries)`** returns ordinary pipes: functions are kept as they are, and each descriptor becomes a function. So data pipes work wherever pipes do, synchronously (paths, builtIns.tree, sync ops, ternaries). **The core doesn't know about them:** pages that don't import the module pay nothing. It's about 0.6 KB gzipped.
+
+| Kind | Descriptor | Does |
+|---|---|---|
+| **`intl`** | `{ intl: 'DateTimeFormat' \| 'NumberFormat' \| 'RelativeTimeFormat' \| 'PluralRules' \| 'ListFormat', locale?, options? }` | An `Intl` formatter, built once per descriptor. `DateTimeFormat` accepts ISO strings (as JSON carries dates), dates and timestamps. `RelativeTimeFormat` takes a `unit` (default `'day'`). `PluralRules` takes `cases` (`{ one: '…', other: '…' }`; `other` is the fallback). |
+| **`map`** | `{ map: { … }, default? }` | A lookup by `String(value)`: n-way labels or class names, where a ternary only does two ways |
+| **`use`** | `{ use: name, args? }` | A built-in: `parseDate`, `number`, `string`, `trim`, `upper`, `lower`, `length`, `toFixed`, `slice`, `join`, `default`. The value comes first, then `args`. |
+| **`chain`** | `{ chain: [name, …] }` | Pipes in sequence, by name: other pipes of the same object (descriptors **or functions**), or built-ins. It stops at `null` / `undefined`, as a path does. |
+
+- **Errors come early:** an unknown descriptor, `intl` kind, built-in, or chain name throws when you call `dataPipes()`, not on first use. A chain that names itself (directly or not) throws a clear error instead of recursing forever.
+- **Locale:** without `locale`, `Intl` uses the runtime's default, which can differ between a server or worker and the browser. Give one when the server renders.
+- **Each pipe made from a descriptor carries it,** under the registered symbol `Symbol.for('assign-gingerly.pipeDescriptor')` (also exported as `PIPE_DESCRIPTOR`, with `pipeDescriptorOf(pipe)`). That's how o2h's `prepareO2HRecord` stores the descriptor instead of losing the pipe, so the worker renders what uses it.
+- **Deliberately small:** no comparisons, arithmetic, filtering or sorting. Pipes that need those stay functions, and in a worker, what uses them is left to the client.

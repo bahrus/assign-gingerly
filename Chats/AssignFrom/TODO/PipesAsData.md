@@ -184,3 +184,70 @@ const pipes = {
 1. **The helper module** (`assign-gingerly/pipes/dataPipes.js`, opt-in, core unchanged), rather than core support or `assignFromAsync`-only?
 2. **All four kinds** in it (627 B gzipped together), or start with fewer?
 3. **Should `chain` reach plain function pipes** too (resolved against the final `pipes` at call time), or only other descriptors in the same `dataPipes` call?
+
+## Bruce's Response III
+
+> 1. **The helper module** (`assign-gingerly/pipes/dataPipes.js`, opt-in, core unchanged), rather than core support or `assignFromAsync`-only?
+
+Yes, helper module, opt-in, core unchanged.
+
+2. **All four kinds** in it (627 B gzipped together), or start with fewer?
+
+All four kinds
+
+3. **Should `chain` reach plain function pipes** too
+
+That sounds useful.  If no serious downsides, I would say yes.
+
+
+## Claude's Implementation Notes
+
+As agreed: an opt-in helper module with all four kinds, and chains that reach plain function pipes. The core is unchanged.
+
+### assign-gingerly
+
+**`pipes/dataPipes.ts`** (new):
+- **`dataPipes(entries)`** returns ordinary pipes. Functions pass through, and descriptors become functions.
+- **The kinds:**
+  - **`intl`:** all five kinds, with the formatter built once per descriptor. `DateTimeFormat` takes ISO strings, dates or timestamps; `RelativeTimeFormat` takes `unit`; `PluralRules` takes `cases`.
+  - **`map`:** a lookup by `String(value)`, with `default`.
+  - **`use`:** the 11 built-ins, with `args`.
+  - **`chain`:** pipes of the same object (functions or descriptors) or built-ins, stopping at `null`, as paths do.
+- **Errors come early:** an unknown descriptor, `intl` kind, built-in or chain name throws at `dataPipes()`. A chain that names itself throws after 32 levels, and the depth counter doesn't leak, so it throws the same way again.
+- **Each made pipe carries its descriptor** under `Symbol.for('assign-gingerly.pipeDescriptor')`, also exported as `PIPE_DESCRIPTOR`, with `pipeDescriptorOf(pipe)`. A registered symbol lets o2h find it without importing the module.
+
+**Elsewhere:**
+- **Types** (submodule `types/assign-gingerly/types.d.ts`): `PipeDescriptor` and the four descriptor interfaces.
+- **`package.json`:** exports `./pipes/dataPipes.js`, and publishes `pipes/**`.
+- **`tsconfig.json`:** includes `pipes/dataPipes.ts`. Nothing imports it statically, so without this neither `tsc` nor your watcher would build it (the lazyLoad lesson).
+- **`docs/pipes.md`:** a new section, "Data Pipes (opt-in): pipes described as data".
+
+### o2h
+
+- **`worker/record.ts`:** `prepareO2HRecord` stores a data pipe's **descriptor** instead of a stand-in, so it isn't in `lost`.
+- **`worker/core.ts`:** `reviveO2HRecord` passes the pipes through `dataPipes`. Stored descriptors become pipes again in the worker, and stand-ins are still stubs. So a chain through a lost function pipe throws `LostReference`, and o2h leaves that element to the client.
+- **The worker bundle** now includes `dataPipes` (`npm run build:worker` rebuilt `o2h-sw.js`).
+- **README:** the service worker section says data pipes aren't lost, linking to pipes.md.
+
+### Tests
+
+- **assign-gingerly `tests/pure-modules.spec.ts`** (Node), checking:
+  - all four kinds through `getValue` paths, including every `Intl` kind, `PluralRules` cases, a chain through a built-in and a pipe, and a chain through a plain function;
+  - that functions pass through, and descriptors are carried under the symbol;
+  - that descriptors survive `structuredClone`, and remake the same pipes;
+  - that chains stop at `null`;
+  - the early errors, and the self-naming chain (twice).
+- **o2h Node test:**
+  - data pipes survive `prepareO2HRecord`: only the plain function is in `lost`, and the descriptor is stored;
+  - the revived record renders them in the "worker". A chain through the plain function is left pending: `<h2>DEMO</h2><p>On hold</p><b data-pending></b>`.
+- **o2h end to end** (`tests/service-worker.html`, through the real service worker, in three browsers): a config using `dataPipes` loses nothing, and the worker's HTML has the piped text rendered (`<h2>DEMO MISSION 7</h2><p>A rocket</p>`).
+- **Results:**
+  - **assign-gingerly** (scratch copy, three browsers): 177 passed and 12 skipped;
+  - **o2h:** browser tests 12 passed; Node tests 9 passed (in the scratch copy linked to the new build).
+
+### For you
+
+- **New files:** assign-gingerly `pipes/dataPipes.ts`, built to `.js` by your watcher.
+- **Changed:**
+  - assign-gingerly: `package.json`, `tsconfig.json`, `docs/pipes.md`, `tests/pure-modules.spec.ts`, and the types submodule;
+  - o2h: `worker/record.ts`, `worker/core.ts`, `o2h-sw.js`, the README and the tests.
