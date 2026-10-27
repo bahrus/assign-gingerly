@@ -5,6 +5,7 @@ import type { AssignFromOptions, FeatureConfigsMap, IAssignGingerlyOptions } fro
 import type { PermissionProcessor } from './types/assign-gingerly/types.js';
 import { normalizeAliasOptions } from './resolve/getValues.js';
 import { registryOption, resolveRegistry } from './utils/resolveRegistry.js';
+import { isJoinValue, join } from './syncOps/join.js';
 
 const DEFAULT_ENHANCEMENT_KEY = Symbol('assign-gingerly.default-enhancement-setup');
 
@@ -348,6 +349,7 @@ function parseAttrCommand(key: string): string | null {
  * - string / number / bigint → setAttribute(name, String(value))
  * - true → setAttribute(name, '');  false / null / undefined → removeAttribute(name)
  * - array → nullish / false items dropped, the rest space-joined; empty → removeAttribute(name)
+ * - { join: [...], separator? } → joined as the join op does (no separator by default)
  * - anything else → not assigned (warning)
  * Event-handler attributes (on*) are always refused; restricted attributes (permission
  * processor) are skipped, for removal as well as for setting.
@@ -370,8 +372,10 @@ export function applyAttribute(element: any, name: string, value: any, permissio
     text = tokens.length > 0 ? tokens.join(' ') : null;
   } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') {
     text = String(value);
+  } else if (isJoinValue(value)) {
+    text = join(value.join, value);
   } else {
-    console.warn(`assignGingerly: ' :=' value for attribute "${name}" must be a string, number, boolean, array or nullish (got ${typeof value}) — skipped.`);
+    console.warn(`assignGingerly: ' :=' value for attribute "${name}" must be a string, number, boolean, array, { join } or nullish (got ${typeof value}) — skipped.`);
     return;
   }
   if (permissionProcessor?.checkRestrictedAttributeCall('setAttribute', [name, text ?? undefined]).blocked) {

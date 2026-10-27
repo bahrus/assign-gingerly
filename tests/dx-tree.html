@@ -157,10 +157,10 @@
         const caught = fn => { try { fn(); } catch (e) { return e; } };
         const where = e => e && `${e.name}|${e.part}:${e.offset}|${e.line}:${e.column}`;
 
-        const attr = caught(() => tree`<div>\n  <p class="a ${'?.x'}"></p>\n</div>`);
+        const attr = caught(() => tree`<div>\n  <p .title="a ${'?.x'}"></p>\n</div>`);
         assert(attr instanceof TreeTemplateError, 'errors are TreeTemplateErrors');
-        assertEquals(where(attr), 'TreeTemplateError|0:12|2:6', 'mixed attribute: points at the attribute (part 0, raw offset 12; line 2, column 6)');
-        assert(/\(line 2, column 6\)\n  <p class="a \$\{…\}"><\/p>\n     \^/.test(attr.message), 'message has the location and a code frame with a caret');
+        assertEquals(where(attr), 'TreeTemplateError|0:12|2:6', 'mixed property text: points at the attribute (part 0, raw offset 12; line 2, column 6)');
+        assert(/\(line 2, column 6\)\n  <p \.title="a \$\{…\}"><\/p>\n     \^/.test(attr.message), 'message has the location and a code frame with a caret');
 
         const trailing = caught(() => tree`<p>${'?.a'}<b>x</b> trailing</p>`);
         assertEquals(where(trailing), 'TreeTemplateError|1:9|1:17', 'text after a child: points at the text, in the second static string (part 1, offset 9)');
@@ -224,7 +224,8 @@
         const text = analyze`<p>${U}</p>`;
         assertEquals(json(text.spec), json(['p', { textContent: '‹x›' }]), 'an unknown as the only content is text, shown as ‹x›');
         ok(analyze`<button @click=${U}>Go</button>`, 'an unknown @event value is accepted');
-        assert(analyze`<p class="a ${U}"></p>`.errors.length === 1, 'real errors are still reported around unknowns');
+        assert(analyze`<p .title="a ${U}"></p>`.errors.length === 1, 'real errors are still reported around unknowns');
+        ok(analyze`<a href="#x/${U}">Go</a>`, 'an unknown in mixed attribute text is accepted');
       }
 
       // Test 13: analyzeTree describes the elements, with locations
@@ -243,9 +244,33 @@
       {
         throws(() => tree`<p>a</p><p>b</p>`, /exactly one root element/, 'two roots');
         throws(() => tree`<p><b>x</b> trailing</p>`, /text after a child element/, 'text after a child element');
-        throws(() => tree`<p class="a ${'?.b'}"></p>`, /mixes text and/, 'mixed attribute value');
+        throws(() => tree`<p .title="a ${'?.b'}"></p>`, /mixes text and/, 'mixed text in a property');
+        throws(() => tree`<p class="a ${{ x: 1 }}"></p>`, /isn't a path or a literal/, 'mixed attribute text with an object');
         throws(() => tree`<p><b>x</p></b>`, /doesn't match/, 'mismatched closing tag');
         throws(() => tree`<ul ${each('?.x')}><li></li><li></li></ul>`, /exactly one child element/, 'each(…) with two children');
+      }
+
+      // Test 7b: attribute text mixed with ${…} is a { join } value, which ` :=` joins into one string
+      {
+        const link = tree`<a class="card ${'?.kind'}" href="#product/${p.id}" title="${'?.n'} of ${'?.total'}" data-x="${'?.missing'}!">Go</a>`;
+        assertEquals(json(link), json(['a', {
+          'class :=': { join: ['card ', '?.kind'] },
+          'href :=': { join: ['#product/', '?.id'] },
+          'title :=': { join: ['?.n', ' of ', '?.total'] },
+          'data-x :=': { join: ['?.missing', '!'] },
+          textContent: 'Go',
+        }]), 'mixed attribute text becomes { join }');
+        const host = await render({ item: link }, { item: { kind: 'sale', id: 3, n: 2, total: 5 } });
+        const a = host.querySelector('a');
+        assertEquals(a.getAttribute('class'), 'card sale', 'joined: class');
+        assertEquals(a.getAttribute('href'), '#product/3', 'joined: href');
+        assertEquals(a.getAttribute('title'), '2 of 5', 'joined: title, starting with a value');
+        assertEquals(a.getAttribute('data-x'), '!', 'joined: a nullish value is dropped, as by join');
+        // Rebinding updates the joined attribute in place
+        assignFrom(host, { '?. =>': { do: 'builtIns.tree', map: { item: link } } }, { from: { item: { kind: 'new', id: 4, n: 3, total: 5 } } });
+        await whenSettled(host);
+        assert(host.querySelector('a') === a, 'joined: element reused on rebind');
+        assertEquals(a.getAttribute('href'), '#product/4', 'joined: rebind updates the attribute');
       }
 
       // Test 14: itemscope on the element gives the values in its text props (microJoin { prop, val })

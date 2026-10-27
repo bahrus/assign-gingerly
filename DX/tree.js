@@ -8,6 +8,7 @@
  * |--------------------------------------|-------------------------------------------------------|
  * | `name="literal"`, `name` (boolean)   | `'name :=': 'literal'` / `true` (baked under compile) |
  * | `name=${value}`                      | `'name :=': value`                                    |
+ * | `name="text ${value}"` (mixed)       | `'name :=': { join: ['text ', value] }`               |
  * | `.prop=${value}`                     | `prop: value` (a property)                            |
  * | `@click=${{ call: 'm' }}` / `${'m'}` | `' +=': { on: 'click', call: 'm' }` (event binding)   |
  * | `ish=${Manager}`                     | the `{ tag, ish }` header                             |
@@ -544,13 +545,30 @@ function toSpec(element, ctx) {
 function leadingSpace(part) {
     return typeof part === 'string' ? part.length - part.trimStart().length : 0;
 }
-/** An attribute's value: a literal string, or one `${…}` (as its value). Mixed text and `${}` isn't supported. */
+/**
+ * An attribute's value: a literal string, one `${…}` (as its value), or text mixed with `${…}` as a
+ * `{ join: [...] }` value, which ` :=` joins into one string (`href="#product/${'?.id'}"`).
+ * Only plain attributes take mixed text: not `.prop`, `@event` or `ish`.
+ */
 function attributeValue(parts, values, fail, name) {
     if (parts.length === 0)
         return '';
     if (parts.length === 1)
         return isHole(parts[0]) ? valueOf(values[parts[0].hole]) : parts[0];
-    return fail(`attribute "${name}" mixes text and \${…}; use a single \${…} (e.g. a pipe, or a computed value)`);
+    if (name === 'ish' || name.startsWith('.') || name.startsWith('@')) {
+        return fail(`"${name}" mixes text and \${…}; use a single \${…}`);
+    }
+    return {
+        join: parts.filter(part => part !== '').map(part => {
+            if (!isHole(part))
+                return part;
+            const value = valueOf(values[part.hole]);
+            if (value != null && typeof value === 'object' && !isUnknown(value)) {
+                fail(`attribute "${name}" mixes text with a \${…} that isn't a path or a literal`);
+            }
+            return value;
+        }),
+    };
 }
 /** Drop leading/trailing whitespace that contains a line break (template indentation). */
 function trimFormatting(parts) {

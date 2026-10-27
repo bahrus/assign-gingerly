@@ -33,6 +33,7 @@
  */
 import { getValue, getValues, isEventBinding, isReferenceString } from '../resolve/getValues.js';
 import { planMicroJoin } from '../syncOps/microJoin.js';
+import { isJoinValue, join } from '../syncOps/join.js';
 import { checkSwitch, isLiteralString, isSnippet, isSwitch, mapKeyName, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 /** A ` :=` key with a plain attribute name (no path): `'aria-label :='` → `aria-label`. */
@@ -263,6 +264,8 @@ export function attributeText(value) {
     }
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint')
         return String(value);
+    if (isJoinValue(value))
+        return join(value.join, value);
     return undefined;
 }
 /** Set (or with null, remove) a baked attribute; a later key wins, as at runtime. */

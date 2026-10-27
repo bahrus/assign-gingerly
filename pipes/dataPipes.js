@@ -14,7 +14,7 @@
  *     });
  *
  * Each function made from a descriptor carries it (under PIPE_DESCRIPTOR, a global symbol), so code that
- * stores pipes (o2h's prepareO2HRecord) can keep the descriptor instead of losing the pipe.
+ * stores pipes (o2h's prepareO2HTransform) can keep the descriptor instead of losing the pipe.
  *
  * Deliberately small: Intl formatting, lookups, a fixed set of built-ins, and chains. No comparisons,
  * arithmetic, filtering or sorting: pipes that need those stay functions.

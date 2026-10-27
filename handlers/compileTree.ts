@@ -34,6 +34,7 @@
 
 import { getValue, getValues, isEventBinding, isReferenceString } from '../resolve/getValues.js';
 import { planMicroJoin } from '../syncOps/microJoin.js';
+import { isJoinValue, join } from '../syncOps/join.js';
 import { checkSwitch, isLiteralString, isSnippet, isSwitch, mapKeyName, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
 import type { GetValuesOptions } from '../types/assign-gingerly/types.js';
 import type {
@@ -277,6 +278,7 @@ export function attributeText(value: any): string | null | undefined {
         return tokens.length > 0 ? tokens.join(' ') : null;
     }
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') return String(value);
+    if (isJoinValue(value)) return join(value.join, value);
     return undefined;
 }
 

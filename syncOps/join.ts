@@ -60,3 +60,12 @@ export function join(args: any, extra: Record<string, any> = {}): string {
     const items = Array.isArray(args) ? processValue(args) : [args];
     return items.join(separator);
 }
+
+/**
+ * A ` :=` value joined into one attribute value: `{ join: [...], separator? }`, with its paths already resolved.
+ * `` tree`…` `` writes it for attribute text mixed with `${…}` (`href="#product/${'?.id'}"`).
+ */
+export function isJoinValue(value: any): value is { join: any; separator?: string } {
+    return !!value && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, 'join')
+        && Object.keys(value).every(key => key === 'join' || key === 'separator');
+}

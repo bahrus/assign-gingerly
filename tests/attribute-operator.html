@@ -191,6 +191,19 @@
         assertEquals(button.getAttribute('aria-pressed'), '', 'event vector applies ' + "' :='");
       }
 
+      // Test 13: a { join } value is joined into one string, with its paths resolved
+      {
+        const a = document.createElement('a');
+        assignFrom(a, {
+          'href :=': { join: ['#product/', '?.id'] },
+          'title :=': { join: ['?.n', '?.total'], separator: ' of ' },
+          'data-x :=': { join: ['a', ['-', '?.missing'], '!'] },
+        }, { from: { id: 3, n: 2, total: 5 } });
+        assertEquals(a.getAttribute('href'), '#product/3', 'join: paths and literals');
+        assertEquals(a.getAttribute('title'), '2 of 5', 'join: separator');
+        assertEquals(a.getAttribute('data-x'), 'a!', 'join: a sub-array with a nullish value is dropped');
+      }
+
       const testComplete = document.getElementById('test-complete');
       testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
       testComplete.setAttribute('data-passed', passed);

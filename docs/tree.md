@@ -261,6 +261,7 @@ The type can also come from elsewhere: `@typedef {import('./launch-api.js').Laun
 |---|---|
 | `name="literal"`, `name` (no value) | `'name :=': 'literal'` / `true`: an **attribute**, baked under `compile` |
 | `name=${value}` | `'name :=': value` |
+| `name="text ${value}"` (text mixed with values) | `'name :=': { join: ['text ', value] }`: one string |
 | `.prop=${value}` | `prop: value` (a property, as in lit) |
 | `@event=${{ call: 'm' }}` or `@event=${'m'}` | an event binding (`' +='`, then `'?. +='`; at most two per element) |
 | `ish=${Manager}` | the `{ tag, ish }` header |
@@ -874,14 +875,14 @@ The client-side counterpart, finishing server-rendered markup, *is* this package
   - **Formatted values:** a pipe at the end would name the prop after the pipe, so write those explicitly, keeping the raw value as `val`: `${{ prop: 'launched', val: p.date_utc, text: '?.date_utc?.parseDate?.longUtc' }}`. Explicit `{ prop, … }` objects are used as written, with or without `itemscope`.
   - **A single value** becomes a one-segment `microJoin` rather than `textContent`, which can't carry a prop. Literal text, and literal-only content, are unchanged.
   - **Without `itemscope`,** nothing changes: values in mixed text are bare paths (no `itemprop`).
-- **Attribute values:** each is a literal or a single `${…}`. Mixing them (`class="a ${x}"`) is an error.
+- **Attribute values:** a literal, a single `${…}`, or text mixed with `${…}`: `href="#product/${p.id}"` becomes `'href :=': { join: ['#product/', '?.id'] }`, which [` :=`](./attribute-operator.md) joins into one string, as the [`join`](./sync-ops.md#join) op does (a nullish value is dropped). The `${…}` values in mixed text are paths or literals. Properties (`.prop`), events (`@event`) and `ish` take a single `${…}` only.
 - **Caching:** results are cached per call site, so the same template with the same values returns the same spec object. Tree's spec identity (`compile`, literal skipping on rebind) holds across calls.
 - **Parser:** a small one of its own, not the browser's, so there's no `<tbody>` insertion or `<p>` auto-closing, and it runs on a server.
 - **Errors:** malformed or unsupported templates (two roots, a mismatched closing tag, text after a child) throw a **`TreeTemplateError`** (exported from `DX/tree.js`). Its message has the location and a code frame:
 
   ```
-  tree`…`: <p>: attribute "class" mixes text and ${…}; … (line 2, column 6)
-    <p class="a ${…}"></p>
+  tree`…`: <p>: ".title" mixes text and ${…}; use a single ${…} (line 2, column 6)
+    <p .title="a ${…}"></p>
        ^
   ```
 
@@ -922,7 +923,7 @@ Installing the analyzer installs Gingerly Tree too.
 - `?.` path strings inside `${…}` (`${'?.name'}`, `'$parent?.upcoming'`), colored as variables rather than strings.
 
 **Gingerly Tree Analyzer** builds on [`analyzeTree`](#more-on-tree) above, so its errors are exactly the ones the tag would throw:
-- **Errors** (the `TreeTemplateError`s described above) are underlined where they are. Examples: a mismatched closing tag, text after a child, or an attribute mixing text and `${…}`.
+- **Errors** (the `TreeTemplateError`s described above) are underlined where they are. Examples: a mismatched closing tag, text after a child, or a `.prop` mixing text and `${…}`.
 - **Hovering a template** shows the notation it produces, written as in this page. `paths()` chains show as their `?.` paths, and values that can't be known statically show as `‹expr›`.
 - **Hovering an attribute** says what it maps to (`.prop` → a property, `@event` → `' +='`, a plain name → `' :='`, `ish` → the header).
 - **In JS/TS files:**

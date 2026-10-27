@@ -39,7 +39,8 @@ assignFrom(form, {
 | `true` | `setAttribute(name, '')` (a boolean attribute) |
 | `false`, `null`, `undefined` | `removeAttribute(name)` |
 | array | `null` / `undefined` / `false` items dropped, the rest **space-joined**; an empty result → `removeAttribute(name)` |
-| object, function, symbol | Not assigned; a console warning |
+| `{ join: [...], separator? }` | **Joined into one string**, as the [`join`](./sync-ops.md#join) op does: no separator by default, nullish items dropped, nested sub-arrays all-or-nothing. `'href :=': { join: ['#product/', '?.id'] }` gives `#product/3`. `` tree`…` `` writes it for attribute text mixed with values (`href="#product/${p.id}"`). |
+| other objects, function, symbol | Not assigned; a console warning |
 
 In `assignFrom` / `assignFromAsync`, `?.` paths resolve as usual, **including inside arrays**, and `!` / `!!` work for booleans:
 

@@ -107,5 +107,5 @@ const pipes = dataPipes({
 
 - **Errors come early:** an unknown descriptor, `intl` kind, built-in, or chain name throws when you call `dataPipes()`, not on first use. A chain that names itself (directly or not) throws a clear error instead of recursing forever.
 - **Locale:** without `locale`, `Intl` uses the runtime's default, which can differ between a server or worker and the browser. Give one when the server renders.
-- **Each pipe made from a descriptor carries it,** under the registered symbol `Symbol.for('assign-gingerly.pipeDescriptor')` (also exported as `PIPE_DESCRIPTOR`, with `pipeDescriptorOf(pipe)`). That's how o2h's `prepareO2HRecord` stores the descriptor instead of losing the pipe, so the worker renders what uses it.
+- **Each pipe made from a descriptor carries it,** under the registered symbol `Symbol.for('assign-gingerly.pipeDescriptor')` (also exported as `PIPE_DESCRIPTOR`, with `pipeDescriptorOf(pipe)`). That's how o2h's `prepareO2HTransform` stores the descriptor instead of losing the pipe, so the worker renders what uses it.
 - **Deliberately small:** no comparisons, arithmetic, filtering or sorting. Pipes that need those stay functions, and in a worker, what uses them is left to the client.

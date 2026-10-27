@@ -59,3 +59,11 @@ export function join(args, extra = {}) {
     const items = Array.isArray(args) ? processValue(args) : [args];
     return items.join(separator);
 }
+/**
+ * A ` :=` value joined into one attribute value: `{ join: [...], separator? }`, with its paths already resolved.
+ * `` tree`…` `` writes it for attribute text mixed with `${…}` (`href="#product/${'?.id'}"`).
+ */
+export function isJoinValue(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, 'join')
+        && Object.keys(value).every(key => key === 'join' || key === 'separator');
+}
