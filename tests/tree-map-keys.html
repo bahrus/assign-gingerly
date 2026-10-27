@@ -106,6 +106,65 @@
         assert(before.length === after.length && before.every((el, i) => el === after[i]), 'adopt: every element reused');
       }
 
+      // Test 6: path keys: '?.' renders the whole VM with one spec; '?.a?.b' the value at a path
+      {
+        const product = (title = 'Bag') => ({ id: 3, title, price: 9.5, rating: { rate: 4.1, count: 12 }, congress: { house: { seats: 435 } } });
+        const pathMap = {
+          '?.': tree`<article><h2>${'?.title'}</h2><p class="price">${'?.price'}</p><p class="rate">${'?.rating?.rate'}</p></article>`,
+          '?.congress?.house': tree`<p class="house">${'?.seats'}</p>`,
+          '?. /* footer */': tree`<footer>#${'?.id'}</footer>`,
+        };
+        const host = document.createElement('div');
+        await run(host, { map: pathMap }, product());
+        assertEquals(strip(host.innerHTML),
+          '<article><h2>Bag</h2><p class="price">9.5</p><p class="rate">4.1</p></article><p class="house">435</p><footer>#<data value="3">3</data></footer>',
+          "'?.' renders the whole VM as one element; a nested path key; '?.' again with a comment");
+
+        const article = host.querySelector('article');
+        await run(host, { map: pathMap }, product('Hat'));
+        assert(host.querySelector('article') === article && article.querySelector('h2').textContent === 'Hat', 'rerun: the whole-VM entry rebinds in place');
+
+        // Nullish at the path: the entry goes
+        const noHouse = product();
+        delete noHouse.congress;
+        await run(host, { map: pathMap }, noHouse);
+        assert(!host.querySelector('.house') && host.querySelector('article'), 'a path key whose value is missing is skipped');
+
+        // '*': a one-step path key names its VM key; '?.' and deeper paths don't
+        const star = document.createElement('div');
+        await run(star, { map: { '?.title': ['h2', '?.'], '?.': ['b', '?.id'], '*': 'i' } }, { title: 'T', id: 1, extra: 'x' });
+        assertEquals(strip(star.innerHTML), '<h2>T</h2><b>1</b><i>1</i><i>x</i>', "'*': '?.title' names title; '?.' names nothing");
+
+        // A primitive VM renders with '?.'
+        const primitive = document.createElement('div');
+        await run(primitive, { map: { '?.': ['p', '?.'] } }, 'just text');
+        assertEquals(strip(primitive.innerHTML), '<p>just text</p>', "'?.' with a primitive VM");
+
+        // Typo warning for a path that leads nowhere; none for '?.'
+        const warn = console.warn;
+        const warnings = [];
+        console.warn = (...args) => warnings.push(args.join(' '));
+        try {
+          await run(document.createElement('div'), { map: { '?.': 'b', '?.congres?.house': 'i', '?.congress?.house': 'u' } }, product());
+        } finally {
+          console.warn = warn;
+        }
+        assert(warnings.length === 1 && warnings[0].includes('?.congres?.house'), 'typo warning: a path key that leads nowhere');
+
+        // compile: the same DOM; adopt: every element reused
+        const compiled = document.createElement('div');
+        await run(compiled, { map: pathMap, compile: true }, product());
+        const plain = document.createElement('div');
+        await run(plain, { map: pathMap }, product());
+        assert(plain.isEqualNode(compiled), 'path keys, compile: the same DOM');
+        const server = document.createElement('div');
+        server.innerHTML = plain.innerHTML;
+        const before = [...server.querySelectorAll('*')];
+        await run(server, { map: pathMap, adopt: true }, product());
+        const after = [...server.querySelectorAll('*')];
+        assert(before.length === after.length && before.every((el, i) => el === after[i]), 'path keys, adopt: every element reused');
+      }
+
       document.getElementById('results').innerHTML = results.join('') + `<h2>Summary: ${passed} passed, ${failed} failed</h2>`;
       const complete = document.getElementById('test-complete');
       complete.dataset.passed = passed;

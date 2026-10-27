@@ -160,23 +160,45 @@ export function mapKeyName(key: string): string {
  */
 export interface TreeMapEntry {
     key: string;
-    /** The VM key: the key without its comment, if any (see mapKeyName) */
+    /** The VM key: the key without its comment, if any (see mapKeyName). For a path key, the path. */
     name: string;
     spec: ElementSpecification;
     value: any;
     templateKey: string;
 }
 
+/** A map key that's a path (`'?.'`, `'?.congress?.house'`) rather than a VM key name. */
+export function isPathKey(name: string): boolean {
+    return name.startsWith('?.');
+}
+
+/** Pre-split path keys, cached by name. */
+const keyPaths = new Map<string, string[]>();
+
+/**
+ * The value a map key names in the VM: `vm[name]`, or for a path key, the value at that path
+ * (`'?.'` is the VM itself). Path keys are plain property paths: no pipes or references.
+ */
+export function mapKeyValue(name: string, from: any): any {
+    if (!isPathKey(name)) return from?.[name];
+    let segments = keyPaths.get(name);
+    if (!segments) keyPaths.set(name, segments = name.split('?.').filter(segment => segment !== ''));
+    let value = from;
+    for (const segment of segments) value = value?.[segment];
+    return value;
+}
+
 /**
  * The map's entries that render, in render order: map order, then `'*'` for the VM keys
  * the map doesn't name (in VM key order). Keys whose value is null / undefined are left
  * out, unless `keepNullish`. A key with a trailing comment names the VM key before it
- * (see mapKeyName), for `'*'` too.
+ * (see mapKeyName), for `'*'` too. A path key (`'?.'`, `'?.a?.b'`) renders the value at that
+ * path; for `'*'`, a one-step path key (`'?.a'`) names its VM key, as `'a'` would.
  */
 export function mapEntries(map: Record<string, ElementSpecification>, from: any, keepNullish = false): TreeMapEntry[] {
     const entries: TreeMapEntry[] = [];
     const push = (key: string, name: string, spec: ElementSpecification, templateKey: string) => {
-        const value = from?.[name];
+        const value = mapKeyValue(name, from);
         if (value == null && !keepNullish) return;
         entries.push({ key, name, spec, value, templateKey });
     };
@@ -184,7 +206,8 @@ export function mapEntries(map: Record<string, ElementSpecification>, from: any,
     for (const key of Object.keys(map)) {
         if (key === WILDCARD) continue;
         const name = mapKeyName(key);
-        named.add(name);
+        if (!isPathKey(name)) named.add(name);
+        else if (/^\?\.[^?]+$/.test(name)) named.add(name.slice(2));
         push(key, name, map[key], key);
     }
     if (map[WILDCARD] === undefined || from === null || typeof from !== 'object') return entries;

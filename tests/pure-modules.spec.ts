@@ -112,6 +112,13 @@ test.describe('pure modules (no DOM)', () => {
     // Nullish: skipped by the VM key's value, unless keepNullish
     expect(mapEntries({ 'gone /* x */': 'p' }, { gone: null })).toEqual([]);
     expect(mapEntries({ 'gone /* x */': 'p' }, { gone: null }, true).length).toBe(1);
+    // Path keys: '?.' is the whole VM, '?.a?.b' a nested value (plain property steps); a commented path key works too
+    const vm = { a: { b: 2 }, c: 3 };
+    const paths = mapEntries({ '?.': 'div', '?.a?.b': 'b', '?. /* again */': 'p', '?.a?.missing': 'i', '?.c': 'u', '*': 's' }, vm);
+    expect(paths.map((e: any) => `${e.key}|${e.name}`)).toEqual(['?.|?.', '?.a?.b|?.a?.b', '?. /* again */|?.', '?.c|?.c', 'a|a']);
+    expect(paths[0].value).toBe(vm);
+    expect(paths[1].value).toBe(2);
+    expect(mapEntries({ '?.': 'p' }, 7).map((e: any) => e.value)).toEqual([7]);
   });
   test('dataPipes: descriptors become pipes (intl, map, use, chain); functions pass through', async ({ browserName }) => {
     test.skip(browserName !== 'chromium', 'Node-side check; once is enough');

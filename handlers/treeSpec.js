@@ -134,16 +134,38 @@ export function mapKeyName(key) {
     keyNames.set(key, name);
     return name;
 }
+/** A map key that's a path (`'?.'`, `'?.congress?.house'`) rather than a VM key name. */
+export function isPathKey(name) {
+    return name.startsWith('?.');
+}
+/** Pre-split path keys, cached by name. */
+const keyPaths = new Map();
+/**
+ * The value a map key names in the VM: `vm[name]`, or for a path key, the value at that path
+ * (`'?.'` is the VM itself). Path keys are plain property paths: no pipes or references.
+ */
+export function mapKeyValue(name, from) {
+    if (!isPathKey(name))
+        return from?.[name];
+    let segments = keyPaths.get(name);
+    if (!segments)
+        keyPaths.set(name, segments = name.split('?.').filter(segment => segment !== ''));
+    let value = from;
+    for (const segment of segments)
+        value = value?.[segment];
+    return value;
+}
 /**
  * The map's entries that render, in render order: map order, then `'*'` for the VM keys
  * the map doesn't name (in VM key order). Keys whose value is null / undefined are left
  * out, unless `keepNullish`. A key with a trailing comment names the VM key before it
- * (see mapKeyName), for `'*'` too.
+ * (see mapKeyName), for `'*'` too. A path key (`'?.'`, `'?.a?.b'`) renders the value at that
+ * path; for `'*'`, a one-step path key (`'?.a'`) names its VM key, as `'a'` would.
  */
 export function mapEntries(map, from, keepNullish = false) {
     const entries = [];
     const push = (key, name, spec, templateKey) => {
-        const value = from?.[name];
+        const value = mapKeyValue(name, from);
         if (value == null && !keepNullish)
             return;
         entries.push({ key, name, spec, value, templateKey });
@@ -153,7 +175,10 @@ export function mapEntries(map, from, keepNullish = false) {
         if (key === WILDCARD)
             continue;
         const name = mapKeyName(key);
-        named.add(name);
+        if (!isPathKey(name))
+            named.add(name);
+        else if (/^\?\.[^?]+$/.test(name))
+            named.add(name.slice(2));
         push(key, name, map[key], key);
     }
     if (map[WILDCARD] === undefined || from === null || typeof from !== 'object')

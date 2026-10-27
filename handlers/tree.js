@@ -69,7 +69,7 @@ import { assignFrom, categorizeKeys, handleSpreads, SUBSTITUTION_VARS } from '..
 import { applyAttribute, assignGingerly, tryAssignTo } from '../assignGingerly.js';
 import { getValue, getValues } from '../resolve/getValues.js';
 import { withEventKeys } from './eventKeys.js';
-import { chooseCase, DEFAULT_CASE, isLiteralString, isSnippet, isSwitch, mapEntries, mapKeyName, normalize, repeatItems, WILDCARD } from './treeSpec.js';
+import { chooseCase, DEFAULT_CASE, isLiteralString, isPathKey, isSnippet, isSwitch, mapEntries, mapKeyName, mapKeyValue, normalize, repeatItems, WILDCARD } from './treeSpec.js';
 import { cloneSnippet, holeAt, parsedSnippet } from './snippets.js';
 import { defineIshCore } from '../handleIshProperty.js';
 import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END, PENDING_ATTRIBUTE } from '../markerUtils.js';
@@ -1180,7 +1180,10 @@ function warnUnmatchedKeys(map, from) {
     if (from === null || typeof from !== 'object')
         return;
     for (const key of Object.keys(map)) {
-        if (key !== WILDCARD && !(mapKeyName(key) in from)) {
+        if (key === WILDCARD)
+            continue;
+        const name = mapKeyName(key);
+        if (isPathKey(name) ? mapKeyValue(name, from) === undefined : !(name in from)) {
             console.warn(`builtIns.tree: map key "${key}" isn't in the view model (typo?)`);
         }
     }

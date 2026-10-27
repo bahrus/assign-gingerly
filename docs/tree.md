@@ -145,6 +145,7 @@ Bare class headers and `$:` headers are reserved for a later phase and throw for
 | Value is `null` / `undefined` | Skipped (an existing element is removed), unless `keepNullish: true` |
 | Map key missing from the VM | Skipped as above, with a `console.warn` on the tree's first render (likely a typo) |
 | The same VM key more than once | Add a trailing comment to the extra keys: `'rocket /* summary */'` (see below) |
+| The whole VM as one element, or a nested value | A path key: `'?.'`, `'?.congress?.house'` (see [Path keys](#path-keys-the-whole-vm-or-a-value-deeper-in-it)) |
 
 ### The same VM key more than once: a comment in the key
 
@@ -168,6 +169,40 @@ map: {
   - the typo warning checks the VM key, and names the key as written.
 - **One comment, at the end:** a comment anywhere else (`'roc /* x */ ket'`), two comments, or a key that's only a comment throws.
 - **o2h** renders commented keys the same way (they share `mapEntries`). A VM key that really contains `/*` can't be named in a map; shape the VM instead.
+
+### Path keys: the whole VM, or a value deeper in it
+
+A map key starting with `?.` is a **path** into the VM, instead of a VM key. `'?.'` is the VM itself, so one specification can render a whole object as one element, with any wrappers it needs:
+
+```JavaScript
+// /products/3 → { id, title, price, image, rating: { rate, count }, … }
+map: {
+    '?.': tree`
+        <article class="product">
+            <img src=${'?.image'} alt=${'?.title'}>
+            <div class="info">
+                <h2>${'?.title'}</h2>
+                <p class="price">${'?.price?.usd'}</p>
+            </div>
+        </article>`,
+}
+```
+
+Deeper paths render the value they lead to, and mix with ordinary keys and comments:
+
+```JavaScript
+map: {
+    title: ['h1', '?.'],
+    '?.congress?.houseOfRepresentatives': ['p', '?.seats'],    // vm.congress.houseOfRepresentatives
+    '?. /* footer */': tree`<footer>#${'?.id'}</footer>`,       // the whole VM again
+}
+```
+
+- **Plain property steps:** a path key follows properties (`?.a?.b`), with no pipes, references or methods. Format inside the specification instead (`'?.price?.usd'` above).
+- **Inside the specification,** `?.` is the value at the path (the VM itself for `'?.'`), and `$parent` is the VM, as for any top-level key.
+- **The key rules apply to the path's value:** nullish skips the entry (unless `keepNullish`), and a path leading nowhere gets the typo warning on the first render. `'?.'` works with a primitive VM too.
+- **`'*'`:** a one-step path key (`'?.title'`) names its VM key, as `'title'` would. `'?.'` and deeper paths name none.
+- **o2h, `compile` and `adopt`** all handle path keys, since they share `mapEntries`.
 
 
 ### Default specification: `'*'`

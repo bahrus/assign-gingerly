@@ -35,7 +35,7 @@
 import { getValue, getValues, isEventBinding, isReferenceString } from '../resolve/getValues.js';
 import { planMicroJoin } from '../syncOps/microJoin.js';
 import { isJoinValue, join } from '../syncOps/join.js';
-import { checkSwitch, isLiteralString, isSnippet, isSwitch, mapKeyName, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
+import { checkSwitch, isLiteralString, isPathKey, isSnippet, isSwitch, mapKeyName, mapKeyValue, normalize, WILDCARD, wildcardSpecOf } from './treeSpec.js';
 import type { GetValuesOptions } from '../types/assign-gingerly/types.js';
 import type {
     CompiledNode, CompiledSwitch, CompiledTemplate, CompiledTree, CompileTreeOptions, ElementSpecification, Pattern,
@@ -78,7 +78,9 @@ export function compileTree(config: Pick<TreeConfig, 'map' | 'aka'>, options: Co
             compileTemplate(key, wildcardSpecOf(map), undefined, ctx);
         } else {
             const name = mapKeyName(key);
-            const keySample = sample != null && typeof sample === 'object' && name in sample ? { value: sample[name] } : undefined;
+            const keySample = isPathKey(name)
+                ? (sample === undefined ? undefined : { value: mapKeyValue(name, sample) })
+                : sample != null && typeof sample === 'object' && name in sample ? { value: sample[name] } : undefined;
             compileTemplate(key, map[key], keySample, ctx);
         }
     }
