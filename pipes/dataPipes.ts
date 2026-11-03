@@ -10,17 +10,19 @@
  *         phase:   { map: { hold: 'On hold', go: 'Go' }, default: 'Unknown' },
  *         price:   { use: 'toFixed', args: [2] },
  *         when:    { chain: ['parseDate', 'longUtc'] },
+ *         total:   { sum: ['?.quantity', '?.price'] },
  *         clock:   s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`,   // functions pass through
  *     });
  *
  * Each function made from a descriptor carries it (under PIPE_DESCRIPTOR, a global symbol), so code that
  * stores pipes (o2h's prepareO2HTransform) can keep the descriptor instead of losing the pipe.
  *
- * Deliberately small: Intl formatting, lookups, a fixed set of built-ins, and chains. No comparisons,
- * arithmetic, filtering or sorting: pipes that need those stay functions.
+ * Deliberately small: Intl formatting, lookups, a fixed set of built-ins, chains, and sums (a total over an
+ * array). No comparisons, other arithmetic, filtering or sorting: pipes that need those stay functions.
  */
 
-import type { Pipes, PipeDescriptor, IntlPipeDescriptor, MapPipeDescriptor, UsePipeDescriptor, ChainPipeDescriptor } from '../types/assign-gingerly/types.js';
+import type { Pipes, PipeDescriptor, IntlPipeDescriptor, MapPipeDescriptor, UsePipeDescriptor, ChainPipeDescriptor, SumPipeDescriptor } from '../types/assign-gingerly/types.js';
+import { getValue } from '../resolve/getValues.js';
 
 /** Where a pipe made from a descriptor keeps it: a registered symbol, so other packages find it without importing this module. */
 export const PIPE_DESCRIPTOR: unique symbol = Symbol.for('assign-gingerly.pipeDescriptor') as any;
@@ -82,8 +84,9 @@ function fromDescriptor(name: string, d: PipeDescriptor, pipes: Pipes): (value: 
         if ('map' in d) return mapPipe(d);
         if ('use' in d) return usePipe(name, d);
         if ('chain' in d) return chainPipe(d, pipes);
+        if ('sum' in d) return sumPipe(name, d, pipes);
     }
-    throw new Error(`dataPipes: "${name}" is neither a function nor a pipe descriptor ({ intl }, { map }, { use } or { chain })`);
+    throw new Error(`dataPipes: "${name}" is neither a function nor a pipe descriptor ({ intl }, { map }, { use }, { chain } or { sum })`);
 }
 
 function intlPipe(name: string, d: IntlPipeDescriptor): (value: any) => any {
@@ -133,5 +136,28 @@ function chainPipe(d: ChainPipeDescriptor, pipes: Pipes): (value: any) => any {
         } finally {
             chainDepth--;
         }
+    };
+}
+
+/**
+ * A total over an array: each element's path, or the product of its paths (`['?.quantity', '?.price']`), added up.
+ * The paths are ordinary `?.` paths, resolved against the element with this object's pipes. An element whose
+ * path leads nowhere, or to something that isn't a number, adds 0. Not an array: undefined (nothing is rendered).
+ */
+function sumPipe(name: string, d: SumPipeDescriptor, pipes: Pipes): (value: any) => any {
+    const paths = typeof d.sum === 'string' ? [d.sum] : d.sum;
+    if (!Array.isArray(paths) || paths.length === 0 || !paths.every(p => typeof p === 'string' && p.startsWith('?.'))) {
+        throw new Error(`dataPipes: "${name}": sum takes a ?. path, or an array of them (multiplied per element)`);
+    }
+    const options = { pipes };
+    return v => {
+        if (!Array.isArray(v)) return undefined;
+        let total = 0;
+        for (const item of v) {
+            let product = 1;
+            for (const path of paths) product *= Number(getValue(path, item, options) ?? NaN);
+            if (Number.isFinite(product)) total += product;
+        }
+        return total;
     };
 }

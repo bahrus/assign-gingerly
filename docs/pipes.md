@@ -91,6 +91,7 @@ const pipes = dataPipes({
     phase:   { map: { hold: 'On hold', go: 'Go for launch' }, default: 'Unknown' },
     price:   { use: 'toFixed', args: [2] },
     when:    { chain: ['parseDate', 'longUtc'] },
+    items:   { sum: '?.quantity' },
     clock:   s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`,   // functions pass through
 });
 // '?.date_utc?.when', '?.mass?.kg', '?.status?.phase' …
@@ -104,8 +105,22 @@ const pipes = dataPipes({
 | **`map`** | `{ map: { … }, default? }` | A lookup by `String(value)`: n-way labels or class names, where a ternary only does two ways |
 | **`use`** | `{ use: name, args? }` | A built-in: `parseDate`, `number`, `string`, `trim`, `upper`, `lower`, `length`, `toFixed`, `slice`, `join`, `default`. The value comes first, then `args`. |
 | **`chain`** | `{ chain: [name, …] }` | Pipes in sequence, by name: other pipes of the same object (descriptors **or functions**), or built-ins. It stops at `null` / `undefined`, as a path does. |
+| **`sum`** | `{ sum: '?.path' }` or `{ sum: ['?.a', '?.b', …] }` | A total over an array: each element's path added up, or with several paths, their **product** per element (quantity × price). The paths are ordinary `?.` paths, resolved against each element with the same pipes. An element whose path leads nowhere, or isn't a number, adds 0 (numeric strings count). An empty array totals 0; a value that isn't an array gives `undefined`. |
 
 - **Errors come early:** an unknown descriptor, `intl` kind, built-in, or chain name throws when you call `dataPipes()`, not on first use. A chain that names itself (directly or not) throws a clear error instead of recursing forever.
 - **Locale:** without `locale`, `Intl` uses the runtime's default, which can differ between a server or worker and the browser. Give one when the server renders.
 - **Each pipe made from a descriptor carries it,** under the registered symbol `Symbol.for('assign-gingerly.pipeDescriptor')` (also exported as `PIPE_DESCRIPTOR`, with `pipeDescriptorOf(pipe)`). That's how o2h's `prepareO2HTransform` stores the descriptor instead of losing the pipe, so the worker renders what uses it.
-- **Deliberately small:** no comparisons, arithmetic, filtering or sorting. Pipes that need those stay functions, and in a worker, what uses them is left to the client.
+- **Totals:** a cart's item count and total, in the worker:
+
+  ```js
+  const pipes = dataPipes({
+      itemCount: { sum: '?.quantity' },                  // 2 + 1 → 3
+      subtotal:  { sum: ['?.quantity', '?.price'] },     // 2 × 109.95 + 1 × 22.3 → 242.2 (give or take float noise)
+      usd:       { intl: 'NumberFormat', locale: 'en-US', options: { style: 'currency', currency: 'USD' } },
+      total:     { chain: ['subtotal', 'usd'] },         // '$242.20': formatting rounds the noise away
+  });
+  // '?.lines?.itemCount', '?.lines?.total'
+  ```
+
+  `?.length` counts an array's elements; `sum` counts what they hold.
+- **Deliberately small:** no comparisons, other arithmetic (beyond `sum`), filtering or sorting. Pipes that need those stay functions, and in a worker, what uses them is left to the client.

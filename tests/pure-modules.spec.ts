@@ -173,4 +173,37 @@ test.describe('pure modules (no DOM)', () => {
     expect(() => loop.a(1)).toThrow(/nests more than 32 deep/);
     expect(() => loop.a(1)).toThrow(/nests more than 32 deep/);   // and again: the depth didn't leak
   });
+
+  test('dataPipes: sum adds up a path per element, or the product of several paths', async ({ browserName }) => {
+    test.skip(browserName !== 'chromium', 'Node-side check; once is enough');
+    const url = (path: string) => new URL(`../${path}`, import.meta.url).href;
+    const { dataPipes } = await import(url('pipes/dataPipes.js'));
+    const { getValue } = await import(url('resolve/getValues.js'));
+    const descriptors = {
+      itemCount: { sum: '?.quantity' },
+      subtotal: { sum: ['?.quantity', '?.price'] },
+      usd: { intl: 'NumberFormat', locale: 'en-US', options: { style: 'currency', currency: 'USD' } },
+      total: { chain: ['subtotal', 'usd'] },
+      cents: { sum: '?.price?.toCents' },               // an element's path can use the object's pipes
+      plain: { sum: '?.' },                              // an array of numbers
+    };
+    const pipes = dataPipes({ ...descriptors, toCents: (n: number) => Math.round(n * 100) });
+    const cart = { lines: [{ quantity: 2, price: 109.95 }, { quantity: 1, price: 22.3 }] };
+    const resolve = (path: string, from: any) => getValue(path, from, { pipes });
+    expect(resolve('?.lines?.itemCount', cart)).toBe(3);
+    expect(resolve('?.lines?.subtotal', cart)).toBeCloseTo(242.2);
+    expect(resolve('?.lines?.total', cart)).toBe('$242.20');
+    expect(resolve('?.lines?.cents', cart)).toBe(10995 + 2230);
+    expect(pipes.plain([1, 2, 3.5])).toBe(6.5);
+    // An empty array totals 0; missing or non-numeric values add 0; numeric strings count
+    expect(pipes.itemCount([])).toBe(0);
+    expect(pipes.subtotal([{ quantity: 2 }, { quantity: 'x', price: 1 }, null, { quantity: '3', price: '2' }])).toBe(6);
+    // Not an array: nothing to render
+    expect(pipes.itemCount({ quantity: 2 })).toBeUndefined();
+    expect(resolve('?.missing?.itemCount', cart)).toBeUndefined();
+    // Survives structuredClone; errors at dataPipes()
+    expect(dataPipes(structuredClone(descriptors)).total(cart.lines)).toBe('$242.20');
+    expect(() => dataPipes({ x: { sum: 'quantity' } })).toThrow(/sum takes a \?\. path/);
+    expect(() => dataPipes({ x: { sum: [] } })).toThrow(/sum takes a \?\. path/);
+  });
 });
