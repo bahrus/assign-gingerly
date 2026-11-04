@@ -32,210 +32,210 @@
   ],
   "exports": {
     ".": {
-      "default": "./index.js",
-      "types": "./index.ts"
+      "types": "./index.ts",
+      "default": "./index.js"
     },
     "./assignGingerly.js": {
-      "default": "./assignGingerly.js",
-      "types": "./assignGingerly.ts"
+      "types": "./assignGingerly.ts",
+      "default": "./assignGingerly.js"
     },
     "./assignTentatively.js": {
-      "default": "./assignTentatively.js",
-      "types": "./assignTentatively.ts"
+      "types": "./assignTentatively.ts",
+      "default": "./assignTentatively.js"
     },
     "./buildCSSQuery.js": {
-      "default": "./buildCSSQuery.js",
-      "types": "./buildCSSQuery.ts"
+      "types": "./buildCSSQuery.ts",
+      "default": "./buildCSSQuery.js"
     },
     "./object-extension.js": {
-      "default": "./object-extension.js",
-      "types": "./object-extension.ts"
+      "types": "./object-extension.ts",
+      "default": "./object-extension.js"
     },
     "./parserRegistry.js": {
       "default": "./parserRegistry.js"
     },
     "./SplitParser.js": {
-      "default": "./SplitParser.js",
-      "types": "./SplitParser.ts"
+      "types": "./SplitParser.ts",
+      "default": "./SplitParser.js"
     },
     "./parseWithAttrs.js": {
-      "default": "./parseWithAttrs.js",
-      "types": "./parseWithAttrs.ts"
+      "types": "./parseWithAttrs.ts",
+      "default": "./parseWithAttrs.js"
     },
     "./resolve/resolveTemplate.js": {
-      "default": "./resolve/resolveTemplate.js",
-      "types": "./resolve/resolveTemplate.ts"
+      "types": "./resolve/resolveTemplate.ts",
+      "default": "./resolve/resolveTemplate.js"
     },
     "./getHost.js": {
-      "default": "./getHost.js",
-      "types": "./getHost.ts"
+      "types": "./getHost.ts",
+      "default": "./getHost.js"
     },
     "./resolve/resolveValues.js": {
-      "default": "./resolve/resolveValues.js",
-      "types": "./resolve/resolveValues.ts"
+      "types": "./resolve/resolveValues.ts",
+      "default": "./resolve/resolveValues.js"
     },
     "./resolve/getValues.js": {
-      "default": "./resolve/getValues.js",
-      "types": "./resolve/getValues.ts"
+      "types": "./resolve/getValues.ts",
+      "default": "./resolve/getValues.js"
     },
     "./resolve/resolveIdRef.js": {
-      "default": "./resolve/resolveIdRef.js",
-      "types": "./resolve/resolveIdRef.ts"
+      "types": "./resolve/resolveIdRef.ts",
+      "default": "./resolve/resolveIdRef.js"
     },
     "./transitionHelper.js": {
-      "default": "./transitionHelper.js",
-      "types": "./transitionHelper.ts"
+      "types": "./transitionHelper.ts",
+      "default": "./transitionHelper.js"
     },
     "./installForwarding.js": {
-      "default": "./installForwarding.js",
-      "types": "./installForwarding.ts"
+      "types": "./installForwarding.ts",
+      "default": "./installForwarding.js"
     },
     "./defineWithFeatures.js": {
-      "default": "./defineWithFeatures.js",
-      "types": "./defineWithFeatures.ts"
+      "types": "./defineWithFeatures.ts",
+      "default": "./defineWithFeatures.js"
     },
     "./handlers/addEventListener.js": {
-      "default": "./handlers/addEventListener.js",
-      "types": "./handlers/addEventListener.ts"
+      "types": "./handlers/addEventListener.ts",
+      "default": "./handlers/addEventListener.js"
     },
     "./handlers/lazyLoad.js": {
-      "default": "./handlers/lazyLoad.js",
-      "types": "./handlers/lazyLoad.ts"
+      "types": "./handlers/lazyLoad.ts",
+      "default": "./handlers/lazyLoad.js"
     },
     "./handlers/lazyLoadSwitch.js": {
-      "default": "./handlers/lazyLoadSwitch.js",
-      "types": "./handlers/lazyLoadSwitch.ts"
+      "types": "./handlers/lazyLoadSwitch.ts",
+      "default": "./handlers/lazyLoadSwitch.js"
     },
     "./syncOps/join.js": {
-      "default": "./syncOps/join.js",
-      "types": "./syncOps/join.ts"
+      "types": "./syncOps/join.ts",
+      "default": "./syncOps/join.js"
     },
     "./syncOps/registry.js": {
-      "default": "./syncOps/registry.js",
-      "types": "./syncOps/registry.ts"
+      "types": "./syncOps/registry.ts",
+      "default": "./syncOps/registry.js"
     },
     "./syncOps/microJoin.js": {
-      "default": "./syncOps/microJoin.js",
-      "types": "./syncOps/microJoin.ts"
+      "types": "./syncOps/microJoin.ts",
+      "default": "./syncOps/microJoin.js"
     },
     "./handlers/compileTree.js": {
-      "default": "./handlers/compileTree.js",
-      "types": "./handlers/compileTree.ts"
+      "types": "./handlers/compileTree.ts",
+      "default": "./handlers/compileTree.js"
     },
     "./pipes/dataPipes.js": {
-      "default": "./pipes/dataPipes.js",
-      "types": "./pipes/dataPipes.ts"
+      "types": "./pipes/dataPipes.ts",
+      "default": "./pipes/dataPipes.js"
     },
     "./handlers/treeSpec.js": {
-      "default": "./handlers/treeSpec.js",
-      "types": "./handlers/treeSpec.ts"
+      "types": "./handlers/treeSpec.ts",
+      "default": "./handlers/treeSpec.js"
     },
     "./types/treeTypes.js": {
       "types": "./types/assign-gingerly/treeTypes.d.ts"
     },
     "./handlers/manageTemplateList.js": {
-      "default": "./handlers/manageTemplateList.js",
-      "types": "./handlers/manageTemplateList.ts"
+      "types": "./handlers/manageTemplateList.ts",
+      "default": "./handlers/manageTemplateList.js"
     },
     "./handlers/nudge.js": {
-      "default": "./handlers/nudge.js",
-      "types": "./handlers/nudge.ts"
+      "types": "./handlers/nudge.ts",
+      "default": "./handlers/nudge.js"
     },
     "./handlers/arr.js": {
-      "default": "./handlers/arr.js",
-      "types": "./handlers/arr.ts"
+      "types": "./handlers/arr.ts",
+      "default": "./handlers/arr.js"
     },
     "./inferencer/inferencer.js": {
-      "default": "./inferencer/inferencer.js",
-      "types": "./inferencer/inferencer.ts"
+      "types": "./inferencer/inferencer.ts",
+      "default": "./inferencer/inferencer.js"
     },
     "./inferencer/upSearch.js": {
-      "default": "./inferencer/upSearch.js",
-      "types": "./inferencer/upSearch.ts"
+      "types": "./inferencer/upSearch.ts",
+      "default": "./inferencer/upSearch.js"
     },
     "./inferencer/withScopePerimeter.js": {
-      "default": "./inferencer/withScopePerimeter.js",
-      "types": "./inferencer/withScopePerimeter.ts"
+      "types": "./inferencer/withScopePerimeter.ts",
+      "default": "./inferencer/withScopePerimeter.js"
     },
     "./DX/paths.js": {
-      "default": "./DX/paths.js",
-      "types": "./DX/paths.ts"
+      "types": "./DX/paths.ts",
+      "default": "./DX/paths.js"
     },
     "./DX/tree.js": {
-      "default": "./DX/tree.js",
-      "types": "./DX/tree.ts"
+      "types": "./DX/tree.ts",
+      "default": "./DX/tree.js"
     },
     "./DX/IterableMixin.js": {
-      "default": "./DX/IterableMixin.js",
-      "types": "./DX/IterableMixin.ts"
+      "types": "./DX/IterableMixin.ts",
+      "default": "./DX/IterableMixin.js"
     },
     "./enhanceAll.js": {
-      "default": "./enhanceAll.js",
-      "types": "./enhanceAll.ts"
+      "types": "./enhanceAll.ts",
+      "default": "./enhanceAll.js"
     },
     "./assignPermissions/isAllowedImportPath.js": {
-      "default": "./assignPermissions/isAllowedImportPath.js",
-      "types": "./assignPermissions/isAllowedImportPath.ts"
+      "types": "./assignPermissions/isAllowedImportPath.ts",
+      "default": "./assignPermissions/isAllowedImportPath.js"
     },
     "./utils/findClassPrototypeInPath.js": {
-      "default": "./utils/findClassPrototypeInPath.js",
-      "types": "./utils/findClassPrototypeInPath.ts"
+      "types": "./utils/findClassPrototypeInPath.ts",
+      "default": "./utils/findClassPrototypeInPath.js"
     },
     "./utils/isAsyncSpawn.js": {
-      "default": "./utils/isAsyncSpawn.js",
-      "types": "./utils/isAsyncSpawn.ts"
+      "types": "./utils/isAsyncSpawn.ts",
+      "default": "./utils/isAsyncSpawn.js"
     },
     "./markerUtils.js": {
-      "default": "./markerUtils.js",
-      "types": "./markerUtils.ts"
+      "types": "./markerUtils.ts",
+      "default": "./markerUtils.js"
     },
     "./utils/waitForSettled.js": {
-      "default": "./utils/waitForSettled.js",
-      "types": "./utils/waitForSettled.ts"
+      "types": "./utils/waitForSettled.ts",
+      "default": "./utils/waitForSettled.js"
     },
     "./inferredAssignments.js": {
-      "default": "./inferredAssignments.js",
-      "types": "./inferredAssignments.ts"
+      "types": "./inferredAssignments.ts",
+      "default": "./inferredAssignments.js"
     },
     "./beVigilant.js": {
-      "default": "./beVigilant.js",
-      "types": "./beVigilant.ts"
+      "types": "./beVigilant.ts",
+      "default": "./beVigilant.js"
     },
     "./assignFromAsync.js": {
-      "default": "./assignFromAsync.js",
-      "types": "./assignFromAsync.ts"
+      "types": "./assignFromAsync.ts",
+      "default": "./assignFromAsync.js"
     },
     "./assignFrom.js": {
-      "default": "./assignFrom.js",
-      "types": "./assignFrom.ts"
+      "types": "./assignFrom.ts",
+      "default": "./assignFrom.js"
     },
     "./assignFrom-extension.js": {
-      "default": "./assignFrom-extension.js",
-      "types": "./assignFrom-extension.ts"
+      "types": "./assignFrom-extension.ts",
+      "default": "./assignFrom-extension.js"
     },
     "./assignFromAsync-extension.js": {
-      "default": "./assignFromAsync-extension.js",
-      "types": "./assignFromAsync-extension.ts"
+      "types": "./assignFromAsync-extension.ts",
+      "default": "./assignFromAsync-extension.js"
     },
     "./DX/emojis.js": {
-      "default": "./DX/emojis.js",
-      "types": "./DX/emojis.ts"
+      "types": "./DX/emojis.ts",
+      "default": "./DX/emojis.js"
     },
     "./DX/strictDefaultPermissions.js": {
-      "default": "./DX/strictDefaultPermissions.js",
-      "types": "./DX/strictDefaultPermissions.ts"
+      "types": "./DX/strictDefaultPermissions.ts",
+      "default": "./DX/strictDefaultPermissions.js"
     },
     "./assignFeatures.js": {
-      "default": "./assignFeatures.js",
-      "types": "./assignFeatures.ts"
+      "types": "./assignFeatures.ts",
+      "default": "./assignFeatures.js"
     },
     "./evaluatePathWithAsyncMethods.js": {
-      "default": "./evaluatePathWithAsyncMethods.js",
-      "types": "./evaluatePathWithAsyncMethods.ts"
+      "types": "./evaluatePathWithAsyncMethods.ts",
+      "default": "./evaluatePathWithAsyncMethods.js"
     },
     "./utils/waitForEvent.js": {
-      "default": "./utils/waitForEvent.js",
-      "types": "./utils/waitForEvent.ts"
+      "types": "./utils/waitForEvent.ts",
+      "default": "./utils/waitForEvent.js"
     }
   },
   "main": "index.js",
