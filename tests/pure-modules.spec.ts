@@ -206,4 +206,27 @@ test.describe('pure modules (no DOM)', () => {
     expect(() => dataPipes({ x: { sum: 'quantity' } })).toThrow(/sum takes a \?\. path/);
     expect(() => dataPipes({ x: { sum: [] } })).toThrow(/sum takes a \?\. path/);
   });
+
+  test('dataPipes: min and max of a path per element, skipping what isn\'t a number', async ({ browserName }) => {
+    test.skip(browserName !== 'chromium', 'Node-side check; once is enough');
+    const url = (path: string) => new URL(`../${path}`, import.meta.url).href;
+    const { dataPipes } = await import(url('pipes/dataPipes.js'));
+    const { getValue } = await import(url('resolve/getValues.js'));
+    const descriptors = { low: { min: '?.value' }, high: { max: '?.value' }, least: { min: '?.' } };
+    const pipes = dataPipes(descriptors);
+    // As BLS sends a series: numeric strings, and "-" for a missing month
+    const series = { data: [{ value: '4.2' }, { value: '-' }, { value: '4.5' }, { value: 3.9 }, {}, { value: '' }, { value: null }] };
+    const resolve = (path: string) => getValue(path, series, { pipes });
+    expect(resolve('?.data?.low')).toBe(3.9);
+    expect(resolve('?.data?.high')).toBe(4.5);
+    expect(pipes.least([3, -1, 2])).toBe(-1);
+    // No numbers, or not an array: nothing to render
+    expect(pipes.low([])).toBeUndefined();
+    expect(pipes.high([{ value: '-' }])).toBeUndefined();
+    expect(pipes.low({ value: 1 })).toBeUndefined();
+    // Survives structuredClone; errors at dataPipes()
+    expect(dataPipes(structuredClone(descriptors)).high(series.data)).toBe(4.5);
+    expect(() => dataPipes({ x: { min: 'value' } })).toThrow(/min takes a \?\. path/);
+    expect(() => dataPipes({ x: { max: ['?.a'] } })).toThrow(/max takes a \?\. path/);
+  });
 });

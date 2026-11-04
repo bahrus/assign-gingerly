@@ -11,14 +11,15 @@
  *         price:   { use: 'toFixed', args: [2] },
  *         when:    { chain: ['parseDate', 'longUtc'] },
  *         total:   { sum: ['?.quantity', '?.price'] },
+ *         low:     { min: '?.value' },
  *         clock:   s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`,   // functions pass through
  *     });
  *
  * Each function made from a descriptor carries it (under PIPE_DESCRIPTOR, a global symbol), so code that
  * stores pipes (o2h's prepareO2HTransform) can keep the descriptor instead of losing the pipe.
  *
- * Deliberately small: Intl formatting, lookups, a fixed set of built-ins, chains, and sums (a total over an
- * array). No comparisons, other arithmetic, filtering or sorting: pipes that need those stay functions.
+ * Deliberately small: Intl formatting, lookups, a fixed set of built-ins, chains, and aggregates over an array
+ * (sum, min, max). No comparisons, other arithmetic, filtering or sorting: pipes that need those stay functions.
  */
 import { getValue } from '../resolve/getValues.js';
 /** Where a pipe made from a descriptor keeps it: a registered symbol, so other packages find it without importing this module. */
@@ -81,8 +82,12 @@ function fromDescriptor(name, d, pipes) {
             return chainPipe(d, pipes);
         if ('sum' in d)
             return sumPipe(name, d, pipes);
+        if ('min' in d)
+            return extremePipe(name, 'min', d.min, pipes);
+        if ('max' in d)
+            return extremePipe(name, 'max', d.max, pipes);
     }
-    throw new Error(`dataPipes: "${name}" is neither a function nor a pipe descriptor ({ intl }, { map }, { use }, { chain } or { sum })`);
+    throw new Error(`dataPipes: "${name}" is neither a function nor a pipe descriptor ({ intl }, { map }, { use }, { chain }, { sum }, { min } or { max })`);
 }
 function intlPipe(name, d) {
     if (!INTL_KINDS.has(d.intl))
@@ -158,4 +163,35 @@ function sumPipe(name, d, pipes) {
         }
         return total;
     };
+}
+/**
+ * The smallest or largest of an array's values at a `?.` path per element (`{ min: '?.value' }`), e.g. to scale a
+ * chart. Only numbers and numeric strings count: an element whose path leads nowhere, to a blank or to something
+ * else (`"-"`) is skipped. No numbers, or not an array: undefined (nothing is rendered).
+ */
+function extremePipe(name, which, path, pipes) {
+    if (typeof path !== 'string' || !path.startsWith('?.')) {
+        throw new Error(`dataPipes: "${name}": ${which} takes a ?. path`);
+    }
+    const options = { pipes };
+    const better = which === 'min' ? (a, b) => a < b : (a, b) => a > b;
+    return v => {
+        if (!Array.isArray(v))
+            return undefined;
+        let best;
+        for (const item of v) {
+            const n = numeric(getValue(path, item, options));
+            if (Number.isFinite(n) && (best === undefined || better(n, best)))
+                best = n;
+        }
+        return best;
+    };
+}
+/** A number, or a numeric string, as a number; anything else (a blank included) NaN. */
+function numeric(raw) {
+    if (typeof raw === 'number')
+        return raw;
+    if (typeof raw === 'string' && raw.trim() !== '')
+        return Number(raw);
+    return NaN;
 }

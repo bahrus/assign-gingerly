@@ -106,6 +106,7 @@ const pipes = dataPipes({
 | **`use`** | `{ use: name, args? }` | A built-in: `parseDate`, `number`, `string`, `trim`, `upper`, `lower`, `length`, `toFixed`, `slice`, `join`, `default`. The value comes first, then `args`. |
 | **`chain`** | `{ chain: [name, …] }` | Pipes in sequence, by name: other pipes of the same object (descriptors **or functions**), or built-ins. It stops at `null` / `undefined`, as a path does. |
 | **`sum`** | `{ sum: '?.path' }` or `{ sum: ['?.a', '?.b', …] }` | A total over an array: each element's path added up, or with several paths, their **product** per element (quantity × price). The paths are ordinary `?.` paths, resolved against each element with the same pipes. An element whose path leads nowhere, or isn't a number, adds 0 (numeric strings count). An empty array totals 0; a value that isn't an array gives `undefined`. |
+| **`min`**, **`max`** | `{ min: '?.path' }`, `{ max: '?.path' }` | The smallest or largest of an array's values at the path per element, e.g. to scale a chart. Only numbers and numeric strings count: an element whose path leads nowhere, to a blank, or to anything else (`"-"`) is skipped. No numbers at all, or a value that isn't an array, gives `undefined`. |
 
 - **Errors come early:** an unknown descriptor, `intl` kind, built-in, or chain name throws when you call `dataPipes()`, not on first use. A chain that names itself (directly or not) throws a clear error instead of recursing forever.
 - **Locale:** without `locale`, `Intl` uses the runtime's default, which can differ between a server or worker and the browser. Give one when the server renders.
@@ -123,4 +124,13 @@ const pipes = dataPipes({
   ```
 
   `?.length` counts an array's elements; `sum` counts what they hold.
-- **Deliberately small:** no comparisons, other arithmetic (beyond `sum`), filtering or sorting. Pipes that need those stay functions, and in a worker, what uses them is left to the client.
+- **A chart's scale:** `{ min: '?.value' }` and `{ max: '?.value' }` give a series' range, which CSS can scale bars with (o2h-edge's BLS demo):
+
+  ```js
+  const pipes = dataPipes({ low: { min: '?.value' }, high: { max: '?.value' } });
+  // <figure style="--low: ${'?.data?.low'}; --high: ${'?.data?.high'}">
+  //     <ol class="bars" ${each('?.data')}><li style="--v: ${'?.value'}"></li></ol>
+  // </figure>
+  // li { height: calc((var(--v) - var(--low)) / (var(--high) - var(--low)) * 100%); }
+  ```
+- **Deliberately small:** no comparisons, other arithmetic (beyond `sum`, `min` and `max`), filtering or sorting. Pipes that need those stay functions, and in a worker, what uses them is left to the client.
