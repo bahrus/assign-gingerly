@@ -23,7 +23,24 @@ import { resolveValues } from './resolve/resolveValues.js';
 import { withSnippetProtocol } from './handlers/snippets.js';
 import assignGingerly from './assignGingerly.js';
 import { assignFrom, expandSubstitutions, categorizeKeys, handleSpreads, loadHandlerCommands, parseMultiInvokeCommand } from './assignFrom.js';
+/** Pipes objects already looked at: the load in progress, if one of their entries needed dataPipes. */
+const dataPipesLoads = new WeakMap();
+/** Load dataPipes if a `pipes` object holds a descriptor (the core can't: it stays synchronous, and without it). */
+function loadDataPipes(pipes) {
+    if (!pipes)
+        return undefined;
+    if (dataPipesLoads.has(pipes))
+        return dataPipesLoads.get(pipes);
+    const loading = Object.values(pipes).some(pipe => typeof pipe !== 'function')
+        ? import('./pipes/dataPipes.js').then(() => { dataPipesLoads.set(pipes, undefined); })
+        : undefined;
+    dataPipesLoads.set(pipes, loading);
+    return loading;
+}
 export async function assignFromAsync(target, pattern, options, permissionProcessor) {
+    const loading = loadDataPipes(options.pipes);
+    if (loading)
+        await loading;
     // The built-in snippets:// protocol, when the options have snippets
     options = withSnippetProtocol(options, permissionProcessor);
     // First: expand looped substitution variables (${x}, ${y}, ${z})

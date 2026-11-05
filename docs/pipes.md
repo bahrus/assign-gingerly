@@ -80,7 +80,77 @@ See [demos/tree-demo.html](../demos/tree-demo.html) for all of these together.
 
 ## Data Pipes (opt-in): pipes described as data
 
-Pipes are functions, and functions can't be stored (IndexedDB, `postMessage`, `structuredClone`). That matters when a config travels: for example, to [o2h's service worker](https://github.com/bahrus/o2h#service-worker-first-paint), which renders it off the main thread. **Data pipes** are pipes described by small objects instead, which survive the trip.
+Pipes are functions, and functions can't be stored (IndexedDB, `postMessage`, `structuredClone`) or written in a JSON file. That matters when a config travels: for example, to [o2h's service worker](https://github.com/bahrus/o2h#service-worker-first-paint), which renders it off the main thread. **Data pipes** are pipes described by small objects instead, which survive the trip.
+
+### The third argument as JSON
+
+A `pipes` option can hold those objects, called descriptors, directly. So the whole third argument can be JSON, and **you never call a function to convert it:**
+
+```json
+{
+    "from": {
+        "lines": [
+            { "quantity": 2, "price": 109.95 },
+            { "quantity": 1, "price": 22.3 }
+        ]
+    },
+    "pipes": {
+        "items":    { "sum": "?.quantity" },
+        "subtotal": { "sum": ["?.quantity", "?.price"] },
+        "usd":      { "intl": "NumberFormat", "locale": "en-US", "options": { "style": "currency", "currency": "USD" } },
+        "total":    { "chain": ["subtotal", "usd"] }
+    }
+}
+```
+
+With that saved as `options.json`, the code needs one import for its side effect, and nothing else:
+
+```js
+import { assignFrom } from 'assign-gingerly/assignFrom.js';
+import 'assign-gingerly/pipes/dataPipes.js';          // imported, never called
+import options from './options.json' with { type: 'json' };
+
+const summary = {};
+assignFrom(summary, { '?.count': '?.lines?.items', '?.amount': '?.lines?.total' }, options);
+
+// summary: { count: 3, amount: '$242.20' }
+```
+
+**How the descriptors become pipes:** importing the module makes it available to the core. The first path that reaches a descriptor (here, `?.lines?.items`) converts the whole `pipes` object, and the result is kept for that object, so later calls reuse it. That's why `total` can chain to its siblings by name. Paths use descriptors exactly as they use functions, and nothing changes in the pattern.
+
+`assignFromAsync` doesn't need the import, because it can wait for a load. The extension doesn't either, because it includes the module:
+
+```js
+import { assignFromAsync } from 'assign-gingerly/assignFromAsync.js';
+import options from './options.json' with { type: 'json' };
+
+await assignFromAsync(summary, { '?.count': '?.lines?.items', '?.amount': '?.lines?.total' }, options);
+```
+
+```js
+import 'assign-gingerly/assignFrom-extension.js';
+import options from './options.json' with { type: 'json' };
+
+const summary = {}.assignFrom({ '?.count': '?.lines?.items', '?.amount': '?.lines?.total' }, options);
+```
+
+The options don't have to be in a file: an object literal, or a parsed string from `postMessage` or a database, works the same way. The JSON form is also how [o2h](https://github.com/bahrus/o2h#data-pipes-survive) carries pipes from an app's JSON to a worker.
+
+### What it costs
+
+The module is about 1.4 KB, minified and gzipped. **The core doesn't import it,** so a page that uses no data pipes doesn't pay for it. Which entry point you use decides when you do:
+
+| You use | The 1.4 KB |
+|---|---|
+| `assignFrom`, `getValue`, `getValues`, `resolveValues` | **Your choice:** the `import` above, once, before the first call. These don't load it themselves, so without it a descriptor throws an error saying so. Function pipes work either way. |
+| `assignFromAsync` | **Loaded for you,** with a dynamic `import()`, when it first sees a descriptor. Never loaded for function pipes. A bundler that splits code makes it a separate chunk; one that doesn't inlines it. |
+| `assignFrom-extension.js` (`obj.assignFrom()`) | **Always included:** it's synchronous, so it can't load the module on demand. |
+
+A `pipes` object is read once, so don't change it afterwards.
+
+### Calling `dataPipes()` yourself
+
+This is optional. It makes the pipes ahead of time, and it reports mistakes sooner: an unknown descriptor, `intl` kind, built-in or chain name throws when you call it, where in a `pipes` option it throws when the first descriptor is used.
 
 ```js
 import { dataPipes } from 'assign-gingerly/pipes/dataPipes.js';
@@ -97,7 +167,9 @@ const pipes = dataPipes({
 // '?.date_utc?.when', '?.mass?.kg', '?.status?.phase' …
 ```
 
-**`dataPipes(entries)`** returns ordinary pipes: functions are kept as they are, and each descriptor becomes a function. So data pipes work wherever pipes do, synchronously (paths, builtIns.tree, sync ops, ternaries). **The core doesn't know about them:** pages that don't import the module pay nothing. It's about 0.6 KB gzipped.
+**`dataPipes(entries)`** returns ordinary pipes: functions are kept as they are, and each descriptor becomes a function. So data pipes work wherever pipes do, synchronously (paths, builtIns.tree, sync ops, ternaries). A `pipes` option can mix functions and descriptors the same way, with or without this call, though a function means it's no longer JSON.
+
+### The descriptors
 
 | Kind | Descriptor | Does |
 |---|---|---|
@@ -108,26 +180,14 @@ const pipes = dataPipes({
 | **`sum`** | `{ sum: '?.path' }` or `{ sum: ['?.a', '?.b', …] }` | A total over an array: each element's path added up, or with several paths, their **product** per element (quantity × price). The paths are ordinary `?.` paths, resolved against each element with the same pipes. An element whose path leads nowhere, or isn't a number, adds 0 (numeric strings count). An empty array totals 0; a value that isn't an array gives `undefined`. |
 | **`min`**, **`max`** | `{ min: '?.path' }`, `{ max: '?.path' }` | The smallest or largest of an array's values at the path per element, e.g. to scale a chart. Only numbers and numeric strings count: an element whose path leads nowhere, to a blank, or to anything else (`"-"`) is skipped. No numbers at all, or a value that isn't an array, gives `undefined`. |
 
-- **Errors come early:** an unknown descriptor, `intl` kind, built-in, or chain name throws when you call `dataPipes()`, not on first use. A chain that names itself (directly or not) throws a clear error instead of recursing forever.
+- **Bad chains:** a chain that names itself (directly or not) throws a clear error instead of recursing forever.
 - **Locale:** without `locale`, `Intl` uses the runtime's default, which can differ between a server or worker and the browser. Give one when the server renders.
 - **Each pipe made from a descriptor carries it,** under the registered symbol `Symbol.for('assign-gingerly.pipeDescriptor')` (also exported as `PIPE_DESCRIPTOR`, with `pipeDescriptorOf(pipe)`). That's how o2h's `prepareO2HTransform` stores the descriptor instead of losing the pipe, so the worker renders what uses it.
-- **Totals:** a cart's item count and total, in the worker:
-
-  ```js
-  const pipes = dataPipes({
-      itemCount: { sum: '?.quantity' },                  // 2 + 1 → 3
-      subtotal:  { sum: ['?.quantity', '?.price'] },     // 2 × 109.95 + 1 × 22.3 → 242.2 (give or take float noise)
-      usd:       { intl: 'NumberFormat', locale: 'en-US', options: { style: 'currency', currency: 'USD' } },
-      total:     { chain: ['subtotal', 'usd'] },         // '$242.20': formatting rounds the noise away
-  });
-  // '?.lines?.itemCount', '?.lines?.total'
-  ```
-
-  `?.length` counts an array's elements; `sum` counts what they hold.
+- **Totals:** `?.length` counts an array's elements; `sum` counts what they hold. In the JSON above, `subtotal` is 2 × 109.95 + 1 × 22.3, which is 242.2 give or take float noise. `total` chains `usd` onto it, and formatting rounds the noise away.
 - **A chart's scale:** `{ min: '?.value' }` and `{ max: '?.value' }` give a series' range, which CSS can scale bars with (o2h-edge's BLS demo):
 
   ```js
-  const pipes = dataPipes({ low: { min: '?.value' }, high: { max: '?.value' } });
+  const pipes = { low: { min: '?.value' }, high: { max: '?.value' } };
   // <figure style="--low: ${'?.data?.low'}; --high: ${'?.data?.high'}">
   //     <ol class="bars" ${each('?.data')}><li style="--v: ${'?.value'}"></li></ol>
   // </figure>

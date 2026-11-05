@@ -180,6 +180,28 @@ function isPipe(part, pipes) {
     return !!pipes && Object.hasOwn(pipes, part);
 }
 /**
+ * dataPipes, once pipes/dataPipes.js is loaded (it registers itself here), so the core doesn't import it: a
+ * `pipes` entry may be a descriptor, but only pages that use one pay for the module.
+ */
+let makePipes;
+export function registerPipeMaker(maker) {
+    makePipes = maker;
+}
+/** A pipes object's functions, made once: per object, so a chain still reaches its siblings. */
+const madePipes = new WeakMap();
+/** The function for a `pipes` entry that's a descriptor. */
+function makePipe(pipes, name) {
+    let made = madePipes.get(pipes);
+    if (!made) {
+        if (!makePipes) {
+            throw new Error(`assign-gingerly: the pipe "${name}" is a descriptor, and dataPipes isn't loaded: import 'assign-gingerly/pipes/dataPipes.js', or use assignFromAsync, which loads it`);
+        }
+        made = makePipes(pipes);
+        madePipes.set(pipes, made);
+    }
+    return made[name];
+}
+/**
  * Navigate a path against a source object, optionally calling methods and pipes.
  * Returns the resolved value at the end of the path.
  */
@@ -195,7 +217,7 @@ function navigatePath(source, parts, withMethods, permissionProcessor, pipes) {
         if (isPipe(rawPart, pipes)) {
             // Detached call: `this` is undefined, not the pipes map
             const pipe = pipes[rawPart];
-            current = pipe(current);
+            current = (typeof pipe === 'function' ? pipe : makePipe(pipes, rawPart))(current);
             i++;
             continue;
         }

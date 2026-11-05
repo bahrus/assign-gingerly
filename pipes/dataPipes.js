@@ -2,8 +2,10 @@
  * Data pipes: pipes described as data instead of written as functions, so they survive structuredClone
  * (IndexedDB, postMessage), e.g. on their way to a worker that renders with o2h.
  *
- * Opt-in: the core doesn't know about them. dataPipes() turns descriptors into ordinary pipe functions,
- * so they work everywhere pipes do, synchronously (getValue, builtIns.tree, sync ops, ternaries):
+ * Opt-in: the core doesn't import this module. dataPipes() turns descriptors into ordinary pipe functions,
+ * so they work everywhere pipes do, synchronously (getValue, builtIns.tree, sync ops, ternaries). A `pipes`
+ * option may also hold descriptors directly (so options can be JSON): loading this module registers dataPipes
+ * with the core, which applies it when a path first needs one, and assignFromAsync loads the module itself:
  *
  *     const pipes = dataPipes({
  *         longUtc: { intl: 'DateTimeFormat', locale: 'en-US', options: { dateStyle: 'long', timeZone: 'UTC' } },
@@ -21,7 +23,7 @@
  * Deliberately small: Intl formatting, lookups, a fixed set of built-ins, chains, and aggregates over an array
  * (sum, min, max). No comparisons, other arithmetic, filtering or sorting: pipes that need those stay functions.
  */
-import { getValue } from '../resolve/getValues.js';
+import { getValue, registerPipeMaker } from '../resolve/getValues.js';
 /** Where a pipe made from a descriptor keeps it: a registered symbol, so other packages find it without importing this module. */
 export const PIPE_DESCRIPTOR = Symbol.for('assign-gingerly.pipeDescriptor');
 /** The descriptor a pipe was made from, if it was made by dataPipes(). */
@@ -66,6 +68,8 @@ export function dataPipes(entries) {
     }
     return pipes;
 }
+// Loading this module is what lets a `pipes` option hold descriptors directly
+registerPipeMaker(dataPipes);
 function withDescriptor(pipe, descriptor) {
     Object.defineProperty(pipe, PIPE_DESCRIPTOR, { value: descriptor });
     return pipe;

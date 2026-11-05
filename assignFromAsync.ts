@@ -23,7 +23,7 @@ import { resolveValues } from './resolve/resolveValues.js';
 import { withSnippetProtocol } from './handlers/snippets.js';
 import {IAssignGingerlyOptions} from './types/assign-gingerly/types.js';
 import assignGingerly from './assignGingerly.js';
-import type { PermissionProcessor, AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
+import type { PermissionProcessor, PipeEntries, AssignFromHandler, AssignFromHandlerConstructor } from './types/assign-gingerly/types.js';
 import {
   assignFrom, expandSubstitutions, categorizeKeys, handleSpreads, isHandlerCommand, loadHandlerCommands, parseMultiInvokeCommand
 } from './assignFrom.js';
@@ -32,8 +32,8 @@ export interface AssignFromOptions extends IAssignGingerlyOptions {
   from: any;
   /** Enclosing `from`s for `$root` / `$parent` references, outermost first */
   fromStack?: any[];
-  /** Named unary functions usable as RHS path segments */
-  pipes?: Record<string, (value: any) => any>;
+  /** Named unary functions usable as RHS path segments, or descriptors of them (see PipeEntries) */
+  pipes?: PipeEntries;
   protocols?: Record<string, (key: string) => any | Promise<any>>;
   where_x_in?: string[];
   where_y_in?: string[];
@@ -53,12 +53,28 @@ export interface AssignFromOptions extends IAssignGingerlyOptions {
 
 export type { AssignFromHandler, AssignFromHandlerConstructor };
 
+/** Pipes objects already looked at: the load in progress, if one of their entries needed dataPipes. */
+const dataPipesLoads = new WeakMap<PipeEntries, Promise<void> | undefined>();
+
+/** Load dataPipes if a `pipes` object holds a descriptor (the core can't: it stays synchronous, and without it). */
+function loadDataPipes(pipes: PipeEntries | undefined): Promise<void> | undefined {
+  if (!pipes) return undefined;
+  if (dataPipesLoads.has(pipes)) return dataPipesLoads.get(pipes);
+  const loading = Object.values(pipes).some(pipe => typeof pipe !== 'function')
+    ? import('./pipes/dataPipes.js').then(() => { dataPipesLoads.set(pipes, undefined); })
+    : undefined;
+  dataPipesLoads.set(pipes, loading);
+  return loading;
+}
+
 export async function assignFromAsync(
   target: any,
   pattern: Record<string, any>,
   options: AssignFromOptions,
   permissionProcessor?: PermissionProcessor
 ): Promise<any> {
+  const loading = loadDataPipes(options.pipes);
+  if (loading) await loading;
   // The built-in snippets:// protocol, when the options have snippets
   options = withSnippetProtocol(options, permissionProcessor);
   // First: expand looped substitution variables (${x}, ${y}, ${z})

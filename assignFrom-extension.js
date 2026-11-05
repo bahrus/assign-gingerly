@@ -1,25 +1,27 @@
 /**
- * assignFrom-extension.js — Adds assignFrom to Object.prototype.
- * 
+ * assignFrom-extension.ts — Adds assignFrom to Object.prototype.
+ *
  * Import this module for the side effect of extending all objects with
  * the assignFrom method, enabling fluent method chaining:
- * 
+ *
  * @example
  * import 'assign-gingerly/assignFrom-extension.js';
- * 
+ *
  * oElement
  *     .assignFrom({ '?.textContent': '?.greeting' }, { from: vm1 })
  *     .assignFrom({ '?.style Y=': { color: '?.themeColor' } }, { from: vm2 });
+ *
+ * It includes dataPipes, so `pipes` can hold descriptors here: this method is synchronous, so it couldn't load
+ * them on demand. (assignFromAsync can, so its extension leaves that to the first use.)
  */
-
+import './pipes/dataPipes.js';
 import { assignFrom } from './assignFrom.js';
-
 Object.defineProperty(Object.prototype, 'assignFrom', {
-  value: function (pattern, options) {
-    assignFrom(this, pattern, options);
-    return this;
-  },
-  writable: true,
-  enumerable: false,
-  configurable: true,
+    value: function (pattern, options) {
+        assignFrom(this, pattern, options);
+        return this;
+    },
+    writable: true,
+    enumerable: false,
+    configurable: true,
 });

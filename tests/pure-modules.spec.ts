@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { spawnSync } from 'node:child_process';
 
 /**
  * The modules a server-side renderer (e.g. a stringify package) builds on must run without a
@@ -228,5 +229,81 @@ test.describe('pure modules (no DOM)', () => {
     expect(dataPipes(structuredClone(descriptors)).high(series.data)).toBe(4.5);
     expect(() => dataPipes({ x: { min: 'value' } })).toThrow(/min takes a \?\. path/);
     expect(() => dataPipes({ x: { max: ['?.a'] } })).toThrow(/max takes a \?\. path/);
+  });
+
+  test('a pipes option holds descriptors directly, once dataPipes is loaded', async ({ browserName }) => {
+    test.skip(browserName !== 'chromium', 'Node-side check; once is enough');
+    // Each in a fresh process: whether the module has been loaded is what's being tested
+    const fresh = (code: string) => {
+      const { status, stdout, stderr } = spawnSync(process.execPath, ['--input-type=module', '-e', code],
+        { cwd: new URL('../', import.meta.url), encoding: 'utf8', env: { ...process.env, FORCE_COLOR: '0' } });
+      if (status !== 0) throw new Error(stderr);
+      return stdout.trim();
+    };
+    const usd = `{ intl: 'NumberFormat', locale: 'en-US', options: { style: 'currency', currency: 'USD' } }`;
+    const json = `{ usd: ${usd}, double: n => n * 2, shown: { chain: ['double', 'usd'] } }`;
+
+    // Not loaded: functions work, and a descriptor says what to do
+    expect(fresh(`
+      import { getValue } from './resolve/getValues.js';
+      console.log(getValue('?.n?.double', { n: 2 }, { pipes: { double: n => n * 2 } }));
+      try { getValue('?.n?.usd', { n: 2 }, { pipes: ${json} }); }
+      catch (e) { console.log(e.message); }
+    `).split('\n')).toEqual(['4', `assign-gingerly: the pipe "usd" is a descriptor, and dataPipes isn't loaded: import 'assign-gingerly/pipes/dataPipes.js', or use assignFromAsync, which loads it`]);
+
+    // The core doesn't load it: nothing does but these
+    expect(fresh(`
+      import { assignFrom } from './assignFrom.js';
+      const target = {};
+      try { assignFrom(target, { '?.price': '?.n?.usd' }, { from: { n: 2 }, pipes: ${json} }); }
+      catch (e) { console.log(e.message.includes("dataPipes isn't loaded")); }
+    `)).toBe('true');
+
+    // Imported: sync, from JSON too, and a chain reaches a function beside the descriptors
+    expect(fresh(`
+      import './pipes/dataPipes.js';
+      import { getValue } from './resolve/getValues.js';
+      import { assignFrom } from './assignFrom.js';
+      const pipes = ${json};
+      console.log(getValue('?.n?.shown', { n: 2 }, { pipes }));
+      console.log(getValue('?.n?.usd', { n: 2 }, { pipes: JSON.parse(JSON.stringify({ usd: ${usd} })) }));
+      console.log(assignFrom({}, { '?.price': '?.n?.usd' }, { from: { n: 2 }, pipes }).price);
+    `).split('\n')).toEqual(['$4.00', '$2.00', '$2.00']);
+
+    // assignFromAsync loads it when it sees a descriptor; concurrent calls wait for the same load
+    expect(fresh(`
+      import { assignFromAsync } from './assignFromAsync.js';
+      import { getValue } from './resolve/getValues.js';
+      const pipes = ${json};
+      const [a, b] = await Promise.all([
+        assignFromAsync({}, { '?.price': '?.n?.usd' }, { from: { n: 2 }, pipes }),
+        assignFromAsync({}, { '?.price': '?.n?.shown' }, { from: { n: 2 }, pipes }),
+      ]);
+      console.log(a.price, b.price);
+      console.log(getValue('?.n?.usd', { n: 3 }, { pipes }));   // loaded for sync calls from then on
+    `).split('\n')).toEqual(['$2.00 $4.00', '$3.00']);
+
+    // assignFromAsync doesn't load it for functions
+    expect(fresh(`
+      import { assignFromAsync } from './assignFromAsync.js';
+      import { getValue } from './resolve/getValues.js';
+      await assignFromAsync({}, { '?.x': '?.n?.double' }, { from: { n: 2 }, pipes: { double: n => n * 2 } });
+      try { getValue('?.n?.usd', { n: 2 }, { pipes: { usd: ${usd} } }); }
+      catch (e) { console.log(e.message.includes("dataPipes isn't loaded")); }
+    `)).toBe('true');
+
+    // assignFrom-extension includes it, since obj.assignFrom() is sync
+    expect(fresh(`
+      import './assignFrom-extension.js';
+      console.log({}.assignFrom({ '?.price': '?.n?.usd' }, { from: { n: 2 }, pipes: { usd: ${usd} } }).price);
+    `)).toBe('$2.00');
+
+    // A bad descriptor throws at first use, naming it
+    expect(fresh(`
+      import './pipes/dataPipes.js';
+      import { getValue } from './resolve/getValues.js';
+      try { getValue('?.n?.bad', { n: 2 }, { pipes: { bad: { nope: 1 } } }); }
+      catch (e) { console.log(e.message); }
+    `)).toContain('dataPipes: "bad" is neither a function nor a pipe descriptor');
   });
 });

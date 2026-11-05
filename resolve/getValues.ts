@@ -17,7 +17,7 @@
  * }, source, { withMethods: ['querySelector'], aka: { q: 'querySelector' } });
  */
 
-import type { GetValuesOptions, ParsedProtocolRef, PermissionProcessor, Pipes, SyncProtocolHandlers } from '../types/assign-gingerly/types.js';
+import type { GetValuesOptions, ParsedProtocolRef, PermissionProcessor, PipeEntries, Pipes, SyncProtocolHandlers } from '../types/assign-gingerly/types.js';
 
 export function normalizeAliasOptions(options?: {
     aka?: Record<string, string>;
@@ -210,8 +210,34 @@ function parseCachedPath(path: string): string[] {
 /**
  * Whether a path segment names a registered pipe.
  */
-function isPipe(part: string, pipes: Pipes | undefined): boolean {
+function isPipe(part: string, pipes: PipeEntries | undefined): boolean {
     return !!pipes && Object.hasOwn(pipes, part);
+}
+
+/**
+ * dataPipes, once pipes/dataPipes.js is loaded (it registers itself here), so the core doesn't import it: a
+ * `pipes` entry may be a descriptor, but only pages that use one pay for the module.
+ */
+let makePipes: ((entries: PipeEntries) => Pipes) | undefined;
+
+export function registerPipeMaker(maker: (entries: PipeEntries) => Pipes): void {
+    makePipes = maker;
+}
+
+/** A pipes object's functions, made once: per object, so a chain still reaches its siblings. */
+const madePipes = new WeakMap<PipeEntries, Pipes>();
+
+/** The function for a `pipes` entry that's a descriptor. */
+function makePipe(pipes: PipeEntries, name: string): (value: any) => any {
+    let made = madePipes.get(pipes);
+    if (!made) {
+        if (!makePipes) {
+            throw new Error(`assign-gingerly: the pipe "${name}" is a descriptor, and dataPipes isn't loaded: import 'assign-gingerly/pipes/dataPipes.js', or use assignFromAsync, which loads it`);
+        }
+        made = makePipes(pipes);
+        madePipes.set(pipes, made);
+    }
+    return made[name];
 }
 
 /**
@@ -223,7 +249,7 @@ function navigatePath(
     parts: string[],
     withMethods: Set<string> | undefined,
     permissionProcessor?: PermissionProcessor,
-    pipes?: Pipes
+    pipes?: PipeEntries
 ): any {
     let current = source;
     let i = 0;
@@ -238,7 +264,7 @@ function navigatePath(
         if (isPipe(rawPart, pipes)) {
             // Detached call: `this` is undefined, not the pipes map
             const pipe = pipes![rawPart];
-            current = pipe(current);
+            current = (typeof pipe === 'function' ? pipe : makePipe(pipes!, rawPart))(current);
             i++;
             continue;
         }
