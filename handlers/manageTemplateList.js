@@ -205,8 +205,6 @@ export class ManageTemplateListHandler {
                 else {
                     const rootEl = clonedNodes.find(n => n instanceof Element);
                     if (rootEl) {
-                        const tempContainer = document.createDocumentFragment();
-                        tempContainer.appendChild(content);
                         if (processInferred) {
                             processInferred(rootEl, item, inferredConfig === true ? { byItemprop: true } : inferredConfig);
                         }
@@ -221,8 +219,13 @@ export class ManageTemplateListHandler {
                         }
                     }
                 }
-                for (const node of clonedNodes) {
-                    fragment.appendChild(node);
+                if (content.childNodes.length === clonedNodes.length) {
+                    fragment.appendChild(content); // all of the clone's nodes, in one move
+                }
+                else {
+                    // Something moved nodes out of the clone: gather them all back, in order
+                    for (const node of clonedNodes)
+                        fragment.appendChild(node);
                 }
                 newKeyToNodes.set(key, clonedNodes);
             }

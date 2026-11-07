@@ -12,7 +12,7 @@
  * Sync-op commands (` =&`) are always fully synchronous — see SYNC_OPS.
  */
 import { getValues, getValue, isFromStackReference } from './resolve/getValues.js';
-import assignGingerly, { assertTogglesItself, isToggleCommand } from './assignGingerly.js';
+import assignGingerly, { assertTogglesItself, isToggleCommand, tryAssignTo } from './assignGingerly.js';
 import { resolveIdVariable, parseIdRef } from './resolve/resolveIdRef.js';
 import { processInferredAssignments } from './inferredAssignments.js';
 import { resolveLhsPath } from './utils/resolveLhsPath.js';
@@ -460,6 +460,52 @@ function getEffectiveIds(options) {
         return options.at;
     return { ...options.pin, ...options.at };
 }
+/** A `#[x]` key's remaining path that's one plain property: `?.textContent` → `textContent`. */
+const PLAIN_PROPERTY_PATH = /^\?\.([A-Za-z_$][\w$]*)$/;
+/** `?.` paths split into their segments, cached by string. */
+const splitPaths = new Map();
+/**
+ * The fast path for `'#[x]?.prop': '?.path'`, as builtIns.tree has for plain keys:
+ * read the path and set the property directly, skipping getValues and assignGingerly,
+ * with the same result. Only called when the options can't change what that means
+ * (see processIdRefNormalKeys). Returns false, having done nothing, for anything else:
+ * - a key that isn't one plain property, is `ish`, or is aliased;
+ * - a value that isn't a `?.` path, or one with an aliased or piped segment;
+ * - a resolved value that's an object (assignGingerly merges those).
+ * Like builtIns.tree, it skips setting `textContent` to the text it already has.
+ */
+function assignIdRefFast(el, remainingPath, value, from, aka, pipes) {
+    const match = PLAIN_PROPERTY_PATH.exec(remainingPath);
+    if (!match || typeof value !== 'string' || !value.startsWith('?.'))
+        return false;
+    const prop = match[1];
+    if (prop === 'ish' || (aka && Object.hasOwn(aka, prop)))
+        return false;
+    let parts = splitPaths.get(value);
+    if (!parts)
+        splitPaths.set(value, parts = value.split('?.').filter(part => part.length > 0));
+    if (parts.length === 0)
+        return false;
+    if ((aka || pipes) && parts.some(part => (aka && Object.hasOwn(aka, part)) || (pipes && Object.hasOwn(pipes, part))))
+        return false;
+    let resolved = from;
+    for (const part of parts) {
+        if (resolved == null)
+            break;
+        resolved = resolved[part];
+    }
+    if (resolved !== null && typeof resolved === 'object' && !Array.isArray(resolved))
+        return false;
+    if (prop === 'textContent') {
+        const text = resolved == null ? '' : String(resolved);
+        if (el.textContent !== text)
+            el.textContent = text;
+    }
+    else if (!(prop in el && tryAssignTo(el[prop], resolved, el, prop))) {
+        el[prop] = resolved;
+    }
+    return true;
+}
 /**
  * Process #[x] normal keys synchronously.
  */
@@ -468,6 +514,9 @@ function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, option
     if (!ids)
         return;
     const { withMethods, aka, akaMethods, protocols, from, substitutions, fromStack, pipes } = options;
+    // The options that change what a plain path or property means rule out the fast path
+    const fastAllowed = !permissionProcessor && !akaMethods && !substitutions && !options.withAsyncMethods
+        && !(withMethods && (withMethods.size ?? withMethods.length));
     for (const key of idRefNormalKeys) {
         const parsed = parseIdRef(key);
         if (!parsed)
@@ -476,6 +525,8 @@ function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, option
         if (!el)
             continue;
         const value = expandedPattern[key];
+        if (fastAllowed && parsed.remainingPath && assignIdRefFast(el, parsed.remainingPath, value, from, aka, pipes))
+            continue;
         if (parsed.remainingPath) {
             const resolvedValue = getValues({ __v: value }, from, { withMethods, aka, akaMethods, substitutions, protocols, root: target, fromStack, pipes, permissionProcessor });
             assignGingerly(el, { [parsed.remainingPath]: resolvedValue.__v }, options, permissionProcessor);
@@ -487,6 +538,25 @@ function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, option
             }
         }
     }
+}
+/** A pattern object's expansion and categorized keys, when nothing is substituted into it. */
+const preparedPatterns = new WeakMap();
+/**
+ * Expand and categorize a pattern. When the options have no `where_x_in` (and so on),
+ * that depends only on the pattern, so it's worked out once per pattern object: a list
+ * applies the same pattern to every item. So, as with builtIns.tree, a pattern object
+ * shouldn't be changed after it's used; make a new one instead.
+ */
+function preparePattern(pattern, options) {
+    const loops = SUBSTITUTION_VARS.some(({ optionKey }) => options[optionKey]?.length);
+    let prepared = loops ? undefined : preparedPatterns.get(pattern);
+    if (!prepared) {
+        const expandedPattern = expandSubstitutions(pattern, options);
+        prepared = { expandedPattern, ...categorizeKeys(expandedPattern) };
+        if (!loops)
+            preparedPatterns.set(pattern, prepared);
+    }
+    return prepared;
 }
 /**
  * Synchronous assignFrom — resolves values, assigns to target, all without awaiting.
@@ -503,10 +573,11 @@ function processIdRefNormalKeys(idRefNormalKeys, expandedPattern, target, option
 export function assignFrom(target, pattern, options, permissionProcessor) {
     // The built-in snippets:// protocol, when the options have snippets
     options = withSnippetProtocol(options, permissionProcessor);
-    // Expand looped substitution variables
-    const expandedPattern = expandSubstitutions(pattern, options);
-    // Categorize keys
-    const { handlerKeys, normalPattern, idRefNormalKeys, idRefHandlerKeys, ternaryKeys, syncOpKeys, multiInvokeKeys } = categorizeKeys(expandedPattern);
+    // Expand looped substitution variables, and categorize keys (once per pattern object, when nothing loops)
+    const prepared = preparePattern(pattern, options);
+    const { expandedPattern, handlerKeys, idRefNormalKeys, idRefHandlerKeys, ternaryKeys, syncOpKeys, multiInvokeKeys } = prepared;
+    // A copy when #[x] values may be resolved into it below, so the prepared one stays as it was
+    const normalPattern = options.pin || options.at ? { ...prepared.normalPattern } : prepared.normalPattern;
     const resolveOptions = { ...options, root: target, permissionProcessor };
     // Process ?= ternary keys (sync)
     if (ternaryKeys.length > 0) {

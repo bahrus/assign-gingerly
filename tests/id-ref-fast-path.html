@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>#[x] fast path, prepared patterns, and generated ids</title>
+  <style>
+    body { font-family: monospace; padding: 20px; }
+    .pass { color: green; }
+    .fail { color: red; }
+  </style>
+</head>
+<body>
+  <h1>#[x] fast path, prepared patterns, and generated ids</h1>
+  <div id="results"></div>
+  <div id="test-complete" style="display:none;" data-status="" data-passed="0" data-failed="0"></div>
+
+  <template id="row-tpl"><tr><td class="a"></td><td class="b"></td></tr></template>
+  <!-- Indented: whitespace text nodes around and inside the row -->
+  <template id="spaced-tpl">
+    <tr>
+      <td class="a"></td>
+    </tr>
+  </template>
+
+  <script type="module">
+    import { assignFrom, assignFromAsync } from '../index.js';
+
+    const results = [];
+    let passed = 0;
+    let failed = 0;
+    function assert(condition, message) {
+      results.push(`<div class="${condition ? 'pass' : 'fail'}">${condition ? '✓' : '✗'} ${message}</div>`);
+      condition ? passed++ : failed++;
+      if (!condition) console.error('Failed:', message);
+    }
+    function assertEquals(actual, expected, message) {
+      const same = JSON.stringify(actual) === JSON.stringify(expected);
+      if (!same) console.error(`${message}\n  Expected: ${JSON.stringify(expected)}\n  Actual:   ${JSON.stringify(actual)}`);
+      assert(same, message);
+    }
+
+    const protocols = { globalThis: k => globalThis[k] };
+    /** A <div> holding a <span> and an <input>, found with at: [0] and [1] */
+    const host = () => {
+      // createElement, not innerHTML: WebKit's innerHTML can hand back an <input> with an earlier one's value
+      const div = document.createElement('div');
+      div.append(document.createElement('span'), document.createElement('input'));
+      return div;
+    };
+    /** What a pattern does to a fresh host: with the fast path, and forced onto the general path (withMethods rules it out) */
+    function both(pattern, from, options = {}) {
+      const run = extra => {
+        const el = host();
+        assignFrom(el, pattern, { from, at: { s: [0], i: [1] }, ...options, ...extra });
+        const [span, input] = el.children;
+        return { text: span.textContent, title: span.title, hidden: span.hidden, color: span.style.color, value: input.value, data: span.data };
+      };
+      return { fast: run({}), general: run({ withMethods: ['querySelector'] }) };
+    }
+
+    async function runTests() {
+      // --- The fast path gives the general path's results ---
+      {
+        const from = { n: 3, label: 'hi', empty: null, flag: true, nested: { x: 'deep' }, style: { color: 'red' }, list: [1, 2] };
+        const cases = {
+          'a number into textContent': { '#[s]?.textContent': '?.n' },
+          'a string into another property': { '#[s]?.title': '?.label' },
+          'null into textContent': { '#[s]?.textContent': '?.empty' },
+          'a missing value into textContent': { '#[s]?.textContent': '?.nope?.deeper' },
+          'a boolean': { '#[s]?.hidden': '?.flag' },
+          'a nested path': { '#[s]?.textContent': '?.nested?.x' },
+          'an input value': { '#[i]?.value': '?.label' },
+          'an object (merged, so the general path)': { '#[s]?.style': '?.style' },
+          'an array': { '#[s]?.data': '?.list' },
+          'a literal': { '#[s]?.title': 'plain' },
+          'a nested left hand side (the general path)': { '#[s]?.style?.color': '?.style?.color' },
+        };
+        for (const [name, pattern] of Object.entries(cases)) {
+          const { fast, general } = both(pattern, from);
+          assertEquals(fast, general, `fast path matches the general path: ${name}`);
+        }
+        const { fast } = both({ '#[s]?.textContent': '?.n', '#[s]?.title': '?.label', '#[s]?.style?.color': '?.style?.color' }, from);
+        assertEquals([fast.text, fast.title, fast.color], ['3', 'hi', 'red'], 'and the values are the right ones');
+      }
+
+      // --- What changes a key's or a path's meaning goes the general way ---
+      {
+        const { fast, general } = both({ '#[s]?._': '?.label' }, { label: 'aliased' }, { aka: { _: 'textContent' } });
+        assertEquals(fast.text, 'aliased', 'an aliased key is mapped');
+        assertEquals(fast, general, 'an aliased key matches the general path');
+        const piped = both({ '#[s]?.textContent': '?.label?.upper' }, { label: 'quiet' }, { pipes: { upper: s => s.toUpperCase() } });
+        assertEquals(piped.fast.text, 'QUIET', 'a piped segment is applied');
+        assertEquals(piped.fast, piped.general, 'a piped segment matches the general path');
+        const aliasedPath = both({ '#[s]?.textContent': '?.l' }, { label: 'via aka' }, { aka: { l: 'label' } });
+        assertEquals(aliasedPath.fast.text, 'via aka', 'an aliased path segment is mapped');
+      }
+
+      // --- textContent that's unchanged isn't replaced ---
+      {
+        const el = host();
+        const pattern = { '#[s]?.textContent': '?.label' };
+        assignFrom(el, pattern, { from: { label: 'same' }, at: { s: [0] } });
+        const node = el.firstElementChild.firstChild;
+        assignFrom(el, pattern, { from: { label: 'same' }, at: { s: [0] } });
+        assert(el.firstElementChild.firstChild === node, 'the same text keeps its text node');
+        assignFrom(el, pattern, { from: { label: 'other' }, at: { s: [0] } });
+        assertEquals(el.firstElementChild.textContent, 'other', 'new text replaces it');
+      }
+
+      // --- A class's assignTo is used, as on the general path ---
+      {
+        class Box { static assignTo(current, value) { current.got = value; } }
+        const el = host();
+        const span = el.firstElementChild;
+        span.box = new Box();
+        const box = span.box;
+        assignFrom(el, { '#[s]?.box': '?.v' }, { from: { v: 7 }, at: { s: [0] } });
+        assert(span.box === box && box.got === 7, 'assignTo receives the value, and the object stays');
+      }
+
+      // --- A permission processor still blocks a restricted property ---
+      {
+        const el = host();
+        // redirectRestrictedProp returning true means it handled (here: blocked) the assignment
+        const permissionProcessor = { checkRestrictedProp: k => k === 'title', redirectRestrictedProp: (parent, key) => key === 'title', getMethodAppendArgs: () => [] };
+        assignFrom(el, { '#[s]?.title': '?.label' }, { from: { label: 'blocked' }, at: { s: [0] } }, permissionProcessor);
+        assert(el.firstElementChild.title !== 'blocked', 'a restricted property is not set');
+      }
+
+      // --- One pattern object, many calls ---
+      {
+        const pattern = { '#[s]?.textContent': '?.label', title: '?.title' };
+        const values = [];
+        for (const label of ['one', 'two', 'three']) {
+          const el = host();
+          assignFrom(el, pattern, { from: { label, title: `t-${label}` }, at: { s: [0] } });
+          values.push(`${el.firstElementChild.textContent}/${el.title}`);
+        }
+        assertEquals(values, ['one/t-one', 'two/t-two', 'three/t-three'], 'a reused pattern gives each call its own values');
+
+        // A #[x] value is resolved into a copy, so the second call resolves it again
+        const fromEl = { title: '#[s]?.textContent' };
+        const titles = [];
+        for (const text of ['first', 'second']) {
+          const el = host();
+          el.firstElementChild.textContent = text;
+          assignFrom(el, fromEl, { from: {}, pin: { s: { path: [0] } } });
+          titles.push(el.title);
+        }
+        assertEquals(titles, ['first', 'second'], 'a #[x] value is resolved afresh on each call');
+        assertEquals(fromEl, { title: '#[s]?.textContent' }, 'and the pattern is unchanged');
+
+        // where_x_in: expanded per call, from that call's values
+        const looped = { '?.${x}': '?.v' };
+        const a = {}, b = {};
+        assignFrom(a, looped, { from: { v: 1 }, where_x_in: ['p'] });
+        assignFrom(b, looped, { from: { v: 2 }, where_x_in: ['q'] });
+        assertEquals([a, b], [{ p: 1 }, { q: 2 }], 'where_x_in expands per call');
+      }
+
+      // --- manageTemplateList with pin: every generated id is distinct ---
+      {
+        const tbody = document.createElement('tbody');
+        document.body.append(Object.assign(document.createElement('table'), {}).appendChild(tbody).parentNode);
+        const cfg = { '?. =>': {
+          do: 'builtIns.manageTemplateList',
+          resolve: { forEach: '?.list', instantiate: 'globalThis://row-tpl', forget: true },
+          fromEachItem: {
+            '#[a]?.textContent': '?.id', '#[b]?.textContent': '?.label',
+            withOptions: { pin: { a: { path: [0] }, b: { path: [1] } } },
+            resolve: { key: '?.id' },
+          },
+        } };
+        const make = (from, n) => Array.from({ length: n }, (_, i) => ({ id: from + i, label: `row ${from + i}` }));
+        let list = make(0, 50);
+        await assignFromAsync(tbody, cfg, { from: { list }, protocols });
+        list = list.concat(make(50, 50));
+        await assignFromAsync(tbody, cfg, { from: { list }, protocols });
+        const ids = [...tbody.querySelectorAll('[id]')].map(el => el.id);
+        assertEquals(ids.length, 200, 'every pinned cell has an id');
+        assertEquals(new Set(ids).size, 200, 'and no two share one');
+        assertEquals(tbody.rows[99].cells[1].textContent, 'row 99', 'the rows are rendered');
+        assert(ids.every(id => document.querySelectorAll(`[id="${id}"]`).length === 1), 'each id is unique in the document');
+      }
+
+      // --- manageTemplateList keeps a template's whitespace nodes, in order ---
+      {
+        const tbody = document.createElement('tbody');
+        document.createElement('table').append(tbody);
+        const cfg = { '?. =>': {
+          do: 'builtIns.manageTemplateList',
+          resolve: { forEach: '?.list', instantiate: 'globalThis://spaced-tpl', forget: true },
+          fromEachItem: { '#[a]?.textContent': '?.id', withOptions: { at: { a: [0] } }, resolve: { key: '?.id' } },
+        } };
+        await assignFromAsync(tbody, cfg, { from: { list: [{ id: 1 }, { id: 2 }] }, protocols });
+        const shape = [...tbody.childNodes].map(n => n.nodeType === 1 ? n.localName : n.nodeType === 3 ? (n.textContent.trim() ? 'text' : 'space') : 'comment');
+        assertEquals(shape, ['comment', 'space', 'tr', 'space', 'space', 'tr', 'space', 'comment'], 'each row brings its whitespace, and the order holds');
+        assertEquals([...tbody.rows].map(r => r.cells[0].textContent), ['1', '2'], 'and the cells are set');
+      }
+
+      document.getElementById('results').innerHTML = results.join('');
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = failed === 0 ? 'success' : 'failure';
+    }
+
+    runTests().catch(e => {
+      console.error(e);
+      assert(false, `threw: ${e.message}`);
+      document.getElementById('results').innerHTML = results.join('');
+      const complete = document.getElementById('test-complete');
+      complete.dataset.passed = passed;
+      complete.dataset.failed = failed;
+      complete.dataset.status = 'failure';
+    });
+  </script>
+</body>
+</html>

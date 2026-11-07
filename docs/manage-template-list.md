@@ -300,20 +300,33 @@ fromEachItem: {
 }
 ```
 
-`at` resolves elements by child index (~2-4ns) without assigning IDs — keeping the DOM clean when rendering thousands of rows. Use `pin` with `{ path: [...] }` instead if you need stability against future DOM structural changes (at the cost of adding ID attributes to each element).
+`at` resolves elements by child index (~2-4ns) without assigning IDs — keeping the DOM clean when rendering thousands of rows. Use `pin` with `{ path: [...] }` instead if you need stability against future DOM structural changes (at the cost of adding ID attributes to each element). Generated IDs (`-ag:0`, `-ag:1`, …) are unique on the page, across rows.
+
+**`'#[a]?.prop': '?.path'` takes a fast path,** like [builtIns.tree](./tree.md)'s plain keys: the value is read and the property set directly, without `getValues` and `assignGingerly`, with the same result. That's when the key after `#[a]` is one plain property and the value is a `?.` path. Anything that could change the meaning takes the general path: `withMethods`, `akaMethods`, `substitutions`, a permission processor, an aliased or piped segment, or an object value (which merges). As in Tree, `textContent` isn't set again when it already has that text.
+
+## Writing the Template
+
+**Keep a row template on one line.** Every whitespace text node in the template is cloned for every row, and inserted with it:
+
+```html
+<!-- 6 elements and 9 whitespace text nodes per row -->
+<template id="row-tpl">
+    <tr>
+        <td class="a"></td>
+        ...
+
+<!-- 6 elements per row -->
+<template id="row-tpl"><tr><td class="a"></td><td class="b"></td><td><button class="remove">×</button></td></tr></template>
+```
+
+On the benchmark page, the indented template made creating 10,000 rows about 20% slower, and clearing them about 25% slower. The handler doesn't drop whitespace for you, because between inline elements it can matter.
 
 ## Optimized Binding (Direct Cell Access)
 
-For maximum performance, use direct property path indexing instead of `infer`. Numeric segments in paths are treated as array/collection indexes:
+Direct property paths are another way to avoid `infer`'s queries. Numeric segments in paths are treated as array/collection indexes:
 
 ```html
-<template id="row-tpl">
-    <tr>
-        <td></td>
-        <td></td>
-        <td><button class="remove">×</button></td>
-    </tr>
-</template>
+<template id="row-tpl"><tr><td></td><td></td><td><button class="remove">×</button></td></tr></template>
 ```
 
 ```JavaScript
@@ -376,18 +389,25 @@ The page now waits for the handler, and swaps really swap (see *Subsequent Calls
 **Reading the numbers:**
 - **Rendering dominates.** For 10,000 rows, the browser's style, layout and paint is most of each total.
 - **The pages split the time.** Each result line also shows a **script** time: until the rows are in the DOM and handed to the browser, which is the part the library controls. A **`?cv`** option lays the table out as a grid with `content-visibility: auto` on each row, so off-screen rows skip layout and paint. That roughly halves the totals.
-- **Script time, from single samples (Chromium, Create 10,000):**
-  - `manageTemplateList` ~90–150 ms;
-  - `builtIns.tree` ~80 ms;
-  - vanilla `createElement` ~30 ms.
-- **`manageTemplateList` is close to vanilla on totals,** but it's the slowest of the four on most operations here. Its per-item work goes through the general `assignFrom` path; this page uses `pin` bindings.
 - WebKit was measured too, but its timings varied too much between runs on the benchmark machine to tabulate.
 
-The vanilla template-clone page was measured before two fixes to that page, which may lower its numbers somewhat: a per-row `await` was removed, and its template is now written on one line, without whitespace text nodes.
+The table was measured before the changes below, and before two fixes to the vanilla template-clone page (a per-row `await` was removed, and its template is now on one line).
+
+**Script time, after the `#[x]` fast path** (and the page's template on one line, with `at` instead of `pin`). These are medians of 5 fresh page loads, with a forced GC before each operation, in ms:
+
+| Create 10,000 | manageTemplateList before | manageTemplateList now | builtIns.tree | Vanilla (template clone) |
+|---|---|---|---|---|
+| Chromium | 86 | 44 | 44 | 42 |
+| Firefox | 127 | 57 | 67 | 40 |
+| WebKit | 104 | 45 | 61 | 30 |
+
+- **`manageTemplateList` now matches `builtIns.tree` in Chromium, and beats it in Firefox and WebKit.** The gains came from the fast path, the one-line template, and `at` (the page used to use `pin`, which writes an ID onto every cell).
+- **Updates gained the most.** "Update every 10th" and "Swap rows" reapply every row, so they dropped from about 8–12 ms to 2–3 ms, below Tree's 4.
+- **Clear is the one operation still behind Tree** (20 ms against 18, in Chromium, for 10,000 rows).
 
 ## manageTemplateList and builtIns.tree
 
-[`builtIns.tree`](./tree.md) also renders keyed lists (a repeat: `{ each, of, key, empty }`). For lists whose markup is defined in JavaScript, it's currently the faster choice on these benchmarks. Its extras:
+[`builtIns.tree`](./tree.md) also renders keyed lists (a repeat: `{ each, of, key, empty }`). On these benchmarks the two are now about as fast. Tree's extras:
 - nesting, `empty`, itemscope managers as view models;
 - an opt-in template `compile` mode.
 

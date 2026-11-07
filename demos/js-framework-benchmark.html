@@ -64,13 +64,8 @@
 
     <pre id="results">Click a button to run a benchmark operation...</pre>
 
-    <template id="row-tpl">
-        <tr>
-            <td class="a"></td>
-            <td class="b"></td>
-            <td><button class="remove">×</button></td>
-        </tr>
-    </template>
+    <!-- One line, so cloning a row copies no whitespace text nodes (each would be another node per row) -->
+    <template id="row-tpl"><tr><td class="a"></td><td class="b"></td><td><button class="remove">×</button></td></tr></template>
 
     <table>
         <thead>
@@ -130,12 +125,8 @@
                     // },
                     '#[a]?.textContent': '?.id',
                     '#[b]?.textContent': '?.label',
-                    withOptions:{
-                        pin: {
-                            a: { path: [0], expect: '.a', fallback: true },
-                            b: { path: [1], expect: '.b', fallback: true }
-                        }
-                    },
+                    // at: by child index, with no ids written (pin would write one per cell)
+                    withOptions: { at: { a: [0], b: [1] } },
                     resolve: { key: '?.id' }
                 }
             }

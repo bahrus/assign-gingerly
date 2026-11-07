@@ -20,24 +20,23 @@ export type WithIdConfig = string | { qry: string } | number[] | { path: number[
 const idCacheMap = new WeakMap<object, Map<string, { id: string; ref: WeakRef<Element> }>>();
 
 /**
- * Counter per rootNode for generating unique IDs.
+ * The next generated ID's number. One counter for the whole page, not one per rootNode:
+ * a list's rows get their IDs while each is still in its own fragment (its own rootNode),
+ * so per-root counters gave every row the same IDs once the rows were inserted.
  */
-const idCounterMap = new WeakMap<object, number>();
+let nextIdNumber = 0;
 
 /**
- * Generate a unique ID within a rootNode.
+ * Generate an ID that's unique on the page, and not already used in rootNode.
  * Format: -ag:0, -ag:1, -ag:2, ...
  * Starts with '-' and contains ':' to avoid collision with JS identifiers/globalThis properties.
  */
 function generateUniqueId(rootNode: any): string {
-    let counter = idCounterMap.get(rootNode) ?? 0;
     let id: string;
-    // Ensure uniqueness (skip if ID already exists in the document)
+    // Ensure uniqueness (skip if ID already exists in the root)
     do {
-        id = `-ag:${counter}`;
-        counter++;
+        id = `-ag:${nextIdNumber++}`;
     } while (rootNode.getElementById?.(id));
-    idCounterMap.set(rootNode, counter);
     return id;
 }
 

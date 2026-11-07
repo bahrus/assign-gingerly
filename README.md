@@ -119,6 +119,8 @@ assignFrom adds support for:
 11. Pipes: named unary functions registered per call via the `pipes` option and used as RHS path segments, e.g. `'?.date?.parseDate?.longUtc'` — see [docs/pipes.md](docs/pipes.md).
 12. Attributes via the ` :=` operator (`'type :=': 'number'`, `'aria-describedby :=': ['?.hint', '?.error']`) — see [docs/attribute-operator.md](docs/attribute-operator.md).
 
+**Reuse a pattern object, but don't change it.** `assignFrom` works out a pattern's keys once per pattern object (unless it uses `where_x_in` and the like), so applying one pattern to many items, as a list does, only pays for that once. So once a pattern has been used, change a copy instead.
+
 Example:
 
 ```TypeScript
