@@ -7,9 +7,9 @@
  *
  * Requires an AbortSignal for cleanup (disconnects the observer on abort).
  */
-import { Infer } from './inferencer/inferencer.js';
-import { withScopePerimeter } from './inferencer/withScopePerimeter.js';
-import { registerInCache } from './resolve/resolveIdRef.js';
+import { Infer } from '../inferencer/inferencer.js';
+import { withScopePerimeter } from '../inferencer/withScopePerimeter.js';
+import { registerInCache } from '../resolve/resolveIdRef.js';
 /**
  * Set up a MutationObserver that watches for new [itemprop] elements
  * and applies inferred assignments from the live `from` object.

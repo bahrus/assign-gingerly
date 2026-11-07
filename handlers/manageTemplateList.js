@@ -24,7 +24,7 @@
  *     }
  * }, { from: vm, withMethods: ['querySelector'], protocols: { globalThis: k => globalThis[k] } });
  */
-import { findMarkers, createMarkers } from '../markerUtils.js';
+import { findMarkers, createMarkers } from '../utils/markerUtils.js';
 import { resolveValue } from '../resolve/resolveValues.js';
 import { assignFrom } from '../assignFrom.js';
 import { processInferredAssignments } from '../inferredAssignments.js';

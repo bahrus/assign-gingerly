@@ -74,8 +74,8 @@ import { chooseCase, DEFAULT_CASE, isLiteralString, isPathKey, isSnippet, isSwit
 import type { TreePathResolver } from './treeSpec.js';
 import { cloneSnippet, holeAt, parsedSnippet } from './snippets.js';
 import type { ParsedSnippet } from './snippets.js';
-import { defineIshCore } from '../handleIshProperty.js';
-import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END, PENDING_ATTRIBUTE } from '../markerUtils.js';
+import { defineIshCore } from '../utils/handleIshProperty.js';
+import { createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END, PENDING_ATTRIBUTE } from '../utils/markerUtils.js';
 import { placeNodes } from '../utils/placeNodes.js';
 import { resolveRegistry } from '../utils/resolveRegistry.js';
 import type {

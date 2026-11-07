@@ -19,7 +19,7 @@
  * }, { withMethods: ['querySelector'], from: myVM });
  */
 import { withTransition, ensureHideStyle, DEFAULT_HIDE_CLASS } from '../transitionHelper.js';
-import { findMarkers, createMarkers, getNodesBetweenMarkers, findMarkersSibling, createMarkersSibling } from '../markerUtils.js';
+import { findMarkers, createMarkers, getNodesBetweenMarkers, findMarkersSibling, createMarkersSibling } from '../utils/markerUtils.js';
 import { assignFrom } from '../assignFrom.js';
 import { snippetNameOf } from './snippets.js';
 /**

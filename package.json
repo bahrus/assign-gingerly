@@ -185,9 +185,13 @@
       "types": "./utils/isAsyncSpawn.ts",
       "default": "./utils/isAsyncSpawn.js"
     },
+    "./utils/markerUtils.js": {
+      "types": "./utils/markerUtils.ts",
+      "default": "./utils/markerUtils.js"
+    },
     "./markerUtils.js": {
-      "types": "./markerUtils.ts",
-      "default": "./markerUtils.js"
+      "types": "./utils/markerUtils.ts",
+      "default": "./utils/markerUtils.js"
     },
     "./utils/waitForSettled.js": {
       "types": "./utils/waitForSettled.ts",
@@ -197,9 +201,13 @@
       "types": "./inferredAssignments.ts",
       "default": "./inferredAssignments.js"
     },
+    "./utils/beVigilant.js": {
+      "types": "./utils/beVigilant.ts",
+      "default": "./utils/beVigilant.js"
+    },
     "./beVigilant.js": {
-      "types": "./beVigilant.ts",
-      "default": "./beVigilant.js"
+      "types": "./utils/beVigilant.ts",
+      "default": "./utils/beVigilant.js"
     },
     "./assignFromAsync.js": {
       "types": "./assignFromAsync.ts",

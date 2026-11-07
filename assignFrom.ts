@@ -751,7 +751,7 @@ export function assignFrom(
       if (!options.signal) {
         throw new Error('assignFrom: infer.beVigilant requires options.signal (AbortSignal) for cleanup');
       }
-      import('./beVigilant.js').then(({ setupVigilantObserver }) => {
+      import('./utils/beVigilant.js').then(({ setupVigilantObserver }) => {
         setupVigilantObserver(target, options.from, options.infer!, options.signal!);
       });
     }

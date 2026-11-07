@@ -37,11 +37,11 @@
  */
 import { assignFrom } from '../assignFrom.js';
 import { assignGingerly } from '../assignGingerly.js';
-import { defineIshCore, setScopeBinder } from '../handleIshProperty.js';
+import { defineIshCore, setScopeBinder } from '../utils/handleIshProperty.js';
 import { resolveRegistry } from '../utils/resolveRegistry.js';
 import { waitForEvent } from '../utils/waitForEvent.js';
 import { withEventKeys } from './eventKeys.js';
-import { PENDING_ATTRIBUTE } from '../markerUtils.js';
+import { PENDING_ATTRIBUTE } from '../utils/markerUtils.js';
 /** Outer options a scope's binding inherits (the rest come from `bind`). */
 const INHERITED_OPTIONS = ['pipes', 'protocols', 'registry', 'handlers', 'signal', 'aka'];
 /** Configs for managers given as classes: used directly, never registered. */

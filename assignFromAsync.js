@@ -164,7 +164,7 @@ export async function assignFromAsync(target, pattern, options, permissionProces
             if (!options.signal) {
                 throw new Error('assignFrom: infer.beVigilant requires options.signal (AbortSignal) for cleanup');
             }
-            const { setupVigilantObserver } = await import('./beVigilant.js');
+            const { setupVigilantObserver } = await import('./utils/beVigilant.js');
             setupVigilantObserver(target, options.from, options.infer, options.signal);
         }
     }

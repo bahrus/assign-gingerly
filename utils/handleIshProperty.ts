@@ -1,5 +1,5 @@
-import type { IAssignGingerlyOptions, IshExtension, ItemscopeManagerConfig } from './types/assign-gingerly/types.js';
-import { resolveRegistry } from './utils/resolveRegistry.js';
+import type { IAssignGingerlyOptions, IshExtension, ItemscopeManagerConfig } from '../types/assign-gingerly/types.js';
+import { resolveRegistry } from './resolveRegistry.js';
 
 /** What re-binds an element's scope against its manager (registered by builtIns.scope). */
 const scopeBinders = new WeakMap<Element, () => void>();
@@ -72,7 +72,7 @@ async function defineIshProperty(
 
   // If not registered, wait for registration
   if (!config) {
-    const { waitForEvent } = await import('./utils/waitForEvent.js');
+    const { waitForEvent } = await import('./waitForEvent.js');
     await waitForEvent(registry, managerName);
     config = registry.get(managerName);
     

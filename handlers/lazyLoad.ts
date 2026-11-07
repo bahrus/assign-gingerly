@@ -22,7 +22,7 @@
 import type { AssignFromHandler } from '../assignFromAsync.js';
 import type { LazyLoadResolvedParams, LazyLoadInstantiatedContext, PermissionProcessor } from '../types/assign-gingerly/types.js';
 import { withTransition, ensureHideStyle, DEFAULT_HIDE_CLASS } from '../transitionHelper.js';
-import { findMarkers, createMarkers, getNodesBetweenMarkers, findMarkersSibling, createMarkersSibling, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
+import { findMarkers, createMarkers, getNodesBetweenMarkers, findMarkersSibling, createMarkersSibling, MARKER_START_PREFIX, MARKER_END } from '../utils/markerUtils.js';
 import { assignFrom } from '../assignFrom.js';
 import { snippetNameOf } from './snippets.js';
 

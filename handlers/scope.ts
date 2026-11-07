@@ -38,11 +38,11 @@
 
 import { assignFrom } from '../assignFrom.js';
 import { assignGingerly } from '../assignGingerly.js';
-import { defineIshCore, setScopeBinder } from '../handleIshProperty.js';
+import { defineIshCore, setScopeBinder } from '../utils/handleIshProperty.js';
 import { resolveRegistry } from '../utils/resolveRegistry.js';
 import { waitForEvent } from '../utils/waitForEvent.js';
 import { withEventKeys } from './eventKeys.js';
-import { PENDING_ATTRIBUTE } from '../markerUtils.js';
+import { PENDING_ATTRIBUTE } from '../utils/markerUtils.js';
 import type {
     AssignFromHandler, AssignFromOptions, ItemscopeManager, ItemscopeManagerConfig, ItemscopeRegistry,
     PermissionProcessor, ScopeBinding, ScopeConfig,

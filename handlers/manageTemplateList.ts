@@ -27,7 +27,7 @@
 
 import type { AssignFromHandler } from '../assignFromAsync.js';
 import type { ManageTemplateListResolvedParams } from '../types/assign-gingerly/types.js';
-import { findMarkers, createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../markerUtils.js';
+import { findMarkers, createMarkers, getNodesBetweenMarkers, MARKER_START_PREFIX, MARKER_END } from '../utils/markerUtils.js';
 import { resolveValue } from '../resolve/resolveValues.js';
 import { assignFrom } from '../assignFrom.js';
 import { processInferredAssignments } from '../inferredAssignments.js';

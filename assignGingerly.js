@@ -924,7 +924,7 @@ export function assignGingerly(target, source, options, permissionProcessor) {
             // Load handler on demand and process asynchronously
             const setupPromise = (async () => {
                 try {
-                    const { handleIshProperty } = await import('./handleIshProperty.js');
+                    const { handleIshProperty } = await import('./utils/handleIshProperty.js');
                     await handleIshProperty(target, ishValue, options, assignGingerly);
                 }
                 catch (err) {
