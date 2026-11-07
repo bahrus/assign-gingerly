@@ -49,7 +49,7 @@ No `withMethods` entry is needed. A restricted method (per the permission proces
 
 ### Static assignments (no `from` source)
 
-Top-level keys that aren't reserved become implicit `toHost` assignments using `assignGingerly` (no path resolution):
+Top-level keys that aren't reserved become implicit `toHost` assignments using `assignGingerly` (no path resolution, so `=!` here toggles itself, and negating another value belongs under `fromHost`: `'?.isSad': '!?.isHappy'`):
 
 ```JavaScript
 '?.querySelector?.button +=': {

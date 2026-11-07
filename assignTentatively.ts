@@ -1,6 +1,7 @@
 /**
  * assignTentatively — reversible assignment with change tracking.
  */
+import { assertTogglesItself } from './assignGingerly.js';
 import type { IAssignTentativelyOptions, PermissionProcessor } from './types/assign-gingerly/types.js';
 export type { IAssignTentativelyOptions };
 
@@ -202,7 +203,7 @@ export function assignTentatively(
     if (isToggleCommand(key)) {
       const lhsPath = parseToggleCommand(key);
       if (lhsPath) {
-        const rhsPath = value;
+        assertTogglesItself(key, value);
         
         let lhsParent: any;
         let lhsLastKey: string;
@@ -232,36 +233,6 @@ export function assignTentatively(
           lhsParent = target;
         }
 
-        // Determine what to negate
-        let valueToNegate;
-        if (rhsPath === '.') {
-          // Self-reference
-          if (lhsLastKey in lhsParent) {
-            valueToNegate = lhsParent[lhsLastKey];
-          } else {
-            valueToNegate = undefined;
-          }
-        } else if (isNestedPath(rhsPath)) {
-          // RHS nested path: navigate to get the value (don't create paths)
-          const rhsPathParts = parsePath(rhsPath);
-          let current = target;
-          let exists = true;
-          
-          for (const part of rhsPathParts) {
-            if (current && typeof current === 'object' && part in current) {
-              current = current[part];
-            } else {
-              exists = false;
-              break;
-            }
-          }
-          
-          valueToNegate = exists ? current : true;
-        } else {
-          // Plain key RHS
-          valueToNegate = (rhsPath in target) ? target[rhsPath] : true;
-        }
-
         // Store original value for reversal if it exists
         if (lhsLastKey in lhsParent) {
           const fullPath = `?.${lhsPathParts.join('?.')}`;
@@ -270,7 +241,7 @@ export function assignTentatively(
           }
         }
         
-        lhsParent[lhsLastKey] = !valueToNegate;
+        lhsParent[lhsLastKey] = !lhsParent[lhsLastKey];
       }
       continue;
     }

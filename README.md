@@ -113,7 +113,7 @@ assignFrom adds support for:
 5.  Looped substitution with `where_x_in` / `where_y_in` / `where_z_in` for expanding template patterns into multiple concrete assignments.
 6.  Dynamic substitutions via the `substitutions` option for injecting runtime string values into path segments. See [docs/substitutions.md](docs/substitutions.md).
 7.  Spread merging via the `"..."` key.
-8.  Boolean coercion / negation of a resolved value via a leading `!` marker: `'!!?.isOpen'` resolves `?.isOpen` then coerces to a real boolean, `'!?.isOpen'` negates it (`!!!` negates, and so on). Only honored in front of a `?.` path, `$0` reference, or protocol — a plain literal like `'!important'` is left untouched. Nullish coerces to `false`, which makes `!!` the safe way to feed an optional source value into a boolean sink (`hidden`, `disabled`, `classList.toggle`'s force argument, …).
+8.  Boolean coercion / negation of a resolved value via a leading `!` marker: `'!!?.isOpen'` resolves `?.isOpen` then coerces to a real boolean, `'!?.isOpen'` negates it (`!!!` negates, and so on), and `'!$0?.isOpen'` negates a value on the target. Only honored in front of a `?.` path, `$0` reference, or protocol — a plain literal like `'!important'` is left untouched. Nullish coerces to `false`, which makes `!!` the safe way to feed an optional source value into a boolean sink (`hidden`, `disabled`, `classList.toggle`'s force argument, …).
 9.  Multiple invocations of one `withMethods` method via the ` =*` operator — see [docs/multi-invoke.md](docs/multi-invoke.md).
 10. Enclosing-`from` references via `$root` and `$parent`, for patterns applied to a nested value (by `builtIns.tree`, `builtIns.manageTemplateList`, or your own nested calls through the `fromStack` option) — see [docs/root-references.md](docs/root-references.md).
 11. Pipes: named unary functions registered per call via the `pipes` option and used as RHS path segments, e.g. `'?.date?.parseDate?.longUtc'` — see [docs/pipes.md](docs/pipes.md).
@@ -864,7 +864,7 @@ While we are in the business of passing values of object A into object B, we mig
 | Operator | Name | Description | Example |
 |----------|------|-------------|---------|
 | ` +=` | Increment | Add to numeric, concat strings, append to arrays, or [bind events](docs/event-binding.md) | `'count +=': 5` |
-| ` =!` | Toggle | Negate a boolean (or any value via `!`) | `'visible =!': '.'` |
+| ` =!` | Toggle | Negate the value on the left (the right hand side is always `'.'`) | `'visible =!': '.'` |
 | ` -=` | Delete | Remove properties from an object | `'?.data -=': 'key'` |
 | ` Y=` | Merge | Recursively `assignGingerly` into a sub-object | `'style Y=': { width: '100px' }` |
 | ` ?=` | Ternary | Conditional assignment (assignFrom only) — [details](docs/ternary-assignment.md) | `'?.text ?=': ['?.cond', 'yes', 'no']` |
@@ -944,9 +944,9 @@ assignFrom(this.shadowRoot, {
 
 The handler is lazy-loaded on demand. For full details including assignment vectors, dedup, nudge, and custom event dispatch, see [docs/event-binding.md](docs/event-binding.md).
 
-## Example 5 - Toggling boolean values and negating
+## Example 5 - Toggling boolean values
 
-The `=!` command allows us to toggle boolean values:
+The `=!` command toggles the value on its left:
 
 ```TypeScript
 const obj = {
@@ -958,16 +958,13 @@ const obj = {
 };
 assignGingerly(obj, {
     '?.a?.b?.c =!': '.',      // Toggle itself
-    // Negates another property.  
-    // The RHS doesn't spawn new objects
-    // and evaluates to true if it doesn't exist
-    '?.a?.d?.c =!': '?.a?.d?.e'       
+    '?.a?.d?.e =!': '.'       // Missing, so it's created, as true
 });
 console.log(obj);
 // {
 //   a: {
-//     b: { c: false }           // Toggled immediately
-//     // d doesn't exist yet
+//     b: { c: false },
+//     d: { e: true }
 //   }
 // }
 ```
@@ -975,6 +972,15 @@ console.log(obj);
 The `=!` command syntax is `<path> =!` where the path uses the `?.` nested notation for nested properties, or a plain key for direct properties.
 
 For existing values, the toggle is performed using JavaScript's logical NOT operator (`!value`), regardless of what type it is.
+
+**The right hand side is always `'.'`, and anything else throws.** `assignGingerly` never reads its right hand side as a path. To negate a different value, use `assignFrom` and its `!` marker, with no command at all:
+
+```TypeScript
+assignFrom(target, { '?.r': '!?.e' },   { from });   // the negation of from.e
+assignFrom(target, { '?.r': '!$0?.e' }, { from });   // the negation of target.e
+```
+
+A missing value is `undefined`, so its negation is `true`.
 
 ## Example 5a - Conditional class lists with the `!!` marker and `=*` command
 

@@ -12,7 +12,7 @@
  * Sync-op commands (` =&`) are always fully synchronous — see SYNC_OPS.
  */
 import { getValues, getValue, isFromStackReference } from './resolve/getValues.js';
-import assignGingerly from './assignGingerly.js';
+import assignGingerly, { assertTogglesItself, isToggleCommand } from './assignGingerly.js';
 import { resolveIdVariable, parseIdRef } from './resolve/resolveIdRef.js';
 import { processInferredAssignments } from './inferredAssignments.js';
 import { resolveLhsPath } from './utils/resolveLhsPath.js';
@@ -419,6 +419,9 @@ export function categorizeKeys(expandedPattern) {
     const syncOpKeys = [];
     const multiInvokeKeys = [];
     for (const key of Object.keys(expandedPattern)) {
+        // Checked before resolving, so that a value from `from` can't pass for the '.'
+        if (isToggleCommand(key))
+            assertTogglesItself(key, expandedPattern[key]);
         if (isHandlerCommand(key)) {
             if (key.startsWith('#[')) {
                 idRefHandlerKeys.push(key);

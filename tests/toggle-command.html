@@ -24,6 +24,8 @@
     <script type="module">
         import assignGingerly from '../assignGingerly.js';
         import { assignFrom } from '../assignFrom.js';
+        import { assignFromAsync } from '../assignFromAsync.js';
+        import { assignTentatively } from '../assignTentatively.js';
 
         const results = [];
         let passed = 0;
@@ -51,6 +53,15 @@
                     if (actual !== expected) {
                         throw new Error(`Expected ${expected} but got ${actual}`);
                     }
+                },
+                toThrow(message) {
+                    try {
+                        actual();
+                    } catch (error) {
+                        if (!error.message.includes(message)) throw new Error(`Threw "${error.message}"`);
+                        return;
+                    }
+                    throw new Error('Expected it to throw');
                 }
             };
         }
@@ -68,26 +79,43 @@
             expect(obj.active).toBe(true);
         });
 
-        test('should negate another property', () => {
-            const obj = { 
-                a: { 
-                    b: { 
-                        c: true 
-                    } 
-                } 
-            };
-            assignGingerly(obj, { 
-                '?.a?.d?.e =!': '?.a?.b?.c'
-            });
-            expect(obj.a.d.e).toBe(false);
+        test('should negate a value from from with the ! marker', () => {
+            const target = { e: false };
+            assignFrom(target, { '?.r': '!?.e' }, { from: { e: true } });
+            expect(target.r).toBe(false);
         });
 
-        test('should treat non-existent RHS path as truthy', () => {
-            const obj = {};
-            assignGingerly(obj, { 
-                '?.result =!': '?.nonexistent?.path'
-            });
-            expect(obj.result).toBe(false);
+        test('should negate a value on the target with the ! marker and $0', () => {
+            const target = { e: true };
+            assignFrom(target, { '?.r': '!$0?.e' }, { from: { e: false } });
+            expect(target.r).toBe(false);
+        });
+
+        test('should negate a value from another branch of the target', () => {
+            const target = { a: { b: { c: true } } };
+            assignFrom(target, { '?.a?.d?.e': '!$0?.a?.b?.c' }, { from: {} });
+            expect(target.a.d.e).toBe(false);
+        });
+
+        test('should toggle itself in assignFrom, whatever from holds', () => {
+            const target = { r: true };
+            assignFrom(target, { '?.r =!': '.' }, { from: { r: true } });
+            expect(target.r).toBe(false);
+        });
+
+        test('should negate a missing value to true', () => {
+            const target = {};
+            assignFrom(target, { '?.r': '!?.nonexistent?.path', '?.s': '!$0?.nonexistent?.path' }, { from: {} });
+            expect(target.r).toBe(true);
+            expect(target.s).toBe(true);
+        });
+
+        test('should negate a string value, without reading it again', () => {
+            for (const [text, expected] of [['', true], ['hi', false], ['x', false], ['?.x', false], ['.', false]]) {
+                const target = { x: false };
+                assignFrom(target, { '?.r': '!?.text' }, { from: { text } });
+                expect(target.r).toBe(expected);
+            }
         });
 
         test('should handle README example', () => {
@@ -101,13 +129,13 @@
             
             assignGingerly(obj, {
                 '?.a?.b?.c =!': '.',
-                '?.a?.d?.e =!': '?.a?.d?.e'
+                '?.a?.d?.e =!': '.'
             });
             
             expect(obj).toEqual({
                 a: {
                     b: { c: false },
-                    d: { e: false }
+                    d: { e: true }
                 }
             });
         });
@@ -160,16 +188,10 @@
             expect(obj.enabled).toBe(false);
         });
 
-        test('should negate non-boolean values', () => {
-            const obj = { value: 0 };
-            assignGingerly(obj, { '?.result =!': '?.value' });
-            expect(obj.result).toBe(true);
-        });
-
-        test('should negate truthy non-boolean values', () => {
-            const obj = { value: 'hello' };
-            assignGingerly(obj, { '?.result =!': '?.value' });
-            expect(obj.result).toBe(false);
+        test('should toggle non-boolean values', () => {
+            const obj = { zero: 0, text: 'hello', list: [], missing: null };
+            assignGingerly(obj, { '?.zero =!': '.', '?.text =!': '.', '?.list =!': '.', '?.missing =!': '.' });
+            expect(obj).toEqual({ zero: true, text: false, list: false, missing: true });
         });
 
         test('should handle very deep nested paths', () => {
@@ -194,136 +216,57 @@
             });
         });
 
-        test('should negate value from different branch', () => {
-            const obj = { 
-                source: { value: false },
-                target: {}
-            };
-            assignGingerly(obj, { 
-                '?.target?.result =!': '?.source?.value'
-            });
-            expect(obj.target.result).toBe(true);
-        });
-
         test('should handle self-negation on non-existent property', () => {
             const obj = {};
             assignGingerly(obj, { '?.newProp =!': '.' });
             expect(obj.newProp).toBe(true);
         });
 
-        test('should chain negations', () => {
-            const obj = { a: true };
-            assignGingerly(obj, { 
-                '?.b =!': '?.a',
-                '?.c =!': '?.b'
-            });
-            expect(obj.a).toBe(true);
-            expect(obj.b).toBe(false);
-            expect(obj.c).toBe(true);
+        test('should negate any type with the ! marker', () => {
+            const from = { zero: 0, one: 1, nothing: null, array: [], object: {} };
+            const target = {};
+            assignFrom(target, {
+                '?.zero': '!?.zero', '?.one': '!?.one', '?.nothing': '!?.nothing', '?.array': '!?.array', '?.object': '!?.object'
+            }, { from });
+            expect(target).toEqual({ zero: true, one: false, nothing: true, array: false, object: false });
         });
 
-        test('should handle null values', () => {
-            const obj = { value: null };
-            assignGingerly(obj, { '?.result =!': '?.value' });
-            expect(obj.result).toBe(true);
-        });
-
-        test('should handle undefined values', () => {
-            const obj = { value: undefined };
-            assignGingerly(obj, { '?.result =!': '?.value' });
-            expect(obj.result).toBe(true);
-        });
-
-        test('should handle numeric values', () => {
-            const obj = { zero: 0, one: 1, negative: -5 };
-            assignGingerly(obj, { 
-                '?.notZero =!': '?.zero',
-                '?.notOne =!': '?.one',
-                '?.notNegative =!': '?.negative'
-            });
-            expect(obj.notZero).toBe(true);
-            expect(obj.notOne).toBe(false);
-            expect(obj.notNegative).toBe(false);
-        });
-
-        test('should handle array values', () => {
-            const obj = { emptyArray: [], fullArray: [1, 2, 3] };
-            assignGingerly(obj, { 
-                '?.notEmpty =!': '?.emptyArray',
-                '?.notFull =!': '?.fullArray'
-            });
-            expect(obj.notEmpty).toBe(false);
-            expect(obj.notFull).toBe(false);
-        });
-
-        test('should handle object values', () => {
-            const obj = { emptyObj: {}, fullObj: { a: 1 } };
-            assignGingerly(obj, { 
-                '?.notEmptyObj =!': '?.emptyObj',
-                '?.notFullObj =!': '?.fullObj'
-            });
-            expect(obj.notEmptyObj).toBe(false);
-            expect(obj.notFullObj).toBe(false);
-        });
-
-        test('should handle resolved literal RHS (e.g., from assignFrom)', () => {
-            // assignFrom resolves '?.expanded' to a boolean before calling assignGingerly.
-            // The toggle handler must use that literal value directly.
-            const obj = { expanded: true };
-            assignGingerly(obj, { '?.hidden =!': true });
-            expect(obj.hidden).toBe(false);
-
-            assignGingerly(obj, { '?.hidden2 =!': false });
-            expect(obj.hidden2).toBe(true);
-        });
-
-        test('should toggle each item with @each and resolved literal RHS', () => {
-            const obj = {
-                items: [{ hidden: false }, { hidden: false }, { hidden: false }],
-                expanded: true
-            };
-            // Simulates assignFrom resolving '?.expanded' to true
-            assignGingerly(obj, {
-                '?.items?.@each?.hidden =!': true
-            });
-            for (const item of obj.items) {
-                expect(item.hidden).toBe(false);
-            }
-
-            assignGingerly(obj, {
-                '?.items?.@each?.hidden =!': false
-            });
-            for (const item of obj.items) {
-                expect(item.hidden).toBe(true);
+        test('should only take "." as the right hand side of =!', () => {
+            for (const rhs of ['?.value', 'value', true, false, 0, null]) {
+                expect(() => assignGingerly({ value: 1 }, { '?.r =!': rhs })).toThrow('toggles itself');
+                expect(() => assignGingerly({ value: 1 }, { 'r =!': rhs })).toThrow('toggles itself');
+                expect(() => assignFrom({}, { '?.r =!': rhs }, { from: {} })).toThrow('toggles itself');
+                expect(() => assignTentatively({ value: 1 }, { '?.r =!': rhs })).toThrow('toggles itself');
+                expect(() => assignGingerly({ items: [{}] }, { '?.items?.@each?.r =!': rhs })).toThrow('toggles itself');
             }
         });
 
-        test('should toggle each item with @each and path RHS', () => {
-            const obj = {
-                items: [{ hidden: true }, { hidden: true }],
-                expanded: true
-            };
-            assignGingerly(obj, {
-                '?.items?.@each?.hidden =!': '?.expanded'
-            });
-            for (const item of obj.items) {
-                expect(item.hidden).toBe(false);
-            }
+        test('should not let data stand in for the "." of =!', () => {
+            const target = { r: false };
+            expect(() => assignFrom(target, { '?.r =!': '?.s' }, { from: { s: '.' } })).toThrow('toggles itself');
+            expect(target.r).toBe(false);
+        });
+
+        test('should leave right hand sides alone in assignGingerly', () => {
+            const obj = { e: true, title: 'a' };
+            assignGingerly(obj, { title: '!.', '?.r': '!$0?.e', '?.s': '?.e' });
+            expect(obj).toEqual({ e: true, title: '!.', r: '!$0?.e', s: '?.e' });
+        });
+
+        test('should write "!." as text in assignFrom', () => {
+            const target = { title: 'a', other: 'b' };
+            assignFrom(target, { title: '?.text', other: '!.' }, { from: { text: '!.' } });
+            expect(target).toEqual({ title: '!.', other: '!.' });
         });
 
         test('should toggle each item with @each when withMethods is provided and path has one segment', () => {
             // Regression: evaluatePathWithMethods returns the container for a single-segment
-            // property path, not the property value. The toggle handler must resolve that.
-            const obj = {
-                items: [{ hidden: true }, { hidden: true }],
-                expanded: false
-            };
+            // property path, not the property value.
+            const obj = { items: [{ hidden: true }, { hidden: false }] };
             assignGingerly(obj, {
-                '?.items?.@each?.hidden =!': '?.expanded'
+                '?.items?.@each?.hidden =!': '.'
             }, { withMethods: ['someMethod'] }); // withMethodsSet present but not used by this path
-            for (const item of obj.items) {
-                expect(item.hidden).toBe(true); // !false === true
-            }
+            expect(obj.items).toEqual([{ hidden: false }, { hidden: true }]);
         });
 
         test('should toggle each item with @each and self-reference', () => {
@@ -341,33 +284,40 @@
         test('should toggle each item with nested @each', () => {
             const obj = {
                 groups: [
-                    { items: [{ hidden: false }, { hidden: false }] },
-                    { items: [{ hidden: false }, { hidden: false }] }
-                ],
-                expanded: true
+                    { items: [{ hidden: false }, { hidden: true }] },
+                    { items: [{ hidden: false }] }
+                ]
             };
             assignGingerly(obj, {
-                '?.groups?.@each?.items?.@each?.hidden =!': '?.expanded'
+                '?.groups?.@each?.items?.@each?.hidden =!': '.'
             });
-            for (const group of obj.groups) {
-                for (const item of group.items) {
-                    expect(item.hidden).toBe(false);
-                }
+            expect(obj.groups).toEqual([
+                { items: [{ hidden: true }, { hidden: false }] },
+                { items: [{ hidden: true }] }
+            ]);
+        });
+
+        test('should negate one value into each item with @each and the ! marker', () => {
+            const target = { controls: [{ hidden: true }, { hidden: true }, { hidden: true }] };
+            assignFrom(target, {
+                '?.controls?.@each?.hidden': '!?.expanded'
+            }, { from: { expanded: true } });
+            for (const item of target.controls) {
+                expect(item.hidden).toBe(false);
             }
         });
 
-        test('should work end-to-end via assignFrom with @each and toggle', () => {
-            const obj = {
-                controls: [{ hidden: true }, { hidden: true }, { hidden: true }],
-                expanded: false
-            };
-            // assignFrom resolves '?.expanded' to the boolean value of obj.expanded
-            assignFrom(obj, {
-                '?.controls?.@each?.hidden =!': '?.expanded'
-            }, { from: obj });
-            for (const item of obj.controls) {
-                expect(item.hidden).toBe(true); // !false === true
-            }
+        try {
+            await assignFromAsync({}, { '?.r =!': '?.s' }, { from: { s: '.' } });
+            test('should check =! in assignFromAsync', () => { throw new Error('Expected it to throw'); });
+        } catch (error) {
+            test('should check =! in assignFromAsync', () => expect(error.message.includes('toggles itself')).toBe(true));
+        }
+
+        const asyncTarget = { x: false };
+        await assignFromAsync(asyncTarget, { '?.r': '!?.s', '?.t': '!$0?.x', '?.u =!': '.' }, { from: { s: 'x' } });
+        test('should negate and toggle in assignFromAsync', () => {
+            expect(asyncTarget).toEqual({ x: false, r: false, t: true, u: true });
         });
 
         // Display results

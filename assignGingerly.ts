@@ -454,8 +454,19 @@ function addValue(lhs: any, rhs: any): any {
 /**
  * Helper function to check if a key represents a =! command
  */
-function isToggleCommand(key: string): boolean {
+export function isToggleCommand(key: string): boolean {
   return key.endsWith(' =!');
+}
+
+/**
+ * ' =!' toggles its own left hand side, so '.' is the only right hand side it takes:
+ * assignGingerly never reads a right hand side as a path. To negate another value,
+ * use assignFrom's `!` marker: `'?.r': '!?.e'`, or `'!$0?.e'` for one on the target.
+ */
+export function assertTogglesItself(key: string, value: any): void {
+  if (value !== '.') {
+    throw new Error(`"${key}" toggles itself, so its right hand side must be '.'. To negate another value, use assignFrom's ! marker: '!?.path' (from), or '!$0?.path' (the target).`);
+  }
 }
 
 /**
@@ -869,35 +880,6 @@ function applyToEach(
 }
 
 /**
- * Resolve the RHS of a toggle (=!) command to the value that should be negated.
- * Supports:
- * - '?.path' nested path strings resolved against target (returns the resolved value, or true if missing)
- * - plain key strings looked up on target (returns the value, or true if missing)
- * - resolved literal values (e.g., booleans from assignFrom) returned as-is
- */
-function resolveValueToNegate(rhsPath: any, target: any): any {
-  if (typeof rhsPath === 'string' && isNestedPath(rhsPath)) {
-    const rhsPathParts = parsePath(rhsPath);
-    let current = target;
-    let exists = true;
-    for (const part of rhsPathParts) {
-      if (current && typeof current === 'object' && part in current) {
-        current = current[part];
-      } else {
-        exists = false;
-        break;
-      }
-    }
-    return exists ? current : true;
-  }
-  if (typeof rhsPath === 'string') {
-    return (rhsPath in target) ? target[rhsPath] : true;
-  }
-  // Non-string resolved value (e.g., boolean, number, null from assignFrom)
-  return rhsPath;
-}
-
-/**
  * Navigate a path that leads to an iterable, returning the iterable value or undefined.
  * Handles withMethods and the evaluatePathWithMethods semantics.
  */
@@ -1202,56 +1184,24 @@ export function assignGingerly(
       continue;
     }
 
-    // Handle =! commands (toggle/negate)
+    // Handle =! commands (toggle)
     if (isToggleCommand(key)) {
       const lhsPath = parseToggleCommand(key);
       if (lhsPath) {
-        const rhsPath = value;
+        assertTogglesItself(key, value);
+        const nested = isNestedPath(lhsPath);
+        const lhsPathParts = nested ? parsePath(lhsPath) : [lhsPath];
 
-        if (isNestedPath(lhsPath)) {
-          const lhsPathParts = parsePath(lhsPath);
+        // Check for @each in the LHS path
+        if (nested && lhsPathParts.some(part => isForEachSymbol(part, aliasMap))) {
+          applyCommandToEach(target, lhsPathParts, ' =!', value, withMethodsSet, aliasMap, options, permissionProcessor);
+          continue;
+        }
 
-          // Check for @each in the LHS path
-          if (lhsPathParts.some(part => isForEachSymbol(part, aliasMap))) {
-            // Resolve non-self-referencing RHS paths against the original target
-            // before iterating, so each item negates the same root value.
-            const resolvedValue = (rhsPath === '.' || typeof rhsPath !== 'string')
-              ? rhsPath
-              : resolveValueToNegate(rhsPath, target);
-            applyCommandToEach(target, lhsPathParts, ' =!', resolvedValue, withMethodsSet, aliasMap, options, permissionProcessor);
-            continue;
-          }
-
-          // No @each in path - standard toggle
-          const lhsLastKey = lhsPathParts[lhsPathParts.length - 1];
-          const lhsParent = ensureNestedPath(target, lhsPathParts);
-
-          // Determine what to negate
-          let valueToNegate: any;
-          if (rhsPath === '.') {
-            valueToNegate = (lhsLastKey in lhsParent) ? lhsParent[lhsLastKey] : undefined;
-          } else {
-            valueToNegate = resolveValueToNegate(rhsPath, target);
-          }
-
-          if (!permissionProcessor?.checkRestrictedProp(lhsLastKey)) {
-            lhsParent[lhsLastKey] = !valueToNegate;
-          }
-        } else {
-          // Plain key LHS
-          const lhsLastKey = lhsPath;
-          const lhsParent = target;
-
-          let valueToNegate: any;
-          if (rhsPath === '.') {
-            valueToNegate = (lhsLastKey in lhsParent) ? lhsParent[lhsLastKey] : undefined;
-          } else {
-            valueToNegate = resolveValueToNegate(rhsPath, target);
-          }
-
-          if (!permissionProcessor?.checkRestrictedProp(lhsLastKey)) {
-            lhsParent[lhsLastKey] = !valueToNegate;
-          }
+        const lhsLastKey = lhsPathParts[lhsPathParts.length - 1];
+        const lhsParent = nested ? ensureNestedPath(target, lhsPathParts) : target;
+        if (!permissionProcessor?.checkRestrictedProp(lhsLastKey)) {
+          lhsParent[lhsLastKey] = !lhsParent[lhsLastKey];
         }
       }
       continue;
