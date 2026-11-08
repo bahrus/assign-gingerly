@@ -4,7 +4,7 @@
 
 I'd like to move some files out of the root folder so that the top level folder is a little less filled with miscellaneous files.
 
-A clear candiddate is moving markerUtils.ts to the utils folder.
+A clear candidate is moving markerUtils.ts to the utils folder.
 
 Other candidates are beVigilant, handleIshProperty.  Any other suggestions?
 
