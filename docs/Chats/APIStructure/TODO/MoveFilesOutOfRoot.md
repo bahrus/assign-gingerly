@@ -57,3 +57,5 @@ Making all of the moves above would leave 11 `.ts` files at the root instead of 
 
 - The package.json export `"./installForwarding.js"` points to `./installForwarding.ts/.js` at the root, but the file lives in `DX/installForwarding.ts`. That subpath is currently broken for consumers.
 - The `"./parserRegistry.js"` export has no `types` entry, unlike the others.
+
+
