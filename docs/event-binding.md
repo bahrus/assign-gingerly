@@ -137,7 +137,40 @@ Removes the `disabled` attribute from the element after the listener is attached
 }
 ```
 
-After processing all assignment vectors, dispatches the configured CustomEvent from the LHS element.
+After the static assignments, dispatches the configured event: by default a `CustomEvent`, at the element with the listener. The `fromLHS` / `fromHost` / `fromTarget` / `fromEvent` vectors are applied asynchronously, so the dispatched event's listeners may not see their results yet.
+
+`dispatch` can also be at the top level of the config, beside `on`.
+
+### Dispatching at another element
+
+`at` is what to dispatch at. It's useful when the listener changes another element, and then announces it. Here the host is an `<option>`, deselected from a button elsewhere:
+
+```JavaScript
+' +=': {
+    on: 'click',
+    '?.selected': false,
+    dispatch: { type: 'change', eventCtr: 'Event', composed: false, at: '?.closest?.select' }
+}
+```
+
+| `at` | Dispatches at |
+|---|---|
+| omitted | The element with the listener |
+| `'?.'` | The host |
+| `'?.closest?.select'` | A path from the host (`closest` in `withMethods`) |
+| `'$parent'`, `'$root?.x'` | The enclosing VMs |
+| `'$0?.form'` | A path from the target |
+| an `EventTarget` | That object (from JavaScript) |
+
+- The path is resolved when the event fires, **before** `call` and the assignments, so they can move or remove what it starts from. The dispatch itself comes after them.
+- If it doesn't lead to an `EventTarget`, there's a console warning, and nothing is dispatched.
+- Put `dispatch` at the top level when using `at`: `get` is resolved when the listener is attached, so `get.dispatch.at` is too.
+
+This `at` is unrelated to the `at` option of `assignFrom` (elements by child index).
+
+### The kind of event
+
+`eventCtr` is a constructor, or the name `'Event'` or `'CustomEvent'` (the default). Any other name warns, and a `CustomEvent` is dispatched. `bubbles` and `composed` default to `true`. A native `change` isn't composed, so use `composed: false` when re-firing one.
 
 ## Options Inheritance
 

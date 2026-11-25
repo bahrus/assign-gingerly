@@ -142,6 +142,143 @@
         assertEquals(root.querySelector('button').title, 'merged', "' Y=' with a '?.querySelector?.button' LHS");
       }
 
+      // ── dispatch ──────────────────────────────────────────────────────────
+
+      // What a function's synchronous part warns
+      function warnings(fn) {
+        const { warn } = console;
+        const said = [];
+        console.warn = (...args) => said.push(args.join(' '));
+        try { fn(); } finally { console.warn = warn; }
+        return said;
+      }
+      // A button bound with the config
+      async function bindDispatch(config, { host = {}, target = document.createElement('div'), fromStack } = {}) {
+        const button = document.createElement('button');
+        target.append(button);
+        assignFrom(target, { '?.querySelector?.button +=': { on: 'click', ...config } },
+          { from: host, withMethods: ['querySelector', 'closest'], fromStack });
+        await settle();
+        return button;
+      }
+      function makeSelect() {
+        const select = document.createElement('select');
+        select.multiple = true;
+        select.innerHTML = '<option selected>a</option><option selected>b</option>';
+        return select;
+      }
+      function record(eventTarget, type = 'x') {
+        const events = [];
+        eventTarget.addEventListener(type, e => events.push(e));
+        return events;
+      }
+
+      // Test 7: without at, from the element with the listener, with the defaults; also under get
+      for (const wrap of [dispatch => ({ dispatch }), dispatch => ({ get: { dispatch } })]) {
+        const button = await bindDispatch(wrap({ type: 'x', detail: { n: 1 } }));
+        const events = record(button);
+        button.click();
+        const [e] = events;
+        assertEquals(events.length, 1, 'no at: dispatched at the listening element, once');
+        assert(e instanceof CustomEvent && e.detail.n === 1 && e.bubbles && e.composed && !e.cancelable, 'no at: a CustomEvent with the defaults');
+      }
+
+      // Test 8: a path from the host, dispatched after the static assignments
+      {
+        const select = makeSelect();
+        const option = select.options[0];
+        const button = await bindDispatch({ '?.selected': false, dispatch: { type: 'x', at: '?.closest?.select' } }, { host: option });
+        const fromButton = record(button);
+        const events = record(select);
+        let selectedThen;
+        select.addEventListener('x', () => { selectedThen = option.selected; });
+        button.click();
+        assertEquals(events.length, 1, "at: '?.closest?.select' dispatches at the select");
+        assertEquals(selectedThen, false, 'its listeners see the static assignments');
+        assertEquals(fromButton.length, 0, 'and not at the button');
+      }
+
+      // Test 9: the host, root references, and EventTargets
+      {
+        const host = new EventTarget();
+        const parent = new EventTarget();
+        const top = { x: new EventTarget() };
+        const other = new EventTarget();
+        const target = document.createElement('div');
+        for (const [at, expected] of [
+          ['?.', host], ['$0', target], ['$parent', parent], ['$root?.x', top.x], [other, other], [window, window],
+        ]) {
+          target.replaceChildren();
+          const button = await bindDispatch({ dispatch: { type: 'x', at, bubbles: false } }, { host, target, fromStack: [top, parent] });
+          const events = record(expected);
+          button.click();
+          assertEquals(events.length, 1, `at: ${String(at)}`);
+        }
+      }
+
+      // Test 10: resolved before call and the assignments, which may detach what the path starts from
+      {
+        const select = makeSelect();
+        const option = select.options[0];
+        option.detach = () => option.remove();
+        const button = await bindDispatch({ call: 'detach', dispatch: { type: 'x', at: '?.closest?.select' } }, { host: option });
+        const events = record(select);
+        button.click();
+        assertEquals(option.parentNode, null, 'call detached the host');
+        assertEquals(events.length, 1, 'the event still goes to the select');
+      }
+
+      // Test 11: nothing found, or not an EventTarget: a warning, and no dispatch
+      for (const at of ['?.nope', '?.name', 'select', null]) {
+        const host = { name: 'n' };
+        const button = await bindDispatch({ '?.ran': true, dispatch: { type: 'x', at } }, { host });
+        const events = record(button);
+        const said = warnings(() => button.click());
+        assertEquals(events.length, 0, `at: ${at} isn't dispatched`);
+        assertEquals(host.ran, true, `at: ${at}: the assignments still ran`);
+        assert(said.length === 1 && said[0].includes(`(${at})`) && said[0].includes('"x"'), `at: ${at} warns`);
+      }
+
+      // Test 12: a restricted method isn't called while resolving
+      {
+        const select = makeSelect();
+        const button = document.createElement('button');
+        const { attachEventListener } = await import('../handlers/addEventListener.js');
+        attachEventListener(button, { on: 'click', dispatch: { type: 'x', at: '?.closest?.select' } },
+          button, select.options[0], { withMethods: ['closest'] }, { checkRestrictedMethod: name => name === 'closest' });
+        const events = record(select);
+        const said = warnings(() => button.click());
+        assertEquals(events.length, 0, 'a restricted method in at is not called');
+        assertEquals(said.length, 1, 'and there is a warning');
+      }
+
+      // Test 13: eventCtr by name
+      for (const [eventCtr, ctr, warned] of [['Event', Event, 0], ['CustomEvent', CustomEvent, 0], [Event, Event, 0], ['toString', CustomEvent, 1]]) {
+        const button = await bindDispatch({ dispatch: { type: 'x', eventCtr } });
+        const events = record(button);
+        const said = warnings(() => button.click());
+        assertEquals(events[0]?.constructor, ctr, `eventCtr: ${eventCtr.name ?? eventCtr}`);
+        assertEquals(said.length, warned, `eventCtr: ${eventCtr.name ?? eventCtr}: ${warned} warnings`);
+      }
+
+      // Test 14: in a Tree repeat over a select's options, rerun: $parent is the select, one event per click
+      {
+        const select = makeSelect();
+        const target = document.createElement('div');
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: {
+          select: ['ul', {}, { of: '?.options', each: ['li', {}, [
+            ['button', { ' +=': { on: 'click', '?.selected': false, dispatch: { type: 'change', eventCtr: 'Event', at: '$parent' } } }],
+          ]], key: '?.value' }],
+        } } };
+        for (let i = 0; i < 3; i++) await assignFromAsync(target, cfg, { from: { select: select } });
+        await settle();
+        const events = record(select, 'change');
+        target.querySelector('button')?.click();
+        assertEquals(events.length, 1, 'Tree repeat, rerun: one change at the select per click');
+        assertEquals(events[0]?.constructor, Event, 'a plain Event');
+        assertEquals(select.options[0].selected, false, 'and the option is deselected');
+      }
+
       const testComplete = document.getElementById('test-complete');
       testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
       testComplete.setAttribute('data-passed', passed);

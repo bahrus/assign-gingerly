@@ -8,7 +8,8 @@
  */
 
 import assignGingerly from '../assignGingerly.js';
-import type { AddEventListenerConfig, AssignDispatchVector, PermissionProcessor } from '../types/assign-gingerly/types.js';
+import { getValue } from '../resolve/getValues.js';
+import type { AddEventListenerConfig, AssignDispatchVector, DispatchEventConfig, PermissionProcessor } from '../types/assign-gingerly/types.js';
 
 /**
  * WeakMap for dedup: Element → Map<key, AbortController>
@@ -86,6 +87,35 @@ function processVector(
 }
 
 /**
+ * What to dispatch at: `dispatch.at` resolved against the host (a path), or as is (an EventTarget).
+ * Without `at`, the element with the listener.
+ */
+function resolveDispatchTarget(
+    at: DispatchEventConfig['at'],
+    lhs: Element,
+    target: any,
+    host: any,
+    inheritedOptions: any,
+    permissionProcessor?: PermissionProcessor
+): any {
+    if (at === undefined) return lhs;
+    if (typeof at !== 'string') return at;
+    return getValue(at, host, { ...inheritedOptions, root: target, permissionProcessor });
+}
+
+/**
+ * The constructor for `dispatch.eventCtr`: a constructor, or the name of one (for JSON).
+ */
+function resolveEventCtr(eventCtr: DispatchEventConfig['eventCtr']): new (type: string, init?: CustomEventInit) => Event {
+    if (typeof eventCtr === 'function') return eventCtr;
+    if (eventCtr === 'Event') return Event;
+    if (eventCtr != null && eventCtr !== 'CustomEvent') {
+        console.warn(`addEventListener: dispatch "eventCtr" (${String(eventCtr)}) is not 'Event', 'CustomEvent' or a constructor; using CustomEvent.`);
+    }
+    return CustomEvent;
+}
+
+/**
  * Attach an event listener based on AddEventListenerConfig.
  * 
  * @param lhs - The DOM element to attach the listener to
@@ -132,6 +162,12 @@ export function attachEventListener(
         if (stopPropagation) event.stopPropagation();
         if (preventDefault) event.preventDefault();
 
+        // Resolved before anything runs: an assignment may move or remove what the path starts from
+        const dispatchConfig: DispatchEventConfig | undefined = dispatch || getDispatch;
+        const dispatchTarget = dispatchConfig?.type
+            ? resolveDispatchTarget(dispatchConfig.at, lhs, target, host, inheritedOptions, permissionProcessor)
+            : undefined;
+
         // call: invoke a host method with the event (respecting restricted methods)
         if (call && !permissionProcessor?.checkRestrictedMethod(call)) {
             const method = host?.[call];
@@ -164,19 +200,20 @@ export function attachEventListener(
             processVector(fromEvent, event, target, host, lhs, inheritedOptions, true, permissionProcessor);
         }
 
-        // Dispatch custom event if configured
-        const dispatchConfig = dispatch || getDispatch;
-        if (dispatchConfig && dispatchConfig.type) {
-            const EventCtr = (typeof dispatchConfig.eventCtr === 'function' 
-                ? dispatchConfig.eventCtr 
-                : CustomEvent) as typeof CustomEvent;
-            const evt = new EventCtr(dispatchConfig.type, {
-                detail: dispatchConfig.detail,
-                bubbles: dispatchConfig.bubbles ?? true,
-                cancelable: dispatchConfig.cancelable ?? false,
-                composed: dispatchConfig.composed ?? true,
-            });
-            lhs.dispatchEvent(evt);
+        // Dispatch the event, if configured
+        if (dispatchConfig?.type) {
+            const { type, at, eventCtr, detail, bubbles, cancelable, composed } = dispatchConfig;
+            if (dispatchTarget instanceof EventTarget) {
+                const EventCtr = resolveEventCtr(eventCtr);
+                dispatchTarget.dispatchEvent(new EventCtr(type, {
+                    detail,
+                    bubbles: bubbles ?? true,
+                    cancelable: cancelable ?? false,
+                    composed: composed ?? true,
+                }));
+            } else {
+                console.warn(`addEventListener: dispatch "at" (${String(at)}) is not an EventTarget; "${type}" was not dispatched.`);
+            }
         }
     }, { signal: controller.signal, ...listenerOptions });
 
