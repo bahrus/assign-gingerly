@@ -102,8 +102,9 @@ Within each source block (or at the top level for static assignments):
 '?.querySelector?.button +=': {
     on: 'click',
     get: {
-        abortController: '?.myController',  // resolved from host — for manual cleanup
+        abortController: '?.myController',  // resolved from host — for manual cleanup (also with a key)
         key: 'uniqueId123',                  // dedup: aborts previous listener with same key
+        keyScope: 'host',                    // ...only if it's from the same host
         nudge: true,                         // remove 'disabled' attribute after binding
         options: { capture: true },          // addEventListener options
         stopPropagation: true,
@@ -116,6 +117,31 @@ Within each source block (or at the top level for static assignments):
 ### Dedup with `key`
 
 When the same `assignFrom` call is repeated (e.g., on re-render), a `key` ensures the previous listener is aborted before the new one is attached. Internally uses `WeakMap<Element, Map<key, AbortController>>`.
+
+`builtIns.tree` and `builtIns.scope` add a key to every event binding that lacks one, since they re-apply patterns on every run.
+
+#### Several hosts, one element: `keyScope`
+
+By default, a key replaces the previous binding whichever host (`options.from`) it came from. With `keyScope: 'host'`, it replaces only a binding from the **same** host. For example, two custom elements that each listen to the same `<select>`, with the same config:
+
+```JavaScript
+'?.selects?.@each +=': {
+    on: 'change',
+    get: { key: 'my-element', keyScope: 'host' },
+    '?.rev +=': 1
+}
+```
+
+Without `keyScope`, the second element's binding would silently end the first's.
+
+- **The host is replaced between runs** (a fresh view model, a Tree item): use `key` alone. With `keyScope: 'host'`, the old host would keep listening.
+- **The host stays, and the element is shared** (a custom element listening to elements outside itself): use `keyScope: 'host'`.
+
+A host-scoped key and a plain one don't replace each other. A host that's a primitive is treated as if there were no `keyScope`. `keyScope` without a `key`, or with any other value, has no effect but a console warning.
+
+#### With `abortController`
+
+The listener stops on whichever comes first: the controller aborting, or the key being bound again. Binding a key again doesn't abort your controller.
 
 ### `nudge`
 

@@ -13,6 +13,34 @@ import { getValue } from '../resolve/getValues.js';
  */
 const keyMap = new WeakMap();
 /**
+ * The same for `keyScope: 'host'`: Element → host → Map<key, AbortController>
+ */
+const hostKeyMap = new WeakMap();
+/**
+ * Where a key is looked up: among the host's own bindings on the element (`keyScope: 'host'`), or among all
+ * of the element's. A primitive host can't key a WeakMap, so it falls back to all of them.
+ */
+function keysFor(lhs, host, keyScope) {
+    if (keyScope === 'host') {
+        if (host !== null && (typeof host === 'object' || typeof host === 'function')) {
+            let hosts = hostKeyMap.get(lhs);
+            if (!hosts)
+                hostKeyMap.set(lhs, hosts = new WeakMap());
+            let keys = hosts.get(host);
+            if (!keys)
+                hosts.set(host, keys = new Map());
+            return keys;
+        }
+    }
+    else if (keyScope !== undefined) {
+        console.warn(`addEventListener: unknown keyScope (${String(keyScope)}); the key applies to bindings from any host.`);
+    }
+    let keys = keyMap.get(lhs);
+    if (!keys)
+        keyMap.set(lhs, keys = new Map());
+    return keys;
+}
+/**
  * Reserved keys that are not shorthand assign patterns.
  */
 const RESERVED_KEYS = new Set([
@@ -107,28 +135,20 @@ function resolveEventCtr(eventCtr) {
 export function attachEventListener(lhs, config, target, host, inheritedOptions, permissionProcessor) {
     const { on: eventName, call, get: getConfig, fromLHS, fromHost, fromTarget, fromEvent, dispatch } = config;
     // Resolve get config values
-    const { abortController, key, nudge, options: listenerOptions, stopPropagation, preventDefault, dispatch: getDispatch } = getConfig ?? {};
-    // Handle dedup via key
-    let controller;
+    const { abortController, key, keyScope, nudge, options: listenerOptions, stopPropagation, preventDefault, dispatch: getDispatch } = getConfig ?? {};
+    // The listener stops when the author's controller aborts, or when its key is bound again
+    let signal = abortController instanceof AbortController ? abortController.signal : undefined;
     if (key) {
-        let elMap = keyMap.get(lhs);
-        if (!elMap) {
-            elMap = new Map();
-            keyMap.set(lhs, elMap);
-        }
+        const keys = keysFor(lhs, host, keyScope);
         // Abort previous listener with same key
-        const prev = elMap.get(key);
-        if (prev)
-            prev.abort();
+        keys.get(key)?.abort();
         // Create new controller for this key
-        controller = new AbortController();
-        elMap.set(key, controller);
+        const controller = new AbortController();
+        keys.set(key, controller);
+        signal = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
     }
-    else if (abortController instanceof AbortController) {
-        controller = abortController;
-    }
-    else {
-        controller = new AbortController();
+    else if (keyScope !== undefined) {
+        console.warn('addEventListener: keyScope does nothing without a key.');
     }
     // Attach the listener
     lhs.addEventListener(eventName, (event) => {
@@ -183,7 +203,7 @@ export function attachEventListener(lhs, config, target, host, inheritedOptions,
                 console.warn(`addEventListener: dispatch "at" (${String(at)}) is not an EventTarget; "${type}" was not dispatched.`);
             }
         }
-    }, { signal: controller.signal, ...listenerOptions });
+    }, { ...(signal && { signal }), ...listenerOptions });
     // Nudge: remove disabled, add interaction hints
     if (nudge) {
         import('./nudge.js').then(({ nudge: nudgeFn }) => {

@@ -279,6 +279,119 @@
         assertEquals(select.options[0].selected, false, 'and the option is deselected');
       }
 
+      // ── key, keyScope, abortController ────────────────────────────────────
+
+      // Bind a 'change' listener on the element, counting in host.n
+      async function bindKeyed(element, host, get) {
+        assignFrom(element, { ' +=': { on: 'change', get, '?.n +=': 1 } }, { from: host });
+        await settle();
+      }
+      const change = element => element.dispatchEvent(new Event('change'));
+      // The warnings while binding (attaching is asynchronous)
+      async function bindWarnings(...args) {
+        const { warn } = console;
+        const said = [];
+        console.warn = (...parts) => said.push(parts.join(' '));
+        try { await bindKeyed(...args); } finally { console.warn = warn; }
+        return said;
+      }
+
+      // Test 15: key alone replaces, across reruns and across hosts
+      {
+        const el = document.createElement('div');
+        const [a, b] = [{ n: 0 }, { n: 0 }];
+        for (const host of [a, a, b, b]) await bindKeyed(el, host, { key: 'k' });
+        change(el);
+        assertEquals(`${a.n},${b.n}`, '0,1', 'key alone: the last host replaces the others');
+      }
+
+      // Test 16: keyScope: 'host' — each host keeps its own, deduped on its own reruns
+      {
+        const el = document.createElement('div');
+        const [a, b] = [{ n: 0 }, { n: 0 }];
+        for (const host of [a, b, a, b, a]) await bindKeyed(el, host, { key: 'k', keyScope: 'host' });
+        change(el);
+        assertEquals(`${a.n},${b.n}`, '1,1', "keyScope: 'host': each host hears the event once");
+      }
+
+      // Test 17: the same host with different keys, and a plain key beside a host-scoped one
+      {
+        const el = document.createElement('div');
+        const host = { n: 0 };
+        await bindKeyed(el, host, { key: 'k', keyScope: 'host' });
+        await bindKeyed(el, host, { key: 'k2', keyScope: 'host' });
+        await bindKeyed(el, host, { key: 'k' });
+        change(el);
+        assertEquals(host.n, 3, 'other keys, and a plain key, coexist with a host-scoped one');
+      }
+
+      // Test 18: a primitive host falls back to the key alone, silently
+      {
+        const el = document.createElement('div');
+        const { attachEventListener } = await import('../handlers/addEventListener.js');
+        const target = { n: 0 };
+        const { warn } = console;
+        let warned = 0;
+        console.warn = () => warned++;
+        for (const host of ['a', 'b', 'a']) {
+          attachEventListener(el, { on: 'change', get: { key: 'k', keyScope: 'host' }, toTarget: { '?.n +=': 1 } }, target, host, {});
+        }
+        change(el);
+        console.warn = warn;
+        assertEquals(target.n, 1, 'primitive hosts: the last one replaces the others');
+        assertEquals(warned, 0, 'primitive hosts: no warning');
+      }
+
+      // Test 19: an unknown keyScope, and one without a key: warnings
+      {
+        const el = document.createElement('div');
+        const [a, b] = [{ n: 0 }, { n: 0 }];
+        await bindWarnings(el, a, { key: 'k', keyScope: 'element' });
+        const said = await bindWarnings(el, b, { key: 'k', keyScope: 'element' });
+        change(el);
+        assert(said.length === 1 && said[0].includes('element'), 'an unknown keyScope warns');
+        assertEquals(`${a.n},${b.n}`, '0,1', 'an unknown keyScope: as the key alone');
+
+        const el2 = document.createElement('div');
+        const c = { n: 0 };
+        const said2 = await bindWarnings(el2, c, { keyScope: 'host' });
+        change(el2);
+        assert(said2.length === 1 && said2[0].includes('key'), 'keyScope without a key warns');
+        assertEquals(c.n, 1, 'keyScope without a key: the listener is still attached');
+      }
+
+      // Test 20: key with abortController — either one stops the listener; a rerun with a fresh one listens again
+      {
+        const el = document.createElement('div');
+        const host = { n: 0, controller: new AbortController() };
+        const get = { key: 'k', abortController: '?.controller' };
+        await bindKeyed(el, host, get);
+        await bindKeyed(el, host, get);
+        change(el);
+        assertEquals(host.n, 1, 'key with abortController: deduped');
+        assertEquals(host.controller.signal.aborted, false, "replacing by key doesn't abort the author's controller");
+        host.controller.abort();
+        change(el);
+        assertEquals(host.n, 1, 'key with abortController: abort() stops the listener');
+        await bindKeyed(el, host, get);
+        change(el);
+        assertEquals(host.n, 1, 'already aborted: not attached');
+        host.controller = new AbortController();
+        await bindKeyed(el, host, get);
+        change(el);
+        assertEquals(host.n, 2, 'a rerun with a fresh controller listens again');
+      }
+
+      // Test 21: keyScope with abortController — aborting one host's leaves the other's
+      {
+        const el = document.createElement('div');
+        const hosts = [0, 1].map(() => ({ n: 0, controller: new AbortController() }));
+        for (const host of hosts) await bindKeyed(el, host, { key: 'k', keyScope: 'host', abortController: '?.controller' });
+        hosts[0].controller.abort();
+        change(el);
+        assertEquals(hosts.map(h => h.n).join(), '0,1', "aborting one host's listener leaves the other's");
+      }
+
       const testComplete = document.getElementById('test-complete');
       testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
       testComplete.setAttribute('data-passed', passed);

@@ -11,10 +11,39 @@ import assignGingerly from '../assignGingerly.js';
 import { getValue } from '../resolve/getValues.js';
 import type { AddEventListenerConfig, AssignDispatchVector, DispatchEventConfig, PermissionProcessor } from '../types/assign-gingerly/types.js';
 
+/** The controllers of the keyed listeners on an element (from one host, or from any), by key. */
+type KeyedControllers = Map<string, AbortController>;
+
 /**
  * WeakMap for dedup: Element → Map<key, AbortController>
  */
-const keyMap = new WeakMap<Element, Map<string, AbortController>>();
+const keyMap = new WeakMap<Element, KeyedControllers>();
+
+/**
+ * The same for `keyScope: 'host'`: Element → host → Map<key, AbortController>
+ */
+const hostKeyMap = new WeakMap<Element, WeakMap<object, KeyedControllers>>();
+
+/**
+ * Where a key is looked up: among the host's own bindings on the element (`keyScope: 'host'`), or among all
+ * of the element's. A primitive host can't key a WeakMap, so it falls back to all of them.
+ */
+function keysFor(lhs: Element, host: any, keyScope: unknown): KeyedControllers {
+    if (keyScope === 'host') {
+        if (host !== null && (typeof host === 'object' || typeof host === 'function')) {
+            let hosts = hostKeyMap.get(lhs);
+            if (!hosts) hostKeyMap.set(lhs, hosts = new WeakMap());
+            let keys = hosts.get(host);
+            if (!keys) hosts.set(host, keys = new Map());
+            return keys;
+        }
+    } else if (keyScope !== undefined) {
+        console.warn(`addEventListener: unknown keyScope (${String(keyScope)}); the key applies to bindings from any host.`);
+    }
+    let keys = keyMap.get(lhs);
+    if (!keys) keyMap.set(lhs, keys = new Map());
+    return keys;
+}
 
 /**
  * Reserved keys that are not shorthand assign patterns.
@@ -135,26 +164,20 @@ export function attachEventListener(
     const { on: eventName, call, get: getConfig, fromLHS, fromHost, fromTarget, fromEvent, dispatch } = config;
 
     // Resolve get config values
-    const { abortController, key, nudge, options: listenerOptions, stopPropagation, preventDefault, dispatch: getDispatch } = getConfig ?? {} as any;
+    const { abortController, key, keyScope, nudge, options: listenerOptions, stopPropagation, preventDefault, dispatch: getDispatch } = getConfig ?? {} as any;
 
-    // Handle dedup via key
-    let controller: AbortController;
+    // The listener stops when the author's controller aborts, or when its key is bound again
+    let signal: AbortSignal | undefined = abortController instanceof AbortController ? abortController.signal : undefined;
     if (key) {
-        let elMap = keyMap.get(lhs);
-        if (!elMap) {
-            elMap = new Map();
-            keyMap.set(lhs, elMap);
-        }
+        const keys = keysFor(lhs, host, keyScope);
         // Abort previous listener with same key
-        const prev = elMap.get(key);
-        if (prev) prev.abort();
+        keys.get(key)?.abort();
         // Create new controller for this key
-        controller = new AbortController();
-        elMap.set(key, controller);
-    } else if (abortController instanceof AbortController) {
-        controller = abortController;
-    } else {
-        controller = new AbortController();
+        const controller = new AbortController();
+        keys.set(key, controller);
+        signal = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
+    } else if (keyScope !== undefined) {
+        console.warn('addEventListener: keyScope does nothing without a key.');
     }
 
     // Attach the listener
@@ -215,7 +238,7 @@ export function attachEventListener(
                 console.warn(`addEventListener: dispatch "at" (${String(at)}) is not an EventTarget; "${type}" was not dispatched.`);
             }
         }
-    }, { signal: controller.signal, ...listenerOptions });
+    }, { ...(signal && { signal }), ...listenerOptions });
 
     // Nudge: remove disabled, add interaction hints
     if (nudge) {

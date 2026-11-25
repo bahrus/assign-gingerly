@@ -395,12 +395,29 @@ function isEventConfig(value: any): boolean {
   return !!value && typeof value === 'object' && !Array.isArray(value) && 'on' in value;
 }
 
+type EventModule = typeof import('./handlers/addEventListener.js');
+
+/** handlers/addEventListener.js, once a binding has asked for it. */
+let eventModule: Promise<EventModule> | undefined;
+
+/**
+ * Load the event binding module. Every binding waits on the same promise, so listeners attach in the order they were
+ * bound (separate `import()`s of one module don't settle in call order). A failed load is forgotten, so a later
+ * binding can try again.
+ */
+function loadEventModule(): Promise<EventModule> {
+  return eventModule ??= import('./handlers/addEventListener.js').catch(error => {
+    eventModule = undefined;
+    throw error;
+  });
+}
+
 /**
  * Attach an event listener for a ` +=` event-binding config (handler module loaded on demand).
  * The host is `options.from` (the view model), falling back to the target.
  */
 function bindEvent(lhs: Element, config: any, target: any, options: any, permissionProcessor?: PermissionProcessor): void {
-  const attached = import('./handlers/addEventListener.js').then(({ attachEventListener }) => {
+  const attached = loadEventModule().then(({ attachEventListener }) => {
     attachEventListener(lhs, config, target, options?.from ?? target, options ?? {}, permissionProcessor);
   }).catch(error => {
     // Still reported, as before (an uncaught error), while whenEventsBound just resolves

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>+= Event Binding Order Tests</title>
+</head>
+<body>
+  <div id="test-complete" style="display:none;" data-status=""></div>
+  <script type="module">
+    // Bindings made before handlers/addEventListener.js has loaded: it must not be imported here first
+    import { assignFrom } from '../index.js';
+
+    const done = document.getElementById('test-complete');
+    try {
+      // Unkeyed: listeners attach in the order they were bound (alternately on the element, and through @each)
+      const el = document.createElement('div');
+      const order = [];
+      for (let i = 1; i <= 8; i++) {
+        const host = { els: [el], note() { order.push(i); } };
+        if (i % 2) assignFrom(el, { ' +=': { on: 'x', call: 'note' } }, { from: host });
+        else assignFrom(host, { '?.els?.@each +=': { on: 'x', call: 'note' } }, { from: host });
+      }
+      // Keyed: the last one prevails
+      const keyed = document.createElement('div');
+      const heard = [];
+      for (let i = 1; i <= 4; i++) {
+        assignFrom(keyed, { ' +=': { on: 'x', call: 'note', get: { key: 'k' } } }, { from: { note() { heard.push(i); } } });
+      }
+      const { whenEventsBound } = await import('../assignGingerly.js');
+      await whenEventsBound(el);
+      await whenEventsBound(keyed);
+      el.dispatchEvent(new Event('x'));
+      keyed.dispatchEvent(new Event('x'));
+      done.dataset.order = order.join();
+      done.dataset.heard = heard.join();
+      done.dataset.status = 'done';
+    } catch (e) {
+      console.error(e);
+      done.dataset.status = 'error';
+    }
+  </script>
+</body>
+</html>
