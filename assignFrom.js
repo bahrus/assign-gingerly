@@ -17,6 +17,7 @@ import { resolveIdVariable, parseIdRef } from './resolve/resolveIdRef.js';
 import { processInferredAssignments } from './inferredAssignments.js';
 import { resolveLhsPath } from './utils/resolveLhsPath.js';
 import { SYNC_OPS } from './syncOps/registry.js';
+import { isJoinValue, join } from './syncOps/join.js';
 import { withSnippetProtocol } from './handlers/snippets.js';
 /**
  * Supported substitution variables and their option keys.
@@ -88,7 +89,7 @@ function assertNoThenable(value, opName, key) {
         return;
     if (typeof value.then === 'function') {
         throw new Error(`assignFrom: sync op '${opName}' (key "${key}") received an async value — ` +
-            `a protocol in options.protocols returned a Promise, which ' =&' cannot await. ` +
+            `a protocol in options.protocols returned a Promise, which can't be awaited here. ` +
             `Use ' =>' with 'resolve:' instead for async values.`);
     }
     if (Array.isArray(value)) {
@@ -150,12 +151,18 @@ function isNestedTernary(value) {
 }
 /**
  * Resolve a value in a result position (then/else/neither, comparison results,
- * chain candidates). Nested ternary expressions are evaluated recursively;
- * everything else goes through resolveTernaryValue.
+ * chain candidates). Nested ternary expressions are evaluated recursively; a
+ * `{ join: [...], separator? }` object becomes a string, as in ' =&'; everything
+ * else goes through resolveTernaryValue.
  */
 function resolveResult(value, source, options) {
     if (isNestedTernary(value)) {
         return evaluateTernary(value, source, options);
+    }
+    if (isJoinValue(value)) {
+        const { join: args, ...extra } = getValues(value, source, options);
+        assertNoThenable(args, 'join', '?=');
+        return join(args, extra);
     }
     return resolveTernaryValue(value, source, options);
 }
@@ -171,6 +178,7 @@ function resolveResult(value, source, options) {
  * - [c1, '||', c2, '||', c3, ...]                  — first truthy candidate (c1 || c2 || c3)
  * - [c1, '??', c2, '??', c3, ...]                  — first non-nullish candidate (c1 ?? c2 ?? c3)
  * - [c1, t1, [c2, t2, e2]]                         — nested ternary in any result position
+ * - [c1, { join: [...] }, e1]                      — text from parts, in any result position
  *
  * Returns TERNARY_SKIP to signal "skip assignment" (guard forms when condition
  * not met). A skip from a nested guard propagates outward.

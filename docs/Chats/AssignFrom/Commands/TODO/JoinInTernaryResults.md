@@ -249,3 +249,88 @@ A patched copy of 0.0.112, served only to a test browser (Chromium):
 1. C, as proposed? Or A, B, or the workaround as it is?
 2. Document the `??` / empty string case (as proposed), or treat an empty join as a failed candidate?
 3. Do you also want A, on its own merits? I'd wait for a use.
+
+## Bruce's Response I
+
+I wonder if C is something that the DX tree tagged template could support.
+
+I think C seems like a very reasonable request, but would not be surprised if A and/or B become useful for some future scenario.  Let's focus on C for now.
+
+> 2. Document the `??` / empty string case (as proposed), or treat an empty join as a failed candidate?
+
+I guess.  I'm not really following your explanation, but I think I will trust your judgment on this.
+
+> 3. Do you also want A, on its own merits? I'd wait for a use.
+
+Agreed.  Hold off.
+
+
+## Claude's Implementation Notes I
+
+C is in: a ` ?=` result can be `{ join: [...], separator? }`. A and B are left for a future need.
+
+### What changed
+
+- **`assignFrom.ts`:** `resolveResult`, as sketched. The thenable check is included, and its message no longer says ` =&`, since ` ?=` shares it now.
+- **`docs/ternary-assignment.md`:** a "Text from parts" section. `docs/sync-ops.md` links to it.
+- **Tests:** `ternary-command.html` (each case through `assignFrom` and `assignFromAsync`, every result position, chains, `$0` / `$root` / `$parent`, protocols, the unchosen branch, a Promise), `tree.html` (a repeat, with `$parent` and reruns, plain and compiled), and `dx-tree.html`.
+
+I edited only sources. Your `tsc --watch` rebuilt `assignFrom.js`.
+
+### Question 2, explained better
+
+A chain tries each candidate until one passes. `??` skips only a *missing* value (`null` / `undefined`), while `||` also skips *empty text*. A `join` always produces text: with nothing to join, that's empty text, which isn't "missing". So:
+
+```JS
+['?.nick', '??', { join: ['?.first'] }, '??', 'Anonymous']   // no nick, no first → '' (stops at the empty text)
+['?.nick', '||', { join: ['?.first'] }, '||', 'Anonymous']   // no nick, no first → 'Anonymous'
+```
+
+I kept it that way and documented "follow a `join` with `||`". It's how `??` and `||` behave in JavaScript, and it keeps `join` the same everywhere.
+
+### Can the DX `tree` support C?
+
+**Yes, today, with the pattern spread,** and the existing `sp` tag already writes the parts from `paths()` proxies:
+
+```JS
+const p = paths();
+tree`<span ${{ 'textContent ?=': [['?.n', 1], '1 item', { join: sp`${p.n} items` }] }}></span>`
+// ['span', { 'textContent ?=': [['?.n', 1], '1 item', { join: ['?.n', ' items'] }] }]
+```
+
+That's now a test. Two things could be better.
+
+**1. A bare proxy inside the array isn't converted.** The spread converts only top-level values (`title: p.tip`). Nested ones stay proxies, and this isn't new with C:
+
+| Written | Result |
+|---|---|
+| `'v ?=': [p.n, 'x', 'y']`, with `n` of 0 | `'x'`: **wrong, silently.** A proxy is always truthy |
+| `{ join: [p.n, ' items'] }` | An error, but a misleading one about a Promise (a proxy appears to have a `then`) |
+
+*Suggestion:* have the spread convert proxies at any depth, in arrays and plain objects. It's a few lines in `DX/tree.ts`, with nothing in the core. I'd do this one.
+
+**2. A helper that reads like the template,** as `choose` does for elements:
+
+```JS
+tree`<span>${when([p.n, 1], '1 item', sp`${p.n} items`)}</span>`
+// → 'textContent ?=': [['?.n', 1], '1 item', { join: ['?.n', ' items'] }]
+```
+
+As the only content it would become `textContent ?=`. As an attribute's value it needs more thought, because ` :=` has no ternary form, so `class=${when(…)}` has nothing to become. I'd wait until you've used the spread for a while.
+
+I haven't changed `DX/tree.ts`.
+
+### Size and test results
+
+- **Size:** `assignFrom.js`, minified and gzipped, goes from 3,755 to 3,809 bytes: 54 more, against about 40 estimated. (The thenable check wasn't in the prototype.)
+- **Tests,** on a copy of the repo, built there (the type check is clean): the full suite has 188 passed, 22 skipped, none failed, in Chromium, Firefox and WebKit. `ternary-command` has 96 of 96.
+- **Not run:** o2h, and the chip-away prototype.
+
+### Noticed
+
+` ?=` conditions and plain path results don't pass the permission processor to `getValue` (`resolveTernaryValue`), so a restricted method in those paths isn't refused there. From reading the code; I haven't measured it. `{ join }` results do pass it. Worth its own fix.
+
+### Questions
+
+1. Should I make the spread convert nested proxies (suggestion 1)?
+2. Should I fix the permission processor gap?

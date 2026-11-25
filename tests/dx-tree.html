@@ -18,7 +18,7 @@
   <script type="module">
     import { assignFrom, whenSettled } from '../index.js';
     import { tree, each, TreeTemplateError, analyzeTree, TreeUnknown } from '../DX/tree.js';
-    import { paths, md } from '../DX/paths.js';
+    import { paths, md, sp } from '../DX/paths.js';
 
     const results = [];
     let passed = 0;
@@ -150,6 +150,16 @@
         assertEquals(json(row(tree`<button>Go</button>`)[2].map(child => child[0])), json(['span', 'button', 'span']),
           'the same template with a child in that position');
         throws(() => tree`<b ${42}></b>`, /each\(…\) or a pattern object/, 'other values in attribute position are an error');
+      }
+
+      // Test 8b: a { join } result in a ternary, through the pattern spread; sp writes its parts
+      {
+        const q = paths();
+        const spec = tree`<span ${{ 'textContent ?=': [['?.n', 1], '1 item', { join: sp`${q.n} items` }] }}></span>`;
+        assertEquals(json(spec), json(['span', { 'textContent ?=': [['?.n', 1], '1 item', { join: ['?.n', ' items'] }] }]),
+          'sp parts in a { join } ternary result');
+        const host = await render({ cart: spec }, { cart: { n: 2 } });
+        assertEquals(host.querySelector('span').textContent, '2 items', 'rendered');
       }
 
       // Test 9: errors carry precise locations (for editors): part/offset exact (raw offsets: each \n escape in these templates is 2 source characters), line/column as displayed

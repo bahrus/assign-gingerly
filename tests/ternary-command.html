@@ -23,6 +23,7 @@
 
     <script type="module">
         import { assignFrom } from '../assignFrom.js';
+        import { assignFromAsync } from '../assignFromAsync.js';
 
         const results = [];
         let passed = 0;
@@ -454,6 +455,97 @@
                 '?.textContent ?=': [['?.g', '?.v'], '||', 'fallback']
             }, { from: vm });
             expect(target.textContent).toBe('fallback');
+        });
+
+        // ── { join } results ──────────────────────────────────────────────────
+
+        const pipes = {
+            names: { pluck: '?.name' },
+            comma: { use: 'join', args: [', '] },
+            list: { chain: ['names', 'comma'] },
+            usd: { intl: 'NumberFormat', locale: 'en-US', options: { style: 'currency', currency: 'USD' } },
+        };
+        const crew = [{ name: 'Ada' }, { name: 'Bo' }, { name: 'Cy' }];
+        const countOrList = [['?.crew?.length', '>', '?.max'], { join: ['?.crew?.length', ' Selected'] }, '?.crew?.list'];
+        const cart = [['?.n', 0], 'Your cart is empty', [['?.n', 1], '1 item', { join: ['?.n', ' items'] }]];
+        const states = ['?.ok', { join: ['Saved at ', '?.at'] }, { join: ['Failed: ', '?.err'] }, 'Saving...'];
+        const skipped = Symbol('not assigned');
+        // [what, ternary, from, expected]
+        const joinCases = [
+            ['a comparison\'s then', countOrList, { crew, max: 2 }, '3 Selected'],
+            ['a comparison\'s then, not chosen', countOrList, { crew, max: 3 }, 'Ada, Bo, Cy'],
+            ['a comparison with undefined', countOrList, { crew }, 'Ada, Bo, Cy'],
+            ['nested: first', cart, { n: 0 }, 'Your cart is empty'],
+            ['nested: second', cart, { n: 1 }, '1 item'],
+            ['nested: the join', cart, { n: 2 }, '2 items'],
+            ['equality, then', [['?.n', 1], { join: ['one: ', '?.n'] }, 'no'], { n: 1 }, 'one: 1'],
+            ['truthiness, then', ['?.name', { join: ['Hi ', '?.name', '!'] }, 'Log in'], { name: 'Ada' }, 'Hi Ada!'],
+            ['truthiness, else', ['?.name', '?.name', { join: ['No ', '?.what'] }], { what: 'name' }, 'No name'],
+            ['three-state: true', states, { ok: true, at: '10:42' }, 'Saved at 10:42'],
+            ['three-state: false', states, { ok: false, err: 'timeout' }, 'Failed: timeout'],
+            ['three-state: neither', ['?.ok', 'y', 'n', { join: ['Waiting ', '?.for'] }], { for: 'it' }, 'Waiting it'],
+            ['a chain candidate', ['?.nick', '??', { join: ['?.first', ' ', '?.last'] }], { first: 'Ada', last: 'L' }, 'Ada L'],
+            ['a chain candidate, not reached', ['?.nick', '??', { join: ['?.first'] }], { nick: 'Al', first: 'Ada' }, 'Al'],
+            ['a chain\'s explicit fallback', ['?.a', '||', '?.b', { join: ['none of ', '?.n'] }], { n: 2 }, 'none of 2'],
+            ['an empty join isn\'t nullish', ['?.nick', '??', { join: ['?.first'] }, '??', 'Anonymous'], {}, ''],
+            ['an empty join is falsy', ['?.nick', '||', { join: ['?.first'] }, '||', 'Anonymous'], {}, 'Anonymous'],
+            ['with a pipe', [['?.price', '>', 0], { join: ['Only ', '?.price?.usd'] }, 'Free'], { price: 12.5 }, 'Only $12.50'],
+            ['optional parts', ['?.l', { join: ['?.l', [', ', '?.m'], ', ', '?.f'] }, '?'], { l: 'L', f: 'A' }, 'L, A'],
+            ['optional parts, present', ['?.l', { join: ['?.l', [', ', '?.m'], ', ', '?.f'] }, '?'], { l: 'L', m: 'D', f: 'A' }, 'L, D, A'],
+            ['a separator', ['?.a', { join: ['?.a', '?.b'], separator: ' | ' }, '-'], { a: 1, b: 2 }, '1 | 2'],
+            ['a guard', [['?.n', '>', 0], { join: ['?.n', ' new'] }], { n: 3 }, '3 new'],
+            ['a guard that skips', [['?.n', '>', 0], { join: ['?.n', ' new'] }], { n: 0 }, skipped],
+            ['other keys: a literal', ['?.a', { join: 1, x: 2 }, '-'], { a: 1 }, { join: 1, x: 2 }],
+        ];
+        await import('../pipes/dataPipes.js');
+        for (const [what, ternary, from, expected] of joinCases) {
+            const check = target => {
+                if (expected === skipped) expect('v' in target).toBe(false);
+                else if (typeof expected === 'object') expect(target.v).toEqual(expected);
+                else expect(target.v).toBe(expected);
+            };
+            test(`join: ${what}`, () => check(assignFrom({}, { 'v ?=': ternary }, { from, pipes })));
+            const asyncTarget = await assignFromAsync({}, { 'v ?=': ternary }, { from, pipes });
+            test(`join (assignFromAsync): ${what}`, () => check(asyncTarget));
+        }
+
+        test('join: an attribute-backed property, and reruns', () => {
+            const a = document.createElement('a');
+            const run = from => {
+                assignFrom(a, { 'href ?=': ['?.id', { join: ['#product/', '?.id'] }, '#'] }, { from });
+                return a.getAttribute('href');
+            };
+            expect([run({ id: 7 }), run({}), run({ id: 8 })].join()).toBe('#product/7,#,#product/8');
+        });
+
+        test('join: $0, $root, $parent and !', () => {
+            const target = assignFrom({ own: 'o' }, {
+                'v ?=': ['?.a', { join: ['$0?.own', '$root?.r', '$parent?.p', '!?.a'] }, '-'],
+            }, { from: { a: 1 }, fromStack: [{ r: 'r' }, { p: 'p' }] });
+            expect(target.v).toBe('orpfalse');
+        });
+
+        test('join: withMethods, aka and protocols', () => {
+            const target = assignFrom({}, { 'v ?=': ['?.a', { join: ['?.a?.up|', '-', 'p://k'] }, '-'] }, {
+                from: { a: 'x' }, withMethods: ['toUpperCase'], aka: { 'up|': 'toUpperCase|' }, protocols: { p: key => `[${key}]` },
+            });
+            expect(target.v).toBe('X-[k]');
+        });
+
+        test('join: the branch that isn\'t chosen isn\'t resolved', () => {
+            let reads = 0;
+            const from = { a: 1, get b() { reads++; return 'b'; } };
+            const target = assignFrom({}, { 'v ?=': ['?.a', 'yes', { join: ['?.b'] }] }, { from });
+            expect(target.v).toBe('yes');
+            expect(reads).toBe(0);
+        });
+
+        test('join: a Promise from a protocol throws', () => {
+            let message = '';
+            try {
+                assignFrom({}, { 'v ?=': ['?.a', { join: ['p://k'] }, '-'] }, { from: { a: 1 }, protocols: { p: async () => 'x' } });
+            } catch (e) { message = e.message; }
+            expect(message.includes('received an async value') && message.includes('?=')).toBe(true);
         });
 
         // Display results

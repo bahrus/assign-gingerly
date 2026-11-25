@@ -203,6 +203,34 @@ Semantics and edge cases:
 - Literal/protocol conditions don't trigger nesting — only `?.`-prefixed strings and arrays (comparison mode) do.
 - Consequence of the trigger: a literal array whose first element is a `?.`-prefixed string (or an array) cannot be assigned in a result position — it will be interpreted as a nested ternary.
 
+### Text from parts — `{ join: [...] }`
+
+Any result position can also be a `{ join: [...], separator? }` object, which means the same as in [` =&`](./sync-ops.md#join): its parts are resolved, and joined into a string.
+
+```JS
+assignFrom(element, {
+    '?.textContent ?=': [['?.n', 0], 'Your cart is empty', [['?.n', 1], '1 item', { join: ['?.n', ' items'] }]]
+}, { from: vm });
+// n: 0 → 'Your cart is empty'    1 → '1 item'    2 → '2 items'
+```
+
+```JS
+'?.textContent ?=': ['?.ok', { join: ['Saved at ', '?.at'] }, { join: ['Failed: ', '?.err'] }, 'Saving...']
+'?.href ?=': ['?.id', { join: ['#product/', '?.id'] }, '#']
+```
+
+- The parts can be anything they can be in ` =&`: paths, literals, [pipes](./pipes.md), `$0` / `$root` / `$parent`, `!`, and all-or-nothing sub-arrays (`[', ', '?.middleName']`).
+- Only the chosen branch is resolved.
+- Only `join` and `separator` are allowed as keys: any other object is assigned as a literal. `microJoin` isn't supported, and neither is `join` in a condition.
+- A part that's a Promise (from a protocol) throws, as in ` =&`.
+- **In a chain, follow a `join` with `'||'`, not `'??'`.** A `join` always gives a string, so when all its parts are missing it gives `''`. That's falsy but not nullish, so `'??'` stops there:
+
+```JS
+// vm has neither nick nor first
+'?.textContent ?=': ['?.nick', '??', { join: ['?.first'] }, '??', 'Anonymous']   // ''
+'?.textContent ?=': ['?.nick', '||', { join: ['?.first'] }, '||', 'Anonymous']   // 'Anonymous'
+```
+
 ## Mixing with other keys
 
 `?=` works alongside normal assignments, `Y=`, `+=`, and handlers in the same call:

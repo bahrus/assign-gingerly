@@ -58,6 +58,8 @@ Joins the resolved `args` array into a string.
 | `join` | Array of `?.` paths and literals. A non-array value is treated as a one-item array. | (required) |
 | `separator` | String placed between items | `''` |
 
+To choose between texts, use a `{ join: [...] }` object as a [` ?=` result](./ternary-assignment.md#text-from-parts---join--).
+
 **Nullish handling:**
 - **Top-level** `null` / `undefined` items are dropped.
 - **Nested sub-arrays are all-or-nothing.** If any item in a sub-array is `null` / `undefined`, the whole sub-array is dropped. Otherwise its items are flattened in. That's how you write optional segments:

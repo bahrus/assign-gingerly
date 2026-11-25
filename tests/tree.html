@@ -683,6 +683,21 @@
         assertEquals(first.item.clicked, undefined, 'the stale value is not touched');
       }
 
+      // Test 35b: a { join } ternary result, with $parent, updated in place on reruns
+      {
+        const target = details();
+        const cfg = { '?. =>': { do: 'builtIns.tree', map: {
+          list: ['ul', {}, { each: ['li', { 'textContent ?=': ['?.n', { join: ['$parent?.list?.length', ':', '?.n'] }, 'none'] }] }],
+        } } };
+        const texts = () => [...target.querySelectorAll('li')].map(li => li.textContent).join();
+        await assignFromAsync(target, cfg, { from: { list: [{ n: 1 }, { n: 0 }] } });
+        assertEquals(texts(), '2:1,none', 'a { join } ternary result in a repeat');
+        const li = target.querySelector('li');
+        await assignFromAsync(target, cfg, { from: { list: [{ n: 0 }, { n: 5 }] } });
+        assertEquals(texts(), 'none,2:5', 'a { join } ternary result after a rerun');
+        assert(target.querySelector('li') === li, 'the element is kept');
+      }
+
       // ── ShadowRoot / DocumentFragment targets ─────────────────────────────
 
       // Test 36: render into a shadow root, rerun in place; arrays and managers inside
