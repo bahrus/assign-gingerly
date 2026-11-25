@@ -172,6 +172,48 @@
         assertEquals([...el.querySelectorAll('li')].map(li => li.textContent).join(), 'B9007 (reused),B9008', 'list items use pipes');
       }
 
+      // Test 11: pluck, over DOM lists, and in sync ops, ternaries and Tree
+      {
+        await import('../pipes/dataPipes.js');
+        const pluckPipes = {
+          texts: { pluck: '?.textContent' },
+          values: { pluck: '?.value' },
+          names: { pluck: '?.name' },
+          ids: { pluck: '?.id' },
+          items: { pluck: '?.' },
+          comma: { use: 'join', args: [', '] },
+          add: { sum: '?.' },
+          joined: { chain: ['texts', 'comma'] },
+          total: { chain: ['values', 'add'] },
+          crewList: { chain: ['names', 'comma'] },
+        };
+        const options = { pipes: pluckPipes };
+        const select = document.createElement('select');
+        select.multiple = true;
+        select.innerHTML = '<option selected value=1>Red</option><option value=2>Green</option><option selected value=3>Blue</option>';
+        assertEquals(getValue('?.selectedOptions?.joined', select, options), 'Red, Blue', 'pluck over an HTMLCollection');
+        assertEquals(getValue('?.selectedOptions?.total', select, options), 4, 'pluck, then sum, over an HTMLCollection');
+        assertEquals(getValue('?.childNodes?.joined', select, options), 'Red, Green, Blue', 'pluck over a NodeList');
+        assert(Array.isArray(getValue('?.selectedOptions?.items', select, options)), "'?.' gives a real array");
+
+        const crew = [{ name: 'Ada', id: 7 }, { name: 'Bo', id: 9 }];
+        const el = document.createElement('div');
+        assignFrom(el, {
+          'textContent =&': { join: ['Crew: ', '?.crew?.crewList'] },
+          'title ?=': [['?.crew?.length', '>', '?.max'], 'many', '?.crew?.crewList'],
+          'data-ids :=': '?.crew?.ids',
+        }, { from: { crew, max: 9 }, ...options });
+        assertEquals(el.textContent, 'Crew: Ada, Bo', 'pluck in =&');
+        assertEquals(el.title, 'Ada, Bo', 'pluck in ?=');
+        assertEquals(el.getAttribute('data-ids'), '7 9', 'pluck in :=');
+
+        const tree = document.createElement('div');
+        await assignFromAsync(tree, { '?. =>': { do: 'builtIns.tree', map: {
+          crew: ['ul', {}, { of: '?.names', each: ['li', '?.'] }],
+        } } }, { from: { crew }, ...options });
+        assertEquals([...tree.querySelectorAll('li')].map(li => li.textContent).join(), 'Ada,Bo', 'pluck as a Tree repeat source');
+      }
+
       const testComplete = document.getElementById('test-complete');
       testComplete.setAttribute('data-status', failed === 0 ? 'success' : 'failure');
       testComplete.setAttribute('data-passed', passed);

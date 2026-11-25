@@ -231,6 +231,70 @@ test.describe('pure modules (no DOM)', () => {
     expect(() => dataPipes({ x: { max: ['?.a'] } })).toThrow(/max takes a \?\. path/);
   });
 
+  test('dataPipes: pluck gives a path\'s value per item, as an array', async ({ browserName }) => {
+    test.skip(browserName !== 'chromium', 'Runs in Node, once');
+
+    const url = (path: string) => new URL(`../${path}`, import.meta.url).href;
+    const { dataPipes, pipeDescriptorOf } = await import(url('pipes/dataPipes.js'));
+    const descriptors = {
+      names: { pluck: '?.name' },
+      cities: { pluck: '?.addr?.city' },
+      all: { pluck: '?.' },
+      keys: { pluck: '?.0' },
+      ids: { pluck: '?.id?.str' },                       // the path can use the object's other pipes
+      str: { use: 'string' },
+      comma: { use: 'join', args: [', '] },
+      and: { intl: 'ListFormat', locale: 'en-US', options: { type: 'conjunction', style: 'long' } },
+      add: { sum: '?.' },
+      crewList: { chain: ['names', 'comma'] },
+      sentence: { chain: ['names', 'and'] },
+      idSentence: { chain: ['ids', 'and'] },
+      total: { chain: ['all', 'add'] },
+    };
+    const pipes = dataPipes(descriptors);
+    const crew = [{ name: 'Ada', id: 7 }, { name: 'Bo', id: 9 }, { name: 'Cy', id: 11 }];
+    expect(pipes.names(crew)).toEqual(['Ada', 'Bo', 'Cy']);
+    expect(pipes.crewList(crew)).toBe('Ada, Bo, Cy');
+    expect(pipes.sentence(crew)).toBe('Ada, Bo, and Cy');
+    expect(pipes.idSentence(crew)).toBe('7, 9, and 11');
+    expect(pipes.total(new Set([1, 2, 3]))).toBe(6);
+    // null and undefined are dropped; other falsy values are kept
+    expect(pipes.cities([{ addr: { city: 'Oslo' } }, { addr: null }, {}, null, undefined, { addr: { city: 'Rome' } }])).toEqual(['Oslo', 'Rome']);
+    expect(pipes.all([0, '', false, null, undefined, 1])).toEqual([0, '', false, 1]);
+    // Any iterable object
+    expect(pipes.names(new Set(crew))).toEqual(['Ada', 'Bo', 'Cy']);
+    expect(pipes.keys(new Map([['a', 1], ['b', 2]]))).toEqual(['a', 'b']);
+    expect(pipes.names([])).toEqual([]);
+    expect(pipes.crewList([])).toBe('');
+    for (const notAList of ['Ada', 7, true, {}, { name: 'Ada' }, () => 1]) expect(pipes.names(notAList)).toBeUndefined();
+
+    // Carries its descriptor; survives structuredClone; errors at dataPipes()
+    expect(pipeDescriptorOf(pipes.names)).toBe(descriptors.names);
+    expect(dataPipes(structuredClone(descriptors)).sentence(crew)).toBe('Ada, Bo, and Cy');
+    for (const bad of ['name', ['?.name'], null, undefined]) {
+      expect(() => dataPipes({ x: { pluck: bad } })).toThrow(/pluck takes a \?\. path/);
+    }
+  });
+
+  test('dataPipes: a pipe\'s own path reads the property, not the pipe, when they share a name', async ({ browserName }) => {
+    test.skip(browserName !== 'chromium', 'Runs in Node, once');
+
+    const url = (path: string) => new URL(`../${path}`, import.meta.url).href;
+    const { dataPipes } = await import(url('pipes/dataPipes.js'));
+    const { getValue } = await import(url('resolve/getValues.js'));
+    const list = [{ q: 1 }, { q: 2 }];
+    for (const [d, expected] of [
+      [{ pluck: '?.q' }, [1, 2]], [{ sum: '?.q' }, 3], [{ sum: ['?.q', '?.q'] }, 5], [{ min: '?.q' }, 1], [{ max: '?.q' }, 2],
+    ]) {
+      expect(dataPipes({ q: d }).q(list)).toEqual(expected);
+      expect(getValue('?.list?.q', { list }, { pipes: { q: d } })).toEqual(expected);
+    }
+    // The other pipes still apply, whichever order they're in
+    const double = (n: number) => n * 2;
+    expect(dataPipes({ q: { sum: '?.q?.double' }, double }).q(list)).toBe(6);
+    expect(dataPipes({ double, q: { pluck: '?.q?.double' } }).q(list)).toEqual([2, 4]);
+  });
+
   test('a pipes option holds descriptors directly, once dataPipes is loaded', async ({ browserName }) => {
     test.skip(browserName !== 'chromium', 'Node-side check; once is enough');
     // Each in a fresh process: whether the module has been loaded is what's being tested

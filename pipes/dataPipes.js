@@ -14,14 +14,16 @@
  *         when:    { chain: ['parseDate', 'longUtc'] },
  *         total:   { sum: ['?.quantity', '?.price'] },
  *         low:     { min: '?.value' },
+ *         names:   { pluck: '?.name' },
  *         clock:   s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`,   // functions pass through
  *     });
  *
  * Each function made from a descriptor carries it (under PIPE_DESCRIPTOR, a global symbol), so code that
  * stores pipes (o2h's prepareO2HTransform) can keep the descriptor instead of losing the pipe.
  *
- * Deliberately small: Intl formatting, lookups, a fixed set of built-ins, chains, and aggregates over an array
- * (sum, min, max). No comparisons, other arithmetic, filtering or sorting: pipes that need those stay functions.
+ * Deliberately small: Intl formatting, lookups, a fixed set of built-ins, chains, aggregates over an array
+ * (sum, min, max), and one property of each item (pluck). No comparisons, other arithmetic, filtering or sorting:
+ * pipes that need those stay functions.
  */
 import { getValue, registerPipeMaker } from '../resolve/getValues.js';
 /** Where a pipe made from a descriptor keeps it: a registered symbol, so other packages find it without importing this module. */
@@ -90,8 +92,10 @@ function fromDescriptor(name, d, pipes) {
             return extremePipe(name, 'min', d.min, pipes);
         if ('max' in d)
             return extremePipe(name, 'max', d.max, pipes);
+        if ('pluck' in d)
+            return pluckPipe(name, d.pluck, pipes);
     }
-    throw new Error(`dataPipes: "${name}" is neither a function nor a pipe descriptor ({ intl }, { map }, { use }, { chain }, { sum }, { min } or { max })`);
+    throw new Error(`dataPipes: "${name}" is neither a function nor a pipe descriptor ({ intl }, { map }, { use }, { chain }, { sum }, { min }, { max } or { pluck })`);
 }
 function intlPipe(name, d) {
     if (!INTL_KINDS.has(d.intl))
@@ -144,19 +148,34 @@ function chainPipe(d, pipes) {
     };
 }
 /**
+ * What resolves a pipe's per-item paths: the object's pipes, but for the pipe itself, so that its path can read a
+ * property it shares a name with (`{ price: { sum: '?.price' } }`). Made on first use, once `pipes` is complete.
+ */
+function itemOptions(name, pipes) {
+    let options;
+    return () => {
+        if (!options) {
+            const { [name]: _self, ...others } = pipes;
+            options = { pipes: others };
+        }
+        return options;
+    };
+}
+/**
  * A total over an array: each element's path, or the product of its paths (`['?.quantity', '?.price']`), added up.
- * The paths are ordinary `?.` paths, resolved against the element with this object's pipes. An element whose
- * path leads nowhere, or to something that isn't a number, adds 0. Not an array: undefined (nothing is rendered).
+ * The paths are ordinary `?.` paths, resolved against the element with this object's other pipes. An element
+ * whose path leads nowhere, or to something that isn't a number, adds 0. Not an array: undefined (nothing is rendered).
  */
 function sumPipe(name, d, pipes) {
     const paths = typeof d.sum === 'string' ? [d.sum] : d.sum;
     if (!Array.isArray(paths) || paths.length === 0 || !paths.every(p => typeof p === 'string' && p.startsWith('?.'))) {
         throw new Error(`dataPipes: "${name}": sum takes a ?. path, or an array of them (multiplied per element)`);
     }
-    const options = { pipes };
+    const optionsFor = itemOptions(name, pipes);
     return v => {
         if (!Array.isArray(v))
             return undefined;
+        const options = optionsFor();
         let total = 0;
         for (const item of v) {
             let product = 1;
@@ -177,11 +196,12 @@ function extremePipe(name, which, path, pipes) {
     if (typeof path !== 'string' || !path.startsWith('?.')) {
         throw new Error(`dataPipes: "${name}": ${which} takes a ?. path`);
     }
-    const options = { pipes };
+    const optionsFor = itemOptions(name, pipes);
     const better = which === 'min' ? (a, b) => a < b : (a, b) => a > b;
     return v => {
         if (!Array.isArray(v))
             return undefined;
+        const options = optionsFor();
         let best;
         for (const item of v) {
             const n = numeric(getValue(path, item, options));
@@ -189,6 +209,29 @@ function extremePipe(name, which, path, pipes) {
                 best = n;
         }
         return best;
+    };
+}
+/**
+ * The value at a `?.` path for each item (`{ pluck: '?.name' }`), as an array, e.g. for `join` or ListFormat. Any
+ * iterable object will do (an array, a Set, a NodeList). An item whose path gives null or undefined is dropped.
+ * Anything else, a string included: undefined (nothing is rendered).
+ */
+function pluckPipe(name, path, pipes) {
+    if (typeof path !== 'string' || !path.startsWith('?.')) {
+        throw new Error(`dataPipes: "${name}": pluck takes a ?. path`);
+    }
+    const optionsFor = itemOptions(name, pipes);
+    return v => {
+        if (v === null || typeof v !== 'object' || typeof v[Symbol.iterator] !== 'function')
+            return undefined;
+        const options = optionsFor();
+        const values = [];
+        for (const item of v) {
+            const value = getValue(path, item, options);
+            if (value != null)
+                values.push(value);
+        }
+        return values;
     };
 }
 /** A number, or a numeric string, as a number; anything else (a blank included) NaN. */

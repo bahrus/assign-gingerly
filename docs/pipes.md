@@ -138,9 +138,9 @@ The options don't have to be in a file: an object literal, or a parsed string fr
 
 ### What it costs
 
-The module is about 1.4 KB, minified and gzipped. **The core doesn't import it,** so a page that uses no data pipes doesn't pay for it. Which entry point you use decides when you do:
+The module is about 1.6 KB, minified and gzipped. **The core doesn't import it,** so a page that uses no data pipes doesn't pay for it. Which entry point you use decides when you do:
 
-| You use | The 1.4 KB |
+| You use | The 1.6 KB |
 |---|---|
 | `assignFrom`, `getValue`, `getValues`, `resolveValues` | **Your choice:** the `import` above, once, before the first call. These don't load it themselves, so without it a descriptor throws an error saying so. Function pipes work either way. |
 | `assignFromAsync` | **Loaded for you,** with a dynamic `import()`, when it first sees a descriptor. Never loaded for function pipes. A bundler that splits code makes it a separate chunk; one that doesn't inlines it. |
@@ -177,8 +177,9 @@ const pipes = dataPipes({
 | **`map`** | `{ map: { … }, default? }` | A lookup by `String(value)`: n-way labels or class names, where a ternary only does two ways |
 | **`use`** | `{ use: name, args? }` | A built-in: `parseDate`, `number`, `string`, `trim`, `upper`, `lower`, `length`, `toFixed`, `slice`, `join`, `default`. The value comes first, then `args`. |
 | **`chain`** | `{ chain: [name, …] }` | Pipes in sequence, by name: other pipes of the same object (descriptors **or functions**), or built-ins. It stops at `null` / `undefined`, as a path does. |
-| **`sum`** | `{ sum: '?.path' }` or `{ sum: ['?.a', '?.b', …] }` | A total over an array: each element's path added up, or with several paths, their **product** per element (quantity × price). The paths are ordinary `?.` paths, resolved against each element with the same pipes. An element whose path leads nowhere, or isn't a number, adds 0 (numeric strings count). An empty array totals 0; a value that isn't an array gives `undefined`. |
+| **`sum`** | `{ sum: '?.path' }` or `{ sum: ['?.a', '?.b', …] }` | A total over an array: each element's path added up, or with several paths, their **product** per element (quantity × price). The paths are ordinary `?.` paths, resolved against each element with the other pipes. An element whose path leads nowhere, or isn't a number, adds 0 (numeric strings count). An empty array totals 0; a value that isn't an array gives `undefined`. |
 | **`min`**, **`max`** | `{ min: '?.path' }`, `{ max: '?.path' }` | The smallest or largest of an array's values at the path per element, e.g. to scale a chart. Only numbers and numeric strings count: an element whose path leads nowhere, to a blank, or to anything else (`"-"`) is skipped. No numbers at all, or a value that isn't an array, gives `undefined`. |
+| **`pluck`** | `{ pluck: '?.path' }` | The value at the path for each item, as an array: `{ pluck: '?.name' }` over the crew gives their names. Takes any iterable object (an array, `Set`, `Map`, `NodeList`, `HTMLCollection`…). Items whose path gives `null` or `undefined` are dropped, so results may not line up with the list by index. An empty list gives `[]`; anything else, a string included, gives `undefined`. |
 
 - **Bad chains:** a chain that names itself (directly or not) throws a clear error instead of recursing forever.
 - **Locale:** without `locale`, `Intl` uses the runtime's default, which can differ between a server or worker and the browser. Give one when the server renders.
@@ -193,4 +194,20 @@ const pipes = dataPipes({
   // </figure>
   // li { height: calc((var(--v) - var(--low)) / (var(--high) - var(--low)) * 100%); }
   ```
+- **A list of names:** `join` and `ListFormat` take lists of strings, and `pluck` makes one from a list of objects, or of elements:
+
+  ```js
+  const pipes = {
+      names:    { pluck: '?.name' },
+      and:      { intl: 'ListFormat', locale: 'en-US', options: { type: 'conjunction', style: 'long' } },
+      crewList: { chain: ['names', 'and'] },            // '?.crew?.crewList' → 'Ada, Bo, and Cy'
+
+      texts:    { pluck: '?.textContent' },
+      comma:    { use: 'join', args: [', '] },
+      joined:   { chain: ['texts', 'comma'] },          // '?.selectedOptions?.joined' → 'Red, Green, Blue'
+  };
+  ```
+
+  `ListFormat` throws on anything but strings, so convert numbers on the way: `{ pluck: '?.id?.str' }`, with `str: { use: 'string' }`.
+- **A pipe named after its property:** the paths of `sum`, `min`, `max` and `pluck` don't see the pipe they belong to, so `{ price: { sum: '?.price' } }` reads each element's `price`. They do see the object's other pipes, which take precedence over properties as usual.
 - **Deliberately small:** no comparisons, other arithmetic (beyond `sum`, `min` and `max`), filtering or sorting. Pipes that need those stay functions, and in a worker, what uses them is left to the client.
