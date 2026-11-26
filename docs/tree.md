@@ -307,7 +307,7 @@ The type can also come from elsewhere: `@typedef {import('./launch-api.js').Laun
 | `` ${tree`…`} `` as content | a child element (composition) |
 | `${choose(on, cases, fallback)}` as content, or as a whole map value | a [switch](#switches) (`{ switch, cases, default }`) |
 | `${snippet(name)}` as content, or as a whole map value | a [snippet](#snippets-static-html) (`{ snippet: name }`) |
-| `${{ '_ ?=': […], … }}` in attribute position | merged into the pattern: for keys markup can't express (ternaries, handlers, sync ops) |
+| `${{ '_ ?=': […], … }}` in attribute position | merged into the pattern: for keys markup can't express (ternaries, handlers, sync ops). `paths()` proxies are converted at any depth: `${{ 'textContent ?=': [[p.n, 1], '1 item', { join: sp`${p.n} items` }] }}` |
 | `${null}`, `${undefined}`, `${false}`, `${''}` as content | nothing (e.g. an optional child) |
 
 [`demos/tree-demo.html`](../demos/tree-demo.html) is written with `tree`, including a pattern spread for its ternaries, an optional child, and `choose` switches. [`demos/tree-demo-with-managed-template-list.html`](../demos/tree-demo-with-managed-template-list.html) writes a similar tree in raw notation, for comparison.

@@ -160,6 +160,18 @@
           'sp parts in a { join } ternary result');
         const host = await render({ cart: spec }, { cart: { n: 2 } });
         assertEquals(host.querySelector('span').textContent, '2 items', 'rendered');
+
+        // Bare proxies at any depth, in a spread and in an event config
+        const bare = tree`<b ${{ 'textContent ?=': [q.ok, { join: [q.n, ' items'] }, [[q.n, '>', 1], 'x', 'y']], title: q.t }}></b>`;
+        assertEquals(json(bare), json(['b', { 'textContent ?=': ['?.ok', { join: ['?.n', ' items'] }, [['?.n', '>', 1], 'x', 'y']], title: '?.t' }]),
+          'proxies in a spread are converted at any depth');
+        const zero = await render({ cart: tree`<b ${{ 'textContent ?=': [q.n, 'some', 'none'] }}></b>` }, { cart: { n: 0 } });
+        assertEquals(zero.querySelector('b').textContent, 'none', 'a proxy as a condition is the path, so 0 is falsy');
+        assertEquals(json(tree`<button @click=${{ fromHost: { '?.last': q.n } }}></button>`),
+          json(['button', { ' +=': { on: 'click', fromHost: { '?.last': '?.n' } } }]), 'proxies in an event config are converted at any depth');
+        const item = tree`<li>${'?.name'}</li>`;
+        const kept = tree`<ul ${{ '?. =>': { do: 'builtIns.tree', map: { x: item } } }}></ul>`;
+        assert(kept[1]['?. =>'].map.x === item, 'what holds no proxy keeps its identity (a tree`…` result inside a spread)');
       }
 
       // Test 9: errors carry precise locations (for editors): part/offset exact (raw offsets: each \n escape in these templates is 2 source characters), line/column as displayed

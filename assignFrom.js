@@ -107,31 +107,35 @@ function assertNoThenable(value, opName, key) {
 /**
  * Resolve a single value — if it's a `?.` path string (or a `$root` / `$parent`
  * reference), resolve against source. If it's a protocol string, resolve via
- * protocol. Otherwise pass through as literal.
+ * protocol. Otherwise pass through as literal. Restricted methods are refused
+ * (options.permissionProcessor), as for any other path.
  */
 function resolveTernaryValue(value, source, options) {
+    const { withMethods, aka, substitutions, protocols, root, permissionProcessor } = options;
     if (typeof value === 'string' && (value.startsWith('?.') || isFromStackReference(value))) {
         return getValue(value, source, {
-            withMethods: options.withMethods,
-            aka: options.aka,
-            substitutions: options.substitutions,
-            protocols: options.protocols,
-            root: options.root,
+            withMethods,
+            aka,
+            substitutions,
+            protocols,
+            root,
             fromStack: options.fromStack,
-            pipes: options.pipes
+            pipes: options.pipes,
+            permissionProcessor,
         });
     }
-    if (typeof value === 'string' && value.includes('://') && options.protocols) {
+    if (typeof value === 'string' && value.includes('://') && protocols) {
         // Check if it matches a known protocol
         const protoEnd = value.indexOf('://');
         const protocol = value.substring(0, protoEnd);
-        if (options.protocols[protocol]) {
+        if (protocols[protocol]) {
             return getValue(value, source, {
-                withMethods: options.withMethods,
-                aka: options.aka,
-                substitutions: options.substitutions,
-                protocols: options.protocols,
-                root: options.root
+                withMethods,
+                aka,
+                substitutions,
+                protocols,
+                root,
+                permissionProcessor,
             });
         }
     }

@@ -13,7 +13,7 @@
  * | `@click=${{ call: 'm' }}` / `${'m'}` | `' +=': { on: 'click', call: 'm' }` (event binding)   |
  * | `ish=${Manager}`                     | the `{ tag, ish }` header                             |
  * | `${each(of, { key, empty })}`        | the repeat `{ each, of, key, empty }` (one child)     |
- * | `${{ '_ ?=': […] }}` (attribute pos.) | merged into the pattern: any key markup can't express |
+ * | `${{ '_ ?=': […] }}` (attribute pos.) | merged into the pattern: any key markup can't express (proxies converted at any depth) |
  * | `${null / undefined / false / ''}`   | nothing, as content (e.g. an optional child)          |
  * | text only / one `${value}` as content | `textContent: …`                                     |
  * | text mixed with `${…}`               | `'?. =&': { microJoin: [...] }`                       |
@@ -439,6 +439,41 @@ const isUnknown = (value) => value instanceof TreeUnknown;
 const isPlainObject = (value) => !!value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype;
 /** A `${…}` value as it goes into a pattern: a paths() proxy becomes its `?.` string. */
 const valueOf = (value) => pathOf(value) ?? value;
+/**
+ * A value written by hand into a pattern (a spread, an event config): paths() proxies become their `?.` strings at
+ * any depth, in arrays and plain objects (a ternary's `[[p.n, 1], …]`, a join's parts). Unchanged parts keep
+ * their identity, and so does the whole value when it holds no proxy (tree`…` results included).
+ */
+function deepValueOf(value, seen = new Set()) {
+    const path = pathOf(value);
+    if (path !== undefined)
+        return path;
+    const isArray = Array.isArray(value);
+    if ((!isArray && !isPlainObject(value)) || seen.has(value))
+        return value;
+    seen.add(value);
+    try {
+        if (isArray) {
+            let copy;
+            value.forEach((item, i) => {
+                const converted = deepValueOf(item, seen);
+                if (converted !== item)
+                    (copy ??= [...value])[i] = converted;
+            });
+            return copy ?? value;
+        }
+        let copy;
+        for (const key of Object.keys(value)) {
+            const converted = deepValueOf(value[key], seen);
+            if (converted !== value[key])
+                (copy ??= { ...value })[key] = converted;
+        }
+        return copy ?? value;
+    }
+    finally {
+        seen.delete(value);
+    }
+}
 function toSpec(element, ctx) {
     const { tag } = element;
     const { values } = ctx;
@@ -458,7 +493,7 @@ function toSpec(element, ctx) {
             const on = name.slice(1);
             const config = typeof value === 'string' ? { call: value }
                 : isUnknown(value) ? { '…': value }
-                    : value && typeof value === 'object' ? value
+                    : value && typeof value === 'object' ? deepValueOf(value)
                         : fail(`@${on} needs an event config object (e.g. { call: 'method' }) or a method name`, pos);
             const key = SELF_EVENT_KEYS[events++] ?? fail('at most two @event bindings per element are supported', pos);
             pattern[key] = { on, ...config };
@@ -482,7 +517,7 @@ function toSpec(element, ctx) {
         else if (isPlainObject(directive)) {
             // A pattern spread: any keys the markup can't express (e.g. '_ ?=' ternaries, ' =>' handlers)
             for (const key of Object.keys(directive))
-                pattern[key] = valueOf(directive[key]);
+                pattern[key] = deepValueOf(directive[key]);
         }
         else if (isUnknown(directive)) {
             // Statically unknown (analyzeTree): an each(…) or a pattern object, presumably

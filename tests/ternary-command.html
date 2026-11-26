@@ -24,6 +24,7 @@
     <script type="module">
         import { assignFrom } from '../assignFrom.js';
         import { assignFromAsync } from '../assignFromAsync.js';
+        import { PermissionProcessor } from '../assignPermissions/PermissionProcessor.js';
 
         const results = [];
         let passed = 0;
@@ -546,6 +547,26 @@
                 assignFrom({}, { 'v ?=': ['?.a', { join: ['p://k'] }, '-'] }, { from: { a: 1 }, protocols: { p: async () => 'x' } });
             } catch (e) { message = e.message; }
             expect(message.includes('received an async value') && message.includes('?=')).toBe(true);
+        });
+
+        test('a restricted method is refused in a condition, a result and a join', () => {
+            const said = [];
+            const { warn } = console;
+            console.warn = (...args) => said.push(args.join(' '));
+            try {
+                const processor = new PermissionProcessor({ restrictedMethodSettings: ['toUpperCase'] });
+                const options = { from: { s: 'abc', t: '' }, withMethods: ['toUpperCase'] };
+                const target = assignFrom({}, {
+                    'cond ?=': [['?.s?.toUpperCase|', 'ABC'], 'called', 'refused'],
+                    'result ?=': ['?.s', '?.s?.toUpperCase|', '-'],
+                    'joined ?=': ['?.s', { join: ['?.s?.toUpperCase|'] }, '-'],
+                    'chain ?=': ['?.t', '||', '?.s?.toUpperCase|'],
+                }, options, processor);
+                const plain = assignFrom({}, { 'cond ?=': [['?.s?.toUpperCase|', 'ABC'], 'called', 'refused'] }, options);
+                expect([target.cond, target.result, target.joined, target.chain, plain.cond].join()).toBe('refused,,,,called');
+            } finally {
+                console.warn = warn;
+            }
         });
 
         // Display results

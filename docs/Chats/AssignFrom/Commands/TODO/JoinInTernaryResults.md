@@ -334,3 +334,31 @@ I haven't changed `DX/tree.ts`.
 
 1. Should I make the spread convert nested proxies (suggestion 1)?
 2. Should I fix the permission processor gap?
+
+## Bruce's Response II
+
+Please address both of those items, thanks
+
+
+## Claude's Implementation Notes II
+
+Both items are done.
+
+### 1. Proxies at any depth, in `tree`
+
+- **`DX/tree.ts`:** a pattern spread (`${{ … }}` in attribute position) now converts `paths()` proxies at any depth, in arrays and plain objects. So `${{ 'textContent ?=': [p.ok, { join: [p.n, ' items'] }] }}` works, and a proxy condition is now a real path: with `n` of 0, `[p.n, 'some', 'none']` gives `none`. Before, it gave `some`, because a proxy is always truthy.
+- **Event configs** (`@click=${{ … }}`) get the same, as they're written by hand too: `fromHost: { '?.last': p.n }`.
+- **Identity is kept:** only the parts holding a proxy are copied, so a `` tree`…` `` result inside a spread is the same object. `builtIns.tree` relies on that identity, for compiling and for skipping literals on reruns.
+- **Docs:** the spread's row in `docs/tree.md`, with an example.
+
+### 2. The permission processor in ` ?=`
+
+- **`assignFrom.ts`:** `resolveTernaryValue` now passes `permissionProcessor` to `getValue`, for both paths and protocols. That covers conditions, comparison operands, plain path results and chain candidates.
+- **The new test** uses a real `PermissionProcessor` that restricts `toUpperCase`. With the previous `assignFrom.js` it **fails**: the method was called in the condition, the result and the chain, and only the `{ join }` result refused it. So the gap was real.
+- A refused method is treated as a property, as everywhere else. `?.s?.toUpperCase|` then gives `undefined`, and the restricted-method warning is logged.
+
+### Test results
+
+On a copy of the repo, built there (the type check is clean): the full suite has 188 passed, 22 skipped, none failed, in Chromium, Firefox and WebKit. `ternary-command` has 97 of 97, and `dx-tree` 73 of 73.
+
+I edited only sources. Your `tsc --watch` rebuilt `assignFrom.js` and `DX/tree.js`.
